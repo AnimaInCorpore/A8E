@@ -2646,6 +2646,9 @@ void AtariIoClose(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
 
+	SDL_FreeSurface(pIoData->tVideoData.pSdlAtariSurface);
+
+	free(pIoData->tVideoData.pPriorityData);
 	free(pIoData->pDisk1);
 	free(pIoData->pBasicRom);
 	free(pIoData->pOsRom);
