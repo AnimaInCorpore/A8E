@@ -7,7 +7,7 @@
 * (c) 2004 Sascha Springer
 *
 * gcc 6502.c A8E.c Antic.c AtariIo.c Gtia.c Pia.c Pokey.c -lGL -lSDL -lm -o A8E
-* gcc 6502.c A8E.c Antic.c AtariIo.c Gtia.c Pia.c Pokey.c -framework Cocoa -framework OpenGL -lSDLmain -lSDL -lm -o A8
+* gcc 6502.c A8E.c Antic.c AtariIo.c Gtia.c Pia.c Pokey.c -I/opt/homebrew/include -L/opt/homebrew/lib -framework Cocoa -framework OpenGL -lSDLmain -lSDL -lm -o A8E
 *
 *
 *
