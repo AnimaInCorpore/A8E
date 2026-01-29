@@ -103,6 +103,9 @@ typedef struct
 	double vol_smooth[4];
 	double vol_alpha;
 
+	/* Last emitted sample (for underrun hold). */
+	int16_t last_sample;
+
 	int16_t *ring;
 	u32 ring_size; /* in samples */
 	u32 ring_read;
@@ -173,14 +176,21 @@ static void PokeyAudio_Callback(void *userdata, Uint8 *stream, int len)
 	int16_t *pOut = (int16_t *)stream;
 	u32 samplesRequested = (u32)(len / (int)sizeof(int16_t));
 	u32 samplesRead = PokeyAudio_RingRead(pPokey, pOut, samplesRequested);
+	int16_t hold = (pPokey != NULL) ? pPokey->last_sample : 0;
 	u32 i;
+
+	if(samplesRead > 0)
+		hold = pOut[samplesRead - 1];
 
 	for(i = samplesRead; i < samplesRequested; i++)
 	{
 		/* Avoid hard discontinuities on underrun; holding the last value is
 		   noticeably less clicky than forcing to zero. */
-		pOut[i] = (samplesRead > 0) ? pOut[samplesRead - 1] : 0;
+		pOut[i] = hold;
 	}
+
+	if(pPokey)
+		pPokey->last_sample = hold;
 }
 
 static u32 PokeyAudio_Xorshift32(u32 *pState)
@@ -906,42 +916,26 @@ void Pokey_Sync(_6502_Context_t *pContext, u64 llCycleCounter)
 			pPokey->filter_mode = mode;
 			/* If volume-only is used, treat it as likely sample playback and
 			   low-pass more aggressively to reduce imaging/aliasing. */
-			if(mode & 0x02)
-			{
-				pPokey->analog_lp_fc = (mode & 0x01) ? 3000.0 : 4000.0;
-				fc_smooth = pPokey->analog_lp_fc;
-				pPokey->lp_stages = 4;
-			}
+				if(mode & 0x02)
+				{
+					pPokey->analog_lp_fc = (mode & 0x01) ? 3000.0 : 4000.0;
+					fc_smooth = pPokey->analog_lp_fc;
+					pPokey->lp_stages = 4;
+				}
 			else
 			{
 				pPokey->analog_lp_fc = 7500.0;
 				pPokey->lp_stages = 4;
 			}
+				
+				if(fc_smooth > 0.0 && pPokey->cpu_hz > 0)
+					pPokey->vol_alpha = 1.0 - exp(-2.0 * pi * fc_smooth / (double)pPokey->cpu_hz);
+				else
+					pPokey->vol_alpha = 1.0;
 
-			if(fc_smooth > 0.0 && pPokey->cpu_hz > 0)
-				pPokey->vol_alpha = 1.0 - exp(-2.0 * pi * fc_smooth / (double)pPokey->cpu_hz);
-			else
-				pPokey->vol_alpha = 1.0;
-
-			{
-				u32 j;
-				for(j = 0; j < 4; j++)
-				{
-					u8 audc = pPokey->aChannels[j].audc;
-					u8 vol = (u8)(audc & 0x0f);
-					u8 vol_only = (u8)((audc & 0x10) != 0);
-					pPokey->vol_smooth[j] = (pPokey->vol_alpha < 1.0 && vol_only) ? (double)vol : 0.0;
-				}
+				PokeyAudio_RecomputeFilter(pPokey);
 			}
-
-			PokeyAudio_BiquadReset(&pPokey->hp);
-			PokeyAudio_BiquadReset(&pPokey->lp);
-			PokeyAudio_BiquadReset(&pPokey->lp2);
-			PokeyAudio_BiquadReset(&pPokey->lp3);
-			PokeyAudio_BiquadReset(&pPokey->lp4);
-			PokeyAudio_RecomputeFilter(pPokey);
 		}
-	}
 
 	cur = pPokey->last_cycle;
 	while(cur < llCycleCounter)
