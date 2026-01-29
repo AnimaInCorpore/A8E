@@ -1,1 +1,6 @@
 build/
+disks/
+docs/
+.DS_Store
+ATARIBAS.ROM
+ATARIXL.ROM
