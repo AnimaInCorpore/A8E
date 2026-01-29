@@ -67,7 +67,8 @@ u8 *Antic_DMACTL(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
 	{
-		SRAM[IO_DMACTL] = *pValue;
+		/* Bits 7-6 are unused on real hardware. */
+		SRAM[IO_DMACTL] = (*pValue & 0x3f);
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
 		printf(" DMACTL: %02X\n", *pValue);
@@ -99,6 +100,7 @@ u8 *Antic_DLISTL(_6502_Context_t *pContext, u8 *pValue)
 
 	if(pValue)
 	{
+		SRAM[IO_DLISTL] = *pValue;
 		pIoData->sDisplayListAddress = (pIoData->sDisplayListAddress & 0xff00) | *pValue;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
@@ -116,6 +118,7 @@ u8 *Antic_DLISTH(_6502_Context_t *pContext, u8 *pValue)
 
 	if(pValue)
 	{
+		SRAM[IO_DLISTH] = *pValue;
 		pIoData->sDisplayListAddress = (pIoData->sDisplayListAddress & 0x00ff) | (*pValue << 8);
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
@@ -193,8 +196,16 @@ u8 *Antic_WSYNC(_6502_Context_t *pContext, u8 *pValue)
 	
 	if(pValue)
 	{
-		pContext->llStallCycleCounter = 
-			MAX(pIoData->llDisplayListFetchCycle, pContext->llStallCycleCounter);
+		u64 llNextLineCycle = pIoData->llDisplayListFetchCycle;
+
+		/* Be robust if timing state is temporarily out-of-sync: WSYNC waits
+		 * for the next scanline boundary (end of current scanline).
+		 */
+		if(llNextLineCycle <= pContext->llCycleCounter)
+			llNextLineCycle = ((pContext->llCycleCounter / CYCLES_PER_LINE) + 1) * CYCLES_PER_LINE;
+
+		pContext->llStallCycleCounter =
+			MAX(llNextLineCycle, pContext->llStallCycleCounter);
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
 		printf(" WSYNC: %02X\n", *pValue);
@@ -256,7 +267,8 @@ u8 *Antic_NMIEN(_6502_Context_t *pContext, u8 *pValue)
 
         printf("\n");
 #endif
-		SRAM[IO_NMIEN] = *pValue;
+		/* Only bits 7-5 are used (DLI/VBI/RESET). */
+		SRAM[IO_NMIEN] = (*pValue & 0xe0);
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
 		printf(" NMIEN: %02X\n", *pValue);
@@ -280,5 +292,3 @@ u8 *Antic_NMIRES_NMIST(_6502_Context_t *pContext, u8 *pValue)
 	
 	return &RAM[IO_NMIRES_NMIST];
 }
-
-

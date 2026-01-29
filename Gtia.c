@@ -13,6 +13,8 @@
 
 #include <SDL/SDL.h>
 
+#include <stdio.h>
+
 #include "6502.h"
 #include "AtariIo.h"
 #include "Gtia.h"
@@ -530,13 +532,13 @@ u8 *Gtia_CONSOL(_6502_Context_t *pContext, u8 *pValue)
 #endif
 	if(pValue)
  	{	
-		SRAM[IO_CONSOL] = *pValue;
+		/* Only bit 3 (speaker) is writable; key bits are read-only. */
+		SRAM[IO_CONSOL] = *pValue & 0x08;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
-		printf(" HPOSP0: %02X\n", *pValue);
+		printf(" CONSOL: %02X\n", *pValue);
 #endif
 	}
 	
 	return &RAM[IO_CONSOL];
 }
-

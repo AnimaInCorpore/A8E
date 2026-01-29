@@ -142,7 +142,7 @@ static IoInitValue_t m_aIoInitValues[] =
 	{ IO_GRAFP3_TRIG0, 0x00, 0x01, Gtia_GRAFP3_TRIG0 },
 	{ IO_GRAFM_TRIG1, 0x00, 0x01, Gtia_GRAFM_TRIG1 },
 	{ IO_COLPM0_TRIG2, 0x00, 0x01, Gtia_COLPM0_TRIG2 },
-	{ IO_COLPM1_TRIG3, 0x00, 0x00, Gtia_COLPM1_TRIG3 },
+	{ IO_COLPM1_TRIG3, 0x00, 0x01, Gtia_COLPM1_TRIG3 },
 	{ IO_COLPM2_PAL, 0x00, 0x01, Gtia_COLPM2_PAL },
 	{ IO_COLPM3, 0x00, 0x0f, Gtia_COLPM3 },
 	{ IO_COLPF0, 0x00, 0x0f, Gtia_COLPF0 },
@@ -1253,17 +1253,18 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
 
-	RAM[IO_NMIRES_NMIST] &= ~NMI_DLI;
 	_6502_STALL(9);
 
 	if(pIoData->tVideoData.lCurrentDisplayLine == LAST_VISIBLE_LINE + 1)
 		pIoData->lNextDisplayListLine = 8;
 
-	if((pIoData->tVideoData.lCurrentDisplayLine == 249) &&
-		(SRAM[IO_NMIEN] & NMI_VBI))
+	/* VBI NMI request occurs around scanline 248 (VCOUNT=124). */
+	if(pIoData->tVideoData.lCurrentDisplayLine == 248)
 	{
 		RAM[IO_NMIRES_NMIST] |= NMI_VBI;
-		_6502_Nmi(pContext);
+
+		if(SRAM[IO_NMIEN] & NMI_VBI)
+			_6502_Nmi(pContext);
 	}
     		
 	// Playfield DMA active?
@@ -1298,15 +1299,6 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 					m_aAnticModeInfoTable[pIoData->cCurrentDisplayListCommand & 0x0f].lNumberOfLines;
 			}		
 
-			// DLI?
-			if(pIoData->cCurrentDisplayListCommand & 0x80)
-			{
-				pIoData->llDliCycle = pContext->llCycleCounter + 
-					(pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine - 1) * CYCLES_PER_LINE;
-					
-				AtariIoCycleTimedEventUpdate(pContext);
-			}
-
 			// Vertical scrolling fixes on the next fetch line   			
 			if(((cOldDisplayListCommand & 0x2f) < 0x22) &&
 				((pIoData->cCurrentDisplayListCommand & 0x2f) >= 0x22))
@@ -1329,6 +1321,15 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			else
 			{
 				pIoData->tVideoData.lVerticalScrollOffset = 0;
+			}
+
+			// DLI? (schedule after vertical scrolling adjustments)
+			if(pIoData->cCurrentDisplayListCommand & 0x80)
+			{
+				pIoData->llDliCycle = pContext->llCycleCounter +
+					(pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine - 1) * CYCLES_PER_LINE;
+
+				AtariIoCycleTimedEventUpdate(pContext);
 			}
 
 			// Fetch new display list address
@@ -2415,15 +2416,15 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 
 	if(pContext->llCycleCounter >= pIoData->llDliCycle)
 	{
-		if(SRAM[IO_NMIEN] & NMI_DLI)
-		{
 #ifdef VERBOSE_DL
-			printf("             [%16lld]", pContext->llCycleCounter);
-			printf(" DL: %3ld DLI\n", pIoData->tVideoData.lCurrentDisplayLine);
+		printf("             [%16lld]", pContext->llCycleCounter);
+		printf(" DL: %3ld DLI\n", pIoData->tVideoData.lCurrentDisplayLine);
 #endif
-			RAM[IO_NMIRES_NMIST] |= NMI_DLI;
+		/* NMIST reflects pending NMIs even if disabled in NMIEN. */
+		RAM[IO_NMIRES_NMIST] |= NMI_DLI;
+
+		if(SRAM[IO_NMIEN] & NMI_DLI)
 			_6502_Nmi(pContext);
-		}
 
 		pIoData->llDliCycle = CYCLE_NEVER;
 	}
