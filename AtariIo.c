@@ -163,7 +163,7 @@ static IoInitValue_t m_aIoInitValues[] =
 	{ IO_AUDF3_POT4, 0x00, 0xff, Pokey_AUDF3_POT4 },
 	{ IO_AUDC3_POT5, 0x00, 0xff, Pokey_AUDC3_POT5 },
 	{ IO_AUDF4_POT6, 0x00, 0xff, Pokey_AUDF4_POT6 },
-	{ IO_AUDC4_POT7, 0x00, 0xff, Pokey_STIMER_KBCODE },
+	{ IO_AUDC4_POT7, 0x00, 0xff, Pokey_AUDC4_POT7 },
 	{ IO_AUDCTL_ALLPOT, 0x00, 0xff, Pokey_AUDCTL_ALLPOT },
 	{ IO_STIMER_KBCODE, 0x00, 0xff, Pokey_STIMER_KBCODE },
 	{ IO_SKREST_RANDOM, 0x00, 0xff, Pokey_SKREST_RANDOM },
@@ -2524,6 +2524,8 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		pIoData->llTimer4Cycle = CYCLE_NEVER;
 	}
 
+	Pokey_Sync(pContext, pContext->llCycleCounter);
+
 	AtariIoCycleTimedEventUpdate(pContext);
 }
 
@@ -2654,11 +2656,15 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 	pContext->IoCycleTimedEventFunction = AtariIo_CycleTimedEvent;
 	
 	srand(time(0));
+
+	Pokey_Init(pContext);
 }
 
 void AtariIoClose(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+
+	Pokey_Close(pContext);
 
 	SDL_FreeSurface(pIoData->tVideoData.pSdlAtariSurface);
 

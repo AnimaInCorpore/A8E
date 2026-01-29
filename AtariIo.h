@@ -95,6 +95,8 @@ typedef struct
 	u64 llTimer2Cycle;
 	u64 llTimer4Cycle;
 
+	void *pPokey;
+
 	u8 cCurrentDisplayListCommand;
 	u32 lNextDisplayListLine;
 	u16 sDisplayListAddress;
@@ -131,4 +133,3 @@ void AtariIoDrawScreen(
 void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboardEvent);
 
 #endif
-
