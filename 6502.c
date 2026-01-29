@@ -514,6 +514,34 @@ static u8 _6502_GetPs(_6502_Context_t *pContext)
 	return cPs;
 }
 
+/* When pushing P to the stack, the B bit is not the CPU's "stored" flag:
+ * - IRQ/NMI push B=0
+ * - BRK/PHP push B=1
+ */
+static u8 _6502_GetPsWithB(_6502_Context_t *pContext, u8 cBreakFlag)
+{
+	u8 cPs = _6502_GetPs(pContext) & ~FLAG_B;
+
+	if(cBreakFlag)
+		cPs |= FLAG_B;
+
+	return cPs;
+}
+
+static void _6502_ServiceInterrupt(_6502_Context_t *pContext, u16 sVector, u8 cBreakFlag, u16 sPcToPush)
+{
+	/* Push PC and P, then vector. Stack always lives in RAM ($0100-$01FF). */
+	RAM[0x100 + CPU.sp] = (sPcToPush >> 8);
+	CPU.sp--;
+	RAM[0x100 + CPU.sp] = (u8)sPcToPush;
+	CPU.sp--;
+	RAM[0x100 + CPU.sp] = _6502_GetPsWithB(pContext, cBreakFlag);
+	CPU.sp--;
+
+	PS.i = 1;
+	CPU.pc = RAM[sVector] | (RAM[sVector + 1] << 8);
+}
+
 static void _6502_SetPs(_6502_Context_t *pContext, u8 cPs)
 {
 	PS.n = cPs & FLAG_N;
@@ -890,29 +918,18 @@ void _6502_Status(_6502_Context_t *pContext)
 
 void _6502_Nmi(_6502_Context_t *pContext)
 {
-	RAM[0x100 + CPU.sp] = (CPU.pc >> 8);
-	CPU.sp--;
-	RAM[0x100 + CPU.sp] = CPU.pc;
-	CPU.sp--;
-	RAM[0x100 + CPU.sp] = _6502_GetPs(pContext);
-	CPU.sp--;
-
-	PS.i = 1;
-	CPU.pc = RAM[0xfffa] | (RAM[0xfffb] << 8);
-
+	_6502_ServiceInterrupt(pContext, 0xfffa, 0, CPU.pc);
 	pContext->llCycleCounter += 7;
 }
 
 void _6502_Reset(_6502_Context_t *pContext)
 {
-	RAM[0x100 + CPU.sp] = (CPU.pc >> 8);
-	CPU.sp--;
-	RAM[0x100 + CPU.sp] = CPU.pc;
-	CPU.sp--;
-	RAM[0x100 + CPU.sp] = _6502_GetPs(pContext);
-	CPU.sp--;
-
+	/* 6502/SALLY reset does not push anything; it sets SP and vectors PC. */
+	CPU.sp = 0xfd;
 	PS.i = 1;
+	PS.d = 0;
+	PS.b = 0;
+	pContext->cIrqPendingFlag = 0;
 	CPU.pc = RAM[0xfffc] | (RAM[0xfffd] << 8);
 
 	pContext->llCycleCounter += 7;
@@ -928,17 +945,7 @@ void _6502_Irq(_6502_Context_t *pContext)
 	{
 		if(pContext->cIrqPendingFlag)
 			pContext->cIrqPendingFlag--;
-
-		RAM[0x100 + CPU.sp] = (CPU.pc >> 8);
-		CPU.sp--;
-		RAM[0x100 + CPU.sp] = CPU.pc;
-		CPU.sp--;
-		RAM[0x100 + CPU.sp] = _6502_GetPs(pContext);
-		CPU.sp--;
-
-		PS.i = 1;
-		CPU.pc = RAM[0xfffe] | (RAM[0xffff] << 8);
-
+		_6502_ServiceInterrupt(pContext, 0xfffe, 0, CPU.pc);
 		pContext->llCycleCounter += 7;
 	}	
 }
@@ -1070,35 +1077,81 @@ void _6502_TYA(_6502_Context_t *pContext)
 	PS.n = CPU.a & 0x80;
 }
 
-void _6502_ADC(_6502_Context_t *pContext) 
+static void _6502_AdcValue(_6502_Context_t *pContext, u8 cValue)
 {
 	if(PS.d)
 	{
-		u16 sSum = m_aBcdToBinTable[CPU.a] + m_aBcdToBinTable[*READ_ACCESS];
+		/* NMOS 6502 decimal adjust; V computed from binary sum (common emulator behavior). */
+		u8 cA = CPU.a;
+		u16 sSum = (u16)cA + (u16)cValue + (PS.c ? 1 : 0);
+		u8 cBin = (u8)sSum;
 
+		PS.v = !((cA ^ cValue) & 0x80) && ((cA ^ cBin) & 0x80);
+
+		if(((cA & 0x0f) + (cValue & 0x0f) + (PS.c ? 1 : 0)) > 9)
+			sSum += 0x06;
+
+		PS.c = (sSum > 0x99);
 		if(PS.c)
-			sSum++;
+			sSum += 0x60;
 
-		CPU.a = m_aBinToBcdTable[sSum % 100];
-		
-		PS.c = (sSum > 99);
+		CPU.a = (u8)sSum;
+		PS.z = !CPU.a;
+		PS.n = CPU.a & 0x80;
 	}
 	else
 	{
-		u8 cValue = *READ_ACCESS;
-		u16 sSum = CPU.a + cValue;
-
-		if(PS.c)
-			sSum++;
+		u16 sSum = (u16)CPU.a + (u16)cValue + (PS.c ? 1 : 0);
 
 		PS.v = !((CPU.a ^ cValue) & 0x80) && ((CPU.a ^ sSum) & 0x80);
 
-		CPU.a = sSum;
-
+		CPU.a = (u8)sSum;
 		PS.c = sSum >> 8;
 		PS.z = !CPU.a;
 		PS.n = CPU.a & 0x80;
 	}
+}
+
+static void _6502_SbcValue(_6502_Context_t *pContext, u8 cValue)
+{
+	if(PS.d)
+	{
+		u8 cA = CPU.a;
+		u16 sDiff = (u16)cA - (u16)cValue - (PS.c ? 0 : 1);
+		u8 cBin = (u8)sDiff;
+		u8 cCarry = (sDiff & 0x100) ? 0 : 1; /* carry==1 means no borrow */
+
+		PS.v = ((cA ^ cBin) & (cA ^ cValue) & 0x80) != 0;
+
+		if(((cA & 0x0f) - (PS.c ? 0 : 1)) < (cValue & 0x0f))
+			sDiff -= 0x06;
+
+		if(!cCarry)
+			sDiff -= 0x60;
+
+		CPU.a = (u8)sDiff;
+		PS.c = cCarry;
+		PS.z = !CPU.a;
+		PS.n = CPU.a & 0x80;
+	}
+	else
+	{
+		u8 cA = CPU.a;
+		u16 sDiff = (u16)cA - (u16)cValue - (PS.c ? 0 : 1);
+		u8 cRes = (u8)sDiff;
+
+		PS.v = ((cA ^ cRes) & (cA ^ cValue) & 0x80) != 0;
+
+		CPU.a = cRes;
+		PS.c = (sDiff & 0x100) ? 0 : 1;
+		PS.z = !CPU.a;
+		PS.n = CPU.a & 0x80;
+	}
+}
+
+void _6502_ADC(_6502_Context_t *pContext) 
+{
+	_6502_AdcValue(pContext, *READ_ACCESS);
 }
 
 void _6502_AND(_6502_Context_t *pContext) 
@@ -1127,33 +1180,7 @@ void _6502_ORA(_6502_Context_t *pContext)
 
 void _6502_SBC(_6502_Context_t *pContext) 
 {
-	if(PS.d)
-	{
-		s16 sDiff = 100 + m_aBcdToBinTable[CPU.a] - m_aBcdToBinTable[*READ_ACCESS];
-
-		if(!PS.c)
-			sDiff--;
-
-		CPU.a = m_aBinToBcdTable[sDiff % 100];
-
-		PS.c = (sDiff > 99);
-	}
-	else
-	{
-		u8 cValue = *READ_ACCESS ^ 0xff;
-		u16 sSum = CPU.a + cValue;
-
-		if(PS.c)
-			sSum++;
-
-		PS.v = !((CPU.a ^ cValue) & 0x80) && ((CPU.a ^ sSum) & 0x80);
-
-		CPU.a = sSum;
-
-		PS.c = sSum >> 8;
-		PS.z = !CPU.a;
-		PS.n = CPU.a & 0x80;
-	}
+	_6502_SbcValue(pContext, *READ_ACCESS);
 }
 
 void _6502_DEC(_6502_Context_t *pContext) 
@@ -1307,61 +1334,60 @@ void _6502_CPY(_6502_Context_t *pContext)
 void _6502_BCC(_6502_Context_t *pContext) 
 {
 	if(!PS.c)
-		CPU.pc += (char )*READ_ACCESS;
+		CPU.pc += (s8)*READ_ACCESS;
 }
 
 void _6502_BCS(_6502_Context_t *pContext) 
 {
 	if(PS.c)
-		CPU.pc += (char )*READ_ACCESS;
+		CPU.pc += (s8)*READ_ACCESS;
 }
 
 void _6502_BEQ(_6502_Context_t *pContext) 
 {
 	if(PS.z)
-		CPU.pc += (char )*READ_ACCESS;
+		CPU.pc += (s8)*READ_ACCESS;
 }
 
 void _6502_BMI(_6502_Context_t *pContext) 
 {
 	if(PS.n)
-		CPU.pc += (char )*READ_ACCESS;
+		CPU.pc += (s8)*READ_ACCESS;
 }
 
 void _6502_BNE(_6502_Context_t *pContext) 
 {
 	if(!PS.z)
-		CPU.pc += (char )*READ_ACCESS;
+		CPU.pc += (s8)*READ_ACCESS;
 }
 
 void _6502_BPL(_6502_Context_t *pContext) 
 {
 	if(!PS.n)
-		CPU.pc += (char )*READ_ACCESS;
+		CPU.pc += (s8)*READ_ACCESS;
 }
 
 void _6502_BVC(_6502_Context_t *pContext) 
 {
 	if(!PS.v)
-		CPU.pc += (char )*READ_ACCESS;
+		CPU.pc += (s8)*READ_ACCESS;
 }
 
 void _6502_BVS(_6502_Context_t *pContext) 
 {
 	if(PS.v)
-		CPU.pc += (char )*READ_ACCESS;
+		CPU.pc += (s8)*READ_ACCESS;
 }
 
 void _6502_BRK(_6502_Context_t *pContext) 
 {
-	_6502_Irq(pContext);
-
-	PS.b = 1;
+	/* BRK is not maskable by I; it always vectors like IRQ with B=1 and pushes PC+2. */
+	_6502_ServiceInterrupt(pContext, 0xfffe, 1, CPU.pc + 1);
 }
 
 void _6502_JMP(_6502_Context_t *pContext) 
 {
-	CPU.pc = READ_ACCESS - RAM;
+	CPU.pc = pContext->sAccessAddress;
 }
 
 void _6502_JSR(_6502_Context_t *pContext) 
@@ -1373,7 +1399,7 @@ void _6502_JSR(_6502_Context_t *pContext)
 	RAM[0x100 + CPU.sp] = sReturn;
 	CPU.sp--;
 
-	CPU.pc = READ_ACCESS - RAM;
+	CPU.pc = pContext->sAccessAddress;
 }
 
 void _6502_NOP(_6502_Context_t *pContext) 
@@ -1444,7 +1470,7 @@ void _6502_PHA(_6502_Context_t *pContext)
 
 void _6502_PHP(_6502_Context_t *pContext) 
 {
-	RAM[0x100 + CPU.sp] = _6502_GetPs(pContext);
+	RAM[0x100 + CPU.sp] = _6502_GetPsWithB(pContext, 1);
 	CPU.sp--;
 }
 
@@ -1481,8 +1507,6 @@ void _6502_XXX(_6502_Context_t *pContext)
 
 void _6502_LAX(_6502_Context_t *pContext) 
 {
-	printf("LAX\n");
-
 	CPU.a = CPU.x = *READ_ACCESS;
 
 	PS.z = !CPU.a;
@@ -1492,8 +1516,6 @@ void _6502_LAX(_6502_Context_t *pContext)
 void _6502_SLO(_6502_Context_t *pContext) 
 {
 	u8 cValue = *READ_ACCESS;
-
-	printf("SLO\n");
 
 	PS.c = cValue & 0x80;
 	
@@ -1507,8 +1529,6 @@ void _6502_SLO(_6502_Context_t *pContext)
 
 void _6502_ATX(_6502_Context_t *pContext) 
 {
-	printf("ATX\n");
-
 	CPU.a &= *READ_ACCESS;
 	CPU.x = CPU.a;
 
@@ -1518,33 +1538,22 @@ void _6502_ATX(_6502_Context_t *pContext)
 
 void _6502_AAX(_6502_Context_t *pContext) 
 {
-	printf("AAX\n");
-
 	u8 cValue = CPU.x & CPU.a;
 	WRITE_ACCESS(&cValue);
-
-	PS.z = !cValue;
-	PS.n = cValue & 0x80;
 }
 
 void _6502_DOP(_6502_Context_t *pContext) 
 {
-	printf("DOP\n");
-
 	READ_ACCESS;
 }
 
 void _6502_TOP(_6502_Context_t *pContext) 
 {
-	printf("TOP\n");
-
 	READ_ACCESS;
 }
 
 void _6502_ASR(_6502_Context_t *pContext) 
 {
-	printf("ASR\n");
-
 	CPU.a &= *READ_ACCESS;
 
 	PS.c = CPU.a & 0x01;
@@ -1557,45 +1566,18 @@ void _6502_ASR(_6502_Context_t *pContext)
 
 void _6502_ISC(_6502_Context_t *pContext) 
 {
+	/* ISC/ISB: INC memory, then SBC memory */
 	u8 cValue = *READ_ACCESS;
-	
-	printf("ISC\n");
 
 	cValue++;
 	WRITE_ACCESS(&cValue);
-	
-	if(PS.d)
-	{
-		s16 sDiff = 100 + m_aBcdToBinTable[CPU.a] - m_aBcdToBinTable[*READ_ACCESS];
 
-		if(!PS.c)
-			sDiff--;
-
-		CPU.a = m_aBinToBcdTable[sDiff % 100];
-
-		PS.c = (sDiff > 99);
-	}
-	else
-	{
-		u16 sSum = CPU.a + (*READ_ACCESS ^ 0xff);
-
-		if(PS.c)
-			sSum++;
-
-		CPU.a = sSum;
-
-		PS.c = sSum >> 8;
-		PS.z = !CPU.a;
-		PS.n = CPU.a & 0x80;
-		PS.v = (PS.c ? 1 : 0) ^ (PS.n ? 1 : 0);
-	}
+	_6502_SbcValue(pContext, cValue);
 }
 
 void _6502_SRE(_6502_Context_t *pContext) 
 {
 	u8 cValue = *READ_ACCESS;
-
-	printf("SRE\n");
 
 	PS.c = cValue & 0x01;
 	
@@ -1609,15 +1591,15 @@ void _6502_SRE(_6502_Context_t *pContext)
 
 void _6502_RLA(_6502_Context_t *pContext) 
 {
+	u8 cOldCarry = PS.c ? 1 : 0;
 	u8 cValue = *READ_ACCESS;
 
-	printf("RLA\n");
-
 	PS.c = cValue & 0x80;
-	
-	cValue <<= 1;
-	
-	CPU.a &= *WRITE_ACCESS(&cValue);
+	cValue = (u8)((cValue << 1) | cOldCarry);
+
+	cValue = *WRITE_ACCESS(&cValue);
+
+	CPU.a &= cValue;
 	
 	PS.z = !CPU.a;
 	PS.n = CPU.a & 0x80;
@@ -1625,8 +1607,6 @@ void _6502_RLA(_6502_Context_t *pContext)
 
 void _6502_AAC(_6502_Context_t *pContext) 
 {
-	printf("AAC\n");
-
 	CPU.a &= *READ_ACCESS;
 	
 	PS.z = !CPU.a;
@@ -1636,8 +1616,6 @@ void _6502_AAC(_6502_Context_t *pContext)
 
 void _6502_XAA(_6502_Context_t *pContext) 
 {
-	printf("XAA\n");
-
 	CPU.a = CPU.x;
 	CPU.a &= *READ_ACCESS;
 	
@@ -1743,4 +1721,3 @@ void _6502_Indirect(_6502_Context_t *pContext)
 
 	pContext->sAccessAddress = sAddress;
 }
-

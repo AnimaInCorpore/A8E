@@ -18,6 +18,8 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
+#include <stdio.h>
+#include <errno.h>
 
 #include "6502.h"
 #include "AtariIo.h"
@@ -50,6 +52,13 @@
 #define PRIO_PM3 0x80
 
 #define FIXED_ADD(address, bits, value) ((address) = ((address) & ~(bits)) | (((address) + (value)) & (bits)))
+
+static void AtariIo_FatalMissingRom(const char *pRomFileName)
+{
+	fprintf(stderr, "A8E: ROM file not found: %s (%s)\n", pRomFileName, strerror(errno));
+	fprintf(stderr, "A8E needs the ROM files ATARIBAS.ROM and ATARIXL.ROM in the current working directory.\n");
+	exit(1);
+}
 
 typedef struct
 {
@@ -2566,19 +2575,23 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 
 	pIoData->pBasicRom = malloc(0x2000);
 	pIoData->pOsRom = malloc(0x1000);
-	pIoData->pSelfTestRom = malloc(0x0800);
-	pIoData->pFloatingPointRom = malloc(0x2800);
-
-	pFile = fopen("ATARIBAS.ROM", "rb");
-	fread(pIoData->pBasicRom, 0x2000, 1, pFile);
-	memcpy(&RAM[0xa000], pIoData->pBasicRom, 0x2000);
-	fclose(pFile);
-
-	pFile = fopen("ATARIXL.ROM", "rb");
-	fread(pIoData->pOsRom, 0x1000, 1, pFile);
-	memcpy(&RAM[0xc000], pIoData->pOsRom, 0x1000);
-	fread(pIoData->pSelfTestRom, 0x0800, 1, pFile);
-	fread(pIoData->pFloatingPointRom, 0x2800, 1, pFile);
+		pIoData->pSelfTestRom = malloc(0x0800);
+		pIoData->pFloatingPointRom = malloc(0x2800);
+	
+		pFile = fopen("ATARIBAS.ROM", "rb");
+		if(!pFile)
+			AtariIo_FatalMissingRom("ATARIBAS.ROM");
+		fread(pIoData->pBasicRom, 0x2000, 1, pFile);
+		memcpy(&RAM[0xa000], pIoData->pBasicRom, 0x2000);
+		fclose(pFile);
+	
+		pFile = fopen("ATARIXL.ROM", "rb");
+		if(!pFile)
+			AtariIo_FatalMissingRom("ATARIXL.ROM");
+		fread(pIoData->pOsRom, 0x1000, 1, pFile);
+		memcpy(&RAM[0xc000], pIoData->pOsRom, 0x1000);
+		fread(pIoData->pSelfTestRom, 0x0800, 1, pFile);
+		fread(pIoData->pFloatingPointRom, 0x2800, 1, pFile);
 	memcpy(&RAM[0xd800], pIoData->pFloatingPointRom, 0x2800);
 	fclose(pFile);
 	
@@ -2910,4 +2923,3 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
         }
 	}
 }
-
