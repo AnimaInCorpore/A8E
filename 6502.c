@@ -981,6 +981,7 @@ u64 _6502_Run(_6502_Context_t *pContext, u64 llCycles)
 		else
 		{
 			pContext->llCycleCounter++;
+			llCycleCounter = pContext->llCycleCounter;
 		}
 	}
 

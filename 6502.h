@@ -99,4 +99,3 @@ void _6502_Irq(_6502_Context_t *pContext);
 u64 _6502_Run(_6502_Context_t *pContext, u64 llCycles);
 
 #endif
-
