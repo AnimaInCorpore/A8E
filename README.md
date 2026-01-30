@@ -1,10 +1,15 @@
 # A8E (Atari 800 XL Emulator)
 
-Small C-based Atari 800 XL emulator using SDL (SDL 1.2 style headers) and optional OpenGL output.
+Small C-based Atari 800 XL emulator using SDL (SDL 1.2 style headers) and optional OpenGL output. Original codebase by Sascha Springer (2004).
 
-## Author
+## Getting the Source Code
 
-- Sascha Springer (original codebase, 2004)
+Clone the repository:
+
+```sh
+git clone https://bitbucket.org/AnimaInCorpore/a8e.git
+cd a8e
+```
 
 ## Runtime files
 
@@ -15,22 +20,18 @@ The emulator expects these ROM files in the current working directory when you r
 
 By default it tries to boot the disk image `d1.atr` (you can pass a different `.atr` path as the first non-flag argument).
 
-## Prerequisites
+## Windows (MSYS2 MinGW-w64)
 
-Build dependencies:
+### Prerequisites
 
 - C compiler (GCC/Clang)
-- CMake (3.16+, presets require 3.23+)
-- OpenGL headers + libraries (system-provided on Windows/macOS; `libGL` on Linux)
+- CMake (3.16+)
+- OpenGL headers + libraries (system-provided)
 - SDL with **SDL 1.2 style headers** (`<SDL/SDL.h>`)
   - SDL 1.2 *or*
   - `sdl12-compat` (provides the SDL 1.2 headers on top of SDL2)
 
-## Build
-
-### Windows (MSYS2 MinGW-w64)
-
-MSYS2 is expected at `C:\msys64` (this repo includes a CMake preset for that path).
+MSYS2 is expected at `C:\msys64`.
 
 Install prerequisites (in the **MSYS2 MinGW64** shell):
 
@@ -38,11 +39,13 @@ Install prerequisites (in the **MSYS2 MinGW64** shell):
 pacman -S --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-SDL
 ```
 
-Configure + build (from **PowerShell** or a normal Windows terminal):
+### Build
 
-```powershell
-cmake --preset msys2-mingw64
-cmake --build --preset msys2-mingw64
+Configure + build (in the **MSYS2 MinGW64** shell):
+
+```sh
+cmake -S . -B build/msys2-mingw64 -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+cmake --build build/msys2-mingw64 -j
 ```
 
 The executable is written to:
@@ -51,7 +54,36 @@ The executable is written to:
 
 If the EXE does not start due to missing DLLs, run it with `C:\msys64\mingw64\bin` on your `PATH` (or copy the required DLLs like `SDL.dll` next to `A8E.exe`).
 
-### Linux
+### Run
+
+From the directory containing `ATARIBAS.ROM` and `ATARIXL.ROM`:
+
+```sh
+./A8E.exe
+```
+
+Common options:
+
+- `-o` / `-O`: OpenGL output (defaults to software blitting)
+- `-f` / `-F`: fullscreen
+- `-b` / `-B`: alternate mode (see source)
+
+Example (boot a specific disk image):
+
+```sh
+./A8E.exe mydisk.atr
+```
+
+## Linux
+
+### Prerequisites
+
+- C compiler (GCC/Clang)
+- CMake (3.16+)
+- OpenGL headers + libraries (`libGL`)
+- SDL with **SDL 1.2 style headers** (`<SDL/SDL.h>`)
+  - SDL 1.2 *or*
+  - `sdl12-compat` (provides the SDL 1.2 headers on top of SDL2)
 
 Install prerequisites using your distribution packages. Names vary; common options are:
 
@@ -59,14 +91,42 @@ Install prerequisites using your distribution packages. Names vary; common optio
 - or `sdl12-compat` + SDL2 development package, e.g. `libsdl2-dev`
 - OpenGL development package, e.g. `libgl1-mesa-dev`
 
-Then:
+### Build
 
 ```sh
 cmake -S . -B build
 cmake --build build -j
 ```
 
-### macOS
+### Run
+
+From the directory containing `ATARIBAS.ROM` and `ATARIXL.ROM`:
+
+```sh
+./A8E
+```
+
+Common options:
+
+- `-o` / `-O`: OpenGL output (defaults to software blitting)
+- `-f` / `-F`: fullscreen
+- `-b` / `-B`: alternate mode (see source)
+
+Example (boot a specific disk image):
+
+```sh
+./A8E mydisk.atr
+```
+
+## macOS
+
+### Prerequisites
+
+- C compiler (GCC/Clang)
+- CMake (3.16+)
+- OpenGL headers + libraries (system-provided)
+- SDL with **SDL 1.2 style headers** (`<SDL/SDL.h>`)
+  - `sdl12-compat` (provides the SDL 1.2 headers on top of SDL2)
 
 Using Homebrew:
 
@@ -74,14 +134,14 @@ Using Homebrew:
 brew install cmake sdl12-compat
 ```
 
-Then:
+### Build
 
 ```sh
 cmake -S . -B build
 cmake --build build -j
 ```
 
-## Run
+### Run
 
 From the directory containing `ATARIBAS.ROM` and `ATARIXL.ROM`:
 
