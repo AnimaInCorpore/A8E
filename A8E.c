@@ -40,8 +40,11 @@ int main(int argc, char *argv[])
 	u64 llCycles = CYCLES_PER_LINE * LINES_PER_SCREEN_PAL;
 	u32 lMode = 0;
 	char *pDiskFileName = "d1.atr";
-	u32 lScreenWidth = 0;
-	u32 lScreenHeight = 0;
+	u32 lAtariScreenWidth = 0;
+	u32 lAtariScreenHeight = 0;
+	u32 lWindowWidth = 0;
+	u32 lWindowHeight = 0;
+	u32 lWindowScale = 2;
 	u32 lIndex;
 	u32 lSdlFlags = 0;
 	
@@ -82,13 +85,25 @@ int main(int argc, char *argv[])
 	lSdlFlags |= SDL_HWSURFACE | SDL_DOUBLEBUF;
 
 	if(lSdlFlags & SDL_FULLSCREEN)
-		lScreenWidth = 320;
+		lAtariScreenWidth = 320;
 	else
-		lScreenWidth = 336;
+		lAtariScreenWidth = 336;
 
-	lScreenHeight = 240;
+	lAtariScreenHeight = 240;
 
-	pScreenSurface = SDL_SetVideoMode(lScreenWidth, lScreenHeight, 32, lSdlFlags);
+	lWindowWidth = lAtariScreenWidth * lWindowScale;
+	lWindowHeight = lAtariScreenHeight * lWindowScale;
+
+	pScreenSurface = SDL_SetVideoMode(lWindowWidth, lWindowHeight, 32, lSdlFlags);
+
+	if(pScreenSurface == NULL && lWindowScale != 1)
+	{
+		/* Fallback: if the scaled mode isn't available, try native size. */
+		lWindowScale = 1;
+		lWindowWidth = lAtariScreenWidth;
+		lWindowHeight = lAtariScreenHeight;
+		pScreenSurface = SDL_SetVideoMode(lWindowWidth, lWindowHeight, 32, lSdlFlags);
+	}
 	
 	if(pScreenSurface == NULL)
 	{
@@ -130,7 +145,7 @@ int main(int argc, char *argv[])
 			llCycles += CYCLES_PER_LINE * LINES_PER_SCREEN_PAL;
 		}
 
-		AtariIoDrawScreen(pAtariContext, pScreenSurface, lScreenWidth, lScreenHeight);
+		AtariIoDrawScreen(pAtariContext, pScreenSurface, lAtariScreenWidth, lAtariScreenHeight);
 
 		SDL_Flip(pScreenSurface);
 
