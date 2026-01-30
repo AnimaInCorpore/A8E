@@ -143,6 +143,7 @@ void _6502_SRE(_6502_Context_t *);
 void _6502_RLA(_6502_Context_t *);
 void _6502_AAC(_6502_Context_t *);
 void _6502_XAA(_6502_Context_t *);
+void _6502_DCP(_6502_Context_t *);
 
 void _6502_Implicit(_6502_Context_t *);
 void _6502_Immediate(_6502_Context_t *);
@@ -390,6 +391,13 @@ _6502_Code_t m_a6502CodeList[] =
 	{ 0x0b, 67, 2, AT_IMMEDIATE        }, /* AAC */
 	{ 0x2b, 67, 2, AT_IMMEDIATE        },
 	{ 0x8b, 68, 2, AT_IMMEDIATE        }, /* XAA */
+	{ 0xc7, 69, 5, AT_ZERO_PAGE        }, /* DCP */
+	{ 0xd7, 69, 6, AT_ZERO_PAGE_X      },
+	{ 0xcf, 69, 6, AT_ABSOLUTE         },
+	{ 0xdf, 69, 7, AT_ABSOLUTE_X       },
+	{ 0xdb, 69, 7, AT_ABSOLUTE_Y       },
+	{ 0xc3, 69, 8, AT_INDEXED_INDIRECT },
+	{ 0xd3, 69, 8, AT_INDIRECT_INDEXED },
 };
 
 char *m_a6502MnemonicList[] = 
@@ -406,7 +414,7 @@ char *m_a6502MnemonicList[] =
 	"PHA", "PHP", "PLA", "PLP", "???",
 	
 	"LAX", "SLO", "ATX", "AAX", "DOP", "TOP",
-	"ASR", "ISC", "SRE", "RLA", "AAC", "XAA"
+	"ASR", "ISC", "SRE", "RLA", "AAC", "XAA", "DCP"
 };
 
 _6502_OpcodeFunction_t m_a6502OpcodeFunctionList[] = 
@@ -427,6 +435,7 @@ _6502_OpcodeFunction_t m_a6502OpcodeFunctionList[] =
 	
 	_6502_LAX, _6502_SLO, _6502_ATX, _6502_AAX, _6502_DOP, _6502_TOP,
 	_6502_ASR, _6502_ISC, _6502_SRE, _6502_RLA, _6502_AAC, _6502_XAA,
+	_6502_DCP,
 };
 
 _6502_AddressTypeFunction_t m_a6502AddressTypeFunctionList[] = 
@@ -1622,6 +1631,19 @@ void _6502_XAA(_6502_Context_t *pContext)
 	
 	PS.z = !CPU.a;
 	PS.n = CPU.a & 0x80;
+}
+
+void _6502_DCP(_6502_Context_t *pContext)
+{
+	/* DCP/DCP: DEC memory, then CMP memory */
+	u8 cValue = *READ_ACCESS;
+
+	cValue--;
+	cValue = *WRITE_ACCESS(&cValue);
+
+	PS.z = (CPU.a == cValue);
+	PS.n = (CPU.a - cValue) & 0x80;
+	PS.c = (CPU.a >= cValue);
 }
 
 /********************************************************************
