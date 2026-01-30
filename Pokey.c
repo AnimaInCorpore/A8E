@@ -101,6 +101,7 @@ typedef struct
 
 	/* Optional smoothing for volume-only (sample playback) to reduce aliasing. */
 	double vol_smooth[4];
+	double vol_smooth2[4];
 	double vol_alpha;
 
 	/* Last emitted sample (for underrun hold). */
@@ -634,9 +635,9 @@ static void PokeyAudio_StepCpuCycle(
 
 	/* Update high-pass latches after divider pulses of ch3/ch4. */
 	if(pulse2 && (audctl & 0x04))
-		pPokey->hp1_latch = pChannels[2].output;
+		pPokey->hp1_latch = pChannels[0].output;
 	if(pulse3 && (audctl & 0x02))
-		pPokey->hp2_latch = pChannels[3].output;
+		pPokey->hp2_latch = pChannels[1].output;
 }
 
 static int32_t PokeyAudio_MixCycleLevel(PokeyState_t *pPokey, PokeyAudioChannel_t *pChannels, u8 audctl)
@@ -684,17 +685,20 @@ static int32_t PokeyAudio_MixCycleLevel(PokeyState_t *pPokey, PokeyAudioChannel_
 			if(vol_only)
 			{
 				pPokey->vol_smooth[i] += pPokey->vol_alpha * (x - pPokey->vol_smooth[i]);
-				sum += pPokey->vol_smooth[i];
+				pPokey->vol_smooth2[i] += pPokey->vol_alpha * (pPokey->vol_smooth[i] - pPokey->vol_smooth2[i]);
+				sum += pPokey->vol_smooth2[i];
 			}
 			else
 			{
 				pPokey->vol_smooth[i] = x;
+				pPokey->vol_smooth2[i] = x;
 				sum += x;
 			}
 		}
 		else
 		{
 			pPokey->vol_smooth[i] = x;
+			pPokey->vol_smooth2[i] = x;
 			sum += x;
 		}
 	}
@@ -767,7 +771,10 @@ void Pokey_Init(_6502_Context_t *pContext)
 	pPokey->lp_stages = 4;
 	pPokey->vol_alpha = 1.0;
 	for(i = 0; i < 4; i++)
+	{
 		pPokey->vol_smooth[i] = 0.0;
+		pPokey->vol_smooth2[i] = 0.0;
+	}
 	PokeyAudio_RecomputeFilter(pPokey);
 
 	pPokey->ring_size = 16384;
