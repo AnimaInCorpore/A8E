@@ -1,6 +1,6 @@
 # A8E (Atari 800 XL Emulator)
 
-Small C-based Atari 800 XL emulator using SDL (SDL 1.2 style headers) and optional OpenGL output. Original codebase by Sascha Springer (2004).
+Small C-based Atari 800 XL emulator using SDL (SDL 1.2 style headers). Original codebase by Sascha Springer (2004).
 
 ## Getting the Source Code
 
@@ -26,7 +26,6 @@ By default it tries to boot the disk image `d1.atr` (you can pass a different `.
 
 - C compiler (GCC/Clang)
 - CMake (3.16+)
-- OpenGL headers + libraries (system-provided)
 - SDL with **SDL 1.2 style headers** (`<SDL/SDL.h>`)
   - SDL 1.2 *or*
   - `sdl12-compat` (provides the SDL 1.2 headers on top of SDL2)
@@ -64,7 +63,6 @@ From the directory containing `ATARIBAS.ROM` and `ATARIXL.ROM`:
 
 Common options:
 
-- `-o` / `-O`: OpenGL output (defaults to software blitting)
 - `-f` / `-F`: fullscreen
 - `-b` / `-B`: alternate mode (see source)
 
@@ -80,7 +78,6 @@ Example (boot a specific disk image):
 
 - C compiler (GCC/Clang)
 - CMake (3.16+)
-- OpenGL headers + libraries (`libGL`)
 - SDL with **SDL 1.2 style headers** (`<SDL/SDL.h>`)
   - SDL 1.2 *or*
   - `sdl12-compat` (provides the SDL 1.2 headers on top of SDL2)
@@ -89,7 +86,6 @@ Install prerequisites using your distribution packages. Names vary; common optio
 
 - SDL 1.2 development package (if available), e.g. `libsdl1.2-dev`
 - or `sdl12-compat` + SDL2 development package, e.g. `libsdl2-dev`
-- OpenGL development package, e.g. `libgl1-mesa-dev`
 
 ### Build
 
@@ -108,7 +104,6 @@ From the directory containing `ATARIBAS.ROM` and `ATARIXL.ROM`:
 
 Common options:
 
-- `-o` / `-O`: OpenGL output (defaults to software blitting)
 - `-f` / `-F`: fullscreen
 - `-b` / `-B`: alternate mode (see source)
 
@@ -124,7 +119,6 @@ Example (boot a specific disk image):
 
 - C compiler (GCC/Clang)
 - CMake (3.16+)
-- OpenGL headers + libraries (system-provided)
 - SDL with **SDL 1.2 style headers** (`<SDL/SDL.h>`)
   - `sdl12-compat` (provides the SDL 1.2 headers on top of SDL2)
 
@@ -151,7 +145,6 @@ From the directory containing `ATARIBAS.ROM` and `ATARIXL.ROM`:
 
 Common options:
 
-- `-o` / `-O`: OpenGL output (defaults to software blitting)
 - `-f` / `-F`: fullscreen
 - `-b` / `-B`: alternate mode (see source)
 

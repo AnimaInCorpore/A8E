@@ -12,11 +12,7 @@ if(POLICY CMP0074)
 endif()
 
 # --- Dependencies ---
-
-# 1. OpenGL
-find_package(OpenGL REQUIRED)
-
-# 2. SDL (Legacy 1.x)
+# 1. SDL (Legacy 1.x)
 # Note: If you port the C code to SDL2, change this to find_package(SDL2 REQUIRED)
 # and update the target_link_libraries below.
 find_package(SDL REQUIRED)
@@ -46,8 +42,8 @@ target_include_directories(A8E PRIVATE "${SDL_INCLUDE_PARENT}")
 
 # --- Linking ---
 
-# Link Standard SDL and OpenGL
-target_link_libraries(A8E PRIVATE OpenGL::GL ${SDL_LIBRARY})
+# Link SDL
+target_link_libraries(A8E PRIVATE ${SDL_LIBRARY})
 
 # --- Platform Specifics ---
 
