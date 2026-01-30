@@ -68,7 +68,7 @@ typedef struct
 	/* 32.32 fixed-point audio sample time in CPU cycles. */
 	u64 cycles_per_sample_fp;
 
-	/* POKEY polynomial counters clocked at ~1.79MHz. */
+	/* POKEY polynomial counters clocked at ~1.77MHz (PAL). */
 	u32 lfsr17;
 	u16 lfsr9;
 	u8 lfsr5;
@@ -120,8 +120,7 @@ typedef struct
 
 static u32 Pokey_CpuHz(void)
 {
-	/* PAL (as documented in AtariIo.c header comment). */
-	return 1773447u;
+	return ATARI_CPU_HZ_PAL;
 }
 
 static void PokeyAudio_RingWrite(PokeyState_t *pPokey, const int16_t *pSamples, u32 count)
@@ -411,7 +410,7 @@ static void PokeyAudio_PolyStep(PokeyState_t *pPokey)
 	if(!pPokey)
 		return;
 
-	/* Polynomials clocked by the ~1.79MHz master clock. */
+	/* Polynomials clocked by the ~1.77MHz (PAL) master clock. */
 	bit17 = (u32)(((pPokey->lfsr17 >> 0) ^ (pPokey->lfsr17 >> 5)) & 1u);
 	pPokey->lfsr17 = (pPokey->lfsr17 >> 1) | (bit17 << 16);
 
@@ -498,7 +497,7 @@ static u8 PokeyAudio_ChannelTick(PokeyState_t *pPokey, PokeyAudioChannel_t *pCh,
 		return 0;
 
 	/* Divider reload: For 15/64kHz clocks N = AUDF + 1.
-	   For the 1.79MHz clocks the hardware uses a modified formula:
+	   For the ~1.77/1.79MHz clocks the hardware uses a modified formula:
 	   - 8-bit:  N = AUDF + 4
 	   - 16-bit: N = AUDF + 7 (handled in PokeyAudio_PairTick). */
 	reload = (u32)pCh->audf + 1u;

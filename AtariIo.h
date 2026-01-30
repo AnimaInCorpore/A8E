@@ -45,6 +45,8 @@
 #define COLOR_CLOCKS_PER_LINE (PIXELS_PER_LINE / 2)
 #define CYCLES_PER_LINE (COLOR_CLOCKS_PER_LINE / 2)
 
+#define ATARI_CPU_HZ_PAL 1773447u
+
 #define CYCLE_NEVER 0xffffffffffffffffLL
 
 #define CONSOL_HACK
