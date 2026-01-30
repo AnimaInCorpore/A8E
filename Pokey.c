@@ -78,6 +78,7 @@ typedef struct
 	u8 hp1_latch;
 	u8 hp2_latch;
 	SDL_AudioSpec have;
+	int audio_subsystem_started;
 	int audio_opened;
 
 	/* Box-filter (cycle-accurate) resampling accumulator. */
@@ -802,15 +803,25 @@ void Pokey_Init(_6502_Context_t *pContext)
 	want.callback = PokeyAudio_Callback;
 	want.userdata = pPokey;
 
-	if(SDL_InitSubSystem(SDL_INIT_AUDIO) < 0)
+	if(!(SDL_WasInit(SDL_INIT_AUDIO) & SDL_INIT_AUDIO))
 	{
-		/* Keep emulator running without audio. */
-		pIoData->pPokey = pPokey;
-		return;
+		if(SDL_InitSubSystem(SDL_INIT_AUDIO) < 0)
+		{
+			/* Keep emulator running without audio. */
+			pIoData->pPokey = pPokey;
+			return;
+		}
+
+		pPokey->audio_subsystem_started = 1;
 	}
 
 	if(SDL_OpenAudio(&want, &pPokey->have) < 0)
 	{
+		if(pPokey->audio_subsystem_started)
+		{
+			SDL_QuitSubSystem(SDL_INIT_AUDIO);
+			pPokey->audio_subsystem_started = 0;
+		}
 		pIoData->pPokey = pPokey;
 		return;
 	}
@@ -819,6 +830,11 @@ void Pokey_Init(_6502_Context_t *pContext)
 	if(pPokey->have.format != AUDIO_S16SYS || pPokey->have.channels != 1 || pPokey->have.freq <= 0)
 	{
 		SDL_CloseAudio();
+		if(pPokey->audio_subsystem_started)
+		{
+			SDL_QuitSubSystem(SDL_INIT_AUDIO);
+			pPokey->audio_subsystem_started = 0;
+		}
 		pIoData->pPokey = pPokey;
 		return;
 	}
@@ -860,6 +876,8 @@ void Pokey_Close(_6502_Context_t *pContext)
 		SDL_UnlockAudio();
 		SDL_CloseAudio();
 	}
+	if(pPokey->audio_subsystem_started)
+		SDL_QuitSubSystem(SDL_INIT_AUDIO);
 
 	free(pPokey->ring);
 	free(pPokey);

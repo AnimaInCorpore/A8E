@@ -1261,6 +1261,8 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 	/* VBI NMI request occurs around scanline 248 (VCOUNT=124). */
 	if(pIoData->tVideoData.lCurrentDisplayLine == 248)
 	{
+		/* DLI/VBI status bits are mutually exclusive. */
+		RAM[IO_NMIRES_NMIST] &= ~NMI_DLI;
 		RAM[IO_NMIRES_NMIST] |= NMI_VBI;
 
 		if(SRAM[IO_NMIEN] & NMI_VBI)
@@ -2421,6 +2423,8 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		printf(" DL: %3ld DLI\n", pIoData->tVideoData.lCurrentDisplayLine);
 #endif
 		/* NMIST reflects pending NMIs even if disabled in NMIEN. */
+		/* DLI/VBI status bits are mutually exclusive. */
+		RAM[IO_NMIRES_NMIST] &= ~NMI_VBI;
 		RAM[IO_NMIRES_NMIST] |= NMI_DLI;
 
 		if(SRAM[IO_NMIEN] & NMI_DLI)

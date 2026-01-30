@@ -529,7 +529,7 @@ static u8 _6502_GetPs(_6502_Context_t *pContext)
  */
 static u8 _6502_GetPsWithB(_6502_Context_t *pContext, u8 cBreakFlag)
 {
-	u8 cPs = _6502_GetPs(pContext) & ~FLAG_B;
+	u8 cPs = (u8)(_6502_GetPs(pContext) & (u8)~FLAG_B);
 
 	if(cBreakFlag)
 		cPs |= FLAG_B;
@@ -540,7 +540,7 @@ static u8 _6502_GetPsWithB(_6502_Context_t *pContext, u8 cBreakFlag)
 static void _6502_ServiceInterrupt(_6502_Context_t *pContext, u16 sVector, u8 cBreakFlag, u16 sPcToPush)
 {
 	/* Push PC and P, then vector. Stack always lives in RAM ($0100-$01FF). */
-	RAM[0x100 + CPU.sp] = (sPcToPush >> 8);
+	RAM[0x100 + CPU.sp] = (u8)(sPcToPush >> 8);
 	CPU.sp--;
 	RAM[0x100 + CPU.sp] = (u8)sPcToPush;
 	CPU.sp--;
@@ -1580,7 +1580,7 @@ void _6502_ISC(_6502_Context_t *pContext)
 	u8 cValue = *READ_ACCESS;
 
 	cValue++;
-	WRITE_ACCESS(&cValue);
+	cValue = *WRITE_ACCESS(&cValue);
 
 	_6502_SbcValue(pContext, cValue);
 }

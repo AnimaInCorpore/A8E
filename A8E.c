@@ -45,7 +45,11 @@ int main(int argc, char *argv[])
 	u32 lIndex;
 	u32 lSdlFlags = 0;
 	
-	SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
+	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0)
+	{
+		fprintf(stderr, "SDL_Init() failed: %s\n", SDL_GetError());
+		return -1;
+	}
 
 	for(lIndex = 1; lIndex < argc; lIndex++)
 	{
@@ -88,9 +92,9 @@ int main(int argc, char *argv[])
 	
 	if(pScreenSurface == NULL)
 	{
-		printf("SDL_SetVideoMode() failed: %s!\n", SDL_GetError());
-
-		exit(-1);
+		fprintf(stderr, "SDL_SetVideoMode() failed: %s\n", SDL_GetError());
+		SDL_Quit();
+		return -1;
 	}
 	
 	SDL_WM_SetCaption(APPLICATION_CAPTION, NULL);
@@ -164,6 +168,7 @@ int main(int argc, char *argv[])
 Exit:
 	AtariIoClose(pAtariContext);
 	_6502_Close(pAtariContext);
+	SDL_Quit();
 
 	return 0;
 }
