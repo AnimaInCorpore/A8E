@@ -220,9 +220,9 @@ static void PokeyAudio_RecomputeDacTable(PokeyState_t *pPokey)
 	/* A fast approximation of the real POKEY output path. Real POKEY DACs
 	   and resistive summing are notably non-linear, which contributes to
 	   the "warm" sound. We use a compressed curve to reduce the "buzzy"
-	   digital edge. */
-	const double headroom = 0.92;
-	const double k = 0.06;
+	   digital edge. Output is now BIPOLAR centered at 0. */
+	const double headroom = 0.85;
+	const double k = 0.12;
 	u32 i;
 
 	if(!pPokey)
@@ -230,13 +230,16 @@ static void PokeyAudio_RecomputeDacTable(PokeyState_t *pPokey)
 
 	for(i = 0; i <= 60; i++)
 	{
-		/* Use an exponential curve (1-e^-ki) to mimic analog compression. */
-		double y = (1.0 - exp(-k * (double)i)) / (1.0 - exp(-k * 60.0));
-		if(y < 0.0)
-			y = 0.0;
-		if(y > 1.0)
-			y = 1.0;
-		pPokey->dac_table[i] = (int32_t)lrint(y * 32767.0 * headroom);
+		/* Use an exponential curve (1-e^-ki) to mimic analog compression.
+		   Map 0-60 to -1.0 to +1.0 (bipolar) for proper AC audio. */
+		double normalized = (double)i / 60.0;  /* 0..1 */
+		double compressed = (1.0 - exp(-k * (double)i)) / (1.0 - exp(-k * 60.0));
+		double bipolar = (compressed * 2.0) - 1.0;  /* -1..+1 */
+		if(bipolar < -1.0)
+			bipolar = -1.0;
+		if(bipolar > 1.0)
+			bipolar = 1.0;
+		pPokey->dac_table[i] = (int32_t)lrint(bipolar * 32767.0 * headroom);
 	}
 }
 
@@ -323,7 +326,7 @@ static void PokeyAudio_RecomputeFilter(PokeyState_t *pPokey)
 {
 	double fs;
 	double fc_lp;
-	double fc_hp = 20.0;    /* DC blocker */
+	double fc_hp = 10.0;    /* DC blocker - lower since signal is now bipolar */
 	const double q = 0.7071067811865475; /* Butterworth */
 
 	if(!pPokey || pPokey->sample_rate_hz == 0)
@@ -679,27 +682,14 @@ static int32_t PokeyAudio_MixCycleLevel(PokeyState_t *pPokey, PokeyAudioChannel_
 		}
 
 		x = bit ? (double)vol : 0.0;
-		if(pPokey->vol_alpha < 1.0)
+		
+		/* Apply smoothing to all channels to reduce aliasing from hard transitions.
+		   Use a gentler alpha for noise channels, stronger for volume-only (sample playback). */
 		{
-			/* Only smooth volume-only style playback; other channels keep crisp edges. */
-			if(vol_only)
-			{
-				pPokey->vol_smooth[i] += pPokey->vol_alpha * (x - pPokey->vol_smooth[i]);
-				pPokey->vol_smooth2[i] += pPokey->vol_alpha * (pPokey->vol_smooth[i] - pPokey->vol_smooth2[i]);
-				sum += pPokey->vol_smooth2[i];
-			}
-			else
-			{
-				pPokey->vol_smooth[i] = x;
-				pPokey->vol_smooth2[i] = x;
-				sum += x;
-			}
-		}
-		else
-		{
-			pPokey->vol_smooth[i] = x;
-			pPokey->vol_smooth2[i] = x;
-			sum += x;
+			double alpha = vol_only ? pPokey->vol_alpha : 0.15;
+			pPokey->vol_smooth[i] += alpha * (x - pPokey->vol_smooth[i]);
+			pPokey->vol_smooth2[i] += alpha * (pPokey->vol_smooth[i] - pPokey->vol_smooth2[i]);
+			sum += pPokey->vol_smooth2[i];
 		}
 	}
 
@@ -766,10 +756,10 @@ void Pokey_Init(_6502_Context_t *pContext)
 	PokeyAudio_BiquadReset(&pPokey->lp2);
 	PokeyAudio_BiquadReset(&pPokey->lp3);
 	PokeyAudio_BiquadReset(&pPokey->lp4);
-	pPokey->analog_lp_fc = 7500.0;
+	pPokey->analog_lp_fc = 6000.0;
 	pPokey->filter_mode = 0xff;
 	pPokey->lp_stages = 4;
-	pPokey->vol_alpha = 1.0;
+	pPokey->vol_alpha = 0.85;
 	for(i = 0; i < 4; i++)
 	{
 		pPokey->vol_smooth[i] = 0.0;
@@ -798,7 +788,7 @@ void Pokey_Init(_6502_Context_t *pContext)
 	want.freq = (int)pPokey->sample_rate_hz;
 	want.format = AUDIO_S16SYS;
 	want.channels = 1;
-	want.samples = 512;
+	want.samples = 1024;  /* Larger buffer for smoother playback */
 	want.callback = PokeyAudio_Callback;
 	want.userdata = pPokey;
 
@@ -940,25 +930,25 @@ void Pokey_Sync(_6502_Context_t *pContext, u64 llCycleCounter)
 			pPokey->filter_mode = mode;
 			/* If volume-only is used, treat it as likely sample playback and
 			   low-pass more aggressively to reduce imaging/aliasing. */
-				if(mode & 0x02)
-				{
-					pPokey->analog_lp_fc = (mode & 0x01) ? 3000.0 : 4000.0;
-					fc_smooth = pPokey->analog_lp_fc;
-					pPokey->lp_stages = 4;
-				}
-			else
+			if(mode & 0x02)
 			{
-				pPokey->analog_lp_fc = 7500.0;
+				pPokey->analog_lp_fc = (mode & 0x01) ? 3500.0 : 4500.0;
+				fc_smooth = pPokey->analog_lp_fc;
 				pPokey->lp_stages = 4;
 			}
-				
-				if(fc_smooth > 0.0 && pPokey->cpu_hz > 0)
-					pPokey->vol_alpha = 1.0 - exp(-2.0 * pi * fc_smooth / (double)pPokey->cpu_hz);
-				else
-					pPokey->vol_alpha = 1.0;
-
-				PokeyAudio_RecomputeFilter(pPokey);
+			else
+			{
+				pPokey->analog_lp_fc = 6000.0;
+				pPokey->lp_stages = 4;
 			}
+
+			if(fc_smooth > 0.0 && pPokey->cpu_hz > 0)
+				pPokey->vol_alpha = 1.0 - exp(-2.0 * pi * fc_smooth / (double)pPokey->cpu_hz);
+			else
+				pPokey->vol_alpha = 0.85;
+
+			PokeyAudio_RecomputeFilter(pPokey);
+		}
 		}
 
 	cur = pPokey->last_cycle;
