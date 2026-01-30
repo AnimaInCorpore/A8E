@@ -821,19 +821,19 @@ u16 _6502_DisassembleLive(_6502_Context_t *pContext, u16 sAddress)
 		
 	case 5: /* Indexed indirect */
 		sValue = (pMemory[1] + CPU.x) & 0xff;
-		cValue = RAM[RAM[sValue] | (RAM[sValue + 1] << 8)];
+		cValue = RAM[RAM[sValue] | (RAM[(sValue + 1) & 0xff] << 8)];
 
 		printf("%02X     %s ($%02X,X) ($%04X:$%02X)\n", 
-			pMemory[1], pMnemonic, pMemory[1], RAM[sValue] | (RAM[sValue + 1] << 8), cValue);
+			pMemory[1], pMnemonic, pMemory[1], RAM[sValue] | (RAM[(sValue + 1) & 0xff] << 8), cValue);
 
 		return(2);
 		
 	case 6: /* Indirect indexed */
 		sValue = pMemory[1];
-		cValue = RAM[(RAM[sValue] | (RAM[sValue + 1] << 8)) + CPU.y];
+		cValue = RAM[((RAM[sValue] | (RAM[(sValue + 1) & 0xff] << 8)) + CPU.y) & 0xffff];
 
 		printf("%02X     %s ($%02X),Y ($%04X:$%02X)\n", 
-			pMemory[1], pMnemonic, pMemory[1], (RAM[sValue] | (RAM[sValue + 1] << 8)) + CPU.y, cValue);
+			pMemory[1], pMnemonic, pMemory[1], ((RAM[sValue] | (RAM[(sValue + 1) & 0xff] << 8)) + CPU.y) & 0xffff, cValue);
 
 		return(2);
 		
@@ -854,18 +854,18 @@ u16 _6502_DisassembleLive(_6502_Context_t *pContext, u16 sAddress)
 		return(2);
 		
 	case 9: /* Absolute x */
-		cValue = RAM[(pMemory[1] | (pMemory[2] << 8)) + CPU.x];
+		cValue = RAM[((pMemory[1] | (pMemory[2] << 8)) + CPU.x) & 0xffff];
 
 		printf("%02X %02X  %s $%02X%02X,X ($%04X:$%02X)\n", 
-			pMemory[1], pMemory[2], pMnemonic, pMemory[2], pMemory[1], (pMemory[1] | (pMemory[2] << 8)) + CPU.x, cValue);
+			pMemory[1], pMemory[2], pMnemonic, pMemory[2], pMemory[1], ((pMemory[1] | (pMemory[2] << 8)) + CPU.x) & 0xffff, cValue);
 
 		return(3);
 		
 	case 10: /* Absolute y */
-		cValue = RAM[(pMemory[1] | (pMemory[2] << 8)) + CPU.y];
+		cValue = RAM[((pMemory[1] | (pMemory[2] << 8)) + CPU.y) & 0xffff];
 
 		printf("%02X %02X  %s $%02X%02X,Y ($%04X:$%02X)\n", 
-			pMemory[1], pMemory[2], pMnemonic, pMemory[2], pMemory[1], (pMemory[1] | (pMemory[2] << 8)) + CPU.y, cValue);
+			pMemory[1], pMemory[2], pMnemonic, pMemory[2], pMemory[1], ((pMemory[1] | (pMemory[2] << 8)) + CPU.y) & 0xffff, cValue);
 
 		return(3);
 		
