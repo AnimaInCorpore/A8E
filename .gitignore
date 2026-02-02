@@ -1,4 +1,5 @@
 build/
+build-mingw/
 disks/
 docs/
 .DS_Store
