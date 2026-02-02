@@ -85,6 +85,10 @@ typedef struct
 	/* Last emitted sample (for underrun hold). */
 	int16_t last_sample;
 
+	/* DC blocker state: previous input and previous output (fixed-point). */
+	int32_t dc_x_prev;
+	int32_t dc_y_prev;
+
 	/* Drift compensation: smoothly adjust rate when buffer is too full/empty. */
 	double rate_adjust;
 
@@ -165,32 +169,23 @@ static void PokeyAudio_RingWrite(PokeyState_t *pPokey, const int16_t *pSamples, 
 	   first-order control (no unbounded accumulation). */
 	{
 		int32_t fill_error = (int32_t)pPokey->ring_count - (int32_t)pPokey->ring_target;
-		int32_t deadband = (int32_t)(pPokey->ring_size / 128u);
+		int32_t deadband = (int32_t)(pPokey->ring_size / 64u);
 		double target = 0.0;
-		double alpha = 0.0;
+		double alpha;
 
-		if(deadband < 32)
-			deadband = 32;
+		if(deadband < 64)
+			deadband = 64;
 
-		/* Target +/-2% adjustment at roughly +/-25% ring error. */
-		if(fill_error > deadband || fill_error < -deadband)
-		{
-			if(pPokey->ring_size != 0)
-				target = ((double)fill_error * 0.08) / (double)pPokey->ring_size;
-		}
+		/* Only adjust if significantly outside deadband to avoid oscillation. */
+		if(fill_error > deadband)
+			target = 0.005;  /* Slow down: buffer too full */
+		else if(fill_error < -deadband)
+			target = -0.005; /* Speed up: buffer too empty */
 
-		if(target > 0.02)
-			target = 0.02;
-		if(target < -0.02)
-			target = -0.02;
-
-		/* Smoothly converge over ~1 second of audio to avoid "wow". */
-		if(pPokey->sample_rate_hz != 0)
-			alpha = 1.0 - exp(-(double)count / (double)pPokey->sample_rate_hz);
-
-		/* Safety clamp for very large writes. */
-		if(alpha > 0.05)
-			alpha = 0.05;
+		/* Very slow convergence to avoid audible pitch wobble. */
+		alpha = (double)count / (pPokey->sample_rate_hz ? (double)pPokey->sample_rate_hz : 48000.0);
+		if(alpha > 0.02)
+			alpha = 0.02;
 
 		pPokey->rate_adjust += (target - pPokey->rate_adjust) * alpha;
 	}
@@ -257,12 +252,9 @@ static void PokeyAudio_Callback(void *userdata, Uint8 *stream, int len)
 
 static void PokeyAudio_RecomputeDacTable(PokeyState_t *pPokey)
 {
-	/* A fast approximation of the real POKEY output path. Real POKEY DACs
-	   and resistive summing are notably non-linear, which contributes to
-	   the "warm" sound. We use a soft S-curve to reduce the "buzzy"
-	   digital edge. Output is unipolar; DC is removed by the post HPF. */
-	const double headroom = 0.82;
-	const double drive = 2.2;
+	/* Simple linear DAC table for maximum speed.
+	   Output is unipolar (0 to positive); DC blocker centers it. */
+	const int32_t max_output = 24000; /* Leave headroom */
 	u32 i;
 
 	if(!pPokey)
@@ -270,14 +262,7 @@ static void PokeyAudio_RecomputeDacTable(PokeyState_t *pPokey)
 
 	for(i = 0; i <= 60; i++)
 	{
-		/* Use a tanh-based S-curve for smoother saturation at extremes. */
-		double normalized = (double)i / 60.0;  /* 0..1 */
-		double shaped = tanh(normalized * drive) / tanh(drive);
-		if(shaped < 0.0)
-			shaped = 0.0;
-		if(shaped > 1.0)
-			shaped = 1.0;
-		pPokey->dac_table[i] = (int32_t)lrint(shaped * 32767.0 * headroom);
+		pPokey->dac_table[i] = (int32_t)((i * max_output) / 60);
 	}
 }
 
@@ -644,13 +629,19 @@ void Pokey_Init(_6502_Context_t *pContext)
 	pPokey->hp2_latch = 0;
 	PokeyAudio_RecomputeDacTable(pPokey);
 
-	/* Larger ring buffer to absorb timing variations between emulation and audio output. */
-	pPokey->ring_size = 32768;
+	/* Ring buffer to absorb timing variations between emulation and audio output. */
+	pPokey->ring_size = 8192;
 	pPokey->ring_mask = ((pPokey->ring_size & (pPokey->ring_size - 1u)) == 0) ? (pPokey->ring_size - 1u) : 0;
 	pPokey->ring = (int16_t *)malloc(sizeof(int16_t) * pPokey->ring_size);
 	if(pPokey->ring)
 		memset(pPokey->ring, 0, sizeof(int16_t) * pPokey->ring_size);
-	pPokey->ring_target = pPokey->ring_size / 4; /* Target 25% full for headroom */
+	
+	/* Target ~50ms latency at 48kHz = 2400 samples. Start empty and let it fill. */
+	pPokey->ring_target = 2400;
+	pPokey->ring_write = 0;
+	pPokey->ring_read = 0;
+	pPokey->ring_count = 0;
+	
 	pPokey->rate_adjust = 0.0;
 
 	pPokey->audctl = SRAM[IO_AUDCTL_ALLPOT];
@@ -670,7 +661,7 @@ void Pokey_Init(_6502_Context_t *pContext)
 	want.freq = (int)pPokey->sample_rate_hz;
 	want.format = AUDIO_S16SYS;
 	want.channels = 1;
-	want.samples = 2048;  /* Larger buffer for smoother playback */
+	want.samples = 1024;  /* Smaller buffer for lower latency and better sync */
 	want.callback = PokeyAudio_Callback;
 	want.userdata = pPokey;
 
@@ -842,16 +833,26 @@ void Pokey_Sync(_6502_Context_t *pContext, u64 llCycleCounter)
 				/* Round-to-nearest division for signed numerator; optimized. */
 				int64_t num = pPokey->sample_acc;
 				u64 den = adjusted_cps;
-				int32_t avg_level;
+				int32_t current_level;
 				if(num >= 0)
-					avg_level = (int32_t)((num + (int64_t)(den / 2)) / (int64_t)den);
+					current_level = (int32_t)((num + (int64_t)(den / 2)) / (int64_t)den);
 				else
-					avg_level = -(int32_t)(((-num) + (int64_t)(den / 2)) / (int64_t)den);
+					current_level = -(int32_t)(((-num) + (int64_t)(den / 2)) / (int64_t)den);
 
-				/* Inline PostProcess (clamp) */
-				if(avg_level > 32767) avg_level = 32767;
-				else if(avg_level < -32768) avg_level = -32768;
-				tmp[tmpCount++] = (int16_t)avg_level;
+				/* DC blocker: y[n] = x[n] - x[n-1] + R * y[n-1]
+				   R = 255/256 (~0.996) for fast settling. */
+				{
+					int32_t x = current_level;
+					int32_t y = x - pPokey->dc_x_prev + ((pPokey->dc_y_prev * 255) >> 8);
+					pPokey->dc_x_prev = x;
+					
+					/* Clamp y_prev to prevent drift/overflow */
+					if(y > 32767) y = 32767;
+					else if(y < -32768) y = -32768;
+					pPokey->dc_y_prev = y;
+
+					tmp[tmpCount++] = (int16_t)y;
+				}
 
 				pPokey->sample_acc = 0;
 				pPokey->sample_phase_fp -= adjusted_cps;
@@ -1125,6 +1126,7 @@ u8 *Pokey_STIMER_KBCODE(_6502_Context_t *pContext, u8 *pValue)
  	{	
 		IoData_t *pIoData = (IoData_t *)pContext->pIoData;
 		
+		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_STIMER_KBCODE] = *pValue;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
@@ -1159,12 +1161,14 @@ u8 *Pokey_STIMER_KBCODE(_6502_Context_t *pContext, u8 *pValue)
 }
 
 /* $D20A SKREST/RANDOM */
+u8 *Pokey_STIMER_KBCODE(_6502_Context_t *pContext, u8 *pValue); // forward
 u8 *Pokey_SKREST_RANDOM(_6502_Context_t *pContext, u8 *pValue)
 {
 	PokeyState_t *pPokey = Pokey_GetState(pContext);
 
 	if(pValue)
  	{	
+		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_SKREST_RANDOM] = *pValue;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
@@ -1225,9 +1229,9 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
 
+	Pokey_Sync(pContext, pContext->llCycleCounter);
 	if(pValue)
 	{
-		Pokey_Sync(pContext, pContext->llCycleCounter);
 #ifdef VERBOSE_SIO
 		printf("             [%16lld] SEROUT ", pContext->llCycleCounter);
 		printf("(%02X)!\n", *pValue);
@@ -1488,6 +1492,10 @@ u8 *Pokey_SKCTL_SKSTAT(_6502_Context_t *pContext, u8 *pValue)
 		printf("             [%16lld]", pContext->llCycleCounter);
 		printf(" SKCTL: %02X\n", *pValue);
 #endif
+	}
+	else
+	{
+		Pokey_Sync(pContext, pContext->llCycleCounter);
 	}
 
 	return &RAM[IO_SKCTL_SKSTAT];
