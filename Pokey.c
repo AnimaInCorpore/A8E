@@ -147,8 +147,8 @@ static void PokeyAudio_RingWrite(PokeyState_t *pPokey, const int16_t *pSamples, 
 	   This prevents hard discontinuities from dropping samples. */
 	{
 		int32_t fill_error = (int32_t)pPokey->ring_count - (int32_t)pPokey->ring_target;
-		double adjust_speed = 0.00001; /* Very slow adjustment */
-		pPokey->rate_adjust += (double)fill_error * adjust_speed;
+		double adjust_speed = 1.0e-9; /* Very slow adjustment */
+		pPokey->rate_adjust += (double)fill_error * adjust_speed * (double)count;
 		/* Clamp rate adjustment to +/- 2% */
 		if(pPokey->rate_adjust > 0.02)
 			pPokey->rate_adjust = 0.02;
@@ -161,10 +161,7 @@ static void PokeyAudio_RingWrite(PokeyState_t *pPokey, const int16_t *pSamples, 
 		/* If buffer is critically full, blend with existing to avoid pop */
 		if(pPokey->ring_count >= pPokey->ring_size - 1)
 		{
-			/* Crossfade oldest sample with new one */
-			int32_t old_sample = pPokey->ring[pPokey->ring_read];
-			int32_t new_sample = pSamples[i];
-			pPokey->ring[pPokey->ring_read] = (int16_t)((old_sample + new_sample) / 2);
+			/* Drop oldest sample */
 			pPokey->ring_read = (pPokey->ring_read + 1) % pPokey->ring_size;
 			pPokey->ring_count--;
 		}
@@ -746,7 +743,7 @@ static int32_t PokeyAudio_MixCycleLevel(PokeyState_t *pPokey, PokeyAudioChannel_
 		/* Second-stage smoothing for final output.
 		   Use stronger alpha for volume-only (sample playback). */
 		{
-			double alpha = vol_only ? pPokey->vol_alpha : 0.5;
+			double alpha = vol_only ? pPokey->vol_alpha : poly_alpha;
 			pPokey->vol_smooth[i] += alpha * (x - pPokey->vol_smooth[i]);
 			pPokey->vol_smooth2[i] += alpha * (pPokey->vol_smooth[i] - pPokey->vol_smooth2[i]);
 			sum += pPokey->vol_smooth2[i];
