@@ -75,8 +75,7 @@ typedef struct
 	int audio_subsystem_started;
 	int audio_opened;
 
-	/* Box-filter (cycle-accurate) resampling accumulator. */
-	int64_t sample_acc;
+	/* Sample phase (32.32 fixed-point CPU cycles since last output sample). */
 	u64 sample_phase_fp;
 
 	/* Non-linear-ish DAC/mixer approximation: sum(volume gates) -> raw level. */
@@ -85,20 +84,12 @@ typedef struct
 	/* Last emitted sample (for underrun hold). */
 	int16_t last_sample;
 
-	/* DC blocker state: previous input and previous output (fixed-point). */
-	int32_t dc_x_prev;
-	int32_t dc_y_prev;
-
-	/* Drift compensation: smoothly adjust rate when buffer is too full/empty. */
-	double rate_adjust;
-
 	int16_t *ring;
 	u32 ring_size; /* in samples */
 	u32 ring_mask; /* ring_size-1 if power-of-two, else 0 */
 	u32 ring_read;
 	u32 ring_write;
 	u32 ring_count;
-	u32 ring_target; /* target fill level for rate adjustment */
 
 	u8 audctl;
 	u8 skctl;
@@ -165,31 +156,6 @@ static void PokeyAudio_RingWrite(PokeyState_t *pPokey, const int16_t *pSamples, 
 		}
 	}
 
-	/* Adaptive rate adjustment: track ring fill level with a bounded
-	   first-order control (no unbounded accumulation). */
-	{
-		int32_t fill_error = (int32_t)pPokey->ring_count - (int32_t)pPokey->ring_target;
-		int32_t deadband = (int32_t)(pPokey->ring_size / 64u);
-		double target = 0.0;
-		double alpha;
-
-		if(deadband < 64)
-			deadband = 64;
-
-		/* Only adjust if significantly outside deadband to avoid oscillation. */
-		if(fill_error > deadband)
-			target = 0.005;  /* Slow down: buffer too full */
-		else if(fill_error < -deadband)
-			target = -0.005; /* Speed up: buffer too empty */
-
-		/* Very slow convergence to avoid audible pitch wobble. */
-		alpha = (double)count / (pPokey->sample_rate_hz ? (double)pPokey->sample_rate_hz : 48000.0);
-		if(alpha > 0.02)
-			alpha = 0.02;
-
-		pPokey->rate_adjust += (target - pPokey->rate_adjust) * alpha;
-	}
-
 	if(pPokey->audio_opened)
 		SDL_UnlockAudio();
 }
@@ -237,14 +203,8 @@ static void PokeyAudio_Callback(void *userdata, Uint8 *stream, int len)
 	if(samplesRead > 0)
 		hold = pOut[samplesRead - 1];
 
-	/* On underrun, fade to zero gradually instead of holding constant
-	   (which can cause a DC offset click when audio resumes). */
 	for(i = samplesRead; i < samplesRequested; i++)
-	{
 		pOut[i] = hold;
-		/* Gentle fade toward zero */
-		hold = (int16_t)(hold * 0.995);
-	}
 
 	if(pPokey)
 		pPokey->last_sample = hold;
@@ -253,7 +213,7 @@ static void PokeyAudio_Callback(void *userdata, Uint8 *stream, int len)
 static void PokeyAudio_RecomputeDacTable(PokeyState_t *pPokey)
 {
 	/* Simple linear DAC table for maximum speed.
-	   Output is unipolar (0 to positive); DC blocker centers it. */
+	   Output is unipolar (0 to positive). */
 	const int32_t max_output = 24000; /* Leave headroom */
 	u32 i;
 
@@ -618,7 +578,6 @@ void Pokey_Init(_6502_Context_t *pContext)
 	pPokey->cycles_per_sample_fp =
 		(((u64)pPokey->cpu_hz) << 32) / (u64)pPokey->sample_rate_hz;
 	pPokey->last_cycle = pContext->llCycleCounter;
-	pPokey->sample_acc = 0;
 	pPokey->sample_phase_fp = 0;
 
 	pPokey->lfsr17 = 0x1ffffu;
@@ -635,14 +594,10 @@ void Pokey_Init(_6502_Context_t *pContext)
 	pPokey->ring = (int16_t *)malloc(sizeof(int16_t) * pPokey->ring_size);
 	if(pPokey->ring)
 		memset(pPokey->ring, 0, sizeof(int16_t) * pPokey->ring_size);
-	
-	/* Target ~50ms latency at 48kHz = 2400 samples. Start empty and let it fill. */
-	pPokey->ring_target = 2400;
+
 	pPokey->ring_write = 0;
 	pPokey->ring_read = 0;
 	pPokey->ring_count = 0;
-	
-	pPokey->rate_adjust = 0.0;
 
 	pPokey->audctl = SRAM[IO_AUDCTL_ALLPOT];
 	pPokey->skctl = SRAM[IO_SKCTL_SKSTAT];
@@ -704,7 +659,6 @@ void Pokey_Init(_6502_Context_t *pContext)
 	pPokey->sample_rate_hz = (u32)pPokey->have.freq;
 	pPokey->cycles_per_sample_fp =
 		(((u64)pPokey->cpu_hz) << 32) / (u64)pPokey->sample_rate_hz;
-	pPokey->sample_acc = 0;
 	pPokey->sample_phase_fp = 0;
 
 	pPokey->audio_opened = 1;
@@ -802,66 +756,27 @@ void Pokey_Sync(_6502_Context_t *pContext, u64 llCycleCounter)
 	pPokey->aChannels[3].audc = SRAM[IO_AUDC4_POT7];
 
 	cur = pPokey->last_cycle;
-
-	/* Pre-calculate adjusted rate once per sync. */
 	u64 adjusted_cps = pPokey->cycles_per_sample_fp;
-	if(pPokey->rate_adjust != 0.0)
-	{
-		double factor = 1.0 + pPokey->rate_adjust;
-		adjusted_cps = (u64)((double)pPokey->cycles_per_sample_fp * factor);
-	}
 
 	while(cur < llCycleCounter)
 	{
-		/* Box-filter the piecewise-constant signal over each output sample
-		   interval to reduce aliasing vs. point sampling. The signal is assumed
-		   constant over the CPU cycle interval [cur, cur+1). */
 		int32_t level = PokeyAudio_MixCycleLevel(pPokey, pPokey->aChannels, pPokey->audctl);
-		u64 remaining_fp = 1ull << 32;
-
-		while(remaining_fp)
+		pPokey->sample_phase_fp += (1ull << 32);
+		while(pPokey->sample_phase_fp >= adjusted_cps)
 		{
-			u64 need_fp = adjusted_cps - pPokey->sample_phase_fp;
-			u64 take_fp = (remaining_fp < need_fp) ? remaining_fp : need_fp;
+			int32_t s = level;
+			if(s > 32767)
+				s = 32767;
+			else if(s < -32768)
+				s = -32768;
+			tmp[tmpCount++] = (int16_t)s;
 
-			pPokey->sample_acc += (int64_t)level * (int64_t)take_fp;
-			pPokey->sample_phase_fp += take_fp;
-			remaining_fp -= take_fp;
+			pPokey->sample_phase_fp -= adjusted_cps;
 
-			if(pPokey->sample_phase_fp >= adjusted_cps)
+			if(tmpCount == (sizeof(tmp) / sizeof(tmp[0])))
 			{
-				/* Round-to-nearest division for signed numerator; optimized. */
-				int64_t num = pPokey->sample_acc;
-				u64 den = adjusted_cps;
-				int32_t current_level;
-				if(num >= 0)
-					current_level = (int32_t)((num + (int64_t)(den / 2)) / (int64_t)den);
-				else
-					current_level = -(int32_t)(((-num) + (int64_t)(den / 2)) / (int64_t)den);
-
-				/* DC blocker: y[n] = x[n] - x[n-1] + R * y[n-1]
-				   R = 255/256 (~0.996) for fast settling. */
-				{
-					int32_t x = current_level;
-					int32_t y = x - pPokey->dc_x_prev + ((pPokey->dc_y_prev * 255) >> 8);
-					pPokey->dc_x_prev = x;
-					
-					/* Clamp y_prev to prevent drift/overflow */
-					if(y > 32767) y = 32767;
-					else if(y < -32768) y = -32768;
-					pPokey->dc_y_prev = y;
-
-					tmp[tmpCount++] = (int16_t)y;
-				}
-
-				pPokey->sample_acc = 0;
-				pPokey->sample_phase_fp -= adjusted_cps;
-
-				if(tmpCount == (sizeof(tmp) / sizeof(tmp[0])))
-				{
-					PokeyAudio_RingWrite(pPokey, tmp, tmpCount);
-					tmpCount = 0;
-				}
+				PokeyAudio_RingWrite(pPokey, tmp, tmpCount);
+				tmpCount = 0;
 			}
 		}
 
