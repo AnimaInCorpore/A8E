@@ -115,6 +115,7 @@ typedef struct
 	u32 ring_count;
 
 	u8 audctl;
+	u8 skctl;
 	PokeyAudioChannel_t aChannels[4];
 } PokeyState_t;
 
@@ -405,26 +406,40 @@ static void PokeyAudio_RecomputeClocks(PokeyAudioChannel_t *pChannels, u8 audctl
 
 static void PokeyAudio_PolyStep(PokeyState_t *pPokey)
 {
-	u32 bit17;
-	u16 bit9;
-	u8 bit5;
-	u8 bit4;
-
 	if(!pPokey)
 		return;
 
-	/* Polynomials clocked by the ~1.77MHz (PAL) master clock. */
-	bit17 = (u32)(((pPokey->lfsr17 >> 0) ^ (pPokey->lfsr17 >> 5)) & 1u);
-	pPokey->lfsr17 = (pPokey->lfsr17 >> 1) | (bit17 << 16);
+	/* Polynomials clocked by the ~1.79MHz (PAL) master clock.
+	   The exact stepping matters for the perceived noise/buzz; these taps
+	   match widely used reference implementations. */
+	{
+		/* poly4/poly5: shift left, new bit in bit0. */
+		u32 l4 = (u32)pPokey->lfsr4 & 0x0fu;
+		u32 l5 = (u32)pPokey->lfsr5 & 0x1fu;
+		u32 new4 = (u32)(~(((l4 >> 2) ^ (l4 >> 3)) & 1u) & 1u);
+		u32 new5 = (u32)(~(((l5 >> 2) ^ (l5 >> 4)) & 1u) & 1u);
+		pPokey->lfsr4 = (u8)(((l4 << 1) | new4) & 0x0fu);
+		pPokey->lfsr5 = (u8)(((l5 << 1) | new5) & 0x1fu);
+	}
 
-	bit9 = (u16)(((pPokey->lfsr9 >> 0) ^ (pPokey->lfsr9 >> 4)) & 1u);
-	pPokey->lfsr9 = (u16)((pPokey->lfsr9 >> 1) | (bit9 << 8));
+	{
+		/* poly9: 9-bit LFSR (BIT0 ^ BIT5). */
+		u32 l9 = (u32)pPokey->lfsr9 & 0x1ffu;
+		u32 in9 = ((l9 >> 0) ^ (l9 >> 5)) & 1u;
+		l9 = (l9 >> 1) | (in9 << 8);
+		pPokey->lfsr9 = (u16)(l9 & 0x1ffu);
+	}
 
-	bit5 = (u8)(((pPokey->lfsr5 >> 0) ^ (pPokey->lfsr5 >> 2)) & 1u);
-	pPokey->lfsr5 = (u8)((pPokey->lfsr5 >> 1) | (bit5 << 4));
-
-	bit4 = (u8)(((pPokey->lfsr4 >> 0) ^ (pPokey->lfsr4 >> 1)) & 1u);
-	pPokey->lfsr4 = (u8)((pPokey->lfsr4 >> 1) | (bit4 << 3));
+	{
+		/* poly17: POKEY-specific 17-bit polynomial. */
+		u32 l17 = pPokey->lfsr17 & 0x1ffffu;
+		u32 in8 = ((l17 >> 8) ^ (l17 >> 13)) & 1u;
+		u32 in0 = l17 & 1u;
+		l17 >>= 1;
+		l17 = (l17 & 0xff7fu) | (in8 << 7);
+		l17 = (l17 & 0xffffu) | (in0 << 16);
+		pPokey->lfsr17 = l17 & 0x1ffffu;
+	}
 }
 
 static u8 PokeyAudio_Poly17Bit(PokeyState_t *pPokey, u8 audctl)
@@ -550,6 +565,11 @@ static void PokeyAudio_StepCpuCycle(
 	u8 pulse2 = 0;
 	u8 pulse3 = 0;
 	u32 i;
+
+	/* If the two least significant bits of SKCTL are 0, audio clocks (and RNG)
+	   are held in reset. */
+	if(pPokey && ((pPokey->skctl & 0x03) == 0))
+		return;
 
 	/* Master clock tick: advance polynomial counters. */
 	PokeyAudio_PolyStep(pPokey);
@@ -743,10 +763,10 @@ void Pokey_Init(_6502_Context_t *pContext)
 	pPokey->sample_phase_fp = 0;
 	pPokey->dither_state = 0x12345678u ^ (u32)pPokey->last_cycle;
 
-	pPokey->lfsr17 = 0x1ffff;
-	pPokey->lfsr9 = 0x1ff;
-	pPokey->lfsr5 = 0x1f;
-	pPokey->lfsr4 = 0x0f;
+	pPokey->lfsr17 = 0x1ffffu;
+	pPokey->lfsr9 = 0x01ffu;
+	pPokey->lfsr5 = 0x00u;
+	pPokey->lfsr4 = 0x00u;
 	pPokey->hp1_latch = 0;
 	pPokey->hp2_latch = 0;
 	PokeyAudio_RecomputeDacTable(pPokey);
@@ -773,6 +793,7 @@ void Pokey_Init(_6502_Context_t *pContext)
 		memset(pPokey->ring, 0, sizeof(int16_t) * pPokey->ring_size);
 
 	pPokey->audctl = SRAM[IO_AUDCTL_ALLPOT];
+	pPokey->skctl = SRAM[IO_SKCTL_SKSTAT];
 	for(i = 0; i < 4; i++)
 	{
 		pPokey->aChannels[i].audf = 0;
@@ -899,6 +920,27 @@ void Pokey_Sync(_6502_Context_t *pContext, u64 llCycleCounter)
 		return;
 
 	/* Read latest control regs; callers sync before writes for cycle correctness. */
+	{
+		u8 skctl = SRAM[IO_SKCTL_SKSTAT];
+		if(pPokey->skctl != skctl)
+		{
+			u32 i;
+			pPokey->skctl = skctl;
+			if((skctl & 0x03) == 0)
+			{
+				/* Hold RNG/audio in reset: restart polynomials and prescalers. */
+				pPokey->lfsr17 = 0x1ffffu;
+				pPokey->lfsr9 = 0x01ffu;
+				pPokey->lfsr5 = 0x00u;
+				pPokey->lfsr4 = 0x00u;
+				for(i = 0; i < 4; i++)
+					pPokey->aChannels[i].clk_acc_cycles = 0;
+				pPokey->hp1_latch = 0;
+				pPokey->hp2_latch = 0;
+			}
+		}
+	}
+
 	if(pPokey->audctl != SRAM[IO_AUDCTL_ALLPOT])
 	{
 		pPokey->audctl = SRAM[IO_AUDCTL_ALLPOT];
