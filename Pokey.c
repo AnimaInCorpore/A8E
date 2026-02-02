@@ -94,6 +94,15 @@ typedef struct
 	PokeyBiquad_t lp2;
 	PokeyBiquad_t lp3;
 	PokeyBiquad_t lp4;
+	PokeyBiquad_t hp_prev;
+	PokeyBiquad_t lp_prev;
+	PokeyBiquad_t lp2_prev;
+	PokeyBiquad_t lp3_prev;
+	PokeyBiquad_t lp4_prev;
+	u32 filter_xfade_remaining;
+	u32 filter_xfade_len;
+	u8 filters_initialized;
+	u8 lp_stages_prev;
 	double analog_lp_fc;
 	u8 filter_mode;
 	u8 lp_stages;
@@ -116,6 +125,7 @@ typedef struct
 
 	int16_t *ring;
 	u32 ring_size; /* in samples */
+	u32 ring_mask; /* ring_size-1 if power-of-two, else 0 */
 	u32 ring_read;
 	u32 ring_write;
 	u32 ring_count;
@@ -131,68 +141,128 @@ static u32 Pokey_CpuHz(void)
 	return ATARI_CPU_HZ_PAL;
 }
 
+static u32 PokeyAudio_RingWrap(u32 idx, u32 ring_size, u32 ring_mask)
+{
+	if(ring_mask != 0)
+		return idx & ring_mask;
+	return (ring_size != 0) ? (idx % ring_size) : 0;
+}
+
 static void PokeyAudio_RingWrite(PokeyState_t *pPokey, const int16_t *pSamples, u32 count)
 {
-	u32 i;
-
 	if(!pPokey || !pPokey->ring || pPokey->ring_size == 0)
 		return;
+
+	/* If asked to write more than the whole ring, keep only the newest samples. */
+	if(count >= pPokey->ring_size)
+	{
+		u32 keep = pPokey->ring_size;
+		pSamples += (count - keep);
+		count = keep;
+	}
 
 	/* Protect against the SDL audio callback thread. */
 	if(pPokey->audio_opened)
 		SDL_LockAudio();
 
-	/* Adaptive rate adjustment: if buffer is getting too full, slightly
-	   speed up sample generation (skip); if too empty, slow down (duplicate).
-	   This prevents hard discontinuities from dropping samples. */
 	{
-		int32_t fill_error = (int32_t)pPokey->ring_count - (int32_t)pPokey->ring_target;
-		double adjust_speed = 1.0e-9; /* Very slow adjustment */
-		pPokey->rate_adjust += (double)fill_error * adjust_speed * (double)count;
-		/* Clamp rate adjustment to +/- 2% */
-		if(pPokey->rate_adjust > 0.02)
-			pPokey->rate_adjust = 0.02;
-		if(pPokey->rate_adjust < -0.02)
-			pPokey->rate_adjust = -0.02;
-	}
+		u32 ring_size = pPokey->ring_size;
+		u32 ring_mask = pPokey->ring_mask;
+		u32 free_space = ring_size - pPokey->ring_count;
+		u32 drop = (count > free_space) ? (count - free_space) : 0;
 
-	for(i = 0; i < count; i++)
-	{
-		/* If buffer is critically full, blend with existing to avoid pop */
-		if(pPokey->ring_count >= pPokey->ring_size - 1)
+		if(drop)
 		{
-			/* Drop oldest sample */
-			pPokey->ring_read = (pPokey->ring_read + 1) % pPokey->ring_size;
-			pPokey->ring_count--;
+			pPokey->ring_read = PokeyAudio_RingWrap(pPokey->ring_read + drop, ring_size, ring_mask);
+			pPokey->ring_count -= drop;
 		}
 
-		pPokey->ring[pPokey->ring_write] = pSamples[i];
-		pPokey->ring_write = (pPokey->ring_write + 1) % pPokey->ring_size;
-		pPokey->ring_count++;
+		{
+			u32 first = count;
+			u32 to_end = ring_size - pPokey->ring_write;
+			if(first > to_end)
+				first = to_end;
+
+			memcpy(&pPokey->ring[pPokey->ring_write], pSamples, (size_t)first * sizeof(int16_t));
+
+			{
+				u32 second = count - first;
+				if(second)
+					memcpy(&pPokey->ring[0], &pSamples[first], (size_t)second * sizeof(int16_t));
+			}
+
+			pPokey->ring_write = PokeyAudio_RingWrap(pPokey->ring_write + count, ring_size, ring_mask);
+			pPokey->ring_count += count;
+		}
 	}
+
+	/* Adaptive rate adjustment: track ring fill level with a bounded
+	   first-order control (no unbounded accumulation). */
+	{
+		int32_t fill_error = (int32_t)pPokey->ring_count - (int32_t)pPokey->ring_target;
+		int32_t deadband = (int32_t)(pPokey->ring_size / 128u);
+		double target = 0.0;
+		double alpha = 0.0;
+
+		if(deadband < 32)
+			deadband = 32;
+
+		/* Target +/-2% adjustment at roughly +/-25% ring error. */
+		if(fill_error > deadband || fill_error < -deadband)
+		{
+			if(pPokey->ring_size != 0)
+				target = ((double)fill_error * 0.08) / (double)pPokey->ring_size;
+		}
+
+		if(target > 0.02)
+			target = 0.02;
+		if(target < -0.02)
+			target = -0.02;
+
+		/* Smoothly converge over ~1 second of audio to avoid "wow". */
+		if(pPokey->sample_rate_hz != 0)
+			alpha = 1.0 - exp(-(double)count / (double)pPokey->sample_rate_hz);
+
+		/* Safety clamp for very large writes. */
+		if(alpha > 0.05)
+			alpha = 0.05;
+
+		pPokey->rate_adjust += (target - pPokey->rate_adjust) * alpha;
+	}
+
 	if(pPokey->audio_opened)
 		SDL_UnlockAudio();
 }
 
 static u32 PokeyAudio_RingRead(PokeyState_t *pPokey, int16_t *pSamples, u32 count)
 {
-	u32 i = 0;
-
 	if(!pPokey || !pPokey->ring || pPokey->ring_size == 0)
 		return 0;
 
 	/* Called from the SDL audio callback; do not SDL_LockAudio() here. */
-	for(i = 0; i < count; i++)
 	{
-		if(pPokey->ring_count == 0)
-			break;
+		u32 ring_size = pPokey->ring_size;
+		u32 ring_mask = pPokey->ring_mask;
+		u32 avail = pPokey->ring_count;
+		u32 to_read = (count < avail) ? count : avail;
+		u32 first = to_read;
+		u32 to_end = ring_size - pPokey->ring_read;
 
-		pSamples[i] = pPokey->ring[pPokey->ring_read];
-		pPokey->ring_read = (pPokey->ring_read + 1) % pPokey->ring_size;
-		pPokey->ring_count--;
+		if(first > to_end)
+			first = to_end;
+
+		memcpy(pSamples, &pPokey->ring[pPokey->ring_read], (size_t)first * sizeof(int16_t));
+
+		{
+			u32 second = to_read - first;
+			if(second)
+				memcpy(&pSamples[first], &pPokey->ring[0], (size_t)second * sizeof(int16_t));
+		}
+
+		pPokey->ring_read = PokeyAudio_RingWrap(pPokey->ring_read + to_read, ring_size, ring_mask);
+		pPokey->ring_count -= to_read;
+		return to_read;
 	}
-
-	return i;
 }
 
 static void PokeyAudio_Callback(void *userdata, Uint8 *stream, int len)
@@ -246,8 +316,9 @@ static void PokeyAudio_RecomputeDacTable(PokeyState_t *pPokey)
 	/* A fast approximation of the real POKEY output path. Real POKEY DACs
 	   and resistive summing are notably non-linear, which contributes to
 	   the "warm" sound. We use a soft S-curve to reduce the "buzzy"
-	   digital edge. Output is now BIPOLAR centered at 0. */
+	   digital edge. Output is unipolar; DC is removed by the post HPF. */
 	const double headroom = 0.82;
+	const double drive = 2.2;
 	u32 i;
 
 	if(!pPokey)
@@ -255,13 +326,11 @@ static void PokeyAudio_RecomputeDacTable(PokeyState_t *pPokey)
 
 	for(i = 0; i <= 60; i++)
 	{
-		/* Use a tanh-based S-curve for smoother saturation at extremes.
-		   Map 0-60 to -1.0 to +1.0 (bipolar) for proper AC audio. */
+		/* Use a tanh-based S-curve for smoother saturation at extremes. */
 		double normalized = (double)i / 60.0;  /* 0..1 */
-		double centered = (normalized * 2.0) - 1.0;  /* -1..+1 */
-		double shaped = tanh(centered * 1.2) / tanh(1.2);  /* soft saturation */
-		if(shaped < -1.0)
-			shaped = -1.0;
+		double shaped = tanh(normalized * drive) / tanh(drive);
+		if(shaped < 0.0)
+			shaped = 0.0;
 		if(shaped > 1.0)
 			shaped = 1.0;
 		pPokey->dac_table[i] = (int32_t)lrint(shaped * 32767.0 * headroom);
@@ -347,15 +416,40 @@ static void PokeyAudio_BiquadSetupHighpass(PokeyBiquad_t *pBiquad, double fs, do
 	pBiquad->a2 = a2 / a0;
 }
 
+static void PokeyAudio_BeginFilterTransition(PokeyState_t *pPokey)
+{
+	if(!pPokey)
+		return;
+
+	if(!pPokey->filters_initialized)
+	{
+		pPokey->filter_xfade_remaining = 0;
+		pPokey->filter_xfade_len = 0;
+		return;
+	}
+
+	pPokey->hp_prev = pPokey->hp;
+	pPokey->lp_prev = pPokey->lp;
+	pPokey->lp2_prev = pPokey->lp2;
+	pPokey->lp3_prev = pPokey->lp3;
+	pPokey->lp4_prev = pPokey->lp4;
+	pPokey->lp_stages_prev = pPokey->lp_stages;
+
+	pPokey->filter_xfade_len = 256;
+	pPokey->filter_xfade_remaining = pPokey->filter_xfade_len;
+}
+
 static void PokeyAudio_RecomputeFilter(PokeyState_t *pPokey)
 {
 	double fs;
 	double fc_lp;
-	double fc_hp = 10.0;    /* DC blocker - lower since signal is now bipolar */
+	double fc_hp = 25.0;    /* DC blocker (faster settling, fewer "whumps") */
 	const double q = 0.7071067811865475; /* Butterworth */
 
 	if(!pPokey || pPokey->sample_rate_hz == 0)
 		return;
+
+	PokeyAudio_BeginFilterTransition(pPokey);
 
 	fs = (double)pPokey->sample_rate_hz;
 	fc_lp = pPokey->analog_lp_fc;
@@ -367,13 +461,39 @@ static void PokeyAudio_RecomputeFilter(PokeyState_t *pPokey)
 	PokeyAudio_BiquadSetupLowpass(&pPokey->lp2, fs, fc_lp, q);
 	PokeyAudio_BiquadSetupLowpass(&pPokey->lp3, fs, fc_lp, q);
 	PokeyAudio_BiquadSetupLowpass(&pPokey->lp4, fs, fc_lp, q);
+
+	/* Reset new filter state; the transition fade avoids coefficient "pops". */
+	PokeyAudio_BiquadReset(&pPokey->hp);
+	PokeyAudio_BiquadReset(&pPokey->lp);
+	PokeyAudio_BiquadReset(&pPokey->lp2);
+	PokeyAudio_BiquadReset(&pPokey->lp3);
+	PokeyAudio_BiquadReset(&pPokey->lp4);
+
+	pPokey->filters_initialized = 1;
+}
+
+static double PokeyAudio_FilterChain(
+	PokeyBiquad_t *pHp,
+	PokeyBiquad_t *pLp1,
+	PokeyBiquad_t *pLp2,
+	PokeyBiquad_t *pLp3,
+	PokeyBiquad_t *pLp4,
+	u8 lp_stages,
+	double x)
+{
+	double y = PokeyAudio_BiquadProcess(pHp, x);
+	y = PokeyAudio_BiquadProcess(pLp1, y);
+	y = PokeyAudio_BiquadProcess(pLp2, y);
+	if(lp_stages >= 3)
+		y = PokeyAudio_BiquadProcess(pLp3, y);
+	if(lp_stages >= 4)
+		y = PokeyAudio_BiquadProcess(pLp4, y);
+	return y;
 }
 
 static int16_t PokeyAudio_PostProcessSample(PokeyState_t *pPokey, int32_t raw)
 {
 	double x;
-	double y1;
-	double y2;
 	double out;
 
 	if(!pPokey)
@@ -387,16 +507,41 @@ static int16_t PokeyAudio_PostProcessSample(PokeyState_t *pPokey, int32_t raw)
 
 	x = (double)raw / 32768.0;
 
-	y1 = PokeyAudio_BiquadProcess(&pPokey->hp, x);
-	y2 = PokeyAudio_BiquadProcess(&pPokey->lp, y1);
-	y2 = PokeyAudio_BiquadProcess(&pPokey->lp2, y2);
-	if(pPokey->lp_stages >= 3)
-		y2 = PokeyAudio_BiquadProcess(&pPokey->lp3, y2);
-	if(pPokey->lp_stages >= 4)
-		y2 = PokeyAudio_BiquadProcess(&pPokey->lp4, y2);
-
 	/* Clamp and add a tiny amount of dither before quantizing back to int16. */
-	out = y2;
+	if(pPokey->filter_xfade_remaining && pPokey->filter_xfade_len)
+	{
+		u32 done = (pPokey->filter_xfade_len - pPokey->filter_xfade_remaining) + 1u;
+		if(done > pPokey->filter_xfade_len)
+			done = pPokey->filter_xfade_len;
+		double t = (double)done / (double)pPokey->filter_xfade_len;
+		double y_old =
+			PokeyAudio_FilterChain(
+				&pPokey->hp_prev,
+				&pPokey->lp_prev,
+				&pPokey->lp2_prev,
+				&pPokey->lp3_prev,
+				&pPokey->lp4_prev,
+				pPokey->lp_stages_prev,
+				x);
+		double y_new =
+			PokeyAudio_FilterChain(
+				&pPokey->hp,
+				&pPokey->lp,
+				&pPokey->lp2,
+				&pPokey->lp3,
+				&pPokey->lp4,
+				pPokey->lp_stages,
+				x);
+
+		out = (y_old * (1.0 - t)) + (y_new * t);
+		pPokey->filter_xfade_remaining--;
+	}
+	else
+	{
+		out = PokeyAudio_FilterChain(
+			&pPokey->hp, &pPokey->lp, &pPokey->lp2, &pPokey->lp3, &pPokey->lp4, pPokey->lp_stages, x);
+	}
+
 	if(out > 1.0)
 		out = 1.0;
 	if(out < -1.0)
@@ -693,9 +838,10 @@ static int32_t PokeyAudio_MixCycleLevel(PokeyState_t *pPokey, PokeyAudioChannel_
 	double sum = 0.0;
 	u8 pair12 = (u8)((audctl & 0x10) != 0);
 	u8 pair34 = (u8)((audctl & 0x08) != 0);
-	/* Alpha for smoothing raw polynomial output at ~1.77MHz rate.
-	   This is the primary anti-aliasing filter for the noise generators. */
-	const double poly_alpha = 0.08;
+	const double pi = 3.14159265358979323846;
+	const double cascade_comp = 1.553773974; /* 1 / sqrt(sqrt(2)-1) */
+	double out_fs = (pPokey != NULL && pPokey->sample_rate_hz != 0) ? (double)pPokey->sample_rate_hz : 48000.0;
+	double cpu_fs = (pPokey != NULL && pPokey->cpu_hz != 0) ? (double)pPokey->cpu_hz : 1773447.0;
 
 	if(!pPokey)
 		return 0;
@@ -710,14 +856,47 @@ static int32_t PokeyAudio_MixCycleLevel(PokeyState_t *pPokey, PokeyAudioChannel_
 		u8 audc = pChannels[i].audc;
 		u8 vol = (u8)(audc & 0x0f);
 		u8 vol_only = (u8)((audc & 0x10) != 0);
+		u8 dist = (u8)((audc >> 5) & 0x07);
+		u8 is_noise = (u8)(dist == 0 || dist == 2 || dist == 4 || dist == 6);
 		u8 bit;
 		double smoothed_bit;
 		double x;
+		double alpha_bit;
+		double alpha_stage;
+		double fc_pre;
+		double fc_stage;
+
+		/* Adapt pre-downsample bandlimiting to reduce aliasing:
+		   - noise/polynomial modes get stronger smoothing (lower cutoff)
+		   - tone modes keep more bandwidth */
+		fc_pre = out_fs * (is_noise ? 0.25 : 0.45);
+		if(is_noise && pChannels[i].clk_div_cycles == 1u)
+			fc_pre *= 0.72;
+		if(fc_pre < 1500.0)
+			fc_pre = 1500.0;
+		if(fc_pre > out_fs * 0.49)
+			fc_pre = out_fs * 0.49;
+
+		alpha_bit = 1.0 - exp(-2.0 * pi * fc_pre / cpu_fs);
+		if(alpha_bit < 0.002)
+			alpha_bit = 0.002;
+		if(alpha_bit > 0.25)
+			alpha_bit = 0.25;
+
+		/* Two cascaded 1-poles: compensate so the combined -3dB is ~fc_pre. */
+		fc_stage = fc_pre * cascade_comp;
+		if(fc_stage > out_fs * 0.49)
+			fc_stage = out_fs * 0.49;
+		alpha_stage = 1.0 - exp(-2.0 * pi * fc_stage / cpu_fs);
+		if(alpha_stage < 0.002)
+			alpha_stage = 0.002;
+		if(alpha_stage > 0.35)
+			alpha_stage = 0.35;
 
 		if(vol == 0)
 		{
 			/* Still update smoothing state to avoid discontinuities when volume returns. */
-			pChannels[i].output_smooth *= (1.0 - poly_alpha);
+			pChannels[i].output_smooth *= (1.0 - alpha_bit);
 			continue;
 		}
 
@@ -735,7 +914,7 @@ static int32_t PokeyAudio_MixCycleLevel(PokeyState_t *pPokey, PokeyAudioChannel_
 
 		/* First-stage smoothing: filter the raw polynomial output.
 		   This runs at CPU clock rate (~1.77MHz) and is the main anti-aliasing. */
-		pChannels[i].output_smooth += poly_alpha * ((double)bit - pChannels[i].output_smooth);
+		pChannels[i].output_smooth += alpha_bit * ((double)bit - pChannels[i].output_smooth);
 		smoothed_bit = pChannels[i].output_smooth;
 
 		x = smoothed_bit * (double)vol;
@@ -743,7 +922,7 @@ static int32_t PokeyAudio_MixCycleLevel(PokeyState_t *pPokey, PokeyAudioChannel_
 		/* Second-stage smoothing for final output.
 		   Use stronger alpha for volume-only (sample playback). */
 		{
-			double alpha = vol_only ? pPokey->vol_alpha : poly_alpha;
+			double alpha = vol_only ? pPokey->vol_alpha : alpha_stage;
 			pPokey->vol_smooth[i] += alpha * (x - pPokey->vol_smooth[i]);
 			pPokey->vol_smooth2[i] += alpha * (pPokey->vol_smooth[i] - pPokey->vol_smooth2[i]);
 			sum += pPokey->vol_smooth2[i];
@@ -816,7 +995,19 @@ void Pokey_Init(_6502_Context_t *pContext)
 	pPokey->analog_lp_fc = 5000.0;
 	pPokey->filter_mode = 0xff;
 	pPokey->lp_stages = 4;
-	pPokey->vol_alpha = 0.90;
+	/* Per-stage alpha for the 2x cascade in PokeyAudio_MixCycleLevel. */
+	{
+		const double pi = 3.14159265358979323846;
+		const double cascade_comp = 1.553773974;
+		double fc_stage = pPokey->analog_lp_fc * cascade_comp;
+		if(fc_stage < 1.0)
+			fc_stage = 1.0;
+		pPokey->vol_alpha = 1.0 - exp(-2.0 * pi * fc_stage / (double)pPokey->cpu_hz);
+		if(pPokey->vol_alpha < 0.002)
+			pPokey->vol_alpha = 0.002;
+		if(pPokey->vol_alpha > 0.35)
+			pPokey->vol_alpha = 0.35;
+	}
 	for(i = 0; i < 4; i++)
 	{
 		pPokey->vol_smooth[i] = 0.0;
@@ -826,6 +1017,7 @@ void Pokey_Init(_6502_Context_t *pContext)
 
 	/* Larger ring buffer to absorb timing variations between emulation and audio output. */
 	pPokey->ring_size = 32768;
+	pPokey->ring_mask = ((pPokey->ring_size & (pPokey->ring_size - 1u)) == 0) ? (pPokey->ring_size - 1u) : 0;
 	pPokey->ring = (int16_t *)malloc(sizeof(int16_t) * pPokey->ring_size);
 	if(pPokey->ring)
 		memset(pPokey->ring, 0, sizeof(int16_t) * pPokey->ring_size);
@@ -1008,6 +1200,7 @@ void Pokey_Sync(_6502_Context_t *pContext, u64 llCycleCounter)
 		if(mode != pPokey->filter_mode)
 		{
 			const double pi = 3.14159265358979323846;
+			const double cascade_comp = 1.553773974;
 			double fc_smooth = 0.0;
 
 			pPokey->filter_mode = mode;
@@ -1026,9 +1219,18 @@ void Pokey_Sync(_6502_Context_t *pContext, u64 llCycleCounter)
 			}
 
 			if(fc_smooth > 0.0 && pPokey->cpu_hz > 0)
-				pPokey->vol_alpha = 1.0 - exp(-2.0 * pi * fc_smooth / (double)pPokey->cpu_hz);
+			{
+				double fc_stage = fc_smooth * cascade_comp;
+				if(fc_stage < 1.0)
+					fc_stage = 1.0;
+				pPokey->vol_alpha = 1.0 - exp(-2.0 * pi * fc_stage / (double)pPokey->cpu_hz);
+				if(pPokey->vol_alpha < 0.002)
+					pPokey->vol_alpha = 0.002;
+				if(pPokey->vol_alpha > 0.35)
+					pPokey->vol_alpha = 0.35;
+			}
 			else
-				pPokey->vol_alpha = 0.85;
+				pPokey->vol_alpha = 0.35;
 
 			PokeyAudio_RecomputeFilter(pPokey);
 		}
