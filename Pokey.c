@@ -557,6 +557,73 @@ static PokeyState_t *Pokey_GetState(_6502_Context_t *pContext)
 	return (PokeyState_t *)pIoData->pPokey;
 }
 
+u64 Pokey_TimerPeriodCpuCycles(_6502_Context_t *pContext, u8 timer)
+{
+	u8 audctl;
+	u32 base;
+	u64 div;
+	u64 reload;
+
+	if(!pContext)
+		return 0;
+
+	/* Hold timers when POKEY clocks are in reset (SKCTL bits0..1 = 0). */
+	if((SRAM[IO_SKCTL_SKSTAT] & 0x03) == 0)
+		return 0;
+
+	audctl = SRAM[IO_AUDCTL_ALLPOT];
+	base = (audctl & 0x01) ? (u32)CYCLES_PER_LINE : 28u;
+
+	switch(timer)
+	{
+		case 1:
+			/* In 16-bit mode (ch1+ch2), timer1 has no independent divider output. */
+			if(audctl & 0x10)
+				return 0;
+			if(SRAM[IO_AUDF1_POT0] == 0)
+				return 0;
+
+			div = (audctl & 0x40) ? 1ull : (u64)base;
+			reload = (u64)SRAM[IO_AUDF1_POT0] + ((audctl & 0x40) ? 4ull : 1ull);
+			return reload * div;
+
+		case 2:
+			if(SRAM[IO_AUDF2_POT2] == 0)
+				return 0;
+
+			if(audctl & 0x10)
+			{
+				u32 period12 = (((u32)SRAM[IO_AUDF2_POT2]) << 8) | (u32)SRAM[IO_AUDF1_POT0];
+				div = (audctl & 0x40) ? 1ull : (u64)base;
+				reload = (u64)period12 + ((audctl & 0x40) ? 7ull : 1ull);
+				return reload * div;
+			}
+
+			div = (u64)base;
+			reload = (u64)SRAM[IO_AUDF2_POT2] + 1ull;
+			return reload * div;
+
+		case 4:
+			if(SRAM[IO_AUDF4_POT6] == 0)
+				return 0;
+
+			if(audctl & 0x08)
+			{
+				u32 period34 = (((u32)SRAM[IO_AUDF4_POT6]) << 8) | (u32)SRAM[IO_AUDF3_POT4];
+				div = (audctl & 0x20) ? 1ull : (u64)base;
+				reload = (u64)period34 + ((audctl & 0x20) ? 7ull : 1ull);
+				return reload * div;
+			}
+
+			div = (u64)base;
+			reload = (u64)SRAM[IO_AUDF4_POT6] + 1ull;
+			return reload * div;
+
+		default:
+			return 0;
+	}
+}
+
 void Pokey_Init(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
@@ -1038,8 +1105,9 @@ u8 *Pokey_AUDCTL_ALLPOT(_6502_Context_t *pContext, u8 *pValue)
 u8 *Pokey_STIMER_KBCODE(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
- 	{	
+  	{	
 		IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+		u64 period;
 		
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_STIMER_KBCODE] = *pValue;
@@ -1047,29 +1115,17 @@ u8 *Pokey_STIMER_KBCODE(_6502_Context_t *pContext, u8 *pValue)
 		printf("             [%16lld]", pContext->llCycleCounter);
 		printf(" STIMER: %02X\n", *pValue);
 #endif
-		if(SRAM[IO_AUDF1_POT0])
-		{
-			pIoData->llTimer1Cycle = 
-				pContext->llCycleCounter + SRAM[IO_AUDF1_POT0];
 
-			AtariIoCycleTimedEventUpdate(pContext);
-		}
+		period = Pokey_TimerPeriodCpuCycles(pContext, 1);
+		pIoData->llTimer1Cycle = period ? (pContext->llCycleCounter + period) : CYCLE_NEVER;
 
-		if(SRAM[IO_AUDF2_POT2])
-		{
-			pIoData->llTimer2Cycle = 
-				pContext->llCycleCounter + SRAM[IO_AUDF2_POT2];
+		period = Pokey_TimerPeriodCpuCycles(pContext, 2);
+		pIoData->llTimer2Cycle = period ? (pContext->llCycleCounter + period) : CYCLE_NEVER;
 
-			AtariIoCycleTimedEventUpdate(pContext);
-		}
+		period = Pokey_TimerPeriodCpuCycles(pContext, 4);
+		pIoData->llTimer4Cycle = period ? (pContext->llCycleCounter + period) : CYCLE_NEVER;
 
-		if(SRAM[IO_AUDF4_POT6])
-		{
-			pIoData->llTimer4Cycle = 
-				pContext->llCycleCounter + SRAM[IO_AUDF4_POT6];
-
-			AtariIoCycleTimedEventUpdate(pContext);
-		}
+		AtariIoCycleTimedEventUpdate(pContext);
 	}
 
 	return &RAM[IO_STIMER_KBCODE];
