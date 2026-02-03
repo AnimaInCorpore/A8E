@@ -2553,11 +2553,9 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 #ifdef VERBOSE_SIO
 		printf("             [%16lld] SERIAL_OUTPUT_TRANSMISSION_DONE request!\n", pContext->llCycleCounter);
 #endif
+		RAM[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
 		if(SRAM[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE)
-		{
-			RAM[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
 			_6502_Irq(pContext);
-		}
 
 		pIoData->llSerialOutputTransmissionDoneCycle = CYCLE_NEVER;
 	}
@@ -2567,11 +2565,9 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 #ifdef VERBOSE_SIO
 		printf("             [%16lld] SERIAL_OUTPUT_DATA_NEEDED request!\n", pContext->llCycleCounter);
 #endif
+		RAM[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_DATA_NEEDED;
 		if(SRAM[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_DATA_NEEDED)
-		{
-			RAM[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_DATA_NEEDED;
 			_6502_Irq(pContext);
-		}
 
 		pIoData->llSerialOutputNeedDataCycle = CYCLE_NEVER;
 	}
@@ -2581,55 +2577,74 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 #ifdef VERBOSE_SIO
 		printf("             [%16lld] SERIAL_INPUT_DATA_READY request!\n", pContext->llCycleCounter);
 #endif
+		RAM[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_INPUT_DATA_READY;
 		if(SRAM[IO_IRQEN_IRQST] & IRQ_SERIAL_INPUT_DATA_READY)
-		{
-			RAM[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_INPUT_DATA_READY;
 			_6502_Irq(pContext);
-		}
 
 		pIoData->llSerialInputDataReadyCycle = CYCLE_NEVER;
 	}
 
 	if(pContext->llCycleCounter >= pIoData->llTimer1Cycle)
 	{
+		u64 period = Pokey_TimerPeriodCpuCycles(pContext, 1);
 #ifdef VERBOSE_SIO
 		printf("             [%16lld] TIMER_1 request!\n", pContext->llCycleCounter);
 #endif
+		RAM[IO_IRQEN_IRQST] &= ~IRQ_TIMER_1;
 		if(SRAM[IO_IRQEN_IRQST] & IRQ_TIMER_1)
-		{
-			RAM[IO_IRQEN_IRQST] &= ~IRQ_TIMER_1;
 			_6502_Irq(pContext);
-		}
 
-		pIoData->llTimer1Cycle = CYCLE_NEVER;
+		if(period == 0)
+		{
+			pIoData->llTimer1Cycle = CYCLE_NEVER;
+		}
+		else
+		{
+			while(pIoData->llTimer1Cycle <= pContext->llCycleCounter)
+				pIoData->llTimer1Cycle += period;
+		}
 	}
 
 	if(pContext->llCycleCounter >= pIoData->llTimer2Cycle)
 	{
+		u64 period = Pokey_TimerPeriodCpuCycles(pContext, 2);
 #ifdef VERBOSE_SIO
 		printf("             [%16lld] TIMER_2 request!\n", pContext->llCycleCounter);
 #endif
+		RAM[IO_IRQEN_IRQST] &= ~IRQ_TIMER_2;
 		if(SRAM[IO_IRQEN_IRQST] & IRQ_TIMER_2)
-		{
-			RAM[IO_IRQEN_IRQST] &= ~IRQ_TIMER_2;
 			_6502_Irq(pContext);
-		}
 
-		pIoData->llTimer2Cycle = CYCLE_NEVER;
+		if(period == 0)
+		{
+			pIoData->llTimer2Cycle = CYCLE_NEVER;
+		}
+		else
+		{
+			while(pIoData->llTimer2Cycle <= pContext->llCycleCounter)
+				pIoData->llTimer2Cycle += period;
+		}
 	}
 
 	if(pContext->llCycleCounter >= pIoData->llTimer4Cycle)
 	{
+		u64 period = Pokey_TimerPeriodCpuCycles(pContext, 4);
 #ifdef VERBOSE_SIO
 		printf("             [%16lld] TIMER_4 request!\n", pContext->llCycleCounter);
 #endif
+		RAM[IO_IRQEN_IRQST] &= ~IRQ_TIMER_4;
 		if(SRAM[IO_IRQEN_IRQST] & IRQ_TIMER_4)
-		{
-			RAM[IO_IRQEN_IRQST] &= ~IRQ_TIMER_4;
 			_6502_Irq(pContext);
-		}
 
-		pIoData->llTimer4Cycle = CYCLE_NEVER;
+		if(period == 0)
+		{
+			pIoData->llTimer4Cycle = CYCLE_NEVER;
+		}
+		else
+		{
+			while(pIoData->llTimer4Cycle <= pContext->llCycleCounter)
+				pIoData->llTimer4Cycle += period;
+		}
 	}
 
 	Pokey_Sync(pContext, pContext->llCycleCounter);
@@ -2910,11 +2925,9 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
     		break;
 
     	case SDLK_F8: // BREAK
+			RAM[IO_IRQEN_IRQST] &= ~IRQ_BREAK_KEY_PRESSED;
 			if(SRAM[IO_IRQEN_IRQST] & IRQ_BREAK_KEY_PRESSED)
-			{
-				RAM[IO_IRQEN_IRQST] &= ~IRQ_BREAK_KEY_PRESSED;
 				_6502_Irq(pContext);
-			}
     		
     		break;
 
@@ -2956,11 +2969,9 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
 
     				RAM[IO_STIMER_KBCODE] = cKeyCode;
 
+    				RAM[IO_IRQEN_IRQST] &= ~IRQ_OTHER_KEY_PRESSED;
     				if(SRAM[IO_IRQEN_IRQST] & IRQ_OTHER_KEY_PRESSED)
-    				{
-    					RAM[IO_IRQEN_IRQST] &= ~IRQ_OTHER_KEY_PRESSED;  
     					_6502_Irq(pContext);
-    				}
 
     				pIoData->lKeyPressCounter++;
     				RAM[IO_SKCTL_SKSTAT] &= ~0x04;
