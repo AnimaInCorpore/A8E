@@ -91,10 +91,25 @@ typedef struct
 	u32 ring_write;
 	u32 ring_count;
 
+	/* Dynamic sample rate adjustment for audio/emulation sync. */
+	u64 cycles_per_sample_fp_base;  /* nominal rate */
+	u32 target_buffer_samples;      /* ideal fill level */
+
 	u8 audctl;
 	u8 skctl;
 	PokeyAudioChannel_t aChannels[4];
 } PokeyState_t;
+
+static u32 PokeyAudio_ClampU32(u32 v, u32 lo, u32 hi)
+{
+	if(hi < lo)
+		hi = lo;
+	if(v < lo)
+		return lo;
+	if(v > hi)
+		return hi;
+	return v;
+}
 
 static u32 Pokey_CpuHz(void)
 {
@@ -644,6 +659,7 @@ void Pokey_Init(_6502_Context_t *pContext)
 	pPokey->cpu_hz = Pokey_CpuHz();
 	pPokey->cycles_per_sample_fp =
 		(((u64)pPokey->cpu_hz) << 32) / (u64)pPokey->sample_rate_hz;
+	pPokey->cycles_per_sample_fp_base = pPokey->cycles_per_sample_fp;
 	pPokey->last_cycle = pContext->llCycleCounter;
 	pPokey->sample_phase_fp = 0;
 
@@ -665,6 +681,9 @@ void Pokey_Init(_6502_Context_t *pContext)
 	pPokey->ring_write = 0;
 	pPokey->ring_read = 0;
 	pPokey->ring_count = 0;
+
+	/* Default target: 1/4 ring for low latency. This gets refined after SDL_OpenAudio. */
+	pPokey->target_buffer_samples = PokeyAudio_ClampU32(pPokey->ring_size / 4u, 256u, (pPokey->ring_size > 0) ? (pPokey->ring_size - 1u) : 0u);
 
 	pPokey->audctl = SRAM[IO_AUDCTL_ALLPOT];
 	pPokey->skctl = SRAM[IO_SKCTL_SKSTAT];
@@ -726,7 +745,18 @@ void Pokey_Init(_6502_Context_t *pContext)
 	pPokey->sample_rate_hz = (u32)pPokey->have.freq;
 	pPokey->cycles_per_sample_fp =
 		(((u64)pPokey->cpu_hz) << 32) / (u64)pPokey->sample_rate_hz;
+	pPokey->cycles_per_sample_fp_base = pPokey->cycles_per_sample_fp;
 	pPokey->sample_phase_fp = 0;
+
+	/* Prefer ~2 SDL device buffers as the steady-state fill (keeps playback smooth without huge latency). */
+	if(pPokey->have.samples > 0)
+	{
+		u32 target = (u32)pPokey->have.samples * 2u;
+		u32 max_target = (pPokey->ring_size * 3u) / 4u; /* leave headroom for throttling */
+		if(max_target == 0)
+			max_target = (pPokey->ring_size > 0) ? (pPokey->ring_size - 1u) : 0u;
+		pPokey->target_buffer_samples = PokeyAudio_ClampU32(target, 256u, max_target);
+	}
 
 	pPokey->audio_opened = 1;
 	SDL_PauseAudio(0);
@@ -822,39 +852,119 @@ void Pokey_Sync(_6502_Context_t *pContext, u64 llCycleCounter)
 	pPokey->aChannels[3].audf = SRAM[IO_AUDF4_POT6];
 	pPokey->aChannels[3].audc = SRAM[IO_AUDC4_POT7];
 
-	cur = pPokey->last_cycle;
-	u64 adjusted_cps = pPokey->cycles_per_sample_fp;
-
-	while(cur < llCycleCounter)
 	{
-		int32_t level = PokeyAudio_MixCycleLevel(pPokey, pPokey->aChannels, pPokey->audctl);
-		pPokey->sample_phase_fp += (1ull << 32);
-		while(pPokey->sample_phase_fp >= adjusted_cps)
+		u64 adjusted_cps;
+		u32 fill_level;
+		int32_t fill_delta;
+		u32 target;
+
+		/* Dynamic rate adjustment: speed up sample generation when buffer is low,
+		   slow down when buffer is filling up. This keeps audio in sync. */
+		if(pPokey->audio_opened)
+			SDL_LockAudio();
+		fill_level = pPokey->ring_count;
+		if(pPokey->audio_opened)
+			SDL_UnlockAudio();
+
+		target = pPokey->target_buffer_samples;
+		if(target == 0)
+			target = 1;
+
+		fill_delta = (int32_t)fill_level - (int32_t)target;
+
+		/* Clamp control error so we never apply a runaway correction. */
+		if(fill_delta > (int32_t)target)
+			fill_delta = (int32_t)target;
+		else if(fill_delta < -(int32_t)target)
+			fill_delta = -(int32_t)target;
+
+		/* Adjust by up to +/- 2% based on buffer fill level.
+		   Positive fill_delta means buffer is fuller than target -> slow down (increase cycles_per_sample).
+		   Negative fill_delta means buffer is emptier -> speed up (decrease cycles_per_sample). */
 		{
-			int32_t s = level;
-			if(s > 32767)
-				s = 32767;
-			else if(s < -32768)
-				s = -32768;
-			tmp[tmpCount++] = (int16_t)s;
+			int64_t base = (int64_t)pPokey->cycles_per_sample_fp_base;
+			int64_t max_adjust = base / 50; /* 2% */
+			int64_t adjustment = ((int64_t)fill_delta * max_adjust) / (int64_t)target;
+			int64_t adjusted = base + adjustment;
 
-			pPokey->sample_phase_fp -= adjusted_cps;
+			if(adjusted < (base - max_adjust))
+				adjusted = base - max_adjust;
+			else if(adjusted > (base + max_adjust))
+				adjusted = base + max_adjust;
+			if(adjusted < 1)
+				adjusted = 1;
 
-			if(tmpCount == (sizeof(tmp) / sizeof(tmp[0])))
-			{
-				PokeyAudio_RingWrite(pPokey, tmp, tmpCount);
-				tmpCount = 0;
-			}
+			adjusted_cps = (u64)adjusted;
 		}
 
-		PokeyAudio_StepCpuCycle(pPokey, pPokey->aChannels, pPokey->audctl);
-		cur++;
+		cur = pPokey->last_cycle;
+
+		while(cur < llCycleCounter)
+		{
+			int32_t level = PokeyAudio_MixCycleLevel(pPokey, pPokey->aChannels, pPokey->audctl);
+			pPokey->sample_phase_fp += (1ull << 32);
+			while(pPokey->sample_phase_fp >= adjusted_cps)
+			{
+				int32_t s = level;
+				if(s > 32767)
+					s = 32767;
+				else if(s < -32768)
+					s = -32768;
+				tmp[tmpCount++] = (int16_t)s;
+
+				pPokey->sample_phase_fp -= adjusted_cps;
+
+				if(tmpCount == (sizeof(tmp) / sizeof(tmp[0])))
+				{
+					PokeyAudio_RingWrite(pPokey, tmp, tmpCount);
+					tmpCount = 0;
+				}
+			}
+
+			PokeyAudio_StepCpuCycle(pPokey, pPokey->aChannels, pPokey->audctl);
+			cur++;
+		}
+
+		if(tmpCount)
+			PokeyAudio_RingWrite(pPokey, tmp, tmpCount);
 	}
 
-	if(tmpCount)
-		PokeyAudio_RingWrite(pPokey, tmp, tmpCount);
-
 	pPokey->last_cycle = llCycleCounter;
+}
+
+int Pokey_ShouldThrottle(_6502_Context_t *pContext)
+{
+	PokeyState_t *pPokey = Pokey_GetState(pContext);
+	u32 fill_level;
+	u32 high_water;
+
+	if(!pPokey || !pPokey->audio_opened || !pPokey->ring || pPokey->ring_size == 0)
+		return 0;
+
+	/* If audio isn't actually playing, don't stall the emulator. */
+	if(SDL_GetAudioStatus() != SDL_AUDIO_PLAYING)
+		return 0;
+
+	/* High water mark: if buffer is more than 75% full, throttle.
+	   This provides audio-driven sync to prevent buffer overflow. */
+	high_water = (pPokey->ring_size * 3) / 4;
+	if(pPokey->have.samples > 0 && pPokey->target_buffer_samples > 0)
+	{
+		u32 extra = (u32)pPokey->have.samples * 2u;
+		u32 candidate = pPokey->target_buffer_samples;
+		if(candidate < (0xffffffffu - extra))
+			candidate += extra;
+		else
+			candidate = 0xffffffffu;
+		if(candidate < high_water)
+			high_water = candidate;
+	}
+
+	SDL_LockAudio();
+	fill_level = pPokey->ring_count;
+	SDL_UnlockAudio();
+
+	return (fill_level >= high_water) ? 1 : 0;
 }
 
 /********************************************************************

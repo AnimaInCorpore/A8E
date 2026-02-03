@@ -19,6 +19,7 @@
 
 #include "6502.h"
 #include "AtariIo.h"
+#include "Pokey.h"
 
 /********************************************************************
 *
@@ -175,7 +176,33 @@ int main(int argc, char *argv[])
 		}
 
 		if(!cTurboFlag)
-			SDL_Delay(MAX(0, MIN(20, 20 - (SDL_GetTicks() - lLastTicks))));
+		{
+			/* Audio-driven timing: wait while audio buffer is sufficiently full.
+			   This keeps emulation in sync with audio playback rate. */
+			u32 throttleStart = SDL_GetTicks();
+			int didThrottle = 0;
+
+			while(Pokey_ShouldThrottle(pAtariContext))
+			{
+				/* Audio buffer is filling up - let it drain. */
+				SDL_PumpEvents();
+				SDL_Delay(1);
+				didThrottle = 1;
+
+				/* Safety net: never stall the main loop indefinitely. */
+				if((SDL_GetTicks() - throttleStart) > 250)
+					break;
+			}
+
+			/* Fallback: if audio throttling didn't engage (audio disabled or buffer very empty),
+			   use time-based delay to prevent runaway speed. */
+			if(!didThrottle)
+			{
+				u32 elapsed = SDL_GetTicks() - lLastTicks;
+				if(elapsed < 18)  /* slightly under 20ms to let buffer build */
+					SDL_Delay(18 - elapsed);
+			}
+		}
 		
 		lLastTicks = SDL_GetTicks();
 	}

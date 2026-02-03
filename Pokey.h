@@ -63,4 +63,7 @@ void Pokey_Init(_6502_Context_t *pContext);
 void Pokey_Close(_6502_Context_t *pContext);
 void Pokey_Sync(_6502_Context_t *pContext, u64 llCycleCounter);
 
+/* Returns 1 if audio buffer is too full and emulation should wait, 0 otherwise. */
+int Pokey_ShouldThrottle(_6502_Context_t *pContext);
+
 #endif
