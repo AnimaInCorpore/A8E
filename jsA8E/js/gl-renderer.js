@@ -159,9 +159,9 @@
         "  vec3 a = fetchLinear(vec2(px - 1.0, py));\n" +
         "  vec3 b = fetchLinear(vec2(px, py));\n" +
         "  vec3 c = fetchLinear(vec2(px + 1.0, py));\n" +
-        "  float wa = gaus(fx + 1.0, -0.95);\n" +
-        "  float wb = gaus(fx, -0.95);\n" +
-        "  float wc = gaus(fx - 1.0, -0.95);\n" +
+        "  float wa = gaus(fx + 1.0, -1.15);\n" +
+        "  float wb = gaus(fx, -1.15);\n" +
+        "  float wc = gaus(fx - 1.0, -1.15);\n" +
         "  return (a * wa + b * wb + c * wc) / (wa + wb + wc);\n" +
         "}\n" +
         "vec3 tri(vec2 samplePos, vec2 scanPos, float vScale){\n" +
@@ -196,10 +196,18 @@
         "  vec3 l2 = toLinear(texture(u_sceneTex, uv - tx * 2.0).rgb);\n" +
         "  vec3 l3 = toLinear(texture(u_sceneTex, uv - tx * 3.0).rgb);\n" +
         "  vec3 bleed;\n" +
-        "  bleed.r = col.r * 0.54 + r1.r * 0.26 + r2.r * 0.14 + r3.r * 0.06;\n" +
-        "  bleed.g = col.g * 0.62 + r1.g * 0.22 + r2.g * 0.11 + r3.g * 0.05;\n" +
-        "  bleed.b = col.b * 0.54 + l1.b * 0.26 + l2.b * 0.14 + l3.b * 0.06;\n" +
+        "  bleed.r = col.r * 0.68 + r1.r * 0.20 + r2.r * 0.09 + r3.r * 0.03;\n" +
+        "  bleed.g = col.g * 0.74 + r1.g * 0.16 + r2.g * 0.07 + r3.g * 0.03;\n" +
+        "  bleed.b = col.b * 0.68 + l1.b * 0.20 + l2.b * 0.09 + l3.b * 0.03;\n" +
         "  return bleed;\n" +
+        "}\n" +
+        "float scanlinePass(float phase, float luminance, float scaleY){\n" +
+        "  float strength = smoothstep(1.2, 2.6, scaleY);\n" +
+        "  float beam = mix(1.35, 0.70, clamp(sqrt(max(luminance, 0.0)), 0.0, 1.0));\n" +
+        "  float wave = max(0.0, 0.5 - 0.5 * cos(phase * 6.2831853));\n" +
+        "  float floor = mix(0.60, 0.82, clamp(luminance, 0.0, 1.0));\n" +
+        "  float shaped = floor + (1.0 - floor) * pow(wave, beam);\n" +
+        "  return mix(1.0, shaped, strength);\n" +
         "}\n" +
         "void main(){\n" +
         "  vec2 uv = warp(v_uv);\n" +
@@ -209,11 +217,14 @@
         "  }\n" +
         "  float scaleY = u_outputSize.y / max(1.0, u_scanlineSize.y);\n" +
         "  float minScale = min(u_outputSize.x / u_sourceSize.x, scaleY);\n" +
-        "  float vScale = mix(-1.3, -3.4, smoothstep(1.0, 3.0, scaleY));\n" +
+        "  float vScale = mix(-1.6, -4.0, smoothstep(1.0, 3.0, scaleY));\n" +
         "  vec2 samplePos = uv * u_sourceSize;\n" +
         "  vec2 scanPos = uv * u_scanlineSize;\n" +
         "  vec3 col = tri(samplePos, scanPos, vScale);\n" +
         "  col = compositeBleed(uv, col);\n" +
+        "  float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));\n" +
+        "  col *= scanlinePass(fract(scanPos.y), lum, scaleY);\n" +
+        "  col *= mix(1.0, 1.03, smoothstep(1.2, 2.6, scaleY));\n" +
         "  vec2 d = uv * 2.0 - 1.0;\n" +
         "  float vignette = 1.0 - 0.14 * dot(d, d);\n" +
         "  col *= clamp(vignette, 0.0, 1.0);\n" +
@@ -265,9 +276,9 @@
         "  vec3 a = fetchLinear(vec2(px - 1.0, py));\n" +
         "  vec3 b = fetchLinear(vec2(px, py));\n" +
         "  vec3 c = fetchLinear(vec2(px + 1.0, py));\n" +
-        "  float wa = gaus(fx + 1.0, -0.95);\n" +
-        "  float wb = gaus(fx, -0.95);\n" +
-        "  float wc = gaus(fx - 1.0, -0.95);\n" +
+        "  float wa = gaus(fx + 1.0, -1.15);\n" +
+        "  float wb = gaus(fx, -1.15);\n" +
+        "  float wc = gaus(fx - 1.0, -1.15);\n" +
         "  return (a * wa + b * wb + c * wc) / (wa + wb + wc);\n" +
         "}\n" +
         "vec3 tri(vec2 samplePos, vec2 scanPos, float vScale){\n" +
@@ -302,10 +313,18 @@
         "  vec3 l2 = toLinear(texture2D(u_sceneTex, uv - tx * 2.0).rgb);\n" +
         "  vec3 l3 = toLinear(texture2D(u_sceneTex, uv - tx * 3.0).rgb);\n" +
         "  vec3 bleed;\n" +
-        "  bleed.r = col.r * 0.54 + r1.r * 0.26 + r2.r * 0.14 + r3.r * 0.06;\n" +
-        "  bleed.g = col.g * 0.62 + r1.g * 0.22 + r2.g * 0.11 + r3.g * 0.05;\n" +
-        "  bleed.b = col.b * 0.54 + l1.b * 0.26 + l2.b * 0.14 + l3.b * 0.06;\n" +
+        "  bleed.r = col.r * 0.68 + r1.r * 0.20 + r2.r * 0.09 + r3.r * 0.03;\n" +
+        "  bleed.g = col.g * 0.74 + r1.g * 0.16 + r2.g * 0.07 + r3.g * 0.03;\n" +
+        "  bleed.b = col.b * 0.68 + l1.b * 0.20 + l2.b * 0.09 + l3.b * 0.03;\n" +
         "  return bleed;\n" +
+        "}\n" +
+        "float scanlinePass(float phase, float luminance, float scaleY){\n" +
+        "  float strength = smoothstep(1.2, 2.6, scaleY);\n" +
+        "  float beam = mix(1.35, 0.70, clamp(sqrt(max(luminance, 0.0)), 0.0, 1.0));\n" +
+        "  float wave = max(0.0, 0.5 - 0.5 * cos(phase * 6.2831853));\n" +
+        "  float floor = mix(0.60, 0.82, clamp(luminance, 0.0, 1.0));\n" +
+        "  float shaped = floor + (1.0 - floor) * pow(wave, beam);\n" +
+        "  return mix(1.0, shaped, strength);\n" +
         "}\n" +
         "void main(){\n" +
         "  vec2 uv = warp(v_uv);\n" +
@@ -315,11 +334,14 @@
         "  }\n" +
         "  float scaleY = u_outputSize.y / max(1.0, u_scanlineSize.y);\n" +
         "  float minScale = min(u_outputSize.x / u_sourceSize.x, scaleY);\n" +
-        "  float vScale = mix(-1.3, -3.4, smoothstep(1.0, 3.0, scaleY));\n" +
+        "  float vScale = mix(-1.6, -4.0, smoothstep(1.0, 3.0, scaleY));\n" +
         "  vec2 samplePos = uv * u_sourceSize;\n" +
         "  vec2 scanPos = uv * u_scanlineSize;\n" +
         "  vec3 col = tri(samplePos, scanPos, vScale);\n" +
         "  col = compositeBleed(uv, col);\n" +
+        "  float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));\n" +
+        "  col *= scanlinePass(fract(scanPos.y), lum, scaleY);\n" +
+        "  col *= mix(1.0, 1.03, smoothstep(1.2, 2.6, scaleY));\n" +
         "  vec2 d = uv * 2.0 - 1.0;\n" +
         "  float vignette = 1.0 - 0.14 * dot(d, d);\n" +
         "  col *= clamp(vignette, 0.0, 1.0);\n" +
