@@ -16,17 +16,25 @@
     var total = countQueuedSamples(queue, queueIndex);
     if (total <= maxSamples) return queueIndex | 0;
 
-    // Drop oldest buffers until we're under budget.
-    while (queue.length && total > maxSamples) {
-      var b = queue.shift();
-      if (queueIndex) {
-        var remaining = ((b.length | 0) - (queueIndex | 0)) | 0;
-        if (remaining < 0) remaining = 0;
-        total -= remaining;
+    // Drop oldest samples, partially trimming the head buffer when possible.
+    var toDrop = (total - maxSamples) | 0;
+    while (queue.length && toDrop > 0) {
+      var head = queue[0];
+      var start = queueIndex | 0;
+      var avail = ((head.length | 0) - start) | 0;
+      if (avail <= 0) {
+        queue.shift();
         queueIndex = 0;
-      } else {
-        total -= b.length | 0;
+        continue;
       }
+      if (avail <= toDrop) {
+        queue.shift();
+        queueIndex = 0;
+        toDrop -= avail;
+        continue;
+      }
+      queueIndex = (start + toDrop) | 0;
+      toDrop = 0;
     }
 
     if (!queue.length) queueIndex = 0;
@@ -50,7 +58,17 @@
         var msg = e && e.data ? e.data : null;
         if (!msg || !msg.type) return;
         if (msg.type === "samples" && msg.samples && msg.samples.length) {
-          self.queue.push(msg.samples);
+          var samples = msg.samples;
+          if (!(samples instanceof Float32Array)) {
+            if (ArrayBuffer.isView(samples) && samples.buffer) {
+              samples = new Float32Array(samples.buffer, samples.byteOffset | 0, samples.length | 0);
+            } else if (Array.isArray(samples)) {
+              samples = new Float32Array(samples);
+            } else {
+              return;
+            }
+          }
+          self.queue.push(samples);
           self.queueIndex = clampQueueSamples(self.queue, self.queueIndex, self.maxQueuedSamples);
           return;
         }
@@ -76,6 +94,11 @@
         }
 
         var buf = this.queue[0];
+        if (!buf || typeof buf.length !== "number") {
+          this.queue.shift();
+          this.queueIndex = 0;
+          continue;
+        }
         var avail = (buf.length | 0) - (this.queueIndex | 0);
         if (avail <= 0) {
           this.queue.shift();
@@ -85,7 +108,13 @@
 
         var toCopy = out.length - i;
         if (toCopy > avail) toCopy = avail;
-        out.set(buf.subarray(this.queueIndex | 0, (this.queueIndex + toCopy) | 0), i);
+        var start = this.queueIndex | 0;
+        var end = (this.queueIndex + toCopy) | 0;
+        if (buf.subarray) {
+          out.set(buf.subarray(start, end), i);
+        } else {
+          for (var j = 0; j < toCopy; j++) out[i + j] = buf[start + j] || 0.0;
+        }
         i += toCopy;
         this.queueIndex = (this.queueIndex + toCopy) | 0;
 

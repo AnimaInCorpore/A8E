@@ -11,7 +11,7 @@
   var COLOR_CLOCKS_PER_LINE = PIXELS_PER_LINE / 2;
   var CYCLES_PER_LINE = COLOR_CLOCKS_PER_LINE / 2; // 114
   var ATARI_CPU_HZ_PAL = 1773447;
-  var CYCLE_NEVER = 0xffffffffffffffff;
+  var CYCLE_NEVER = Infinity;
 
   var FIRST_VISIBLE_LINE = 8;
   var LAST_VISIBLE_LINE = 247;
@@ -20,6 +20,7 @@
   var SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES = 1500;
   var SERIAL_INPUT_FIRST_DATA_READY_CYCLES = 3000;
   var SERIAL_INPUT_DATA_READY_CYCLES = 900;
+  var POKEY_AUDIO_MAX_CATCHUP_CYCLES = 50000;
 
   var NMI_DLI = 0x80;
   var NMI_VBI = 0x40;
@@ -124,6 +125,47 @@
   var PRIO_PM1 = 0x20;
   var PRIO_PM2 = 0x40;
   var PRIO_PM3 = 0x80;
+  var PRIORITY_TABLE_BKG_PF012 = new Uint8Array([PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2]);
+  var PRIORITY_TABLE_BKG_PF013 = new Uint8Array([PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF3]);
+  var PRIORITY_TABLE_PF0123 = new Uint8Array([PRIO_PF0, PRIO_PF1, PRIO_PF2, PRIO_PF3]);
+  var SCRATCH_GTIA_COLOR_TABLE = new Uint8Array(16);
+  var SCRATCH_COLOR_TABLE_A = new Uint8Array(4);
+  var SCRATCH_COLOR_TABLE_B = new Uint8Array(4);
+  var SCRATCH_BACKGROUND_TABLE = new Uint8Array(4);
+
+  function fillGtiaColorTable(sram, out) {
+    out[0] = sram[IO_COLPM0_TRIG2] & 0xff;
+    out[1] = sram[IO_COLPM1_TRIG3] & 0xff;
+    out[2] = sram[IO_COLPM2_PAL] & 0xff;
+    out[3] = sram[IO_COLPM3] & 0xff;
+    out[4] = sram[IO_COLPF0] & 0xff;
+    out[5] = sram[IO_COLPF1] & 0xff;
+    out[6] = sram[IO_COLPF2] & 0xff;
+    out[7] = sram[IO_COLPF3] & 0xff;
+    out[8] = sram[IO_COLBK] & 0xff;
+    out[9] = sram[IO_COLBK] & 0xff;
+    out[10] = sram[IO_COLBK] & 0xff;
+    out[11] = sram[IO_COLBK] & 0xff;
+    out[12] = sram[IO_COLPF0] & 0xff;
+    out[13] = sram[IO_COLPF1] & 0xff;
+    out[14] = sram[IO_COLPF2] & 0xff;
+    out[15] = sram[IO_COLPF3] & 0xff;
+  }
+
+  function fillBkgPf012ColorTable(sram, out) {
+    out[0] = sram[IO_COLBK] & 0xff;
+    out[1] = sram[IO_COLPF0] & 0xff;
+    out[2] = sram[IO_COLPF1] & 0xff;
+    out[3] = sram[IO_COLPF2] & 0xff;
+  }
+
+  function decodeTextModeCharacter(ch, chactl) {
+    ch &= 0xff;
+    if (!(ch & 0x80)) return ch;
+    if (chactl & 0x01) return 0x00; // blank/space for high-bit characters
+    ch &= 0x7f;
+    return (chactl & 0x02) ? (ch | 0x100) : ch;
+  }
 
   // --- Minimal ANTIC mode info (ported from AtariIo.c) ---
   var ANTIC_MODE_INFO = [
@@ -1049,6 +1091,9 @@
     var cur = st.lastCycle;
     var cps = st.cyclesPerSampleFp;
     var samplePhase = st.samplePhaseFp;
+    if (target - cur > POKEY_AUDIO_MAX_CATCHUP_CYCLES) {
+      cur = target - POKEY_AUDIO_MAX_CATCHUP_CYCLES;
+    }
 
     while (cur < target) {
       var level = pokeyAudioMixCycleSample(st);
@@ -1725,7 +1770,6 @@
     var io = ctx.ioData;
     var ram = ctx.ram;
     var sram = ctx.sram;
-    var y = io.video.currentDisplayLine;
 
     var lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
     var vScrollOffset = (8 - lineDelta) - (io.video.verticalScrollOffset | 0);
@@ -1737,104 +1781,110 @@
       );
     }
 
-	    var bytesPerLine = io.drawLine.bytesPerLine | 0;
-	    var dst = io.videoOut.pixels;
-	    var prio = io.videoOut.priority;
-	    var dstIndex = io.drawLine.destIndex | 0;
-	    var dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
-
+    var bytesPerLine = io.drawLine.bytesPerLine | 0;
+    var dst = io.videoOut.pixels;
+    var prio = io.videoOut.priority;
+    var dstIndex = io.drawLine.destIndex | 0;
+    var dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
+    var chactl = sram[IO_CHACTL] & 0x03;
     var priorMode = (sram[IO_PRIOR] >> 6) & 3;
-
-    // Color table used by GTIA modes (case 2 in the original).
-    var colorTable = [
-      sram[IO_COLPM0_TRIG2],
-      sram[IO_COLPM1_TRIG3],
-      sram[IO_COLPM2_PAL],
-      sram[IO_COLPM3],
-      sram[IO_COLPF0],
-      sram[IO_COLPF1],
-      sram[IO_COLPF2],
-      sram[IO_COLPF3],
-      sram[IO_COLBK],
-      sram[IO_COLBK],
-      sram[IO_COLBK],
-      sram[IO_COLBK],
-      sram[IO_COLPF0],
-      sram[IO_COLPF1],
-      sram[IO_COLPF2],
-      sram[IO_COLPF3],
-    ];
+    var colorTable = SCRATCH_GTIA_COLOR_TABLE;
+    fillGtiaColorTable(sram, colorTable);
+    var colPf1 = sram[IO_COLPF1] & 0xff;
+    var colPf2 = sram[IO_COLPF2] & 0xff;
+    var colBk = sram[IO_COLBK] & 0xff;
+    var c0Inverse = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
+    var c1Inverse = colPf2 & 0xff;
+    var c0Normal = colPf2 & 0xff;
+    var c1Normal = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
 
     var chBase = ((sram[IO_CHBASE] << 8) & 0xfc00) & 0xffff;
 
-	    for (var i = 0; i < bytesPerLine; i++) {
-	      var ch = ram[dispAddr] & 0xff;
-	      dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
+    for (var i = 0; i < bytesPerLine; i++) {
+      var decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
+      var ch = decoded & 0xff;
+      var inverse = (decoded & 0x100) !== 0;
+      dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
 
-	      var c0, c1, p0, p1;
-	      if (ch & 0x80) {
-	        ch &= 0x7f;
-	        c0 = (sram[IO_COLPF2] & 0xf0) | (sram[IO_COLPF1] & 0x0f);
-	        c1 = sram[IO_COLPF2];
-	        p0 = PRIO_PF1;
-	        p1 = PRIO_PF2;
-	      } else {
-	        c0 = sram[IO_COLPF2];
-	        c1 = (sram[IO_COLPF2] & 0xf0) | (sram[IO_COLPF1] & 0x0f);
-	        p0 = PRIO_PF2;
-	        p1 = PRIO_PF1;
-	      }
+      var c0 = inverse ? c0Inverse : c0Normal;
+      var c1 = inverse ? c1Inverse : c1Normal;
+      var p0 = inverse ? PRIO_PF1 : PRIO_PF2;
+      var p1 = inverse ? PRIO_PF2 : PRIO_PF1;
 
       var glyph = ram[(chBase + ch * 8 + (vScrollOffset & 0xff)) & 0xffff] & 0xff;
 
-	      if (priorMode === 0) {
-	        for (var b = 0; b < 8; b++) {
-	          if (glyph & 0x80) {
-	            dst[dstIndex] = c1;
-	            prio[dstIndex] = p1;
-	          } else {
-	            dst[dstIndex] = c0;
-	            prio[dstIndex] = p0;
-	          }
-	          dstIndex++;
-	          glyph = (glyph << 1) & 0xff;
-	        }
-	      } else if (priorMode === 1) {
+      if (priorMode === 0) {
+        for (var b = 0; b < 8; b++) {
+          if (glyph & 0x80) {
+            dst[dstIndex] = c1;
+            prio[dstIndex] = p1;
+          } else {
+            dst[dstIndex] = c0;
+            prio[dstIndex] = p0;
+          }
+          dstIndex++;
+          glyph = (glyph << 1) & 0xff;
+        }
+      } else if (priorMode === 1) {
         // GTIA mode 9-ish: 2 pixels of 4 bits each mixed with COLBK.
         var hi = glyph >> 4;
         var lo = glyph & 0x0f;
-        var col = (sram[IO_COLBK] | hi) & 0xff;
+        var col = (colBk | hi) & 0xff;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = col;
-        col = (sram[IO_COLBK] | lo) & 0xff;
+        prio[dstIndex - 1] = PRIO_BKG;
+        col = (colBk | lo) & 0xff;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
       } else if (priorMode === 2) {
         var hi2 = colorTable[glyph >> 4] & 0xff;
         dst[dstIndex++] = hi2;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = hi2;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = hi2;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = hi2;
+        prio[dstIndex - 1] = PRIO_BKG;
         var lo2 = colorTable[glyph & 0x0f] & 0xff;
         dst[dstIndex++] = lo2;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = lo2;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = lo2;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = lo2;
+        prio[dstIndex - 1] = PRIO_BKG;
       } else {
-        var hi3 = glyph & 0xf0 ? (sram[IO_COLBK] | (glyph & 0xf0)) : sram[IO_COLBK] & 0xf0;
+        var hi3 = glyph & 0xf0 ? (colBk | (glyph & 0xf0)) : colBk & 0xf0;
         dst[dstIndex++] = hi3;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = hi3;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = hi3;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = hi3;
-        var lo3 = glyph & 0x0f ? (sram[IO_COLBK] | ((glyph << 4) & 0xf0)) : sram[IO_COLBK] & 0xf0;
+        prio[dstIndex - 1] = PRIO_BKG;
+        var lo3 = glyph & 0x0f ? (colBk | ((glyph << 4) & 0xf0)) : colBk & 0xf0;
         dst[dstIndex++] = lo3;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = lo3;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = lo3;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = lo3;
+        prio[dstIndex - 1] = PRIO_BKG;
       }
     }
 
@@ -1857,24 +1907,24 @@
     var prio = io.videoOut.priority;
     var dstIndex = io.drawLine.destIndex | 0;
     var dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
+    var chactl = sram[IO_CHACTL] & 0x03;
+    var colPf1 = sram[IO_COLPF1] & 0xff;
+    var colPf2 = sram[IO_COLPF2] & 0xff;
+    var c0Inverse = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
+    var c1Inverse = colPf2 & 0xff;
+    var c0Normal = colPf2 & 0xff;
+    var c1Normal = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
 
     for (var i = 0; i < bytesPerLine; i++) {
-      var ch = ram[dispAddr] & 0xff;
+      var decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
+      var ch = decoded & 0xff;
+      var inverse = (decoded & 0x100) !== 0;
       dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
 
-      var c0, c1, p0, p1;
-      if (ch & 0x80) {
-        ch &= 0x7f;
-        c0 = (sram[IO_COLPF2] & 0xf0) | (sram[IO_COLPF1] & 0x0f);
-        c1 = sram[IO_COLPF2];
-        p0 = PRIO_PF1;
-        p1 = PRIO_PF2;
-      } else {
-        c0 = sram[IO_COLPF2];
-        c1 = (sram[IO_COLPF2] & 0xf0) | (sram[IO_COLPF1] & 0x0f);
-        p0 = PRIO_PF2;
-        p1 = PRIO_PF1;
-      }
+      var c0 = inverse ? c0Inverse : c0Normal;
+      var c1 = inverse ? c1Inverse : c1Normal;
+      var p0 = inverse ? PRIO_PF1 : PRIO_PF2;
+      var p1 = inverse ? PRIO_PF2 : PRIO_PF1;
 
       var data = 0;
       if (ch < 0x60) {
@@ -1940,10 +1990,14 @@
       );
     }
 
-    var aColorTable0 = [sram[IO_COLBK], sram[IO_COLPF0], sram[IO_COLPF1], sram[IO_COLPF2]];
-    var aColorTable1 = [sram[IO_COLBK], sram[IO_COLPF0], sram[IO_COLPF1], sram[IO_COLPF3]];
-    var aPriorityTable0 = [PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2];
-    var aPriorityTable1 = [PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF3];
+    var chactl = sram[IO_CHACTL] & 0x03;
+    var aColorTable0 = SCRATCH_COLOR_TABLE_A;
+    var aColorTable1 = SCRATCH_COLOR_TABLE_B;
+    fillBkgPf012ColorTable(sram, aColorTable0);
+    aColorTable1[0] = sram[IO_COLBK] & 0xff;
+    aColorTable1[1] = sram[IO_COLPF0] & 0xff;
+    aColorTable1[2] = sram[IO_COLPF1] & 0xff;
+    aColorTable1[3] = sram[IO_COLPF3] & 0xff;
 
     var bytesPerLine = io.drawLine.bytesPerLine | 0;
     var dst = io.videoOut.pixels;
@@ -1953,15 +2007,16 @@
     var chBase = (((sram[IO_CHBASE] & 0xff) << 8) & 0xfc00) & 0xffff;
 
     for (var i = 0; i < bytesPerLine; i++) {
-      var ch = ram[dispAddr] & 0xff;
+      var decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
+      var ch = decoded & 0xff;
+      var inverse = (decoded & 0x100) !== 0;
       dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
 
       var colorTable = aColorTable0;
-      var prioTable = aPriorityTable0;
-      if (ch & 0x80) {
-        ch &= 0x7f;
+      var prioTable = PRIORITY_TABLE_BKG_PF012;
+      if (inverse) {
         colorTable = aColorTable1;
-        prioTable = aPriorityTable1;
+        prioTable = PRIORITY_TABLE_BKG_PF013;
       }
 
       var data = ram[(chBase + ch * 8 + (vScrollOffset & 0xff)) & 0xffff] & 0xff;
@@ -1995,10 +2050,14 @@
       );
     }
 
-    var aColorTable0 = [sram[IO_COLBK], sram[IO_COLPF0], sram[IO_COLPF1], sram[IO_COLPF2]];
-    var aColorTable1 = [sram[IO_COLBK], sram[IO_COLPF0], sram[IO_COLPF1], sram[IO_COLPF3]];
-    var aPriorityTable0 = [PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2];
-    var aPriorityTable1 = [PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF3];
+    var chactl = sram[IO_CHACTL] & 0x03;
+    var aColorTable0 = SCRATCH_COLOR_TABLE_A;
+    var aColorTable1 = SCRATCH_COLOR_TABLE_B;
+    fillBkgPf012ColorTable(sram, aColorTable0);
+    aColorTable1[0] = sram[IO_COLBK] & 0xff;
+    aColorTable1[1] = sram[IO_COLPF0] & 0xff;
+    aColorTable1[2] = sram[IO_COLPF1] & 0xff;
+    aColorTable1[3] = sram[IO_COLPF3] & 0xff;
 
     var bytesPerLine = io.drawLine.bytesPerLine | 0;
     var dst = io.videoOut.pixels;
@@ -2008,15 +2067,16 @@
     var chBase = (((sram[IO_CHBASE] & 0xff) << 8) & 0xfe00) & 0xffff;
 
     for (var i = 0; i < bytesPerLine; i++) {
-      var ch = ram[dispAddr] & 0xff;
+      var decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
+      var ch = decoded & 0xff;
+      var inverse = (decoded & 0x100) !== 0;
       dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
 
       var colorTable = aColorTable0;
-      var prioTable = aPriorityTable0;
-      if (ch & 0x80) {
-        ch &= 0x7f;
+      var prioTable = PRIORITY_TABLE_BKG_PF012;
+      if (inverse) {
         colorTable = aColorTable1;
-        prioTable = aPriorityTable1;
+        prioTable = PRIORITY_TABLE_BKG_PF013;
       }
 
       var data = ram[(chBase + ch * 8 + vScrollOffset) & 0xffff] & 0xff;
@@ -2050,8 +2110,11 @@
       );
     }
 
-    var aColorTable = [sram[IO_COLPF0], sram[IO_COLPF1], sram[IO_COLPF2], sram[IO_COLPF3]];
-    var aPriorityTable = [PRIO_PF0, PRIO_PF1, PRIO_PF2, PRIO_PF3];
+    var aColorTable = SCRATCH_COLOR_TABLE_A;
+    aColorTable[0] = sram[IO_COLPF0] & 0xff;
+    aColorTable[1] = sram[IO_COLPF1] & 0xff;
+    aColorTable[2] = sram[IO_COLPF2] & 0xff;
+    aColorTable[3] = sram[IO_COLPF3] & 0xff;
     var cColor0 = sram[IO_COLBK] & 0xff;
 
     var bytesPerLine = io.drawLine.bytesPerLine | 0;
@@ -2066,7 +2129,7 @@
       dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
 
       var cColor1 = aColorTable[ch >> 6] & 0xff;
-      var p = aPriorityTable[ch >> 6] & 0xff;
+      var p = PRIORITY_TABLE_PF0123[ch >> 6] & 0xff;
       ch &= 0x3f;
 
       var data = ram[(chBase + ch * 8 + (vScrollOffset & 0xff)) & 0xffff] & 0xff;
@@ -2105,8 +2168,11 @@
       );
     }
 
-    var aColorTable = [sram[IO_COLPF0], sram[IO_COLPF1], sram[IO_COLPF2], sram[IO_COLPF3]];
-    var aPriorityTable = [PRIO_PF0, PRIO_PF1, PRIO_PF2, PRIO_PF3];
+    var aColorTable = SCRATCH_COLOR_TABLE_A;
+    aColorTable[0] = sram[IO_COLPF0] & 0xff;
+    aColorTable[1] = sram[IO_COLPF1] & 0xff;
+    aColorTable[2] = sram[IO_COLPF2] & 0xff;
+    aColorTable[3] = sram[IO_COLPF3] & 0xff;
     var cColor0 = sram[IO_COLBK] & 0xff;
 
     var bytesPerLine = io.drawLine.bytesPerLine | 0;
@@ -2121,7 +2187,7 @@
       dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
 
       var cColor1 = aColorTable[ch >> 6] & 0xff;
-      var p = aPriorityTable[ch >> 6] & 0xff;
+      var p = PRIORITY_TABLE_PF0123[ch >> 6] & 0xff;
       ch &= 0x3f;
 
       var data = ram[(chBase + ch * 8 + vScrollOffset) & 0xffff] & 0xff;
@@ -2159,8 +2225,8 @@
       );
     }
 
-    var aColorTable = [sram[IO_COLBK], sram[IO_COLPF0], sram[IO_COLPF1], sram[IO_COLPF2]];
-    var aPriorityTable = [PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2];
+    var aColorTable = SCRATCH_COLOR_TABLE_A;
+    fillBkgPf012ColorTable(sram, aColorTable);
 
     var bytesPerLine = io.drawLine.bytesPerLine | 0;
     var dst = io.videoOut.pixels;
@@ -2175,7 +2241,7 @@
       for (var x = 0; x < 8; x += 2) {
         var idx = (data >> (6 - x)) & 0x03;
         var c = aColorTable[idx] & 0xff;
-        var p = aPriorityTable[idx] & 0xff;
+        var p = PRIORITY_TABLE_BKG_PF012[idx] & 0xff;
         for (var k = 0; k < 8; k++) {
           dst[dstIndex] = c;
           prio[dstIndex] = p;
@@ -2247,8 +2313,8 @@
       );
     }
 
-    var aColorTable = [sram[IO_COLBK], sram[IO_COLPF0], sram[IO_COLPF1], sram[IO_COLPF2]];
-    var aPriorityTable = [PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2];
+    var aColorTable = SCRATCH_COLOR_TABLE_A;
+    fillBkgPf012ColorTable(sram, aColorTable);
 
     var bytesPerLine = io.drawLine.bytesPerLine | 0;
     var dst = io.videoOut.pixels;
@@ -2263,7 +2329,7 @@
       for (var x = 0; x < 8; x += 2) {
         var idx = (data >> (6 - x)) & 0x03;
         var c = aColorTable[idx] & 0xff;
-        var p = aPriorityTable[idx] & 0xff;
+        var p = PRIORITY_TABLE_BKG_PF012[idx] & 0xff;
         dst[dstIndex] = c;
         prio[dstIndex] = p;
         dst[dstIndex + 1] = c;
@@ -2340,8 +2406,8 @@
       );
     }
 
-    var aColorTable = [sram[IO_COLBK], sram[IO_COLPF0], sram[IO_COLPF1], sram[IO_COLPF2]];
-    var aPriorityTable = [PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2];
+    var aColorTable = SCRATCH_COLOR_TABLE_A;
+    fillBkgPf012ColorTable(sram, aColorTable);
 
     var bytesPerLine = io.drawLine.bytesPerLine | 0;
     var dst = io.videoOut.pixels;
@@ -2356,7 +2422,7 @@
       for (var x = 0; x < 8; x += 2) {
         var idx = (data >> (6 - x)) & 0x03;
         var c = aColorTable[idx] & 0xff;
-        var p = aPriorityTable[idx] & 0xff;
+        var p = PRIORITY_TABLE_BKG_PF012[idx] & 0xff;
         dst[dstIndex] = c;
         prio[dstIndex] = p;
         dst[dstIndex + 1] = c;
@@ -2396,24 +2462,9 @@
     var cColor0 = sram[IO_COLPF2] & 0xff;
     var cColor1 = ((sram[IO_COLPF2] & 0xf0) | (sram[IO_COLPF1] & 0x0f)) & 0xff;
 
-    var colorTable = [
-      sram[IO_COLPM0_TRIG2],
-      sram[IO_COLPM1_TRIG3],
-      sram[IO_COLPM2_PAL],
-      sram[IO_COLPM3],
-      sram[IO_COLPF0],
-      sram[IO_COLPF1],
-      sram[IO_COLPF2],
-      sram[IO_COLPF3],
-      sram[IO_COLBK],
-      sram[IO_COLBK],
-      sram[IO_COLBK],
-      sram[IO_COLBK],
-      sram[IO_COLPF0],
-      sram[IO_COLPF1],
-      sram[IO_COLPF2],
-      sram[IO_COLPF3],
-    ];
+    var colorTable = SCRATCH_GTIA_COLOR_TABLE;
+    fillGtiaColorTable(sram, colorTable);
+    var colBk = sram[IO_COLBK] & 0xff;
 
     var priorMode = (sram[IO_PRIOR] >> 6) & 3;
 
@@ -2437,16 +2488,24 @@
       for (var i1 = 0; i1 < bytesPerLine; i1++) {
         var d1 = ram[dispAddr] & 0xff;
         dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-        var col = (sram[IO_COLBK] | (d1 >> 4)) & 0xff;
+        var col = (colBk | (d1 >> 4)) & 0xff;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = col;
-        col = (sram[IO_COLBK] | (d1 & 0x0f)) & 0xff;
+        prio[dstIndex - 1] = PRIO_BKG;
+        col = (colBk | (d1 & 0x0f)) & 0xff;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = col;
+        prio[dstIndex - 1] = PRIO_BKG;
       }
     } else if (priorMode === 2) {
       for (var i2 = 0; i2 < bytesPerLine; i2++) {
@@ -2454,29 +2513,45 @@
         dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
         var hi = colorTable[d2 >> 4] & 0xff;
         dst[dstIndex++] = hi;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = hi;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = hi;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = hi;
+        prio[dstIndex - 1] = PRIO_BKG;
         var lo = colorTable[d2 & 0x0f] & 0xff;
         dst[dstIndex++] = lo;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = lo;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = lo;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = lo;
+        prio[dstIndex - 1] = PRIO_BKG;
       }
     } else {
       for (var i3 = 0; i3 < bytesPerLine; i3++) {
         var d3 = ram[dispAddr] & 0xff;
         dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-        var hi3 = d3 & 0xf0 ? (sram[IO_COLBK] | (d3 & 0xf0)) : sram[IO_COLBK] & 0xf0;
+        var hi3 = d3 & 0xf0 ? (colBk | (d3 & 0xf0)) : colBk & 0xf0;
         dst[dstIndex++] = hi3;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = hi3;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = hi3;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = hi3;
-        var lo3 = d3 & 0x0f ? (sram[IO_COLBK] | ((d3 << 4) & 0xf0)) : sram[IO_COLBK] & 0xf0;
+        prio[dstIndex - 1] = PRIO_BKG;
+        var lo3 = d3 & 0x0f ? (colBk | ((d3 << 4) & 0xf0)) : colBk & 0xf0;
         dst[dstIndex++] = lo3;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = lo3;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = lo3;
+        prio[dstIndex - 1] = PRIO_BKG;
         dst[dstIndex++] = lo3;
+        prio[dstIndex - 1] = PRIO_BKG;
       }
     }
 
@@ -2493,8 +2568,11 @@
     if (y < FIRST_VISIBLE_LINE || y > LAST_VISIBLE_LINE) return;
 
     var prior = sram[IO_PRIOR] & 0xff;
-    var bkgTable = [sram[IO_COLBK], sram[IO_COLBK], sram[IO_COLPM0_TRIG2], sram[IO_COLBK] & 0xf0];
-    var bkg = bkgTable[(prior >> 6) & 3] & 0xff;
+    SCRATCH_BACKGROUND_TABLE[0] = sram[IO_COLBK] & 0xff;
+    SCRATCH_BACKGROUND_TABLE[1] = sram[IO_COLBK] & 0xff;
+    SCRATCH_BACKGROUND_TABLE[2] = sram[IO_COLPM0_TRIG2] & 0xff;
+    SCRATCH_BACKGROUND_TABLE[3] = sram[IO_COLBK] & 0xf0;
+    var bkg = SCRATCH_BACKGROUND_TABLE[(prior >> 6) & 3] & 0xff;
 
     var dmactl = sram[IO_DMACTL] & 0xff;
     var pfWidth = dmactl & 0x03;
@@ -2531,8 +2609,6 @@
 
       var ppb = ANTIC_MODE_INFO[mode].ppb || 8;
       var bytesPerLine = (playfieldPixels / ppb) | 0;
-      io.drawLine.bytesPerLine = bytesPerLine;
-      CPU.stall(ctx, bytesPerLine);
 
       if (cmd & 0x10) {
         // HSCROL
@@ -2540,12 +2616,13 @@
         if (pfWidth !== 0x03) {
           destIndex -= 32 - h * 2;
           bytesPerLine += 8;
-          io.drawLine.bytesPerLine = bytesPerLine;
         } else {
           destIndex += h * 2;
         }
       }
 
+      io.drawLine.bytesPerLine = bytesPerLine;
+      CPU.stall(ctx, bytesPerLine);
       io.drawLine.destIndex = destIndex;
       io.drawLine.displayMemoryAddress = io.displayMemoryAddress & 0xffff;
 

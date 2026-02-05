@@ -198,6 +198,8 @@
     }
 
     function paint(video) {
+      gl.useProgram(program);
+
       // Upload indexed framebuffer.
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, indexTex);
@@ -232,4 +234,3 @@
     create: create,
   };
 })();
-

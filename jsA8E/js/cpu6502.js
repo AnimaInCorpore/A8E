@@ -544,7 +544,7 @@
       if (ps.c) sum += 0x60;
 
       cpu.a = sum & 0xff;
-      setZN(ctx, cpu.a);
+      setZN(ctx, bin);
     } else {
       var s = (cpu.a & 0xff) + value + (ps.c ? 1 : 0);
       ps.v = ((cpu.a ^ value) & 0x80) === 0 && ((cpu.a ^ s) & 0x80) !== 0 ? 1 : 0;
@@ -570,7 +570,7 @@
 
       cpu.a = diff & 0xff;
       ps.c = carry;
-      setZN(ctx, cpu.a);
+      setZN(ctx, bin);
     } else {
       var a2 = cpu.a & 0xff;
       var d2 = a2 - value - (ps.c ? 0 : 1);
