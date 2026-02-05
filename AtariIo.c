@@ -2423,45 +2423,7 @@ void AtariIoDrawScreen(
 
 		SDL_BlitSurface(pIoData->tVideoData.pSdlAtariSurface, &tRect, pViewportSurface, NULL);
 
-		/* Fast path: exact 2x integer scale for 32bpp surfaces. */
-		if(pSdlScreenSurface->w == (int)(lScreenWidth * 2) &&
-			pSdlScreenSurface->h == (int)(lScreenHeight * 2) &&
-			pViewportSurface->format->BytesPerPixel == 4 &&
-			pSdlScreenSurface->format->BytesPerPixel == 4)
-		{
-			u32 y;
-
-			if(SDL_MUSTLOCK(pViewportSurface))
-				SDL_LockSurface(pViewportSurface);
-			if(SDL_MUSTLOCK(pSdlScreenSurface))
-				SDL_LockSurface(pSdlScreenSurface);
-
-			for(y = 0; y < lScreenHeight; y++)
-			{
-				const u32 *pSrc = (const u32 *)((const u8 *)pViewportSurface->pixels + y * pViewportSurface->pitch);
-				u32 *pDst0 = (u32 *)((u8 *)pSdlScreenSurface->pixels + (y * 2) * pSdlScreenSurface->pitch);
-				u32 *pDst1 = (u32 *)((u8 *)pSdlScreenSurface->pixels + (y * 2 + 1) * pSdlScreenSurface->pitch);
-				u32 x;
-
-				for(x = 0; x < lScreenWidth; x++)
-				{
-					u32 c = pSrc[x];
-					pDst0[x * 2] = c;
-					pDst0[x * 2 + 1] = c;
-					pDst1[x * 2] = c;
-					pDst1[x * 2 + 1] = c;
-				}
-			}
-
-			if(SDL_MUSTLOCK(pSdlScreenSurface))
-				SDL_UnlockSurface(pSdlScreenSurface);
-			if(SDL_MUSTLOCK(pViewportSurface))
-				SDL_UnlockSurface(pViewportSurface);
-		}
-		else
-		{
-			SDL_SoftStretch(pViewportSurface, NULL, pSdlScreenSurface, NULL);
-		}
+		SDL_SoftStretch(pViewportSurface, NULL, pSdlScreenSurface, NULL);
 	}
 }
 
