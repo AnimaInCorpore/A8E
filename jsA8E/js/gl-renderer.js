@@ -157,9 +157,9 @@
         "  vec3 a = fetchLinear(vec2(px - 1.0, py));\n" +
         "  vec3 b = fetchLinear(vec2(px, py));\n" +
         "  vec3 c = fetchLinear(vec2(px + 1.0, py));\n" +
-        "  float wa = gaus(fx + 1.0, -2.8);\n" +
-        "  float wb = gaus(fx, -2.8);\n" +
-        "  float wc = gaus(fx - 1.0, -2.8);\n" +
+        "  float wa = gaus(fx + 1.0, -0.95);\n" +
+        "  float wb = gaus(fx, -0.95);\n" +
+        "  float wc = gaus(fx - 1.0, -0.95);\n" +
         "  return (a * wa + b * wb + c * wc) / (wa + wb + wc);\n" +
         "}\n" +
         "vec3 tri(vec2 pos, float vScale){\n" +
@@ -177,11 +177,25 @@
         "  float sy = max(1.0, u_outputSize.y / u_sourceSize.y);\n" +
         "  float line = mod(floor(gl_FragCoord.y / sy), 2.0);\n" +
         "  float phase = mod(floor(gl_FragCoord.x / sx) + line, 3.0);\n" +
-        "  vec3 mask = vec3(0.68);\n" +
-        "  if (phase < 0.5) mask.r = 1.16;\n" +
-        "  else if (phase < 1.5) mask.g = 1.16;\n" +
-        "  else mask.b = 1.16;\n" +
+        "  vec3 mask = vec3(0.92);\n" +
+        "  if (phase < 0.5) mask.r = 1.01;\n" +
+        "  else if (phase < 1.5) mask.g = 1.01;\n" +
+        "  else mask.b = 1.01;\n" +
         "  return mask;\n" +
+        "}\n" +
+        "vec3 compositeBleed(vec2 uv, vec3 col){\n" +
+        "  vec2 tx = vec2(2.0 / u_sourceSize.x, 0.0);\n" +
+        "  vec3 r1 = toLinear(texture(u_sceneTex, uv + tx).rgb);\n" +
+        "  vec3 r2 = toLinear(texture(u_sceneTex, uv + tx * 2.0).rgb);\n" +
+        "  vec3 r3 = toLinear(texture(u_sceneTex, uv + tx * 3.0).rgb);\n" +
+        "  vec3 l1 = toLinear(texture(u_sceneTex, uv - tx).rgb);\n" +
+        "  vec3 l2 = toLinear(texture(u_sceneTex, uv - tx * 2.0).rgb);\n" +
+        "  vec3 l3 = toLinear(texture(u_sceneTex, uv - tx * 3.0).rgb);\n" +
+        "  vec3 bleed;\n" +
+        "  bleed.r = col.r * 0.54 + r1.r * 0.26 + r2.r * 0.14 + r3.r * 0.06;\n" +
+        "  bleed.g = col.g * 0.62 + r1.g * 0.22 + r2.g * 0.11 + r3.g * 0.05;\n" +
+        "  bleed.b = col.b * 0.54 + l1.b * 0.26 + l2.b * 0.14 + l3.b * 0.06;\n" +
+        "  return bleed;\n" +
         "}\n" +
         "void main(){\n" +
         "  vec2 uv = warp(v_uv);\n" +
@@ -191,15 +205,16 @@
         "  }\n" +
         "  float scaleY = u_outputSize.y / u_sourceSize.y;\n" +
         "  float minScale = min(u_outputSize.x / u_sourceSize.x, scaleY);\n" +
-        "  float vScale = mix(-3.5, -9.5, smoothstep(1.0, 3.0, scaleY));\n" +
+        "  float vScale = mix(-1.0, -2.6, smoothstep(1.0, 3.0, scaleY));\n" +
         "  vec2 pos = uv * u_sourceSize;\n" +
         "  vec3 col = tri(pos, vScale);\n" +
+        "  col = compositeBleed(uv, col);\n" +
         "  vec2 d = uv * 2.0 - 1.0;\n" +
         "  float vignette = 1.0 - 0.14 * dot(d, d);\n" +
         "  col *= clamp(vignette, 0.0, 1.0);\n" +
-        "  float maskFade = smoothstep(1.5, 3.0, minScale);\n" +
+        "  float maskFade = smoothstep(4.0, 6.0, minScale);\n" +
         "  col *= mix(vec3(1.0), shadowMask(), maskFade);\n" +
-        "  col *= mix(1.0, 1.05, maskFade);\n" +
+        "  col *= mix(1.0, 1.005, maskFade);\n" +
         "  outColor = vec4(toSrgb(col), 1.0);\n" +
         "}\n";
     } else {
@@ -245,9 +260,9 @@
         "  vec3 a = fetchLinear(vec2(px - 1.0, py));\n" +
         "  vec3 b = fetchLinear(vec2(px, py));\n" +
         "  vec3 c = fetchLinear(vec2(px + 1.0, py));\n" +
-        "  float wa = gaus(fx + 1.0, -2.8);\n" +
-        "  float wb = gaus(fx, -2.8);\n" +
-        "  float wc = gaus(fx - 1.0, -2.8);\n" +
+        "  float wa = gaus(fx + 1.0, -0.95);\n" +
+        "  float wb = gaus(fx, -0.95);\n" +
+        "  float wc = gaus(fx - 1.0, -0.95);\n" +
         "  return (a * wa + b * wb + c * wc) / (wa + wb + wc);\n" +
         "}\n" +
         "vec3 tri(vec2 pos, float vScale){\n" +
@@ -265,11 +280,25 @@
         "  float sy = max(1.0, u_outputSize.y / u_sourceSize.y);\n" +
         "  float line = mod(floor(gl_FragCoord.y / sy), 2.0);\n" +
         "  float phase = mod(floor(gl_FragCoord.x / sx) + line, 3.0);\n" +
-        "  vec3 mask = vec3(0.68);\n" +
-        "  if (phase < 0.5) mask.r = 1.16;\n" +
-        "  else if (phase < 1.5) mask.g = 1.16;\n" +
-        "  else mask.b = 1.16;\n" +
+        "  vec3 mask = vec3(0.92);\n" +
+        "  if (phase < 0.5) mask.r = 1.01;\n" +
+        "  else if (phase < 1.5) mask.g = 1.01;\n" +
+        "  else mask.b = 1.01;\n" +
         "  return mask;\n" +
+        "}\n" +
+        "vec3 compositeBleed(vec2 uv, vec3 col){\n" +
+        "  vec2 tx = vec2(2.0 / u_sourceSize.x, 0.0);\n" +
+        "  vec3 r1 = toLinear(texture2D(u_sceneTex, uv + tx).rgb);\n" +
+        "  vec3 r2 = toLinear(texture2D(u_sceneTex, uv + tx * 2.0).rgb);\n" +
+        "  vec3 r3 = toLinear(texture2D(u_sceneTex, uv + tx * 3.0).rgb);\n" +
+        "  vec3 l1 = toLinear(texture2D(u_sceneTex, uv - tx).rgb);\n" +
+        "  vec3 l2 = toLinear(texture2D(u_sceneTex, uv - tx * 2.0).rgb);\n" +
+        "  vec3 l3 = toLinear(texture2D(u_sceneTex, uv - tx * 3.0).rgb);\n" +
+        "  vec3 bleed;\n" +
+        "  bleed.r = col.r * 0.54 + r1.r * 0.26 + r2.r * 0.14 + r3.r * 0.06;\n" +
+        "  bleed.g = col.g * 0.62 + r1.g * 0.22 + r2.g * 0.11 + r3.g * 0.05;\n" +
+        "  bleed.b = col.b * 0.54 + l1.b * 0.26 + l2.b * 0.14 + l3.b * 0.06;\n" +
+        "  return bleed;\n" +
         "}\n" +
         "void main(){\n" +
         "  vec2 uv = warp(v_uv);\n" +
@@ -279,15 +308,16 @@
         "  }\n" +
         "  float scaleY = u_outputSize.y / u_sourceSize.y;\n" +
         "  float minScale = min(u_outputSize.x / u_sourceSize.x, scaleY);\n" +
-        "  float vScale = mix(-3.5, -9.5, smoothstep(1.0, 3.0, scaleY));\n" +
+        "  float vScale = mix(-1.0, -2.6, smoothstep(1.0, 3.0, scaleY));\n" +
         "  vec2 pos = uv * u_sourceSize;\n" +
         "  vec3 col = tri(pos, vScale);\n" +
+        "  col = compositeBleed(uv, col);\n" +
         "  vec2 d = uv * 2.0 - 1.0;\n" +
         "  float vignette = 1.0 - 0.14 * dot(d, d);\n" +
         "  col *= clamp(vignette, 0.0, 1.0);\n" +
-        "  float maskFade = smoothstep(1.5, 3.0, minScale);\n" +
+        "  float maskFade = smoothstep(4.0, 6.0, minScale);\n" +
         "  col *= mix(vec3(1.0), shadowMask(), maskFade);\n" +
-        "  col *= mix(1.0, 1.05, maskFade);\n" +
+        "  col *= mix(1.0, 1.005, maskFade);\n" +
         "  gl_FragColor = vec4(toSrgb(col), 1.0);\n" +
         "}\n";
     }
