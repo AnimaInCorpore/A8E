@@ -5,9 +5,11 @@
 
   function boot() {
     var canvas = document.getElementById("screen");
+    var debugEl = document.getElementById("debug");
     canvas.tabIndex = 0;
     var nativeScreenW = canvas.width | 0;
     var nativeScreenH = canvas.height | 0;
+    var app = null;
     var gl = null;
     try {
       gl =
@@ -42,6 +44,12 @@
     }
 
     var ctx2d = null;
+    var crtCanvas = null;
+    var onCrtCanvasResize = null;
+    var onCrtContextLost = null;
+    var onCrtContextRestored = null;
+    var didCleanup = false;
+
     function resizeCrtCanvas() {
       if (!gl) return;
       var dpr = window.devicePixelRatio || 1;
@@ -56,11 +64,57 @@
       }
     }
 
+    function detachCrtHooks() {
+      if (!crtCanvas) return;
+      if (onCrtCanvasResize) {
+        window.removeEventListener("resize", onCrtCanvasResize);
+        if (window.visualViewport) window.visualViewport.removeEventListener("resize", onCrtCanvasResize);
+      }
+      if (onCrtContextLost) crtCanvas.removeEventListener("webglcontextlost", onCrtContextLost, false);
+      if (onCrtContextRestored) crtCanvas.removeEventListener("webglcontextrestored", onCrtContextRestored, false);
+      crtCanvas = null;
+      onCrtCanvasResize = null;
+      onCrtContextLost = null;
+      onCrtContextRestored = null;
+    }
+
+    function cleanup() {
+      if (didCleanup) return;
+      didCleanup = true;
+      detachCrtHooks();
+      if (app && app.dispose) app.dispose();
+    }
+
     if (gl) {
       canvas.classList.add("crtEnabled");
       resizeCrtCanvas();
-      window.addEventListener("resize", resizeCrtCanvas);
-      if (window.visualViewport) window.visualViewport.addEventListener("resize", resizeCrtCanvas);
+
+      crtCanvas = canvas;
+      onCrtCanvasResize = resizeCrtCanvas;
+      onCrtContextLost = function (e) {
+        e.preventDefault();
+        if (app && app.pause) {
+          app.pause();
+          setButtons(false);
+        }
+        gl = null;
+        if (debugEl) {
+          debugEl.textContent = "WebGL context lost. Waiting for restore.";
+        }
+      };
+      onCrtContextRestored = function () {
+        if (debugEl) {
+          debugEl.textContent = "WebGL context restored. Reloading emulator.";
+        }
+        window.setTimeout(function () {
+          window.location.reload();
+        }, 0);
+      };
+
+      window.addEventListener("resize", onCrtCanvasResize);
+      if (window.visualViewport) window.visualViewport.addEventListener("resize", onCrtCanvasResize);
+      crtCanvas.addEventListener("webglcontextlost", onCrtContextLost, false);
+      crtCanvas.addEventListener("webglcontextrestored", onCrtContextRestored, false);
       requestAnimationFrame(resizeCrtCanvas);
     } else {
       canvas.classList.remove("crtEnabled");
@@ -79,9 +133,7 @@
     var disk1 = document.getElementById("disk1");
     var romStatus = document.getElementById("romStatus");
     var diskStatus = document.getElementById("diskStatus");
-    var debugEl = document.getElementById("debug");
 
-    var app;
     try {
       app = window.A8EApp.create({
         canvas: canvas,
@@ -95,6 +147,7 @@
     } catch (e) {
       // If WebGL init succeeded but shader/program setup failed, fall back to 2D by replacing the canvas.
       if (gl && !ctx2d) {
+        detachCrtHooks();
         var parent = canvas.parentNode;
         if (parent) {
           var nextCanvas = canvas.cloneNode(false);
@@ -122,6 +175,8 @@
         throw e;
       }
     }
+
+    window.addEventListener("beforeunload", cleanup);
 
     function setButtons(running) {
       btnStart.disabled = running;

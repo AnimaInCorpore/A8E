@@ -292,121 +292,53 @@
         "}\n";
     }
 
-    var decodeProgram = linkProgram(gl, vsSource, decodeFsSource);
-    var crtProgram = linkProgram(gl, vsSource, crtFsSource);
+    var decodeProgram = null;
+    var crtProgram = null;
+    var indexTex = null;
+    var paletteTex = null;
+    var sceneTex = null;
+    var sceneFbo = null;
+    var decodeBuf = null;
+    var crtBuf = null;
+    var decodePosLoc = -1;
+    var decodeUvLoc = -1;
+    var decodeIndexLoc = null;
+    var decodePaletteLoc = null;
+    var crtPosLoc = -1;
+    var crtUvLoc = -1;
+    var crtSceneLoc = null;
+    var crtSourceSizeLoc = null;
+    var crtOutputSizeLoc = null;
+    var disposed = false;
 
-    gl.disable(gl.DITHER);
-    gl.disable(gl.BLEND);
-    gl.clearColor(0, 0, 0, 1);
-
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    if (!gl2 && gl.UNPACK_COLORSPACE_CONVERSION_WEBGL) {
-      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+    function dispose() {
+      if (disposed) return;
+      disposed = true;
+      try {
+        if (decodeBuf) gl.deleteBuffer(decodeBuf);
+        if (crtBuf) gl.deleteBuffer(crtBuf);
+        if (indexTex) gl.deleteTexture(indexTex);
+        if (paletteTex) gl.deleteTexture(paletteTex);
+        if (sceneTex) gl.deleteTexture(sceneTex);
+        if (sceneFbo) gl.deleteFramebuffer(sceneFbo);
+        if (decodeProgram) gl.deleteProgram(decodeProgram);
+        if (crtProgram) gl.deleteProgram(crtProgram);
+      } catch (e) {
+        // ignore
+      }
+      decodeBuf = null;
+      crtBuf = null;
+      indexTex = null;
+      paletteTex = null;
+      sceneTex = null;
+      sceneFbo = null;
+      decodeProgram = null;
+      crtProgram = null;
     }
-
-    // Source indexed framebuffer texture.
-    var indexTex = createTexture(
-      gl,
-      gl.TEXTURE0,
-      gl.NEAREST,
-      gl.NEAREST,
-      gl.CLAMP_TO_EDGE,
-      gl.CLAMP_TO_EDGE
-    );
-    if (gl2) {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, texW, texH, 0, gl.RED, gl.UNSIGNED_BYTE, null);
-    } else {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, texW, texH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, null);
-    }
-
-    // Palette lookup texture.
-    var paletteTex = createTexture(
-      gl,
-      gl.TEXTURE1,
-      gl.NEAREST,
-      gl.NEAREST,
-      gl.CLAMP_TO_EDGE,
-      gl.CLAMP_TO_EDGE
-    );
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      256,
-      1,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      buildPaletteRgba(paletteRgb)
-    );
-
-    // Offscreen scene texture (RGB after palette pass, at sceneScale× resolution).
-    var sceneTex = createTexture(
-      gl,
-      gl.TEXTURE2,
-      gl.NEAREST,
-      gl.NEAREST,
-      gl.CLAMP_TO_EDGE,
-      gl.CLAMP_TO_EDGE
-    );
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, sceneW, sceneH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-
-    var sceneFbo = gl.createFramebuffer();
-    gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0);
-    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
-      throw new Error("A8EGlRenderer: framebuffer incomplete");
-    }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-    // Quad for decode pass (full canvas quad, uv remaps to Atari viewport region).
-    var u0 = (viewX + 0.5) / texW;
-    var u1 = (viewX + viewW - 0.5) / texW;
-    var v0 = (viewY + 0.5) / texH;
-    var v1 = (viewY + viewH - 0.5) / texH;
-    var decodeQuad = new Float32Array([
-      -1.0, -1.0, u0, v1,
-      -1.0, 1.0, u0, v0,
-      1.0, -1.0, u1, v1,
-      1.0, 1.0, u1, v0,
-    ]);
-
-    var decodeBuf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, decodeBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, decodeQuad, gl.STATIC_DRAW);
-
-    // Quad for final CRT post-process pass.
-    var crtQuad = new Float32Array([
-      -1.0, -1.0, 0.0, 0.0,
-      -1.0, 1.0, 0.0, 1.0,
-      1.0, -1.0, 1.0, 0.0,
-      1.0, 1.0, 1.0, 1.0,
-    ]);
-
-    var crtBuf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, crtBuf);
-    gl.bufferData(gl.ARRAY_BUFFER, crtQuad, gl.STATIC_DRAW);
-
-    var decodePosLoc = gl.getAttribLocation(decodeProgram, "a_pos");
-    var decodeUvLoc = gl.getAttribLocation(decodeProgram, "a_uv");
-    var decodeIndexLoc = gl.getUniformLocation(decodeProgram, "u_indexTex");
-    var decodePaletteLoc = gl.getUniformLocation(decodeProgram, "u_paletteTex");
-
-    var crtPosLoc = gl.getAttribLocation(crtProgram, "a_pos");
-    var crtUvLoc = gl.getAttribLocation(crtProgram, "a_uv");
-    var crtSceneLoc = gl.getUniformLocation(crtProgram, "u_sceneTex");
-    var crtSourceSizeLoc = gl.getUniformLocation(crtProgram, "u_sourceSize");
-    var crtOutputSizeLoc = gl.getUniformLocation(crtProgram, "u_outputSize");
-
-    gl.useProgram(decodeProgram);
-    if (decodeIndexLoc !== null) gl.uniform1i(decodeIndexLoc, 0);
-    if (decodePaletteLoc !== null) gl.uniform1i(decodePaletteLoc, 1);
-
-    gl.useProgram(crtProgram);
-    if (crtSceneLoc !== null) gl.uniform1i(crtSceneLoc, 2);
-    if (crtSourceSizeLoc !== null) gl.uniform2f(crtSourceSizeLoc, sceneW, sceneH);
 
     function paint(video) {
+      if (disposed) return;
+
       // Upload indexed framebuffer.
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, indexTex);
@@ -437,26 +369,130 @@
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 
-    function dispose() {
-      try {
-        if (decodeBuf) gl.deleteBuffer(decodeBuf);
-        if (crtBuf) gl.deleteBuffer(crtBuf);
-        if (indexTex) gl.deleteTexture(indexTex);
-        if (paletteTex) gl.deleteTexture(paletteTex);
-        if (sceneTex) gl.deleteTexture(sceneTex);
-        if (sceneFbo) gl.deleteFramebuffer(sceneFbo);
-        if (decodeProgram) gl.deleteProgram(decodeProgram);
-        if (crtProgram) gl.deleteProgram(crtProgram);
-      } catch (e) {
-        // ignore
-      }
-    }
+    try {
+      decodeProgram = linkProgram(gl, vsSource, decodeFsSource);
+      crtProgram = linkProgram(gl, vsSource, crtFsSource);
 
-    return {
-      paint: paint,
-      dispose: dispose,
-      backend: gl2 ? "webgl2" : "webgl",
-    };
+      gl.disable(gl.DITHER);
+      gl.disable(gl.BLEND);
+      gl.clearColor(0, 0, 0, 1);
+
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      if (!gl2 && gl.UNPACK_COLORSPACE_CONVERSION_WEBGL) {
+        gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+      }
+
+      // Source indexed framebuffer texture.
+      indexTex = createTexture(
+        gl,
+        gl.TEXTURE0,
+        gl.NEAREST,
+        gl.NEAREST,
+        gl.CLAMP_TO_EDGE,
+        gl.CLAMP_TO_EDGE
+      );
+      if (gl2) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, texW, texH, 0, gl.RED, gl.UNSIGNED_BYTE, null);
+      } else {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, texW, texH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, null);
+      }
+
+      // Palette lookup texture.
+      paletteTex = createTexture(
+        gl,
+        gl.TEXTURE1,
+        gl.NEAREST,
+        gl.NEAREST,
+        gl.CLAMP_TO_EDGE,
+        gl.CLAMP_TO_EDGE
+      );
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA,
+        256,
+        1,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        buildPaletteRgba(paletteRgb)
+      );
+
+      // Offscreen scene texture (RGB after palette pass, at sceneScale× resolution).
+      sceneTex = createTexture(
+        gl,
+        gl.TEXTURE2,
+        gl.NEAREST,
+        gl.NEAREST,
+        gl.CLAMP_TO_EDGE,
+        gl.CLAMP_TO_EDGE
+      );
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, sceneW, sceneH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+      sceneFbo = gl.createFramebuffer();
+      gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0);
+      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+        throw new Error("A8EGlRenderer: framebuffer incomplete");
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+      // Quad for decode pass (full canvas quad, uv remaps to Atari viewport region).
+      var u0 = (viewX + 0.5) / texW;
+      var u1 = (viewX + viewW - 0.5) / texW;
+      var v0 = (viewY + 0.5) / texH;
+      var v1 = (viewY + viewH - 0.5) / texH;
+      var decodeQuad = new Float32Array([
+        -1.0, -1.0, u0, v1,
+        -1.0, 1.0, u0, v0,
+        1.0, -1.0, u1, v1,
+        1.0, 1.0, u1, v0,
+      ]);
+
+      decodeBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, decodeBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, decodeQuad, gl.STATIC_DRAW);
+
+      // Quad for final CRT post-process pass.
+      var crtQuad = new Float32Array([
+        -1.0, -1.0, 0.0, 0.0,
+        -1.0, 1.0, 0.0, 1.0,
+        1.0, -1.0, 1.0, 0.0,
+        1.0, 1.0, 1.0, 1.0,
+      ]);
+
+      crtBuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, crtBuf);
+      gl.bufferData(gl.ARRAY_BUFFER, crtQuad, gl.STATIC_DRAW);
+
+      decodePosLoc = gl.getAttribLocation(decodeProgram, "a_pos");
+      decodeUvLoc = gl.getAttribLocation(decodeProgram, "a_uv");
+      decodeIndexLoc = gl.getUniformLocation(decodeProgram, "u_indexTex");
+      decodePaletteLoc = gl.getUniformLocation(decodeProgram, "u_paletteTex");
+
+      crtPosLoc = gl.getAttribLocation(crtProgram, "a_pos");
+      crtUvLoc = gl.getAttribLocation(crtProgram, "a_uv");
+      crtSceneLoc = gl.getUniformLocation(crtProgram, "u_sceneTex");
+      crtSourceSizeLoc = gl.getUniformLocation(crtProgram, "u_sourceSize");
+      crtOutputSizeLoc = gl.getUniformLocation(crtProgram, "u_outputSize");
+
+      gl.useProgram(decodeProgram);
+      if (decodeIndexLoc !== null) gl.uniform1i(decodeIndexLoc, 0);
+      if (decodePaletteLoc !== null) gl.uniform1i(decodePaletteLoc, 1);
+
+      gl.useProgram(crtProgram);
+      if (crtSceneLoc !== null) gl.uniform1i(crtSceneLoc, 2);
+      if (crtSourceSizeLoc !== null) gl.uniform2f(crtSourceSizeLoc, sceneW, sceneH);
+
+      return {
+        paint: paint,
+        dispose: dispose,
+        backend: gl2 ? "webgl2" : "webgl",
+      };
+    } catch (err) {
+      dispose();
+      throw err;
+    }
   }
 
   window.A8EGlRenderer = {

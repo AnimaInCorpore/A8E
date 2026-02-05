@@ -3557,6 +3557,12 @@
       if (machine.ctx && machine.ctx.ioData) machine.ctx.ioData.optionOnStart = optionOnStart;
     }
 
+    function dispose() {
+      pause();
+      stopAudio();
+      if (renderer && renderer.dispose) renderer.dispose();
+    }
+
     function loadOsRom(arrayBuffer) {
       var bytes = new Uint8Array(arrayBuffer);
       if (bytes.length !== 0x4000) {
@@ -3773,6 +3779,7 @@
       isRunning: function () {
         return machine.running;
       },
+      dispose: dispose,
       onKeyDown: onKeyDown,
       onKeyUp: onKeyUp,
     };
