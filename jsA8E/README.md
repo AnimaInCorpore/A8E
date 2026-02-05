@@ -2,6 +2,8 @@
 
 Browser-based Atari 800 XL emulator port of the C/SDL A8E project.
 
+Rendering uses WebGL when available (indexed framebuffer + palette lookup in a fragment shader), with a 2D-canvas fallback.
+
 ## Run
 
 Because most browsers block `fetch()` from `file://` URLs, run it via a local static server from the repo root:

@@ -6,7 +6,41 @@
   function boot() {
     var canvas = document.getElementById("screen");
     canvas.tabIndex = 0;
-    var ctx2d = canvas.getContext("2d", { alpha: false });
+    var gl = null;
+    try {
+      gl =
+        canvas.getContext("webgl2", {
+          alpha: false,
+          antialias: false,
+          depth: false,
+          stencil: false,
+          premultipliedAlpha: false,
+          preserveDrawingBuffer: false,
+          powerPreference: "high-performance",
+        }) ||
+        canvas.getContext("webgl", {
+          alpha: false,
+          antialias: false,
+          depth: false,
+          stencil: false,
+          premultipliedAlpha: false,
+          preserveDrawingBuffer: false,
+          powerPreference: "high-performance",
+        }) ||
+        canvas.getContext("experimental-webgl", {
+          alpha: false,
+          antialias: false,
+          depth: false,
+          stencil: false,
+          premultipliedAlpha: false,
+          preserveDrawingBuffer: false,
+        });
+    } catch (e) {
+      gl = null;
+    }
+
+    var ctx2d = null;
+    if (!gl) ctx2d = canvas.getContext("2d", { alpha: false });
 
     var btnStart = document.getElementById("btnStart");
     var btnPause = document.getElementById("btnPause");
@@ -22,14 +56,44 @@
     var diskStatus = document.getElementById("diskStatus");
     var debugEl = document.getElementById("debug");
 
-    var app = window.A8EApp.create({
-      canvas: canvas,
-      ctx2d: ctx2d,
-      debugEl: debugEl,
-      audioEnabled: chkAudio.checked,
-      turbo: chkTurbo.checked,
-      optionOnStart: chkOptionOnStart.checked,
-    });
+    var app;
+    try {
+      app = window.A8EApp.create({
+        canvas: canvas,
+        gl: gl,
+        ctx2d: ctx2d,
+        debugEl: debugEl,
+        audioEnabled: chkAudio.checked,
+        turbo: chkTurbo.checked,
+        optionOnStart: chkOptionOnStart.checked,
+      });
+    } catch (e) {
+      // If WebGL init succeeded but shader/program setup failed, fall back to 2D by replacing the canvas.
+      if (gl && !ctx2d) {
+        var parent = canvas.parentNode;
+        if (parent) {
+          var nextCanvas = canvas.cloneNode(false);
+          parent.replaceChild(nextCanvas, canvas);
+          canvas = nextCanvas;
+          canvas.tabIndex = 0;
+          gl = null;
+          ctx2d = canvas.getContext("2d", { alpha: false });
+          app = window.A8EApp.create({
+            canvas: canvas,
+            gl: null,
+            ctx2d: ctx2d,
+            debugEl: debugEl,
+            audioEnabled: chkAudio.checked,
+            turbo: chkTurbo.checked,
+            optionOnStart: chkOptionOnStart.checked,
+          });
+        } else {
+          throw e;
+        }
+      } else {
+        throw e;
+      }
+    }
 
     function setButtons(running) {
       btnStart.disabled = running;

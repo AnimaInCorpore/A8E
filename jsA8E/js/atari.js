@@ -3114,6 +3114,7 @@
   function createApp(opts) {
     var canvas = opts.canvas;
     var ctx2d = opts.ctx2d;
+    var gl = opts.gl;
     var debugEl = opts.debugEl;
 
     var audioEnabled = !!opts.audioEnabled;
@@ -3121,7 +3122,32 @@
     var optionOnStart = !!opts.optionOnStart;
 
     var video = makeVideo();
-    var imageData = ctx2d.createImageData(VIEW_W, VIEW_H);
+    var renderer = null;
+    var imageData = null;
+    if (gl && window.A8EGlRenderer && window.A8EGlRenderer.create) {
+      renderer = window.A8EGlRenderer.create({
+        gl: gl,
+        canvas: canvas,
+        textureW: PIXELS_PER_LINE,
+        textureH: LINES_PER_SCREEN_PAL,
+        viewX: VIEW_X,
+        viewY: VIEW_Y,
+        viewW: VIEW_W,
+        viewH: VIEW_H,
+        paletteRgb: video.paletteRgb,
+      });
+    } else {
+      if (!ctx2d) throw new Error("Missing 2D canvas context");
+      imageData = ctx2d.createImageData(VIEW_W, VIEW_H);
+      renderer = {
+        paint: function () {
+          blitViewportToImageData(video, imageData);
+          ctx2d.putImageData(imageData, 0, 0);
+        },
+        dispose: function () {},
+        backend: "2d",
+      };
+    }
 
     var machine = {
       ctx: CPU.makeContext(),
@@ -3336,8 +3362,7 @@
     }
 
     function paint() {
-      blitViewportToImageData(video, imageData);
-      ctx2d.putImageData(imageData, 0, 0);
+      renderer.paint(video);
     }
 
     function updateDebug() {
