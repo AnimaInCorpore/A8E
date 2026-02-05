@@ -97,12 +97,14 @@
     if (!gl) throw new Error("A8EGlRenderer: missing WebGL context");
     if (!canvas) throw new Error("A8EGlRenderer: missing canvas");
     if (!paletteRgb || paletteRgb.length < 256 * 3) throw new Error("A8EGlRenderer: missing palette");
-    var sceneScale = (opts.sceneScale | 0) || 2;
+    var sceneScaleLegacy = opts.sceneScale | 0;
+    var sceneScaleX = (opts.sceneScaleX | 0) || sceneScaleLegacy || 2;
+    var sceneScaleY = (opts.sceneScaleY | 0) || sceneScaleLegacy || 1;
     if (texW <= 0 || texH <= 0) throw new Error("A8EGlRenderer: invalid texture size");
     if (viewW <= 0 || viewH <= 0) throw new Error("A8EGlRenderer: invalid viewport size");
 
-    var sceneW = viewW * sceneScale;
-    var sceneH = viewH * sceneScale;
+    var sceneW = viewW * sceneScaleX;
+    var sceneH = viewH * sceneScaleY;
 
     var gl2 = isWebGL2(gl);
 
@@ -135,6 +137,7 @@
         "precision mediump float;\n" +
         "uniform sampler2D u_sceneTex;\n" +
         "uniform vec2 u_sourceSize;\n" +
+        "uniform vec2 u_scanlineSize;\n" +
         "uniform vec2 u_outputSize;\n" +
         "in vec2 v_uv;\n" +
         "out vec4 outColor;\n" +
@@ -150,9 +153,8 @@
         "  vec2 uv = pixelPos / u_sourceSize;\n" +
         "  return toLinear(texture(u_sceneTex, uv).rgb);\n" +
         "}\n" +
-        "vec3 horz3(vec2 pos, float yOff){\n" +
+        "vec3 horz3(vec2 pos, float py){\n" +
         "  float fx = fract(pos.x) - 0.5;\n" +
-        "  float py = floor(pos.y) + 0.5 + yOff;\n" +
         "  float px = floor(pos.x) + 0.5;\n" +
         "  vec3 a = fetchLinear(vec2(px - 1.0, py));\n" +
         "  vec3 b = fetchLinear(vec2(px, py));\n" +
@@ -162,11 +164,13 @@
         "  float wc = gaus(fx - 1.0, -0.95);\n" +
         "  return (a * wa + b * wb + c * wc) / (wa + wb + wc);\n" +
         "}\n" +
-        "vec3 tri(vec2 pos, float vScale){\n" +
-        "  float fy = fract(pos.y) - 0.5;\n" +
-        "  vec3 a = horz3(pos, -1.0);\n" +
-        "  vec3 b = horz3(pos, 0.0);\n" +
-        "  vec3 c = horz3(pos, 1.0);\n" +
+        "vec3 tri(vec2 samplePos, vec2 scanPos, float vScale){\n" +
+        "  float yStep = max(1.0, u_sourceSize.y / max(1.0, u_scanlineSize.y));\n" +
+        "  float fy = fract(scanPos.y) - 0.5;\n" +
+        "  float center = (floor(scanPos.y) + 0.5) * yStep;\n" +
+        "  vec3 a = horz3(samplePos, center - yStep);\n" +
+        "  vec3 b = horz3(samplePos, center);\n" +
+        "  vec3 c = horz3(samplePos, center + yStep);\n" +
         "  float wa = gaus(fy + 1.0, vScale);\n" +
         "  float wb = gaus(fy, vScale);\n" +
         "  float wc = gaus(fy - 1.0, vScale);\n" +
@@ -174,7 +178,7 @@
         "}\n" +
         "vec3 shadowMask(){\n" +
         "  float sx = max(1.0, u_outputSize.x / u_sourceSize.x);\n" +
-        "  float sy = max(1.0, u_outputSize.y / u_sourceSize.y);\n" +
+        "  float sy = max(1.0, u_outputSize.y / max(1.0, u_scanlineSize.y));\n" +
         "  float line = mod(floor(gl_FragCoord.y / sy), 2.0);\n" +
         "  float phase = mod(floor(gl_FragCoord.x / sx) + line, 3.0);\n" +
         "  vec3 mask = vec3(0.92);\n" +
@@ -203,11 +207,12 @@
         "    outColor = vec4(0.0, 0.0, 0.0, 1.0);\n" +
         "    return;\n" +
         "  }\n" +
-        "  float scaleY = u_outputSize.y / u_sourceSize.y;\n" +
+        "  float scaleY = u_outputSize.y / max(1.0, u_scanlineSize.y);\n" +
         "  float minScale = min(u_outputSize.x / u_sourceSize.x, scaleY);\n" +
-        "  float vScale = mix(-1.0, -2.6, smoothstep(1.0, 3.0, scaleY));\n" +
-        "  vec2 pos = uv * u_sourceSize;\n" +
-        "  vec3 col = tri(pos, vScale);\n" +
+        "  float vScale = mix(-1.3, -3.4, smoothstep(1.0, 3.0, scaleY));\n" +
+        "  vec2 samplePos = uv * u_sourceSize;\n" +
+        "  vec2 scanPos = uv * u_scanlineSize;\n" +
+        "  vec3 col = tri(samplePos, scanPos, vScale);\n" +
         "  col = compositeBleed(uv, col);\n" +
         "  vec2 d = uv * 2.0 - 1.0;\n" +
         "  float vignette = 1.0 - 0.14 * dot(d, d);\n" +
@@ -239,6 +244,7 @@
         "precision mediump float;\n" +
         "uniform sampler2D u_sceneTex;\n" +
         "uniform vec2 u_sourceSize;\n" +
+        "uniform vec2 u_scanlineSize;\n" +
         "uniform vec2 u_outputSize;\n" +
         "varying vec2 v_uv;\n" +
         "float gaus(float pos, float scale){ return exp2(scale * pos * pos); }\n" +
@@ -253,9 +259,8 @@
         "  vec2 uv = pixelPos / u_sourceSize;\n" +
         "  return toLinear(texture2D(u_sceneTex, uv).rgb);\n" +
         "}\n" +
-        "vec3 horz3(vec2 pos, float yOff){\n" +
+        "vec3 horz3(vec2 pos, float py){\n" +
         "  float fx = fract(pos.x) - 0.5;\n" +
-        "  float py = floor(pos.y) + 0.5 + yOff;\n" +
         "  float px = floor(pos.x) + 0.5;\n" +
         "  vec3 a = fetchLinear(vec2(px - 1.0, py));\n" +
         "  vec3 b = fetchLinear(vec2(px, py));\n" +
@@ -265,11 +270,13 @@
         "  float wc = gaus(fx - 1.0, -0.95);\n" +
         "  return (a * wa + b * wb + c * wc) / (wa + wb + wc);\n" +
         "}\n" +
-        "vec3 tri(vec2 pos, float vScale){\n" +
-        "  float fy = fract(pos.y) - 0.5;\n" +
-        "  vec3 a = horz3(pos, -1.0);\n" +
-        "  vec3 b = horz3(pos, 0.0);\n" +
-        "  vec3 c = horz3(pos, 1.0);\n" +
+        "vec3 tri(vec2 samplePos, vec2 scanPos, float vScale){\n" +
+        "  float yStep = max(1.0, u_sourceSize.y / max(1.0, u_scanlineSize.y));\n" +
+        "  float fy = fract(scanPos.y) - 0.5;\n" +
+        "  float center = (floor(scanPos.y) + 0.5) * yStep;\n" +
+        "  vec3 a = horz3(samplePos, center - yStep);\n" +
+        "  vec3 b = horz3(samplePos, center);\n" +
+        "  vec3 c = horz3(samplePos, center + yStep);\n" +
         "  float wa = gaus(fy + 1.0, vScale);\n" +
         "  float wb = gaus(fy, vScale);\n" +
         "  float wc = gaus(fy - 1.0, vScale);\n" +
@@ -277,7 +284,7 @@
         "}\n" +
         "vec3 shadowMask(){\n" +
         "  float sx = max(1.0, u_outputSize.x / u_sourceSize.x);\n" +
-        "  float sy = max(1.0, u_outputSize.y / u_sourceSize.y);\n" +
+        "  float sy = max(1.0, u_outputSize.y / max(1.0, u_scanlineSize.y));\n" +
         "  float line = mod(floor(gl_FragCoord.y / sy), 2.0);\n" +
         "  float phase = mod(floor(gl_FragCoord.x / sx) + line, 3.0);\n" +
         "  vec3 mask = vec3(0.92);\n" +
@@ -306,11 +313,12 @@
         "    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);\n" +
         "    return;\n" +
         "  }\n" +
-        "  float scaleY = u_outputSize.y / u_sourceSize.y;\n" +
+        "  float scaleY = u_outputSize.y / max(1.0, u_scanlineSize.y);\n" +
         "  float minScale = min(u_outputSize.x / u_sourceSize.x, scaleY);\n" +
-        "  float vScale = mix(-1.0, -2.6, smoothstep(1.0, 3.0, scaleY));\n" +
-        "  vec2 pos = uv * u_sourceSize;\n" +
-        "  vec3 col = tri(pos, vScale);\n" +
+        "  float vScale = mix(-1.3, -3.4, smoothstep(1.0, 3.0, scaleY));\n" +
+        "  vec2 samplePos = uv * u_sourceSize;\n" +
+        "  vec2 scanPos = uv * u_scanlineSize;\n" +
+        "  vec3 col = tri(samplePos, scanPos, vScale);\n" +
         "  col = compositeBleed(uv, col);\n" +
         "  vec2 d = uv * 2.0 - 1.0;\n" +
         "  float vignette = 1.0 - 0.14 * dot(d, d);\n" +
@@ -338,6 +346,7 @@
     var crtUvLoc = -1;
     var crtSceneLoc = null;
     var crtSourceSizeLoc = null;
+    var crtScanlineSizeLoc = null;
     var crtOutputSizeLoc = null;
     var disposed = false;
 
@@ -375,7 +384,7 @@
       if (gl2) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, texW, texH, gl.RED, gl.UNSIGNED_BYTE, video.pixels);
       else gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, texW, texH, gl.LUMINANCE, gl.UNSIGNED_BYTE, video.pixels);
 
-      // Pass 1: index + palette -> scene texture (at sceneScale× resolution).
+      // Pass 1: index + palette -> scene texture (at internal sceneScaleX/sceneScaleY resolution).
       gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo);
       gl.viewport(0, 0, sceneW, sceneH);
       gl.useProgram(decodeProgram);
@@ -448,7 +457,7 @@
         buildPaletteRgba(paletteRgb)
       );
 
-      // Offscreen scene texture (RGB after palette pass, at sceneScale× resolution).
+      // Offscreen scene texture (RGB after palette pass, at internal sceneScaleX/sceneScaleY resolution).
       sceneTex = createTexture(
         gl,
         gl.TEXTURE2,
@@ -504,6 +513,7 @@
       crtUvLoc = gl.getAttribLocation(crtProgram, "a_uv");
       crtSceneLoc = gl.getUniformLocation(crtProgram, "u_sceneTex");
       crtSourceSizeLoc = gl.getUniformLocation(crtProgram, "u_sourceSize");
+      crtScanlineSizeLoc = gl.getUniformLocation(crtProgram, "u_scanlineSize");
       crtOutputSizeLoc = gl.getUniformLocation(crtProgram, "u_outputSize");
 
       gl.useProgram(decodeProgram);
@@ -513,6 +523,7 @@
       gl.useProgram(crtProgram);
       if (crtSceneLoc !== null) gl.uniform1i(crtSceneLoc, 2);
       if (crtSourceSizeLoc !== null) gl.uniform2f(crtSourceSizeLoc, sceneW, sceneH);
+      if (crtScanlineSizeLoc !== null) gl.uniform2f(crtScanlineSizeLoc, viewW, viewH);
 
       return {
         paint: paint,

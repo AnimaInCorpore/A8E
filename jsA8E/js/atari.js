@@ -3211,6 +3211,8 @@
         viewY: VIEW_Y,
         viewW: VIEW_W,
         viewH: VIEW_H,
+        sceneScaleX: 2,
+        sceneScaleY: 1,
         paletteRgb: video.paletteRgb,
       });
     } else {
