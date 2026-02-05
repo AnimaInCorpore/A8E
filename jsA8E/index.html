@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>jsA8E</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="title">jsA8E</div>
+        <div class="subtitle">Atari 800 XL emulator (JavaScript-only)</div>
+      </div>
+      <div class="controls">
+        <button id="btnStart">Start</button>
+        <button id="btnPause" disabled>Pause</button>
+        <button id="btnReset" disabled>Reset</button>
+        <label class="chk">
+          <input type="checkbox" id="chkTurbo" />
+          Turbo
+        </label>
+        <label class="chk">
+          <input type="checkbox" id="chkAudio" checked />
+          Audio
+        </label>
+        <label class="chk" title="Hold OPTION during boot to disable BASIC ROM mapping.">
+          <input type="checkbox" id="chkOptionOnStart" checked />
+          Option on start
+        </label>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="screenPanel">
+        <canvas id="screen" width="336" height="240"></canvas>
+        <div class="hint">
+          Focus the canvas and type. Keys: F2/F3/F4 = OPTION/SELECT/START, F5 = RESET.
+        </div>
+      </section>
+
+      <section class="sidePanel">
+        <div class="card">
+          <div class="cardTitle">ROMs</div>
+          <div class="row">
+            <label class="file">
+              ATARIXL.ROM
+              <input type="file" id="romOs" accept=".rom,application/octet-stream" />
+            </label>
+          </div>
+          <div class="row">
+            <label class="file">
+              ATARIBAS.ROM
+              <input type="file" id="romBasic" accept=".rom,application/octet-stream" />
+            </label>
+          </div>
+          <div class="row small muted" id="romStatus">No ROMs loaded yet.</div>
+        </div>
+
+        <div class="card">
+          <div class="cardTitle">Disk (optional)</div>
+          <div class="row">
+            <label class="file">
+              d1.atr
+              <input type="file" id="disk1" accept=".atr,application/octet-stream" />
+            </label>
+          </div>
+          <div class="row small muted" id="diskStatus">No disk loaded.</div>
+        </div>
+
+        <div class="card">
+          <div class="cardTitle">Debug</div>
+          <pre id="debug" class="debug">Idle.</pre>
+        </div>
+      </section>
+    </main>
+
+    <script src="js/util.js"></script>
+    <script src="js/palette.js"></script>
+    <script src="js/cpu6502.js"></script>
+    <script src="js/atari.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/main.js"></script>
+  </body>
+</html>
