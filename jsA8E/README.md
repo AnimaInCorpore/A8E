@@ -2,7 +2,7 @@
 
 Browser-based Atari 800 XL emulator port of the C/SDL A8E project.
 
-Rendering uses WebGL when available (indexed framebuffer + palette lookup in a fragment shader), with a 2D-canvas fallback.
+Rendering uses WebGL when available (indexed framebuffer + palette lookup, then a `crt-lottes-fast` style post-process tuned for early-1980s TV metrics), with a 2D-canvas fallback.
 
 ## Run
 

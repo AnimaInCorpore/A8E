@@ -59,6 +59,30 @@
     return typeof window.WebGL2RenderingContext !== "undefined" && gl instanceof window.WebGL2RenderingContext;
   }
 
+  function createTexture(gl, unit, minFilter, magFilter, wrapS, wrapT) {
+    var tex = gl.createTexture();
+    gl.activeTexture(unit);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, magFilter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrapS);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrapT);
+    return tex;
+  }
+
+  function setupQuad(gl, buffer, posLoc, uvLoc) {
+    var stride = 4 * 4;
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    if (posLoc >= 0) {
+      gl.enableVertexAttribArray(posLoc);
+      gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, stride, 0);
+    }
+    if (uvLoc >= 0) {
+      gl.enableVertexAttribArray(uvLoc);
+      gl.vertexAttribPointer(uvLoc, 2, gl.FLOAT, false, stride, 2 * 4);
+    }
+  }
+
   function create(opts) {
     var gl = opts.gl;
     var canvas = opts.canvas;
@@ -73,13 +97,18 @@
     if (!gl) throw new Error("A8EGlRenderer: missing WebGL context");
     if (!canvas) throw new Error("A8EGlRenderer: missing canvas");
     if (!paletteRgb || paletteRgb.length < 256 * 3) throw new Error("A8EGlRenderer: missing palette");
+    var sceneScale = (opts.sceneScale | 0) || 2;
     if (texW <= 0 || texH <= 0) throw new Error("A8EGlRenderer: invalid texture size");
     if (viewW <= 0 || viewH <= 0) throw new Error("A8EGlRenderer: invalid viewport size");
+
+    var sceneW = viewW * sceneScale;
+    var sceneH = viewH * sceneScale;
 
     var gl2 = isWebGL2(gl);
 
     var vsSource;
-    var fsSource;
+    var decodeFsSource;
+    var crtFsSource;
     if (gl2) {
       vsSource =
         "#version 300 es\n" +
@@ -87,7 +116,8 @@
         "in vec2 a_uv;\n" +
         "out vec2 v_uv;\n" +
         "void main(){ v_uv = a_uv; gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
-      fsSource =
+
+      decodeFsSource =
         "#version 300 es\n" +
         "precision mediump float;\n" +
         "uniform sampler2D u_indexTex;\n" +
@@ -99,13 +129,87 @@
         "  float u = (idx + 0.5) / 256.0;\n" +
         "  outColor = texture(u_paletteTex, vec2(u, 0.5));\n" +
         "}\n";
+
+      crtFsSource =
+        "#version 300 es\n" +
+        "precision mediump float;\n" +
+        "uniform sampler2D u_sceneTex;\n" +
+        "uniform vec2 u_sourceSize;\n" +
+        "uniform vec2 u_outputSize;\n" +
+        "in vec2 v_uv;\n" +
+        "out vec4 outColor;\n" +
+        "float gaus(float pos, float scale){ return exp2(scale * pos * pos); }\n" +
+        "vec3 toLinear(vec3 c){ return pow(max(c, vec3(0.0)), vec3(2.2)); }\n" +
+        "vec3 toSrgb(vec3 c){ return pow(max(c, vec3(0.0)), vec3(1.0 / 2.2)); }\n" +
+        "vec2 warp(vec2 uv){\n" +
+        "  vec2 c = uv * 2.0 - 1.0;\n" +
+        "  c *= vec2(1.0 + (c.y * c.y) * 0.032, 1.0 + (c.x * c.x) * 0.042);\n" +
+        "  return c * 0.5 + 0.5;\n" +
+        "}\n" +
+        "vec3 fetchLinear(vec2 pixelPos){\n" +
+        "  vec2 uv = pixelPos / u_sourceSize;\n" +
+        "  return toLinear(texture(u_sceneTex, uv).rgb);\n" +
+        "}\n" +
+        "vec3 horz3(vec2 pos, float yOff){\n" +
+        "  float fx = fract(pos.x) - 0.5;\n" +
+        "  float py = floor(pos.y) + 0.5 + yOff;\n" +
+        "  float px = floor(pos.x) + 0.5;\n" +
+        "  vec3 a = fetchLinear(vec2(px - 1.0, py));\n" +
+        "  vec3 b = fetchLinear(vec2(px, py));\n" +
+        "  vec3 c = fetchLinear(vec2(px + 1.0, py));\n" +
+        "  float wa = gaus(fx + 1.0, -2.8);\n" +
+        "  float wb = gaus(fx, -2.8);\n" +
+        "  float wc = gaus(fx - 1.0, -2.8);\n" +
+        "  return (a * wa + b * wb + c * wc) / (wa + wb + wc);\n" +
+        "}\n" +
+        "vec3 tri(vec2 pos, float vScale){\n" +
+        "  float fy = fract(pos.y) - 0.5;\n" +
+        "  vec3 a = horz3(pos, -1.0);\n" +
+        "  vec3 b = horz3(pos, 0.0);\n" +
+        "  vec3 c = horz3(pos, 1.0);\n" +
+        "  float wa = gaus(fy + 1.0, vScale);\n" +
+        "  float wb = gaus(fy, vScale);\n" +
+        "  float wc = gaus(fy - 1.0, vScale);\n" +
+        "  return (a * wa + b * wb + c * wc) / (wa + wb + wc);\n" +
+        "}\n" +
+        "vec3 shadowMask(){\n" +
+        "  float sx = max(1.0, u_outputSize.x / u_sourceSize.x);\n" +
+        "  float sy = max(1.0, u_outputSize.y / u_sourceSize.y);\n" +
+        "  float line = mod(floor(gl_FragCoord.y / sy), 2.0);\n" +
+        "  float phase = mod(floor(gl_FragCoord.x / sx) + line, 3.0);\n" +
+        "  vec3 mask = vec3(0.68);\n" +
+        "  if (phase < 0.5) mask.r = 1.16;\n" +
+        "  else if (phase < 1.5) mask.g = 1.16;\n" +
+        "  else mask.b = 1.16;\n" +
+        "  return mask;\n" +
+        "}\n" +
+        "void main(){\n" +
+        "  vec2 uv = warp(v_uv);\n" +
+        "  if (uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0) {\n" +
+        "    outColor = vec4(0.0, 0.0, 0.0, 1.0);\n" +
+        "    return;\n" +
+        "  }\n" +
+        "  float scaleY = u_outputSize.y / u_sourceSize.y;\n" +
+        "  float minScale = min(u_outputSize.x / u_sourceSize.x, scaleY);\n" +
+        "  float vScale = mix(-3.5, -9.5, smoothstep(1.0, 3.0, scaleY));\n" +
+        "  vec2 pos = uv * u_sourceSize;\n" +
+        "  vec3 col = tri(pos, vScale);\n" +
+        "  vec2 d = uv * 2.0 - 1.0;\n" +
+        "  float vignette = 1.0 - 0.14 * dot(d, d);\n" +
+        "  col *= clamp(vignette, 0.0, 1.0);\n" +
+        "  float maskFade = smoothstep(1.5, 3.0, minScale);\n" +
+        "  col *= mix(vec3(1.0), shadowMask(), maskFade);\n" +
+        "  col *= mix(1.0, 1.05, maskFade);\n" +
+        "  outColor = vec4(toSrgb(col), 1.0);\n" +
+        "}\n";
     } else {
       vsSource =
         "attribute vec2 a_pos;\n" +
         "attribute vec2 a_uv;\n" +
         "varying vec2 v_uv;\n" +
         "void main(){ v_uv = a_uv; gl_Position = vec4(a_pos, 0.0, 1.0); }\n";
-      fsSource =
+
+      decodeFsSource =
         "precision mediump float;\n" +
         "uniform sampler2D u_indexTex;\n" +
         "uniform sampler2D u_paletteTex;\n" +
@@ -115,10 +219,81 @@
         "  float u = (idx + 0.5) / 256.0;\n" +
         "  gl_FragColor = texture2D(u_paletteTex, vec2(u, 0.5));\n" +
         "}\n";
+
+      crtFsSource =
+        "precision mediump float;\n" +
+        "uniform sampler2D u_sceneTex;\n" +
+        "uniform vec2 u_sourceSize;\n" +
+        "uniform vec2 u_outputSize;\n" +
+        "varying vec2 v_uv;\n" +
+        "float gaus(float pos, float scale){ return exp2(scale * pos * pos); }\n" +
+        "vec3 toLinear(vec3 c){ return pow(max(c, vec3(0.0)), vec3(2.2)); }\n" +
+        "vec3 toSrgb(vec3 c){ return pow(max(c, vec3(0.0)), vec3(1.0 / 2.2)); }\n" +
+        "vec2 warp(vec2 uv){\n" +
+        "  vec2 c = uv * 2.0 - 1.0;\n" +
+        "  c *= vec2(1.0 + (c.y * c.y) * 0.032, 1.0 + (c.x * c.x) * 0.042);\n" +
+        "  return c * 0.5 + 0.5;\n" +
+        "}\n" +
+        "vec3 fetchLinear(vec2 pixelPos){\n" +
+        "  vec2 uv = pixelPos / u_sourceSize;\n" +
+        "  return toLinear(texture2D(u_sceneTex, uv).rgb);\n" +
+        "}\n" +
+        "vec3 horz3(vec2 pos, float yOff){\n" +
+        "  float fx = fract(pos.x) - 0.5;\n" +
+        "  float py = floor(pos.y) + 0.5 + yOff;\n" +
+        "  float px = floor(pos.x) + 0.5;\n" +
+        "  vec3 a = fetchLinear(vec2(px - 1.0, py));\n" +
+        "  vec3 b = fetchLinear(vec2(px, py));\n" +
+        "  vec3 c = fetchLinear(vec2(px + 1.0, py));\n" +
+        "  float wa = gaus(fx + 1.0, -2.8);\n" +
+        "  float wb = gaus(fx, -2.8);\n" +
+        "  float wc = gaus(fx - 1.0, -2.8);\n" +
+        "  return (a * wa + b * wb + c * wc) / (wa + wb + wc);\n" +
+        "}\n" +
+        "vec3 tri(vec2 pos, float vScale){\n" +
+        "  float fy = fract(pos.y) - 0.5;\n" +
+        "  vec3 a = horz3(pos, -1.0);\n" +
+        "  vec3 b = horz3(pos, 0.0);\n" +
+        "  vec3 c = horz3(pos, 1.0);\n" +
+        "  float wa = gaus(fy + 1.0, vScale);\n" +
+        "  float wb = gaus(fy, vScale);\n" +
+        "  float wc = gaus(fy - 1.0, vScale);\n" +
+        "  return (a * wa + b * wb + c * wc) / (wa + wb + wc);\n" +
+        "}\n" +
+        "vec3 shadowMask(){\n" +
+        "  float sx = max(1.0, u_outputSize.x / u_sourceSize.x);\n" +
+        "  float sy = max(1.0, u_outputSize.y / u_sourceSize.y);\n" +
+        "  float line = mod(floor(gl_FragCoord.y / sy), 2.0);\n" +
+        "  float phase = mod(floor(gl_FragCoord.x / sx) + line, 3.0);\n" +
+        "  vec3 mask = vec3(0.68);\n" +
+        "  if (phase < 0.5) mask.r = 1.16;\n" +
+        "  else if (phase < 1.5) mask.g = 1.16;\n" +
+        "  else mask.b = 1.16;\n" +
+        "  return mask;\n" +
+        "}\n" +
+        "void main(){\n" +
+        "  vec2 uv = warp(v_uv);\n" +
+        "  if (uv.x <= 0.0 || uv.x >= 1.0 || uv.y <= 0.0 || uv.y >= 1.0) {\n" +
+        "    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);\n" +
+        "    return;\n" +
+        "  }\n" +
+        "  float scaleY = u_outputSize.y / u_sourceSize.y;\n" +
+        "  float minScale = min(u_outputSize.x / u_sourceSize.x, scaleY);\n" +
+        "  float vScale = mix(-3.5, -9.5, smoothstep(1.0, 3.0, scaleY));\n" +
+        "  vec2 pos = uv * u_sourceSize;\n" +
+        "  vec3 col = tri(pos, vScale);\n" +
+        "  vec2 d = uv * 2.0 - 1.0;\n" +
+        "  float vignette = 1.0 - 0.14 * dot(d, d);\n" +
+        "  col *= clamp(vignette, 0.0, 1.0);\n" +
+        "  float maskFade = smoothstep(1.5, 3.0, minScale);\n" +
+        "  col *= mix(vec3(1.0), shadowMask(), maskFade);\n" +
+        "  col *= mix(1.0, 1.05, maskFade);\n" +
+        "  gl_FragColor = vec4(toSrgb(col), 1.0);\n" +
+        "}\n";
     }
 
-    var program = linkProgram(gl, vsSource, fsSource);
-    gl.useProgram(program);
+    var decodeProgram = linkProgram(gl, vsSource, decodeFsSource);
+    var crtProgram = linkProgram(gl, vsSource, crtFsSource);
 
     gl.disable(gl.DITHER);
     gl.disable(gl.BLEND);
@@ -129,27 +304,30 @@
       gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
     }
 
-    // Textures
-    var indexTex = gl.createTexture();
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, indexTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    // Source indexed framebuffer texture.
+    var indexTex = createTexture(
+      gl,
+      gl.TEXTURE0,
+      gl.NEAREST,
+      gl.NEAREST,
+      gl.CLAMP_TO_EDGE,
+      gl.CLAMP_TO_EDGE
+    );
     if (gl2) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, texW, texH, 0, gl.RED, gl.UNSIGNED_BYTE, null);
     } else {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, texW, texH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, null);
     }
 
-    var paletteTex = gl.createTexture();
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, paletteTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    // Palette lookup texture.
+    var paletteTex = createTexture(
+      gl,
+      gl.TEXTURE1,
+      gl.NEAREST,
+      gl.NEAREST,
+      gl.CLAMP_TO_EDGE,
+      gl.CLAMP_TO_EDGE
+    );
     gl.texImage2D(
       gl.TEXTURE_2D,
       0,
@@ -162,51 +340,98 @@
       buildPaletteRgba(paletteRgb)
     );
 
-    // Sampler uniforms
-    var uIndex = gl.getUniformLocation(program, "u_indexTex");
-    var uPal = gl.getUniformLocation(program, "u_paletteTex");
-    if (uIndex) gl.uniform1i(uIndex, 0);
-    if (uPal) gl.uniform1i(uPal, 1);
+    // Offscreen scene texture (RGB after palette pass, at sceneScale× resolution).
+    var sceneTex = createTexture(
+      gl,
+      gl.TEXTURE2,
+      gl.NEAREST,
+      gl.NEAREST,
+      gl.CLAMP_TO_EDGE,
+      gl.CLAMP_TO_EDGE
+    );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, sceneW, sceneH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
-    // Quad buffer (pos.xy, uv.xy) for TRIANGLE_STRIP:
-    // bottom-left, top-left, bottom-right, top-right
+    var sceneFbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0);
+    if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      throw new Error("A8EGlRenderer: framebuffer incomplete");
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+    // Quad for decode pass (full canvas quad, uv remaps to Atari viewport region).
     var u0 = (viewX + 0.5) / texW;
     var u1 = (viewX + viewW - 0.5) / texW;
     var v0 = (viewY + 0.5) / texH;
     var v1 = (viewY + viewH - 0.5) / texH;
-    var quad = new Float32Array([
+    var decodeQuad = new Float32Array([
       -1.0, -1.0, u0, v1,
       -1.0, 1.0, u0, v0,
       1.0, -1.0, u1, v1,
       1.0, 1.0, u1, v0,
     ]);
 
-    var buf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
+    var decodeBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, decodeBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, decodeQuad, gl.STATIC_DRAW);
 
-    var aPosLoc = gl.getAttribLocation(program, "a_pos");
-    var aUvLoc = gl.getAttribLocation(program, "a_uv");
-    var stride = 4 * 4;
-    if (aPosLoc >= 0) {
-      gl.enableVertexAttribArray(aPosLoc);
-      gl.vertexAttribPointer(aPosLoc, 2, gl.FLOAT, false, stride, 0);
-    }
-    if (aUvLoc >= 0) {
-      gl.enableVertexAttribArray(aUvLoc);
-      gl.vertexAttribPointer(aUvLoc, 2, gl.FLOAT, false, stride, 2 * 4);
-    }
+    // Quad for final CRT post-process pass.
+    var crtQuad = new Float32Array([
+      -1.0, -1.0, 0.0, 0.0,
+      -1.0, 1.0, 0.0, 1.0,
+      1.0, -1.0, 1.0, 0.0,
+      1.0, 1.0, 1.0, 1.0,
+    ]);
+
+    var crtBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, crtBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, crtQuad, gl.STATIC_DRAW);
+
+    var decodePosLoc = gl.getAttribLocation(decodeProgram, "a_pos");
+    var decodeUvLoc = gl.getAttribLocation(decodeProgram, "a_uv");
+    var decodeIndexLoc = gl.getUniformLocation(decodeProgram, "u_indexTex");
+    var decodePaletteLoc = gl.getUniformLocation(decodeProgram, "u_paletteTex");
+
+    var crtPosLoc = gl.getAttribLocation(crtProgram, "a_pos");
+    var crtUvLoc = gl.getAttribLocation(crtProgram, "a_uv");
+    var crtSceneLoc = gl.getUniformLocation(crtProgram, "u_sceneTex");
+    var crtSourceSizeLoc = gl.getUniformLocation(crtProgram, "u_sourceSize");
+    var crtOutputSizeLoc = gl.getUniformLocation(crtProgram, "u_outputSize");
+
+    gl.useProgram(decodeProgram);
+    if (decodeIndexLoc !== null) gl.uniform1i(decodeIndexLoc, 0);
+    if (decodePaletteLoc !== null) gl.uniform1i(decodePaletteLoc, 1);
+
+    gl.useProgram(crtProgram);
+    if (crtSceneLoc !== null) gl.uniform1i(crtSceneLoc, 2);
+    if (crtSourceSizeLoc !== null) gl.uniform2f(crtSourceSizeLoc, sceneW, sceneH);
 
     function paint(video) {
-      gl.useProgram(program);
-
       // Upload indexed framebuffer.
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, indexTex);
       if (gl2) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, texW, texH, gl.RED, gl.UNSIGNED_BYTE, video.pixels);
       else gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, texW, texH, gl.LUMINANCE, gl.UNSIGNED_BYTE, video.pixels);
 
-      // Draw.
+      // Pass 1: index + palette -> scene texture (at sceneScale× resolution).
+      gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo);
+      gl.viewport(0, 0, sceneW, sceneH);
+      gl.useProgram(decodeProgram);
+      setupQuad(gl, decodeBuf, decodePosLoc, decodeUvLoc);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, indexTex);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, paletteTex);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      // Pass 2: CRT post-process to display.
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.useProgram(crtProgram);
+      setupQuad(gl, crtBuf, crtPosLoc, crtUvLoc);
+      gl.activeTexture(gl.TEXTURE2);
+      gl.bindTexture(gl.TEXTURE_2D, sceneTex);
+      if (crtOutputSizeLoc !== null) gl.uniform2f(crtOutputSizeLoc, canvas.width | 0, canvas.height | 0);
       gl.viewport(0, 0, canvas.width | 0, canvas.height | 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -214,10 +439,14 @@
 
     function dispose() {
       try {
-        if (buf) gl.deleteBuffer(buf);
+        if (decodeBuf) gl.deleteBuffer(decodeBuf);
+        if (crtBuf) gl.deleteBuffer(crtBuf);
         if (indexTex) gl.deleteTexture(indexTex);
         if (paletteTex) gl.deleteTexture(paletteTex);
-        if (program) gl.deleteProgram(program);
+        if (sceneTex) gl.deleteTexture(sceneTex);
+        if (sceneFbo) gl.deleteFramebuffer(sceneFbo);
+        if (decodeProgram) gl.deleteProgram(decodeProgram);
+        if (crtProgram) gl.deleteProgram(crtProgram);
       } catch (e) {
         // ignore
       }

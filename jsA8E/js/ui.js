@@ -6,6 +6,8 @@
   function boot() {
     var canvas = document.getElementById("screen");
     canvas.tabIndex = 0;
+    var nativeScreenW = canvas.width | 0;
+    var nativeScreenH = canvas.height | 0;
     var gl = null;
     try {
       gl =
@@ -40,7 +42,30 @@
     }
 
     var ctx2d = null;
-    if (!gl) ctx2d = canvas.getContext("2d", { alpha: false });
+    function resizeCrtCanvas() {
+      if (!gl) return;
+      var dpr = window.devicePixelRatio || 1;
+      var rect = canvas.getBoundingClientRect();
+      var cssW = Math.max(1, Math.round(rect.width || nativeScreenW));
+      var cssH = Math.max(1, Math.round(rect.height || nativeScreenH));
+      var targetW = Math.max(nativeScreenW, Math.round(cssW * dpr));
+      var targetH = Math.max(nativeScreenH, Math.round(cssH * dpr));
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+      }
+    }
+
+    if (gl) {
+      canvas.classList.add("crtEnabled");
+      resizeCrtCanvas();
+      window.addEventListener("resize", resizeCrtCanvas);
+      if (window.visualViewport) window.visualViewport.addEventListener("resize", resizeCrtCanvas);
+      requestAnimationFrame(resizeCrtCanvas);
+    } else {
+      canvas.classList.remove("crtEnabled");
+      ctx2d = canvas.getContext("2d", { alpha: false });
+    }
 
     var btnStart = document.getElementById("btnStart");
     var btnPause = document.getElementById("btnPause");
@@ -73,6 +98,9 @@
         var parent = canvas.parentNode;
         if (parent) {
           var nextCanvas = canvas.cloneNode(false);
+          nextCanvas.width = nativeScreenW;
+          nextCanvas.height = nativeScreenH;
+          nextCanvas.classList.remove("crtEnabled");
           parent.replaceChild(nextCanvas, canvas);
           canvas = nextCanvas;
           canvas.tabIndex = 0;
