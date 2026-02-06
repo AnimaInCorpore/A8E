@@ -97,9 +97,9 @@
     if (!gl) throw new Error("A8EGlRenderer: missing WebGL context");
     if (!canvas) throw new Error("A8EGlRenderer: missing canvas");
     if (!paletteRgb || paletteRgb.length < 256 * 3) throw new Error("A8EGlRenderer: missing palette");
-    var sceneScaleLegacy = opts.sceneScale | 0;
-    var sceneScaleX = (opts.sceneScaleX | 0) || sceneScaleLegacy || 2;
-    var sceneScaleY = (opts.sceneScaleY | 0) || sceneScaleLegacy || 1;
+    // Keep CRT internal scene resolution fixed to 2x horizontal, 1x vertical.
+    var sceneScaleX = 2;
+    var sceneScaleY = 1;
     if (texW <= 0 || texH <= 0) throw new Error("A8EGlRenderer: invalid texture size");
     if (viewW <= 0 || viewH <= 0) throw new Error("A8EGlRenderer: invalid viewport size");
 
@@ -187,19 +187,43 @@
         "  else mask.b = 1.01;\n" +
         "  return mask;\n" +
         "}\n" +
-        "vec3 compositeBleed(vec2 uv, vec3 col){\n" +
-        "  vec2 tx = vec2(2.0 / u_sourceSize.x, 0.0);\n" +
-        "  vec3 r1 = toLinear(texture(u_sceneTex, uv + tx).rgb);\n" +
-        "  vec3 r2 = toLinear(texture(u_sceneTex, uv + tx * 2.0).rgb);\n" +
-        "  vec3 r3 = toLinear(texture(u_sceneTex, uv + tx * 3.0).rgb);\n" +
-        "  vec3 l1 = toLinear(texture(u_sceneTex, uv - tx).rgb);\n" +
-        "  vec3 l2 = toLinear(texture(u_sceneTex, uv - tx * 2.0).rgb);\n" +
-        "  vec3 l3 = toLinear(texture(u_sceneTex, uv - tx * 3.0).rgb);\n" +
-        "  vec3 bleed;\n" +
-        "  bleed.r = col.r * 0.68 + r1.r * 0.20 + r2.r * 0.09 + r3.r * 0.03;\n" +
-        "  bleed.g = col.g * 0.74 + r1.g * 0.16 + r2.g * 0.07 + r3.g * 0.03;\n" +
-        "  bleed.b = col.b * 0.68 + l1.b * 0.20 + l2.b * 0.09 + l3.b * 0.03;\n" +
-        "  return bleed;\n" +
+        "vec3 rgbToYuv(vec3 c){\n" +
+        "  float y = dot(c, vec3(0.299, 0.587, 0.114));\n" +
+        "  float u = dot(c, vec3(-0.14713, -0.28886, 0.436));\n" +
+        "  float v = dot(c, vec3(0.615, -0.51499, -0.10001));\n" +
+        "  return vec3(y, u, v);\n" +
+        "}\n" +
+        "vec3 yuvToRgb(vec3 c){\n" +
+        "  float y = c.x;\n" +
+        "  float u = c.y;\n" +
+        "  float v = c.z;\n" +
+        "  return vec3(\n" +
+        "    y + 1.13983 * v,\n" +
+        "    y - 0.39465 * u - 0.58060 * v,\n" +
+        "    y + 2.03211 * u\n" +
+        "  );\n" +
+        "}\n" +
+        "vec3 compositePal(vec2 uv, vec2 scanPos, vec3 col){\n" +
+        "  vec2 tx = vec2(1.0 / u_sourceSize.x, 0.0);\n" +
+        "  vec2 ty = vec2(0.0, 1.0 / u_sourceSize.y);\n" +
+        "  vec3 yuv0 = rgbToYuv(toSrgb(col));\n" +
+        "  vec3 yuv1 = rgbToYuv(texture(u_sceneTex, uv + tx).rgb);\n" +
+        "  vec3 yuv2 = rgbToYuv(texture(u_sceneTex, uv + tx * 2.0).rgb);\n" +
+        "  vec3 yuv3 = rgbToYuv(texture(u_sceneTex, uv + tx * 3.0).rgb);\n" +
+        "  vec3 yuv4 = rgbToYuv(texture(u_sceneTex, uv + tx * 4.0).rgb);\n" +
+        "  float y = yuv0.x * 0.72 + yuv1.x * 0.20 + yuv2.x * 0.08;\n" +
+        "  float u = yuv0.y * 0.46 + yuv1.y * 0.26 + yuv2.y * 0.16 + yuv3.y * 0.08 + yuv4.y * 0.04;\n" +
+        "  float v = yuv0.z * 0.46 + yuv1.z * 0.26 + yuv2.z * 0.16 + yuv3.z * 0.08 + yuv4.z * 0.04;\n" +
+        "  vec3 py0 = rgbToYuv(texture(u_sceneTex, uv - ty).rgb);\n" +
+        "  vec3 py1 = rgbToYuv(texture(u_sceneTex, uv - ty + tx).rgb);\n" +
+        "  vec3 py2 = rgbToYuv(texture(u_sceneTex, uv - ty + tx * 2.0).rgb);\n" +
+        "  float uPrev = py0.y * 0.50 + py1.y * 0.30 + py2.y * 0.20;\n" +
+        "  float vPrev = py0.z * 0.50 + py1.z * 0.30 + py2.z * 0.20;\n" +
+        "  u = mix(u, uPrev, 0.20);\n" +
+        "  v = mix(v, vPrev, 0.20);\n" +
+        "  u *= 0.88;\n" +
+        "  v *= 0.88;\n" +
+        "  return toLinear(clamp(yuvToRgb(vec3(y, u, v)), 0.0, 1.0));\n" +
         "}\n" +
         "float scanlinePass(float phase, float luminance, float scaleY){\n" +
         "  float strength = smoothstep(1.2, 2.6, scaleY);\n" +
@@ -221,7 +245,7 @@
         "  vec2 samplePos = uv * u_sourceSize;\n" +
         "  vec2 scanPos = uv * u_scanlineSize;\n" +
         "  vec3 col = tri(samplePos, scanPos, vScale);\n" +
-        "  col = compositeBleed(uv, col);\n" +
+        "  col = compositePal(uv, scanPos, col);\n" +
         "  float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));\n" +
         "  col *= scanlinePass(fract(scanPos.y), lum, scaleY);\n" +
         "  col *= mix(1.0, 1.03, smoothstep(1.2, 2.6, scaleY));\n" +
@@ -304,19 +328,43 @@
         "  else mask.b = 1.01;\n" +
         "  return mask;\n" +
         "}\n" +
-        "vec3 compositeBleed(vec2 uv, vec3 col){\n" +
-        "  vec2 tx = vec2(2.0 / u_sourceSize.x, 0.0);\n" +
-        "  vec3 r1 = toLinear(texture2D(u_sceneTex, uv + tx).rgb);\n" +
-        "  vec3 r2 = toLinear(texture2D(u_sceneTex, uv + tx * 2.0).rgb);\n" +
-        "  vec3 r3 = toLinear(texture2D(u_sceneTex, uv + tx * 3.0).rgb);\n" +
-        "  vec3 l1 = toLinear(texture2D(u_sceneTex, uv - tx).rgb);\n" +
-        "  vec3 l2 = toLinear(texture2D(u_sceneTex, uv - tx * 2.0).rgb);\n" +
-        "  vec3 l3 = toLinear(texture2D(u_sceneTex, uv - tx * 3.0).rgb);\n" +
-        "  vec3 bleed;\n" +
-        "  bleed.r = col.r * 0.68 + r1.r * 0.20 + r2.r * 0.09 + r3.r * 0.03;\n" +
-        "  bleed.g = col.g * 0.74 + r1.g * 0.16 + r2.g * 0.07 + r3.g * 0.03;\n" +
-        "  bleed.b = col.b * 0.68 + l1.b * 0.20 + l2.b * 0.09 + l3.b * 0.03;\n" +
-        "  return bleed;\n" +
+        "vec3 rgbToYuv(vec3 c){\n" +
+        "  float y = dot(c, vec3(0.299, 0.587, 0.114));\n" +
+        "  float u = dot(c, vec3(-0.14713, -0.28886, 0.436));\n" +
+        "  float v = dot(c, vec3(0.615, -0.51499, -0.10001));\n" +
+        "  return vec3(y, u, v);\n" +
+        "}\n" +
+        "vec3 yuvToRgb(vec3 c){\n" +
+        "  float y = c.x;\n" +
+        "  float u = c.y;\n" +
+        "  float v = c.z;\n" +
+        "  return vec3(\n" +
+        "    y + 1.13983 * v,\n" +
+        "    y - 0.39465 * u - 0.58060 * v,\n" +
+        "    y + 2.03211 * u\n" +
+        "  );\n" +
+        "}\n" +
+        "vec3 compositePal(vec2 uv, vec2 scanPos, vec3 col){\n" +
+        "  vec2 tx = vec2(1.0 / u_sourceSize.x, 0.0);\n" +
+        "  vec2 ty = vec2(0.0, 1.0 / u_sourceSize.y);\n" +
+        "  vec3 yuv0 = rgbToYuv(toSrgb(col));\n" +
+        "  vec3 yuv1 = rgbToYuv(texture2D(u_sceneTex, uv + tx).rgb);\n" +
+        "  vec3 yuv2 = rgbToYuv(texture2D(u_sceneTex, uv + tx * 2.0).rgb);\n" +
+        "  vec3 yuv3 = rgbToYuv(texture2D(u_sceneTex, uv + tx * 3.0).rgb);\n" +
+        "  vec3 yuv4 = rgbToYuv(texture2D(u_sceneTex, uv + tx * 4.0).rgb);\n" +
+        "  float y = yuv0.x * 0.72 + yuv1.x * 0.20 + yuv2.x * 0.08;\n" +
+        "  float u = yuv0.y * 0.46 + yuv1.y * 0.26 + yuv2.y * 0.16 + yuv3.y * 0.08 + yuv4.y * 0.04;\n" +
+        "  float v = yuv0.z * 0.46 + yuv1.z * 0.26 + yuv2.z * 0.16 + yuv3.z * 0.08 + yuv4.z * 0.04;\n" +
+        "  vec3 py0 = rgbToYuv(texture2D(u_sceneTex, uv - ty).rgb);\n" +
+        "  vec3 py1 = rgbToYuv(texture2D(u_sceneTex, uv - ty + tx).rgb);\n" +
+        "  vec3 py2 = rgbToYuv(texture2D(u_sceneTex, uv - ty + tx * 2.0).rgb);\n" +
+        "  float uPrev = py0.y * 0.50 + py1.y * 0.30 + py2.y * 0.20;\n" +
+        "  float vPrev = py0.z * 0.50 + py1.z * 0.30 + py2.z * 0.20;\n" +
+        "  u = mix(u, uPrev, 0.20);\n" +
+        "  v = mix(v, vPrev, 0.20);\n" +
+        "  u *= 0.88;\n" +
+        "  v *= 0.88;\n" +
+        "  return toLinear(clamp(yuvToRgb(vec3(y, u, v)), 0.0, 1.0));\n" +
         "}\n" +
         "float scanlinePass(float phase, float luminance, float scaleY){\n" +
         "  float strength = smoothstep(1.2, 2.6, scaleY);\n" +
@@ -338,7 +386,7 @@
         "  vec2 samplePos = uv * u_sourceSize;\n" +
         "  vec2 scanPos = uv * u_scanlineSize;\n" +
         "  vec3 col = tri(samplePos, scanPos, vScale);\n" +
-        "  col = compositeBleed(uv, col);\n" +
+        "  col = compositePal(uv, scanPos, col);\n" +
         "  float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));\n" +
         "  col *= scanlinePass(fract(scanPos.y), lum, scaleY);\n" +
         "  col *= mix(1.0, 1.03, smoothstep(1.2, 2.6, scaleY));\n" +

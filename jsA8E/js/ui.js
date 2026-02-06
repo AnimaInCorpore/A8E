@@ -9,6 +9,7 @@
     canvas.tabIndex = 0;
     var nativeScreenW = canvas.width | 0;
     var nativeScreenH = canvas.height | 0;
+    var screenViewport = canvas.parentElement;
     var app = null;
     var gl = null;
     try {
@@ -45,12 +46,32 @@
 
     var ctx2d = null;
     var crtCanvas = null;
-    var onCrtCanvasResize = null;
+    var onLayoutResize = null;
     var onCrtContextLost = null;
     var onCrtContextRestored = null;
     var didCleanup = false;
 
+    function resizeDisplayCanvas() {
+      var viewport = screenViewport || canvas.parentElement;
+      if (!viewport) return;
+      var rect = viewport.getBoundingClientRect();
+      var maxW = Math.max(1, Math.floor(rect.width || nativeScreenW));
+      var maxH = Math.max(1, Math.floor(rect.height || nativeScreenH));
+      var aspect = nativeScreenW / nativeScreenH;
+      var cssW = maxW;
+      var cssH = Math.round(cssW / aspect);
+      if (cssH > maxH) {
+        cssH = maxH;
+        cssW = Math.round(cssH * aspect);
+      }
+      var nextW = Math.max(1, cssW) + "px";
+      var nextH = Math.max(1, cssH) + "px";
+      if (canvas.style.width !== nextW) canvas.style.width = nextW;
+      if (canvas.style.height !== nextH) canvas.style.height = nextH;
+    }
+
     function resizeCrtCanvas() {
+      resizeDisplayCanvas();
       if (!gl) return;
       var dpr = window.devicePixelRatio || 1;
       var rect = canvas.getBoundingClientRect();
@@ -64,16 +85,18 @@
       }
     }
 
+    function detachLayoutHooks() {
+      if (!onLayoutResize) return;
+      window.removeEventListener("resize", onLayoutResize);
+      if (window.visualViewport) window.visualViewport.removeEventListener("resize", onLayoutResize);
+      onLayoutResize = null;
+    }
+
     function detachCrtHooks() {
       if (!crtCanvas) return;
-      if (onCrtCanvasResize) {
-        window.removeEventListener("resize", onCrtCanvasResize);
-        if (window.visualViewport) window.visualViewport.removeEventListener("resize", onCrtCanvasResize);
-      }
       if (onCrtContextLost) crtCanvas.removeEventListener("webglcontextlost", onCrtContextLost, false);
       if (onCrtContextRestored) crtCanvas.removeEventListener("webglcontextrestored", onCrtContextRestored, false);
       crtCanvas = null;
-      onCrtCanvasResize = null;
       onCrtContextLost = null;
       onCrtContextRestored = null;
     }
@@ -81,6 +104,7 @@
     function cleanup() {
       if (didCleanup) return;
       didCleanup = true;
+      detachLayoutHooks();
       detachCrtHooks();
       if (app && app.dispose) app.dispose();
     }
@@ -90,7 +114,6 @@
       resizeCrtCanvas();
 
       crtCanvas = canvas;
-      onCrtCanvasResize = resizeCrtCanvas;
       onCrtContextLost = function (e) {
         e.preventDefault();
         if (app && app.pause) {
@@ -111,15 +134,17 @@
         }, 0);
       };
 
-      window.addEventListener("resize", onCrtCanvasResize);
-      if (window.visualViewport) window.visualViewport.addEventListener("resize", onCrtCanvasResize);
       crtCanvas.addEventListener("webglcontextlost", onCrtContextLost, false);
       crtCanvas.addEventListener("webglcontextrestored", onCrtContextRestored, false);
-      requestAnimationFrame(resizeCrtCanvas);
     } else {
       canvas.classList.remove("crtEnabled");
       ctx2d = canvas.getContext("2d", { alpha: false });
     }
+
+    onLayoutResize = resizeCrtCanvas;
+    window.addEventListener("resize", onLayoutResize);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", onLayoutResize);
+    requestAnimationFrame(onLayoutResize);
 
     var btnStart = document.getElementById("btnStart");
     var btnPause = document.getElementById("btnPause");
@@ -156,6 +181,7 @@
           nextCanvas.classList.remove("crtEnabled");
           parent.replaceChild(nextCanvas, canvas);
           canvas = nextCanvas;
+          screenViewport = canvas.parentElement;
           canvas.tabIndex = 0;
           gl = null;
           ctx2d = canvas.getContext("2d", { alpha: false });
@@ -168,6 +194,7 @@
             turbo: chkTurbo.checked,
             optionOnStart: chkOptionOnStart.checked,
           });
+          resizeCrtCanvas();
         } else {
           throw e;
         }
