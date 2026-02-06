@@ -233,7 +233,12 @@
 
     function updateFullscreenButton() {
       if (!btnFullscreen) return;
-      btnFullscreen.textContent = isViewportFullscreen() ? "Exit fullscreen" : "Fullscreen";
+      var active = isViewportFullscreen();
+      btnFullscreen.innerHTML = active
+        ? '<i class="fa-solid fa-compress"></i>'
+        : '<i class="fa-solid fa-expand"></i>';
+      btnFullscreen.title = active ? "Exit fullscreen" : "Fullscreen";
+      btnFullscreen.setAttribute("aria-label", active ? "Exit fullscreen" : "Fullscreen");
     }
 
     function requestFullscreen(el) {

@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>jsA8E</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
@@ -13,25 +14,25 @@
         <div class="subtitle">Atari 800 XL emulator by Sascha Springer; CRT ref: Timothy Lottes</div>
       </div>
       <div class="controls">
-        <button id="btnStart">Start</button>
-        <button id="btnPause" disabled>Pause</button>
-        <button id="btnReset" disabled>Reset</button>
-        <button id="btnFullscreen">Fullscreen</button>
-        <label class="chk">
+        <button id="btnStart" title="Start"><i class="fa-solid fa-play"></i></button>
+        <button id="btnPause" disabled title="Pause"><i class="fa-solid fa-pause"></i></button>
+        <button id="btnReset" disabled title="Reset"><i class="fa-solid fa-rotate-right"></i></button>
+        <button id="btnFullscreen" title="Fullscreen"><i class="fa-solid fa-expand"></i></button>
+        <label class="chk" title="Turbo">
           <input type="checkbox" id="chkTurbo" />
-          Turbo
+          <i class="fa-solid fa-gauge-high"></i>
         </label>
-        <label class="chk" title="Accelerates only SIO disk transfer timing.">
+        <label class="chk" title="SIO turbo - Accelerates only SIO disk transfer timing.">
           <input type="checkbox" id="chkSioTurbo" checked />
-          SIO turbo
+          <i class="fa-solid fa-floppy-disk"></i>
         </label>
-        <label class="chk">
+        <label class="chk" title="Audio">
           <input type="checkbox" id="chkAudio" checked />
-          Audio
+          <i class="fa-solid fa-volume-high"></i>
         </label>
-        <label class="chk" title="Hold OPTION during boot to disable BASIC ROM mapping.">
+        <label class="chk" title="Option on start - Hold OPTION during boot to disable BASIC ROM mapping.">
           <input type="checkbox" id="chkOptionOnStart" checked />
-          Option on start
+          <i class="fa-solid fa-gear"></i>
         </label>
       </div>
     </header>

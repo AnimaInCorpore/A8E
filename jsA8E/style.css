@@ -62,6 +62,13 @@ button {
   padding: 7px 10px;
   border-radius: 8px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+button i {
+  font-size: 16px;
 }
 
 button:disabled {
@@ -79,6 +86,10 @@ button:hover:not(:disabled) {
   gap: 6px;
   font-size: 13px;
   color: var(--muted);
+}
+
+.chk i {
+  font-size: 14px;
 }
 
 .layout {
