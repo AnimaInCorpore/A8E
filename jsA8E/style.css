@@ -73,15 +73,15 @@ body {
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
-  min-width: 220px;
-  max-width: min(90vw, 320px);
-  padding: 8px 10px;
+  min-width: 280px;
+  max-width: min(90vw, 420px);
+  padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel);
   color: var(--muted);
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.5;
   text-align: left;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
   opacity: 0;
@@ -93,6 +93,12 @@ body {
 .brandTooltip strong {
   color: var(--text);
   font-weight: 600;
+}
+
+.brandTooltip em {
+  color: var(--muted);
+  font-style: italic;
+  opacity: 0.85;
 }
 
 .brandHelp:focus-visible .brandTooltip,
