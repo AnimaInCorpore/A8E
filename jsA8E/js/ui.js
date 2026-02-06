@@ -150,6 +150,7 @@
     var btnPause = document.getElementById("btnPause");
     var btnReset = document.getElementById("btnReset");
     var chkTurbo = document.getElementById("chkTurbo");
+    var chkSioTurbo = document.getElementById("chkSioTurbo");
     var chkAudio = document.getElementById("chkAudio");
     var chkOptionOnStart = document.getElementById("chkOptionOnStart");
 
@@ -167,6 +168,7 @@
         debugEl: debugEl,
         audioEnabled: chkAudio.checked,
         turbo: chkTurbo.checked,
+        sioTurbo: chkSioTurbo.checked,
         optionOnStart: chkOptionOnStart.checked,
       });
     } catch (e) {
@@ -192,6 +194,7 @@
             debugEl: debugEl,
             audioEnabled: chkAudio.checked,
             turbo: chkTurbo.checked,
+            sioTurbo: chkSioTurbo.checked,
             optionOnStart: chkOptionOnStart.checked,
           });
           resizeCrtCanvas();
@@ -239,6 +242,10 @@
 
     chkTurbo.addEventListener("change", function () {
       app.setTurbo(!!chkTurbo.checked);
+    });
+
+    chkSioTurbo.addEventListener("change", function () {
+      app.setSioTurbo(!!chkSioTurbo.checked);
     });
 
     chkAudio.addEventListener("change", function () {

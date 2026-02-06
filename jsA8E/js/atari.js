@@ -20,6 +20,8 @@
   var SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES = 1500;
   var SERIAL_INPUT_FIRST_DATA_READY_CYCLES = 3000;
   var SERIAL_INPUT_DATA_READY_CYCLES = 900;
+  var SIO_TURBO_DELAY_DIVISOR = 64;
+  var SIO_TURBO_MIN_DELAY_CYCLES = 8;
   // Keep enough history to survive slow frames without dropping audible state.
   var POKEY_AUDIO_MAX_CATCHUP_CYCLES = 200000;
 
@@ -459,6 +461,7 @@
       // Shim from the C version: optionally force OPTION held during the OS boot check
       // (disables BASIC without requiring a key press timing window).
       optionOnStart: false,
+      sioTurbo: false,
       disk1: null,
       disk1Size: 0,
       disk1Name: null,
@@ -484,6 +487,14 @@
     if (io.timer2Cycle < next) next = io.timer2Cycle;
     if (io.timer4Cycle < next) next = io.timer4Cycle;
     ctx.ioCycleTimedEventCycle = next;
+  }
+
+  function sioDelayCycles(io, normalCycles) {
+    var cycles = normalCycles | 0;
+    if (!io || !io.sioTurbo) return cycles;
+    var fast = (cycles / SIO_TURBO_DELAY_DIVISOR) | 0;
+    if (fast < SIO_TURBO_MIN_DELAY_CYCLES) fast = SIO_TURBO_MIN_DELAY_CYCLES;
+    return fast | 0;
   }
 
   function sioChecksum(buf, size) {
@@ -1231,7 +1242,7 @@
     var io = ctx.ioData;
     var now = ctx.cycleCounter;
 
-    io.serialOutputNeedDataCycle = now + SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
+    io.serialOutputNeedDataCycle = now + sioDelayCycles(io, SERIAL_OUTPUT_DATA_NEEDED_CYCLES);
     cycleTimedEventUpdate(ctx);
 
     var buf = io.sioBuffer;
@@ -1240,7 +1251,7 @@
     function queueSerinResponse(size) {
       io.sioInSize = size | 0;
       io.sioInIndex = 0;
-      io.serialInputDataReadyCycle = now + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
+      io.serialInputDataReadyCycle = now + sioDelayCycles(io, SERIAL_INPUT_FIRST_DATA_READY_CYCLES);
       cycleTimedEventUpdate(ctx);
     }
 
@@ -1271,7 +1282,7 @@
       var expected = (io.sioPendingBytes | 0) + 1; // data + checksum
       if (dataIndex !== expected) return;
 
-      io.serialOutputTransmissionDoneCycle = now + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
+      io.serialOutputTransmissionDoneCycle = now + sioDelayCycles(io, SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES);
       cycleTimedEventUpdate(ctx);
 
       var dataBytes = io.sioPendingBytes | 0;
@@ -1342,7 +1353,7 @@
       return;
     }
 
-    io.serialOutputTransmissionDoneCycle = now + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
+    io.serialOutputTransmissionDoneCycle = now + sioDelayCycles(io, SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES);
     cycleTimedEventUpdate(ctx);
 
     var dev = buf[0] & 0xff;
@@ -1463,7 +1474,7 @@
 
       if ((io.sioInSize | 0) > 0) {
         io.serialInputDataReadyCycle =
-          ctx.cycleCounter + SERIAL_INPUT_DATA_READY_CYCLES;
+          ctx.cycleCounter + sioDelayCycles(io, SERIAL_INPUT_DATA_READY_CYCLES);
         cycleTimedEventUpdate(ctx);
       } else {
         io.sioInIndex = 0;
@@ -3238,6 +3249,7 @@
 
     var audioEnabled = !!opts.audioEnabled;
     var turbo = !!opts.turbo;
+    var sioTurbo = !!opts.sioTurbo;
     var optionOnStart = !!opts.optionOnStart;
 
     var video = makeVideo();
@@ -3295,6 +3307,7 @@
 
     machine.ctx.ioData = makeIoData(video);
     machine.ctx.ioData.optionOnStart = optionOnStart;
+    machine.ctx.ioData.sioTurbo = sioTurbo;
     machine.ctx.ioCycleTimedEventFunction = ioCycleTimedEvent;
     cycleTimedEventUpdate(machine.ctx);
 
@@ -3352,6 +3365,7 @@
       machine.ctx.irqPending = 0;
       machine.ctx.ioData = makeIoData(video);
       machine.ctx.ioData.optionOnStart = optionOnStart;
+      machine.ctx.ioData.sioTurbo = sioTurbo;
       machine.ctx.ioData.disk1 = machine.media.disk1;
       machine.ctx.ioData.disk1Size = machine.media.disk1Size | 0;
       machine.ctx.ioData.disk1Name = machine.media.disk1Name;
@@ -3599,6 +3613,11 @@
       }
     }
 
+    function setSioTurbo(v) {
+      sioTurbo = !!v;
+      if (machine.ctx && machine.ctx.ioData) machine.ctx.ioData.sioTurbo = sioTurbo;
+    }
+
     function setOptionOnStart(v) {
       optionOnStart = !!v;
       if (machine.ctx && machine.ctx.ioData) machine.ctx.ioData.optionOnStart = optionOnStart;
@@ -3814,6 +3833,7 @@
       pause: pause,
       reset: reset,
       setTurbo: setTurbo,
+      setSioTurbo: setSioTurbo,
       setAudioEnabled: setAudioEnabled,
       setOptionOnStart: setOptionOnStart,
       loadOsRom: loadOsRom,
