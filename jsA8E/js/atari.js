@@ -461,7 +461,7 @@
       // Shim from the C version: optionally force OPTION held during the OS boot check
       // (disables BASIC without requiring a key press timing window).
       optionOnStart: false,
-      sioTurbo: false,
+      sioTurbo: true,
       disk1: null,
       disk1Size: 0,
       disk1Name: null,
@@ -3275,7 +3275,7 @@
 
     var audioEnabled = !!opts.audioEnabled;
     var turbo = !!opts.turbo;
-    var sioTurbo = !!opts.sioTurbo;
+    var sioTurbo = opts.sioTurbo !== false;
     var optionOnStart = !!opts.optionOnStart;
 
     var video = makeVideo();
