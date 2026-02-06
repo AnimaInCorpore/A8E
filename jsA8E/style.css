@@ -82,13 +82,12 @@ button:hover:not(:disabled) {
 }
 
 .layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  grid-template-rows: 1fr;
-  gap: 14px;
+  display: flex;
+  justify-content: center;
   padding: 14px;
   flex: 1 1 0;
   min-height: 0;
+  overflow-y: auto;
 }
 
 .screenPanel {
@@ -97,23 +96,21 @@ button:hover:not(:disabled) {
   align-items: stretch;
   gap: 10px;
   min-height: 0;
+  width: 100%;
 }
 
 .screenViewport {
   width: 100%;
-  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   overflow: hidden;
 }
 
 canvas {
   display: block;
-  width: 336px;
-  height: 240px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 336 / 240;
   flex: 0 0 auto;
   image-rendering: pixelated;
   border-radius: 12px;
@@ -132,12 +129,57 @@ canvas.crtEnabled {
   text-align: center;
 }
 
-.sidePanel {
+.filePanel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  min-height: 0;
-  overflow-y: auto;
+  gap: 8px;
+  padding: 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.fileGroup {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.fileBtn {
+  position: relative;
+  cursor: pointer;
+}
+
+.fileBtn input[type="file"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.fileBtn span {
+  display: inline-block;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  transition: border-color 0.15s;
+}
+
+.fileBtn:hover span {
+  border-color: #35507a;
+}
+
+.fileStatus {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
 }
 
 .card {
@@ -195,8 +237,6 @@ input[type="file"] {
     overflow: auto;
   }
   .layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto;
     flex: none;
   }
 }

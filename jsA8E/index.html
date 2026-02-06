@@ -39,35 +39,26 @@
         <div class="hint">
           Focus the canvas and type. Keys: F2/F3/F4 = OPTION/SELECT/START, F5 = RESET.
         </div>
-      </section>
 
-      <section class="sidePanel">
-        <div class="card">
-          <div class="cardTitle">ROMs</div>
-          <div class="row">
-            <label class="file">
-              ATARIXL.ROM
+        <div class="filePanel">
+          <div class="fileGroup">
+            <label class="fileBtn">
               <input type="file" id="romOs" accept=".rom,application/octet-stream" />
+              <span>ATARIXL.ROM</span>
             </label>
-          </div>
-          <div class="row">
-            <label class="file">
-              ATARIBAS.ROM
+            <label class="fileBtn">
               <input type="file" id="romBasic" accept=".rom,application/octet-stream" />
+              <span>ATARIBAS.ROM</span>
             </label>
-          </div>
-          <div class="row small muted" id="romStatus">No ROMs loaded yet.</div>
-        </div>
-
-        <div class="card">
-          <div class="cardTitle">Disk (optional)</div>
-          <div class="row">
-            <label class="file">
-              d1.atr
+            <label class="fileBtn">
               <input type="file" id="disk1" accept=".atr,application/octet-stream" />
+              <span>Load ATR</span>
             </label>
           </div>
-          <div class="row small muted" id="diskStatus">No disk loaded.</div>
+          <div class="fileStatus">
+            <span id="romStatus">No ROMs loaded yet.</span>
+            <span id="diskStatus">No disk loaded.</span>
+          </div>
         </div>
 
         <div class="card">
