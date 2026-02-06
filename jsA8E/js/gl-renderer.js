@@ -146,7 +146,7 @@
         "vec3 toSrgb(vec3 c){ return pow(max(c, vec3(0.0)), vec3(1.0 / 2.2)); }\n" +
         "vec2 warp(vec2 uv){\n" +
         "  vec2 c = uv * 2.0 - 1.0;\n" +
-        "  c *= vec2(1.0 + (c.y * c.y) * 0.032, 1.0 + (c.x * c.x) * 0.042);\n" +
+        "  c *= vec2(1.0 + (c.y * c.y) * 0.020, 1.0 + (c.x * c.x) * 0.026);\n" +
         "  return c * 0.5 + 0.5;\n" +
         "}\n" +
         "vec3 fetchLinear(vec2 pixelPos){\n" +
@@ -181,11 +181,21 @@
         "  float sy = max(1.0, u_outputSize.y / max(1.0, u_scanlineSize.y));\n" +
         "  float line = mod(floor(gl_FragCoord.y / sy), 2.0);\n" +
         "  float phase = mod(floor(gl_FragCoord.x / sx) + line, 3.0);\n" +
-        "  vec3 mask = vec3(0.92);\n" +
-        "  if (phase < 0.5) mask.r = 1.01;\n" +
-        "  else if (phase < 1.5) mask.g = 1.01;\n" +
-        "  else mask.b = 1.01;\n" +
+        "  vec3 mask = vec3(0.96);\n" +
+        "  if (phase < 0.5) mask.r = 1.005;\n" +
+        "  else if (phase < 1.5) mask.g = 1.005;\n" +
+        "  else mask.b = 1.005;\n" +
         "  return mask;\n" +
+        "}\n" +
+        "float tubeCornerMask(vec2 uv){\n" +
+        "  vec2 outPx = max(u_outputSize, vec2(1.0));\n" +
+        "  float radiusPx = clamp(min(outPx.x, outPx.y) * 0.008, 3.0, 8.0);\n" +
+        "  float featherPx = 1.25;\n" +
+        "  vec2 p = uv * outPx - outPx * 0.5;\n" +
+        "  vec2 halfRect = max(outPx * 0.5 - vec2(radiusPx + 0.5), vec2(1.0));\n" +
+        "  vec2 q = abs(p) - halfRect;\n" +
+        "  float dist = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - radiusPx;\n" +
+        "  return 1.0 - smoothstep(-featherPx, featherPx, dist);\n" +
         "}\n" +
         "vec3 rgbToYuv(vec3 c){\n" +
         "  float y = dot(c, vec3(0.299, 0.587, 0.114));\n" +
@@ -211,25 +221,25 @@
         "  vec3 yuv2 = rgbToYuv(texture(u_sceneTex, uv + tx * 2.0).rgb);\n" +
         "  vec3 yuv3 = rgbToYuv(texture(u_sceneTex, uv + tx * 3.0).rgb);\n" +
         "  vec3 yuv4 = rgbToYuv(texture(u_sceneTex, uv + tx * 4.0).rgb);\n" +
-        "  float y = yuv0.x * 0.72 + yuv1.x * 0.20 + yuv2.x * 0.08;\n" +
-        "  float u = yuv0.y * 0.46 + yuv1.y * 0.26 + yuv2.y * 0.16 + yuv3.y * 0.08 + yuv4.y * 0.04;\n" +
-        "  float v = yuv0.z * 0.46 + yuv1.z * 0.26 + yuv2.z * 0.16 + yuv3.z * 0.08 + yuv4.z * 0.04;\n" +
+        "  float y = yuv0.x * 0.86 + yuv1.x * 0.10 + yuv2.x * 0.04;\n" +
+        "  float u = yuv0.y * 0.62 + yuv1.y * 0.20 + yuv2.y * 0.11 + yuv3.y * 0.05 + yuv4.y * 0.02;\n" +
+        "  float v = yuv0.z * 0.62 + yuv1.z * 0.20 + yuv2.z * 0.11 + yuv3.z * 0.05 + yuv4.z * 0.02;\n" +
         "  vec3 py0 = rgbToYuv(texture(u_sceneTex, uv - ty).rgb);\n" +
         "  vec3 py1 = rgbToYuv(texture(u_sceneTex, uv - ty + tx).rgb);\n" +
         "  vec3 py2 = rgbToYuv(texture(u_sceneTex, uv - ty + tx * 2.0).rgb);\n" +
         "  float uPrev = py0.y * 0.50 + py1.y * 0.30 + py2.y * 0.20;\n" +
         "  float vPrev = py0.z * 0.50 + py1.z * 0.30 + py2.z * 0.20;\n" +
-        "  u = mix(u, uPrev, 0.20);\n" +
-        "  v = mix(v, vPrev, 0.20);\n" +
-        "  u *= 0.88;\n" +
-        "  v *= 0.88;\n" +
+        "  u = mix(u, uPrev, 0.10);\n" +
+        "  v = mix(v, vPrev, 0.10);\n" +
+        "  u *= 0.94;\n" +
+        "  v *= 0.94;\n" +
         "  return toLinear(clamp(yuvToRgb(vec3(y, u, v)), 0.0, 1.0));\n" +
         "}\n" +
         "float scanlinePass(float phase, float luminance, float scaleY){\n" +
-        "  float strength = smoothstep(1.2, 2.6, scaleY);\n" +
-        "  float beam = mix(1.35, 0.70, clamp(sqrt(max(luminance, 0.0)), 0.0, 1.0));\n" +
+        "  float strength = smoothstep(1.5, 3.5, scaleY);\n" +
+        "  float beam = mix(1.20, 0.80, clamp(sqrt(max(luminance, 0.0)), 0.0, 1.0));\n" +
         "  float wave = max(0.0, 0.5 - 0.5 * cos(phase * 6.2831853));\n" +
-        "  float floor = mix(0.60, 0.82, clamp(luminance, 0.0, 1.0));\n" +
+        "  float floor = mix(0.82, 0.95, clamp(luminance, 0.0, 1.0));\n" +
         "  float shaped = floor + (1.0 - floor) * pow(wave, beam);\n" +
         "  return mix(1.0, shaped, strength);\n" +
         "}\n" +
@@ -248,13 +258,14 @@
         "  col = compositePal(uv, scanPos, col);\n" +
         "  float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));\n" +
         "  col *= scanlinePass(fract(scanPos.y), lum, scaleY);\n" +
-        "  col *= mix(1.0, 1.03, smoothstep(1.2, 2.6, scaleY));\n" +
+        "  col *= mix(1.0, 1.015, smoothstep(1.5, 3.5, scaleY));\n" +
         "  vec2 d = uv * 2.0 - 1.0;\n" +
-        "  float vignette = 1.0 - 0.14 * dot(d, d);\n" +
+        "  float vignette = 1.0 - 0.07 * dot(d, d);\n" +
         "  col *= clamp(vignette, 0.0, 1.0);\n" +
         "  float maskFade = smoothstep(4.0, 6.0, minScale);\n" +
         "  col *= mix(vec3(1.0), shadowMask(), maskFade);\n" +
         "  col *= mix(1.0, 1.005, maskFade);\n" +
+        "  col *= tubeCornerMask(uv);\n" +
         "  outColor = vec4(toSrgb(col), 1.0);\n" +
         "}\n";
     } else {
@@ -287,7 +298,7 @@
         "vec3 toSrgb(vec3 c){ return pow(max(c, vec3(0.0)), vec3(1.0 / 2.2)); }\n" +
         "vec2 warp(vec2 uv){\n" +
         "  vec2 c = uv * 2.0 - 1.0;\n" +
-        "  c *= vec2(1.0 + (c.y * c.y) * 0.032, 1.0 + (c.x * c.x) * 0.042);\n" +
+        "  c *= vec2(1.0 + (c.y * c.y) * 0.020, 1.0 + (c.x * c.x) * 0.026);\n" +
         "  return c * 0.5 + 0.5;\n" +
         "}\n" +
         "vec3 fetchLinear(vec2 pixelPos){\n" +
@@ -322,11 +333,21 @@
         "  float sy = max(1.0, u_outputSize.y / max(1.0, u_scanlineSize.y));\n" +
         "  float line = mod(floor(gl_FragCoord.y / sy), 2.0);\n" +
         "  float phase = mod(floor(gl_FragCoord.x / sx) + line, 3.0);\n" +
-        "  vec3 mask = vec3(0.92);\n" +
-        "  if (phase < 0.5) mask.r = 1.01;\n" +
-        "  else if (phase < 1.5) mask.g = 1.01;\n" +
-        "  else mask.b = 1.01;\n" +
+        "  vec3 mask = vec3(0.96);\n" +
+        "  if (phase < 0.5) mask.r = 1.005;\n" +
+        "  else if (phase < 1.5) mask.g = 1.005;\n" +
+        "  else mask.b = 1.005;\n" +
         "  return mask;\n" +
+        "}\n" +
+        "float tubeCornerMask(vec2 uv){\n" +
+        "  vec2 outPx = max(u_outputSize, vec2(1.0));\n" +
+        "  float radiusPx = clamp(min(outPx.x, outPx.y) * 0.008, 3.0, 8.0);\n" +
+        "  float featherPx = 1.25;\n" +
+        "  vec2 p = uv * outPx - outPx * 0.5;\n" +
+        "  vec2 halfRect = max(outPx * 0.5 - vec2(radiusPx + 0.5), vec2(1.0));\n" +
+        "  vec2 q = abs(p) - halfRect;\n" +
+        "  float dist = length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - radiusPx;\n" +
+        "  return 1.0 - smoothstep(-featherPx, featherPx, dist);\n" +
         "}\n" +
         "vec3 rgbToYuv(vec3 c){\n" +
         "  float y = dot(c, vec3(0.299, 0.587, 0.114));\n" +
@@ -352,25 +373,25 @@
         "  vec3 yuv2 = rgbToYuv(texture2D(u_sceneTex, uv + tx * 2.0).rgb);\n" +
         "  vec3 yuv3 = rgbToYuv(texture2D(u_sceneTex, uv + tx * 3.0).rgb);\n" +
         "  vec3 yuv4 = rgbToYuv(texture2D(u_sceneTex, uv + tx * 4.0).rgb);\n" +
-        "  float y = yuv0.x * 0.72 + yuv1.x * 0.20 + yuv2.x * 0.08;\n" +
-        "  float u = yuv0.y * 0.46 + yuv1.y * 0.26 + yuv2.y * 0.16 + yuv3.y * 0.08 + yuv4.y * 0.04;\n" +
-        "  float v = yuv0.z * 0.46 + yuv1.z * 0.26 + yuv2.z * 0.16 + yuv3.z * 0.08 + yuv4.z * 0.04;\n" +
+        "  float y = yuv0.x * 0.86 + yuv1.x * 0.10 + yuv2.x * 0.04;\n" +
+        "  float u = yuv0.y * 0.62 + yuv1.y * 0.20 + yuv2.y * 0.11 + yuv3.y * 0.05 + yuv4.y * 0.02;\n" +
+        "  float v = yuv0.z * 0.62 + yuv1.z * 0.20 + yuv2.z * 0.11 + yuv3.z * 0.05 + yuv4.z * 0.02;\n" +
         "  vec3 py0 = rgbToYuv(texture2D(u_sceneTex, uv - ty).rgb);\n" +
         "  vec3 py1 = rgbToYuv(texture2D(u_sceneTex, uv - ty + tx).rgb);\n" +
         "  vec3 py2 = rgbToYuv(texture2D(u_sceneTex, uv - ty + tx * 2.0).rgb);\n" +
         "  float uPrev = py0.y * 0.50 + py1.y * 0.30 + py2.y * 0.20;\n" +
         "  float vPrev = py0.z * 0.50 + py1.z * 0.30 + py2.z * 0.20;\n" +
-        "  u = mix(u, uPrev, 0.20);\n" +
-        "  v = mix(v, vPrev, 0.20);\n" +
-        "  u *= 0.88;\n" +
-        "  v *= 0.88;\n" +
+        "  u = mix(u, uPrev, 0.10);\n" +
+        "  v = mix(v, vPrev, 0.10);\n" +
+        "  u *= 0.94;\n" +
+        "  v *= 0.94;\n" +
         "  return toLinear(clamp(yuvToRgb(vec3(y, u, v)), 0.0, 1.0));\n" +
         "}\n" +
         "float scanlinePass(float phase, float luminance, float scaleY){\n" +
-        "  float strength = smoothstep(1.2, 2.6, scaleY);\n" +
-        "  float beam = mix(1.35, 0.70, clamp(sqrt(max(luminance, 0.0)), 0.0, 1.0));\n" +
+        "  float strength = smoothstep(1.5, 3.5, scaleY);\n" +
+        "  float beam = mix(1.20, 0.80, clamp(sqrt(max(luminance, 0.0)), 0.0, 1.0));\n" +
         "  float wave = max(0.0, 0.5 - 0.5 * cos(phase * 6.2831853));\n" +
-        "  float floor = mix(0.60, 0.82, clamp(luminance, 0.0, 1.0));\n" +
+        "  float floor = mix(0.82, 0.95, clamp(luminance, 0.0, 1.0));\n" +
         "  float shaped = floor + (1.0 - floor) * pow(wave, beam);\n" +
         "  return mix(1.0, shaped, strength);\n" +
         "}\n" +
@@ -389,13 +410,14 @@
         "  col = compositePal(uv, scanPos, col);\n" +
         "  float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));\n" +
         "  col *= scanlinePass(fract(scanPos.y), lum, scaleY);\n" +
-        "  col *= mix(1.0, 1.03, smoothstep(1.2, 2.6, scaleY));\n" +
+        "  col *= mix(1.0, 1.015, smoothstep(1.5, 3.5, scaleY));\n" +
         "  vec2 d = uv * 2.0 - 1.0;\n" +
-        "  float vignette = 1.0 - 0.14 * dot(d, d);\n" +
+        "  float vignette = 1.0 - 0.07 * dot(d, d);\n" +
         "  col *= clamp(vignette, 0.0, 1.0);\n" +
         "  float maskFade = smoothstep(4.0, 6.0, minScale);\n" +
         "  col *= mix(vec3(1.0), shadowMask(), maskFade);\n" +
         "  col *= mix(1.0, 1.005, maskFade);\n" +
+        "  col *= tubeCornerMask(uv);\n" +
         "  gl_FragColor = vec4(toSrgb(col), 1.0);\n" +
         "}\n";
     }
