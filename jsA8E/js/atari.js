@@ -20,8 +20,7 @@
   var SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES = 1500;
   var SERIAL_INPUT_FIRST_DATA_READY_CYCLES = 3000;
   var SERIAL_INPUT_DATA_READY_CYCLES = 900;
-  var SIO_TURBO_DELAY_DIVISOR = 64;
-  var SIO_TURBO_MIN_DELAY_CYCLES = 8;
+  var SIO_TURBO_EMU_MULTIPLIER = 4.0;
   // Keep enough history to survive slow frames without dropping audible state.
   var POKEY_AUDIO_MAX_CATCHUP_CYCLES = 200000;
 
@@ -442,6 +441,7 @@
       sioInSize: 0,
       // POKEY-ish randomness state (LFSR)
       pokeyLfsr17: 0x1ffff,
+      pokeyLfsr17LastCycle: 0,
       // POKEY pot scan (POT0..POT7 / ALLPOT) -- minimal but time-based.
       pokeyPotValues: potValues,
       pokeyPotLatched: new Uint8Array(8),
@@ -489,14 +489,6 @@
     ctx.ioCycleTimedEventCycle = next;
   }
 
-  function sioDelayCycles(io, normalCycles) {
-    var cycles = normalCycles | 0;
-    if (!io || !io.sioTurbo) return cycles;
-    var fast = (cycles / SIO_TURBO_DELAY_DIVISOR) | 0;
-    if (fast < SIO_TURBO_MIN_DELAY_CYCLES) fast = SIO_TURBO_MIN_DELAY_CYCLES;
-    return fast | 0;
-  }
-
   function sioChecksum(buf, size) {
     var checksum = 0;
     for (var i = 0; i < size; i++) {
@@ -516,6 +508,38 @@
     l17 = (l17 & 0xffff) | (in0 << 16);
     io.pokeyLfsr17 = l17 & 0x1ffff;
     return io.pokeyLfsr17 & 0xff;
+  }
+
+  function pokeySyncLfsr17(ctx) {
+    var io = ctx.ioData;
+    var now = ctx.cycleCounter;
+
+    // Keep RANDOM consistent with the audio poly state when audio is enabled.
+    if (io.pokeyAudio) {
+      pokeyAudioSync(ctx, io.pokeyAudio, now);
+      io.pokeyLfsr17 = io.pokeyAudio.lfsr17 & 0x1ffff;
+      io.pokeyLfsr17LastCycle = now;
+      return;
+    }
+
+    var skctl = ctx.sram[IO_SKCTL_SKSTAT] & 0xff;
+    if ((skctl & 0x03) === 0) {
+      // SKCTL bits0..1 == 0 holds RNG/audio in reset.
+      io.pokeyLfsr17 = 0x1ffff;
+      io.pokeyLfsr17LastCycle = now;
+      return;
+    }
+
+    var last = io.pokeyLfsr17LastCycle;
+    if (last > now) last = now;
+    var delta = now - last;
+
+    while (delta > 0) {
+      pokeyStepLfsr17(io);
+      delta--;
+    }
+
+    io.pokeyLfsr17LastCycle = now;
   }
 
   // --- POKEY pot scan (POT0..POT7 / ALLPOT) ---
@@ -1242,7 +1266,7 @@
     var io = ctx.ioData;
     var now = ctx.cycleCounter;
 
-    io.serialOutputNeedDataCycle = now + sioDelayCycles(io, SERIAL_OUTPUT_DATA_NEEDED_CYCLES);
+    io.serialOutputNeedDataCycle = now + SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
     cycleTimedEventUpdate(ctx);
 
     var buf = io.sioBuffer;
@@ -1251,7 +1275,7 @@
     function queueSerinResponse(size) {
       io.sioInSize = size | 0;
       io.sioInIndex = 0;
-      io.serialInputDataReadyCycle = now + sioDelayCycles(io, SERIAL_INPUT_FIRST_DATA_READY_CYCLES);
+      io.serialInputDataReadyCycle = now + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
       cycleTimedEventUpdate(ctx);
     }
 
@@ -1282,7 +1306,7 @@
       var expected = (io.sioPendingBytes | 0) + 1; // data + checksum
       if (dataIndex !== expected) return;
 
-      io.serialOutputTransmissionDoneCycle = now + sioDelayCycles(io, SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES);
+      io.serialOutputTransmissionDoneCycle = now + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
       cycleTimedEventUpdate(ctx);
 
       var dataBytes = io.sioPendingBytes | 0;
@@ -1353,7 +1377,7 @@
       return;
     }
 
-    io.serialOutputTransmissionDoneCycle = now + sioDelayCycles(io, SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES);
+    io.serialOutputTransmissionDoneCycle = now + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
     cycleTimedEventUpdate(ctx);
 
     var dev = buf[0] & 0xff;
@@ -1474,7 +1498,7 @@
 
       if ((io.sioInSize | 0) > 0) {
         io.serialInputDataReadyCycle =
-          ctx.cycleCounter + sioDelayCycles(io, SERIAL_INPUT_DATA_READY_CYCLES);
+          ctx.cycleCounter + SERIAL_INPUT_DATA_READY_CYCLES;
         cycleTimedEventUpdate(ctx);
       } else {
         io.sioInIndex = 0;
@@ -1584,6 +1608,7 @@
           break;
 
         case IO_SKREST_RANDOM:
+          pokeySyncLfsr17(ctx);
           sram[addr] = v;
           break;
 
@@ -1599,7 +1624,7 @@
           break;
 
         case IO_SKCTL_SKSTAT:
-          if (io.pokeyAudio) pokeyAudioSync(ctx, io.pokeyAudio, ctx.cycleCounter);
+          pokeySyncLfsr17(ctx);
           sram[addr] = v;
           if (io.pokeyAudio) pokeyAudioOnRegisterWrite(io.pokeyAudio, addr, v);
           break;
@@ -1715,7 +1740,8 @@
         return ram[addr] & 0xff;
 
       case IO_SKREST_RANDOM:
-        ram[addr] = pokeyStepLfsr17(io);
+        pokeySyncLfsr17(ctx);
+        ram[addr] = io.pokeyLfsr17 & 0xff;
         return ram[addr] & 0xff;
 
       case IO_SEROUT_SERIN:
@@ -3503,6 +3529,17 @@
       renderer.paint(video);
     }
 
+    function isSioActive(io) {
+      if (!io) return false;
+      if ((io.sioOutIndex | 0) !== 0) return true;
+      if ((io.sioOutPhase | 0) !== 0) return true;
+      if ((io.sioInSize | 0) > 0) return true;
+      if (io.serialOutputNeedDataCycle !== CYCLE_NEVER) return true;
+      if (io.serialOutputTransmissionDoneCycle !== CYCLE_NEVER) return true;
+      if (io.serialInputDataReadyCycle !== CYCLE_NEVER) return true;
+      return false;
+    }
+
     function updateDebug() {
       if (!debugEl) return;
       var c = machine.ctx.cpu;
@@ -3532,6 +3569,7 @@
       if (dtMs > 100) dtMs = 100;
 
       var mult = turbo ? 4.0 : 1.0;
+      if (!turbo && sioTurbo && isSioActive(machine.ctx.ioData)) mult = SIO_TURBO_EMU_MULTIPLIER;
       var cyclesToRun = ((dtMs / 1000) * ATARI_CPU_HZ_PAL * mult) | 0;
       if (cyclesToRun < 1) cyclesToRun = 1;
 
