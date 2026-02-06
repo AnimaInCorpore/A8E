@@ -55,8 +55,11 @@
       var viewport = screenViewport || canvas.parentElement;
       if (!viewport) return;
       var rect = viewport.getBoundingClientRect();
+      var vv = window.visualViewport;
+      var visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+      var availableH = Math.floor(visibleBottom - rect.top - 8);
       var maxW = Math.max(1, Math.floor(rect.width || nativeScreenW));
-      var maxH = Math.max(1, Math.floor(rect.height || nativeScreenH));
+      var maxH = Math.max(1, availableH || Math.floor(rect.height || nativeScreenH));
       var aspect = nativeScreenW / nativeScreenH;
       var cssW = maxW;
       var cssH = Math.round(cssW / aspect);
