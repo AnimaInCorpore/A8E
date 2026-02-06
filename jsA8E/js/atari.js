@@ -3328,6 +3328,7 @@
       audioCtx: null,
       audioNode: null,
       audioState: null,
+      audioTurbo: false,
       audioMode: "none", // "none" | "worklet" | "script" | "loading"
     };
 
@@ -3409,6 +3410,7 @@
       if (machine.audioState) {
         pokeyAudioResetState(machine.audioState);
         pokeyAudioSetTurbo(machine.audioState, turbo);
+        machine.audioTurbo = !!turbo;
       }
       if (machine.audioMode === "worklet" && machine.audioNode && machine.audioNode.port) {
         try {
@@ -3428,6 +3430,7 @@
       machine.audioState = pokeyAudioCreateState(machine.audioCtx.sampleRate);
       pokeyAudioResetState(machine.audioState);
       pokeyAudioSetTurbo(machine.audioState, turbo);
+      machine.audioTurbo = !!turbo;
       // Initialize audio regs from current POKEY write-shadow.
       {
         var sram = machine.ctx.sram;
@@ -3518,6 +3521,7 @@
       machine.audioMode = "none";
       machine.audioCtx = null;
       machine.audioState = null;
+      machine.audioTurbo = false;
       machine.ctx.ioData.pokeyAudio = null;
     }
 
@@ -3538,6 +3542,15 @@
       if (io.serialOutputTransmissionDoneCycle !== CYCLE_NEVER) return true;
       if (io.serialInputDataReadyCycle !== CYCLE_NEVER) return true;
       return false;
+    }
+
+    function syncAudioTurboMode(nextTurbo) {
+      if (!machine.audioState) return;
+      var next = !!nextTurbo;
+      if (next === machine.audioTurbo) return;
+      pokeyAudioSync(machine.ctx, machine.audioState, machine.ctx.cycleCounter);
+      pokeyAudioSetTurbo(machine.audioState, next);
+      machine.audioTurbo = next;
     }
 
     function updateDebug() {
@@ -3568,8 +3581,12 @@
       // Clamp big pauses (tab background etc).
       if (dtMs > 100) dtMs = 100;
 
+      var sioFast = !turbo && sioTurbo && isSioActive(machine.ctx.ioData);
+      var emuTurbo = turbo || sioFast;
+      syncAudioTurboMode(emuTurbo);
+
       var mult = turbo ? 4.0 : 1.0;
-      if (!turbo && sioTurbo && isSioActive(machine.ctx.ioData)) mult = SIO_TURBO_EMU_MULTIPLIER;
+      if (!turbo && sioFast) mult = SIO_TURBO_EMU_MULTIPLIER;
       var cyclesToRun = ((dtMs / 1000) * ATARI_CPU_HZ_PAL * mult) | 0;
       if (cyclesToRun < 1) cyclesToRun = 1;
 
@@ -3633,11 +3650,8 @@
     function setTurbo(v) {
       var next = !!v;
       if (next === turbo) return;
-      if (machine.audioState) {
-        pokeyAudioSync(machine.ctx, machine.audioState, machine.ctx.cycleCounter);
-        pokeyAudioSetTurbo(machine.audioState, next);
-      }
       turbo = next;
+      syncAudioTurboMode(turbo || (!turbo && sioTurbo && isSioActive(machine.ctx.ioData)));
     }
 
     function setAudioEnabled(v) {
@@ -3654,6 +3668,7 @@
     function setSioTurbo(v) {
       sioTurbo = !!v;
       if (machine.ctx && machine.ctx.ioData) machine.ctx.ioData.sioTurbo = sioTurbo;
+      syncAudioTurboMode(turbo || (!turbo && sioTurbo && isSioActive(machine.ctx.ioData)));
     }
 
     function setOptionOnStart(v) {
