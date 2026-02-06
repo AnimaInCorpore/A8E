@@ -10,40 +10,52 @@
   <body>
     <header class="topbar">
       <div class="brand">
-        <div class="title">jsA8E</div>
+        <div class="titleRow">
+          <div class="title">jsA8E</div>
+          <span class="brandHelp" tabindex="0" role="button" aria-label="Show emulator credits">
+            <i class="fa-regular fa-circle-question" aria-hidden="true"></i>
+            <span class="brandTooltip" role="tooltip">
+              Atari 800 XL Emulator (A8E) by <strong>Sascha Springer</strong><br />
+              CRT Shader by <strong>Timothy Lottes</strong><br /><br />
+              Focus the canvas and type. Keys: F2/F3/F4 = OPTION/SELECT/START, F5 = RESET.
+            </span>
+          </span>
+        </div>
       </div>
       <div class="controls">
-        <label class="fileBtn">
+        <label class="fileBtn" title="Load the Atari XL operating system ROM (ATARIXL.ROM). This file is required for a normal boot. Status icon: red cross means not loaded, green check means loaded.">
           <input type="file" id="romOs" accept=".rom,application/octet-stream" />
           <span>ATARIXL.ROM <i id="romOsStatus" class="fa-solid fa-circle-xmark status-icon"></i></span>
         </label>
-        <label class="fileBtn">
+        <label class="fileBtn" title="Load the Atari BASIC ROM (ATARIBAS.ROM). Keep this loaded for BASIC programs; disable with Option on Start when software requires BASIC off. Status icon: red cross means not loaded, green check means loaded.">
           <input type="file" id="romBasic" accept=".rom,application/octet-stream" />
           <span>ATARIBAS.ROM <i id="romBasicStatus" class="fa-solid fa-circle-xmark status-icon"></i></span>
         </label>
-        <label class="fileBtn">
+        <label class="fileBtn" title="Load an ATR disk image into drive 1. Status icon: red cross means no disk loaded, green check means disk loaded.">
           <input type="file" id="disk1" accept=".atr,application/octet-stream" />
           <span>Load ATR <i id="diskStatus" class="fa-solid fa-circle-xmark status-icon"></i></span>
         </label>
-        <button id="btnStart" title="Start"><i class="fa-solid fa-play"></i></button>
-        <button id="btnPause" disabled title="Pause"><i class="fa-solid fa-pause"></i></button>
-        <button id="btnReset" disabled title="Reset"><i class="fa-solid fa-rotate-right"></i></button>
-        <button id="btnFullscreen" title="Fullscreen"><i class="fa-solid fa-expand"></i></button>
-        <button id="btnTurbo" class="toggle-btn" title="Turbo">
-          <span class="fa-layers fa-fw">
+        <button id="btnStart" title="Start emulation and run the loaded Atari system." aria-label="Start emulation and run the loaded Atari system."><i class="fa-solid fa-play"></i></button>
+        <button id="btnReset" disabled title="Reset the emulated Atari to its startup state while keeping the loaded files." aria-label="Reset the emulated Atari to its startup state while keeping the loaded files."><i class="fa-solid fa-rotate-right"></i></button>
+        <button id="btnFullscreen" title="Enter fullscreen mode for the emulator display area." aria-label="Enter fullscreen mode for the emulator display area."><i class="fa-solid fa-expand"></i></button>
+        <button id="btnTurbo" class="toggle-btn" title="Toggle CPU turbo mode to run emulation faster than normal speed." aria-label="Toggle CPU turbo mode to run emulation faster than normal speed.">
+          <span class="fa-layers fa-fw turbo-stack">
             <i class="fa-solid fa-microchip"></i>
-            <i class="fa-solid fa-forward-fast turbo-badge" data-fa-transform="shrink-10 down-6 right-6"></i>
+            <i class="fa-solid fa-forward-fast turbo-badge"></i>
           </span>
         </button>
-        <button id="btnSioTurbo" class="toggle-btn active" title="SIO turbo - Accelerates only SIO disk transfer timing.">
-          <i class="fa-solid fa-floppy-disk"></i>
+        <button id="btnSioTurbo" class="toggle-btn active" title="Toggle SIO turbo mode. This accelerates only SIO disk transfer timing and does not speed up overall CPU execution." aria-label="Toggle SIO turbo mode. This accelerates only SIO disk transfer timing and does not speed up overall CPU execution.">
+          <span class="fa-layers fa-fw turbo-stack">
+            <i class="fa-solid fa-floppy-disk"></i>
+            <i class="fa-solid fa-forward-fast turbo-badge"></i>
+          </span>
         </button>
-        <button id="btnAudio" class="toggle-btn active" title="Audio">
+        <button id="btnAudio" class="toggle-btn active" title="Toggle emulator audio output on or off." aria-label="Toggle emulator audio output on or off.">
           <i class="fa-solid fa-volume-high audio-on"></i>
           <i class="fa-solid fa-volume-xmark audio-off"></i>
         </button>
-        <button id="btnOptionOnStart" class="toggle-btn active" title="Option on start - Hold OPTION during boot to disable BASIC ROM mapping.">
-          <i class="fa-solid fa-gear"></i>
+        <button id="btnOptionOnStart" class="toggle-btn active" title="Toggle Option on Start. When enabled, OPTION is held during boot to disable BASIC ROM mapping for software that requires BASIC off." aria-label="Toggle Option on Start. When enabled, OPTION is held during boot to disable BASIC ROM mapping for software that requires BASIC off.">
+          <i class="fa-solid fa-hand-point-down"></i>
         </button>
       </div>
     </header>
@@ -52,13 +64,6 @@
       <section class="screenPanel">
         <div class="screenViewport">
           <canvas id="screen" width="336" height="240"></canvas>
-        </div>
-        <div class="hint">
-          Focus the canvas and type. Keys: F2/F3/F4 = OPTION/SELECT/START, F5 = RESET.
-        </div>
-        <div class="credits">
-          <div>Atari 800 XL Emulator (A8E) by <strong>Sascha Springer</strong></div>
-          <div>CRT Shader by <strong>Timothy Lottes</strong></div>
         </div>
       </section>
     </main>

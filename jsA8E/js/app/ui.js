@@ -149,7 +149,6 @@
     requestAnimationFrame(onLayoutResize);
 
     var btnStart = document.getElementById("btnStart");
-    var btnPause = document.getElementById("btnPause");
     var btnReset = document.getElementById("btnReset");
     var btnFullscreen = document.getElementById("btnFullscreen");
     var btnTurbo = document.getElementById("btnTurbo");
@@ -220,9 +219,23 @@
 
     window.addEventListener("beforeunload", cleanup);
 
+    function setRunPauseButton(running) {
+      btnStart.innerHTML = running
+        ? '<i class="fa-solid fa-pause"></i>'
+        : '<i class="fa-solid fa-play"></i>';
+      btnStart.title = running
+        ? "Pause emulation. Use this button again to continue from the current state."
+        : "Start emulation and run the loaded Atari system.";
+      btnStart.setAttribute(
+        "aria-label",
+        running
+          ? "Pause emulation. Use this button again to continue from the current state."
+          : "Start emulation and run the loaded Atari system."
+      );
+    }
+
     function setButtons(running) {
-      btnStart.disabled = running;
-      btnPause.disabled = !running;
+      setRunPauseButton(running);
       btnReset.disabled = !app.isReady();
     }
 
@@ -240,8 +253,15 @@
       btnFullscreen.innerHTML = active
         ? '<i class="fa-solid fa-compress"></i>'
         : '<i class="fa-solid fa-expand"></i>';
-      btnFullscreen.title = active ? "Exit fullscreen" : "Fullscreen";
-      btnFullscreen.setAttribute("aria-label", active ? "Exit fullscreen" : "Fullscreen");
+      btnFullscreen.title = active
+        ? "Exit fullscreen mode and return to the normal emulator layout."
+        : "Enter fullscreen mode for the emulator display area.";
+      btnFullscreen.setAttribute(
+        "aria-label",
+        active
+          ? "Exit fullscreen mode and return to the normal emulator layout."
+          : "Enter fullscreen mode for the emulator display area."
+      );
     }
 
     function requestFullscreen(el) {
@@ -288,14 +308,14 @@
     }
 
     btnStart.addEventListener("click", function () {
-      app.start();
-      setButtons(true);
-      canvas.focus();
-    });
-
-    btnPause.addEventListener("click", function () {
-      app.pause();
-      setButtons(false);
+      if (app.isRunning()) {
+        app.pause();
+        setButtons(app.isRunning());
+      } else {
+        app.start();
+        setButtons(app.isRunning());
+        canvas.focus();
+      }
     });
 
     btnReset.addEventListener("click", function () {

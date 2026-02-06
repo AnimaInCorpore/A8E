@@ -42,6 +42,64 @@ body {
   letter-spacing: 0.2px;
 }
 
+.brand .titleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brandHelp {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+  cursor: help;
+}
+
+.brandHelp i {
+  font-size: 14px;
+}
+
+.brandHelp:focus-visible,
+.brandHelp:hover {
+  color: var(--accent);
+  outline: none;
+}
+
+.brandTooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 220px;
+  max-width: min(90vw, 320px);
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease-in;
+  z-index: 10;
+}
+
+.brandTooltip strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.brandHelp:focus-visible .brandTooltip,
+.brandHelp:hover .brandTooltip {
+  opacity: 1;
+}
+
 .brand .subtitle {
   font-size: 12px;
   color: var(--muted);
@@ -88,7 +146,7 @@ button:hover:not(:disabled) {
 
 .toggle-btn.active {
   opacity: 1;
-  border-color: var(--accent);
+  border-color: var(--border);
 }
 
 .toggle-btn:hover:not(:disabled) {
@@ -96,12 +154,22 @@ button:hover:not(:disabled) {
 }
 
 /* Turbo badge - only show when active */
+.turbo-stack {
+  position: relative;
+}
+
 .turbo-badge {
   display: none;
+  position: absolute;
+  right: -0.18em;
+  bottom: -0.14em;
+  font-size: 0.65em;
+  line-height: 1;
+  color: #ef4444;
 }
 
 .toggle-btn.active .turbo-badge {
-  display: inline;
+  display: inline-block;
 }
 
 /* Audio icons - swap based on state */
@@ -195,23 +263,6 @@ canvas.crtEnabled {
   text-align: center;
   width: 100%;
 }
-
-.credits {
-  font-size: 12px;
-  color: var(--muted);
-  text-align: center;
-  width: 100%;
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.credits strong {
-  color: var(--text);
-  font-weight: 600;
-}
-
 
 .fileBtn {
   position: relative;
