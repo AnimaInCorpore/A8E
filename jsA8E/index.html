@@ -57,18 +57,24 @@
           Focus the canvas and type. Keys: F2/F3/F4 = OPTION/SELECT/START, F5 = RESET.
         </div>
         <div class="credits">
-          <div>Atari 800 XL Emulator by <strong>Sascha Springer</strong></div>
-          <div>CRT Shader Reference: <strong>Timothy Lottes</strong></div>
+          <div>Atari 800 XL Emulator (A8E) by <strong>Sascha Springer</strong></div>
+          <div>CRT Shader by <strong>Timothy Lottes</strong></div>
         </div>
       </section>
     </main>
 
-    <script src="js/util.js"></script>
-    <script src="js/palette.js"></script>
-    <script src="js/cpu6502.js"></script>
-    <script src="js/gl-renderer.js"></script>
-    <script src="js/atari.js"></script>
-    <script src="js/ui.js"></script>
-    <script src="js/main.js"></script>
+    <script src="js/shared/util.js"></script>
+    <script src="js/render/palette.js"></script>
+    <script src="js/core/cpu.js"></script>
+    <script src="js/render/gl.js"></script>
+    <script src="js/core/pokey.js"></script>
+    <script src="js/core/keys.js"></script>
+    <script src="js/core/io.js"></script>
+    <script src="js/core/playfield.js"></script>
+    <script src="js/core/antic.js"></script>
+    <script src="js/core/gtia.js"></script>
+    <script src="js/core/atari.js"></script>
+    <script src="js/app/ui.js"></script>
+    <script src="js/app/a8e.js"></script>
   </body>
 </html>

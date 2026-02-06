@@ -3,7 +3,7 @@
 
   var Util = window.A8EUtil;
 
-  function boot() {
+  async function boot() {
     var canvas = document.getElementById("screen");
     var debugEl = document.getElementById("debug");
     canvas.tabIndex = 0;
@@ -163,6 +163,14 @@
     var romOsStatus = document.getElementById("romOsStatus");
     var romBasicStatus = document.getElementById("romBasicStatus");
     var diskStatus = document.getElementById("diskStatus");
+
+    if (gl && window.A8EGlRenderer && window.A8EGlRenderer.loadShaderSources) {
+      try {
+        await window.A8EGlRenderer.loadShaderSources();
+      } catch (e) {
+        // create() will fail and trigger the existing 2D fallback path below.
+      }
+    }
 
     try {
       app = window.A8EApp.create({
