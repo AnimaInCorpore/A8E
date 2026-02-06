@@ -129,14 +129,8 @@
           setButtons(false);
         }
         gl = null;
-        if (debugEl) {
-          debugEl.textContent = "WebGL context lost. Waiting for restore.";
-        }
       };
       onCrtContextRestored = function () {
-        if (debugEl) {
-          debugEl.textContent = "WebGL context restored. Reloading emulator.";
-        }
         window.setTimeout(function () {
           window.location.reload();
         }, 0);
@@ -166,7 +160,8 @@
     var romOs = document.getElementById("romOs");
     var romBasic = document.getElementById("romBasic");
     var disk1 = document.getElementById("disk1");
-    var romStatus = document.getElementById("romStatus");
+    var romOsStatus = document.getElementById("romOsStatus");
+    var romBasicStatus = document.getElementById("romBasicStatus");
     var diskStatus = document.getElementById("diskStatus");
 
     try {
@@ -254,11 +249,33 @@
     }
 
     function updateStatus() {
-      var rs = [];
-      if (app.hasOsRom()) rs.push("ATARIXL.ROM loaded");
-      if (app.hasBasicRom()) rs.push("ATARIBAS.ROM loaded");
-      romStatus.textContent = rs.length ? rs.join(" · ") : "No ROMs loaded yet.";
-      diskStatus.textContent = app.hasDisk1() ? "Disk loaded." : "No disk loaded.";
+      // Update OS ROM status icon
+      if (app.hasOsRom()) {
+        romOsStatus.classList.remove("fa-circle-xmark");
+        romOsStatus.classList.add("fa-circle-check");
+      } else {
+        romOsStatus.classList.remove("fa-circle-check");
+        romOsStatus.classList.add("fa-circle-xmark");
+      }
+
+      // Update BASIC ROM status icon
+      if (app.hasBasicRom()) {
+        romBasicStatus.classList.remove("fa-circle-xmark");
+        romBasicStatus.classList.add("fa-circle-check");
+      } else {
+        romBasicStatus.classList.remove("fa-circle-check");
+        romBasicStatus.classList.add("fa-circle-xmark");
+      }
+
+      // Update disk status icon
+      if (app.hasDisk1()) {
+        diskStatus.classList.remove("fa-circle-xmark");
+        diskStatus.classList.add("fa-circle-check");
+      } else {
+        diskStatus.classList.remove("fa-circle-check");
+        diskStatus.classList.add("fa-circle-xmark");
+      }
+
       setButtons(app.isRunning());
     }
 
@@ -288,8 +305,8 @@
             resizeCrtCanvas();
             canvas.focus();
           })
-          .catch(function (e) {
-            debugEl.textContent = String(e && e.message ? e.message : e);
+          .catch(function () {
+            // Fullscreen error - silently ignore
           });
       });
     }
@@ -326,7 +343,7 @@
             handler(buf, file.name);
             updateStatus();
           } catch (e) {
-            debugEl.textContent = String(e && e.message ? e.message : e);
+            console.error("File load error:", e);
           }
         });
       });
@@ -361,7 +378,7 @@
         if (res[0]) app.loadOsRom(res[0]);
         if (res[1]) app.loadBasicRom(res[1]);
       } catch (e) {
-        debugEl.textContent = String(e && e.message ? e.message : e);
+        console.error("Auto-load error:", e);
       }
       updateStatus();
     });

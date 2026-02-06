@@ -11,9 +11,20 @@
     <header class="topbar">
       <div class="brand">
         <div class="title">jsA8E</div>
-        <div class="subtitle">Atari 800 XL emulator by Sascha Springer; CRT ref: Timothy Lottes</div>
       </div>
       <div class="controls">
+        <label class="fileBtn">
+          <input type="file" id="romOs" accept=".rom,application/octet-stream" />
+          <span>ATARIXL.ROM <i id="romOsStatus" class="fa-solid fa-circle-xmark status-icon"></i></span>
+        </label>
+        <label class="fileBtn">
+          <input type="file" id="romBasic" accept=".rom,application/octet-stream" />
+          <span>ATARIBAS.ROM <i id="romBasicStatus" class="fa-solid fa-circle-xmark status-icon"></i></span>
+        </label>
+        <label class="fileBtn">
+          <input type="file" id="disk1" accept=".atr,application/octet-stream" />
+          <span>Load ATR <i id="diskStatus" class="fa-solid fa-circle-xmark status-icon"></i></span>
+        </label>
         <button id="btnStart" title="Start"><i class="fa-solid fa-play"></i></button>
         <button id="btnPause" disabled title="Pause"><i class="fa-solid fa-pause"></i></button>
         <button id="btnReset" disabled title="Reset"><i class="fa-solid fa-rotate-right"></i></button>
@@ -45,33 +56,9 @@
         <div class="hint">
           Focus the canvas and type. Keys: F2/F3/F4 = OPTION/SELECT/START, F5 = RESET.
         </div>
-      </section>
-
-      <section class="controlPanel">
-        <div class="filePanel">
-          <div class="fileGroup">
-            <label class="fileBtn">
-              <input type="file" id="romOs" accept=".rom,application/octet-stream" />
-              <span>ATARIXL.ROM</span>
-            </label>
-            <label class="fileBtn">
-              <input type="file" id="romBasic" accept=".rom,application/octet-stream" />
-              <span>ATARIBAS.ROM</span>
-            </label>
-            <label class="fileBtn">
-              <input type="file" id="disk1" accept=".atr,application/octet-stream" />
-              <span>Load ATR</span>
-            </label>
-          </div>
-          <div class="fileStatus">
-            <span id="romStatus">No ROMs loaded yet.</span>
-            <span id="diskStatus">No disk loaded.</span>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="cardTitle">Debug</div>
-          <pre id="debug" class="debug">Idle.</pre>
+        <div class="credits">
+          <div>Atari 800 XL Emulator by <strong>Sascha Springer</strong></div>
+          <div>CRT Shader Reference: <strong>Timothy Lottes</strong></div>
         </div>
       </section>
     </main>
