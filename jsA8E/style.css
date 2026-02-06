@@ -80,6 +80,43 @@ button:hover:not(:disabled) {
   border-color: #35507a;
 }
 
+/* Toggle buttons */
+.toggle-btn {
+  opacity: 0.5;
+  transition: opacity 0.15s, border-color 0.15s;
+}
+
+.toggle-btn.active {
+  opacity: 1;
+  border-color: var(--accent);
+}
+
+.toggle-btn:hover:not(:disabled) {
+  opacity: 1;
+}
+
+/* Turbo badge - only show when active */
+.turbo-badge {
+  display: none;
+}
+
+.toggle-btn.active .turbo-badge {
+  display: inline;
+}
+
+/* Audio icons - swap based on state */
+.audio-off {
+  display: none;
+}
+
+.toggle-btn:not(.active) .audio-off {
+  display: inline;
+}
+
+.toggle-btn:not(.active) .audio-on {
+  display: none;
+}
+
 .chk {
   display: inline-flex;
   align-items: center;

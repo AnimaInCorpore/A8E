@@ -29,22 +29,22 @@
         <button id="btnPause" disabled title="Pause"><i class="fa-solid fa-pause"></i></button>
         <button id="btnReset" disabled title="Reset"><i class="fa-solid fa-rotate-right"></i></button>
         <button id="btnFullscreen" title="Fullscreen"><i class="fa-solid fa-expand"></i></button>
-        <label class="chk" title="Turbo">
-          <input type="checkbox" id="chkTurbo" />
-          <i class="fa-solid fa-gauge-high"></i>
-        </label>
-        <label class="chk" title="SIO turbo - Accelerates only SIO disk transfer timing.">
-          <input type="checkbox" id="chkSioTurbo" checked />
+        <button id="btnTurbo" class="toggle-btn" title="Turbo">
+          <span class="fa-layers fa-fw">
+            <i class="fa-solid fa-microchip"></i>
+            <i class="fa-solid fa-forward-fast turbo-badge" data-fa-transform="shrink-10 down-6 right-6"></i>
+          </span>
+        </button>
+        <button id="btnSioTurbo" class="toggle-btn active" title="SIO turbo - Accelerates only SIO disk transfer timing.">
           <i class="fa-solid fa-floppy-disk"></i>
-        </label>
-        <label class="chk" title="Audio">
-          <input type="checkbox" id="chkAudio" checked />
-          <i class="fa-solid fa-volume-high"></i>
-        </label>
-        <label class="chk" title="Option on start - Hold OPTION during boot to disable BASIC ROM mapping.">
-          <input type="checkbox" id="chkOptionOnStart" checked />
+        </button>
+        <button id="btnAudio" class="toggle-btn active" title="Audio">
+          <i class="fa-solid fa-volume-high audio-on"></i>
+          <i class="fa-solid fa-volume-xmark audio-off"></i>
+        </button>
+        <button id="btnOptionOnStart" class="toggle-btn active" title="Option on start - Hold OPTION during boot to disable BASIC ROM mapping.">
           <i class="fa-solid fa-gear"></i>
-        </label>
+        </button>
       </div>
     </header>
 
@@ -65,10 +65,16 @@
 
     <script src="js/shared/util.js"></script>
     <script src="js/render/palette.js"></script>
+    <script src="js/render/software.js"></script>
     <script src="js/core/cpu.js"></script>
     <script src="js/render/gl.js"></script>
     <script src="js/core/pokey.js"></script>
+    <script src="js/audio/runtime.js"></script>
     <script src="js/core/keys.js"></script>
+    <script src="js/core/input.js"></script>
+    <script src="js/core/hw.js"></script>
+    <script src="js/core/state.js"></script>
+    <script src="js/core/memory.js"></script>
     <script src="js/core/io.js"></script>
     <script src="js/core/playfield.js"></script>
     <script src="js/core/antic.js"></script>

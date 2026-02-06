@@ -152,10 +152,10 @@
     var btnPause = document.getElementById("btnPause");
     var btnReset = document.getElementById("btnReset");
     var btnFullscreen = document.getElementById("btnFullscreen");
-    var chkTurbo = document.getElementById("chkTurbo");
-    var chkSioTurbo = document.getElementById("chkSioTurbo");
-    var chkAudio = document.getElementById("chkAudio");
-    var chkOptionOnStart = document.getElementById("chkOptionOnStart");
+    var btnTurbo = document.getElementById("btnTurbo");
+    var btnSioTurbo = document.getElementById("btnSioTurbo");
+    var btnAudio = document.getElementById("btnAudio");
+    var btnOptionOnStart = document.getElementById("btnOptionOnStart");
 
     var romOs = document.getElementById("romOs");
     var romBasic = document.getElementById("romBasic");
@@ -178,10 +178,10 @@
         gl: gl,
         ctx2d: ctx2d,
         debugEl: debugEl,
-        audioEnabled: chkAudio.checked,
-        turbo: chkTurbo.checked,
-        sioTurbo: chkSioTurbo.checked,
-        optionOnStart: chkOptionOnStart.checked,
+        audioEnabled: btnAudio.classList.contains("active"),
+        turbo: btnTurbo.classList.contains("active"),
+        sioTurbo: btnSioTurbo.classList.contains("active"),
+        optionOnStart: btnOptionOnStart.classList.contains("active"),
       });
     } catch (e) {
       // If WebGL init succeeded but shader/program setup failed, fall back to 2D by replacing the canvas.
@@ -204,10 +204,10 @@
             gl: null,
             ctx2d: ctx2d,
             debugEl: debugEl,
-            audioEnabled: chkAudio.checked,
-            turbo: chkTurbo.checked,
-            sioTurbo: chkSioTurbo.checked,
-            optionOnStart: chkOptionOnStart.checked,
+            audioEnabled: btnAudio.classList.contains("active"),
+            turbo: btnTurbo.classList.contains("active"),
+            sioTurbo: btnSioTurbo.classList.contains("active"),
+            optionOnStart: btnOptionOnStart.classList.contains("active"),
           });
           resizeCrtCanvas();
         } else {
@@ -326,20 +326,24 @@
     document.addEventListener("fullscreenchange", onFullscreenChange);
     document.addEventListener("webkitfullscreenchange", onFullscreenChange);
 
-    chkTurbo.addEventListener("change", function () {
-      app.setTurbo(!!chkTurbo.checked);
+    btnTurbo.addEventListener("click", function () {
+      btnTurbo.classList.toggle("active");
+      app.setTurbo(btnTurbo.classList.contains("active"));
     });
 
-    chkSioTurbo.addEventListener("change", function () {
-      app.setSioTurbo(!!chkSioTurbo.checked);
+    btnSioTurbo.addEventListener("click", function () {
+      btnSioTurbo.classList.toggle("active");
+      app.setSioTurbo(btnSioTurbo.classList.contains("active"));
     });
 
-    chkAudio.addEventListener("change", function () {
-      app.setAudioEnabled(!!chkAudio.checked);
+    btnAudio.addEventListener("click", function () {
+      btnAudio.classList.toggle("active");
+      app.setAudioEnabled(btnAudio.classList.contains("active"));
     });
 
-    chkOptionOnStart.addEventListener("change", function () {
-      app.setOptionOnStart(!!chkOptionOnStart.checked);
+    btnOptionOnStart.addEventListener("click", function () {
+      btnOptionOnStart.classList.toggle("active");
+      app.setOptionOnStart(btnOptionOnStart.classList.contains("active"));
     });
 
     function attachFileInput(inputEl, handler) {
