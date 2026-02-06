@@ -20,7 +20,8 @@
   var SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES = 1500;
   var SERIAL_INPUT_FIRST_DATA_READY_CYCLES = 3000;
   var SERIAL_INPUT_DATA_READY_CYCLES = 900;
-  var POKEY_AUDIO_MAX_CATCHUP_CYCLES = 50000;
+  // Keep enough history to survive slow frames without dropping audible state.
+  var POKEY_AUDIO_MAX_CATCHUP_CYCLES = 200000;
 
   var NMI_DLI = 0x80;
   var NMI_VBI = 0x40;
@@ -976,6 +977,28 @@
     return ((sum - 30) / 60) * 0.35;
   }
 
+  function pokeyAudioReloadDividerCounters(st) {
+    if (!st) return;
+
+    if (st.audctl & 0x10) {
+      var p12 = (((st.channels[1].audf & 0xff) << 8) | (st.channels[0].audf & 0xff)) >>> 0;
+      st.channels[1].counter = (st.audctl & 0x40) ? (p12 + 7) : (p12 + 1);
+    } else {
+      st.channels[0].counter =
+        (st.audctl & 0x40) ? ((st.channels[0].audf & 0xff) + 4) : ((st.channels[0].audf & 0xff) + 1);
+      st.channels[1].counter = ((st.channels[1].audf & 0xff) + 1) | 0;
+    }
+
+    if (st.audctl & 0x08) {
+      var p34 = (((st.channels[3].audf & 0xff) << 8) | (st.channels[2].audf & 0xff)) >>> 0;
+      st.channels[3].counter = (st.audctl & 0x20) ? (p34 + 7) : (p34 + 1);
+    } else {
+      st.channels[2].counter =
+        (st.audctl & 0x20) ? ((st.channels[2].audf & 0xff) + 4) : ((st.channels[2].audf & 0xff) + 1);
+      st.channels[3].counter = ((st.channels[3].audf & 0xff) + 1) | 0;
+    }
+  }
+
   function pokeyAudioOnRegisterWrite(st, addr, v) {
     if (!st) return;
     var ch;
@@ -1034,24 +1057,14 @@
       case IO_AUDCTL_ALLPOT: {
         st.audctl = v & 0xff;
         pokeyAudioRecomputeClocks(st.channels, st.audctl);
+        pokeyAudioReloadDividerCounters(st);
+        break;
+      }
 
-        if (st.audctl & 0x10) {
-          var p12 = (((st.channels[1].audf & 0xff) << 8) | (st.channels[0].audf & 0xff)) >>> 0;
-          st.channels[1].counter = (st.audctl & 0x40) ? (p12 + 7) : (p12 + 1);
-        } else {
-          st.channels[0].counter =
-            (st.audctl & 0x40) ? ((st.channels[0].audf & 0xff) + 4) : ((st.channels[0].audf & 0xff) + 1);
-          st.channels[1].counter = ((st.channels[1].audf & 0xff) + 1) | 0;
-        }
-
-        if (st.audctl & 0x08) {
-          var p34 = (((st.channels[3].audf & 0xff) << 8) | (st.channels[2].audf & 0xff)) >>> 0;
-          st.channels[3].counter = (st.audctl & 0x20) ? (p34 + 7) : (p34 + 1);
-        } else {
-          st.channels[2].counter =
-            (st.audctl & 0x20) ? ((st.channels[2].audf & 0xff) + 4) : ((st.channels[2].audf & 0xff) + 1);
-          st.channels[3].counter = ((st.channels[3].audf & 0xff) + 1) | 0;
-        }
+      case IO_STIMER_KBCODE: {
+        // STIMER restarts POKEY timers/dividers and is used for phase sync.
+        for (var r = 0; r < 4; r++) st.channels[r].clkAccCycles = 0;
+        pokeyAudioReloadDividerCounters(st);
         break;
       }
 
@@ -1526,7 +1539,9 @@
           break;
 
         case IO_STIMER_KBCODE:
+          if (io.pokeyAudio) pokeyAudioSync(ctx, io.pokeyAudio, ctx.cycleCounter);
           sram[addr] = v;
+          if (io.pokeyAudio) pokeyAudioOnRegisterWrite(io.pokeyAudio, addr, v);
           pokeyRestartTimers(ctx);
           break;
 
