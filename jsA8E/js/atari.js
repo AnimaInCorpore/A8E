@@ -633,6 +633,8 @@
       cpuHzBase: ATARI_CPU_HZ_PAL,
       cpuHz: ATARI_CPU_HZ_PAL,
       cyclesPerSampleFp: 0,
+      cyclesPerSampleFpBase: 0,
+      targetBufferSamples: 2048,
       lastCycle: 0,
       samplePhaseFp: 0,
 
@@ -673,7 +675,19 @@
     var hz = st.cpuHz || ATARI_CPU_HZ_PAL;
     var cps = Math.floor((hz * POKEY_FP_ONE) / sr);
     if (cps < 1) cps = 1;
+    st.cyclesPerSampleFpBase = cps;
     st.cyclesPerSampleFp = cps;
+  }
+
+  function pokeyAudioSetTargetBufferSamples(st, n) {
+    if (!st) return;
+    var ringSize = st.ringSize | 0;
+    var max = ((ringSize * 3) / 4) | 0;
+    if (max < 1) max = ringSize > 0 ? (ringSize - 1) | 0 : 1;
+    var target = n | 0;
+    if (target < 256) target = 256;
+    if (target > max) target = max;
+    st.targetBufferSamples = target | 0;
   }
 
   function pokeyAudioSetTurbo(st, turbo) {
@@ -1102,7 +1116,22 @@
 
     var tmpCount = 0;
     var cur = st.lastCycle;
-    var cps = st.cyclesPerSampleFp;
+    var cpsBase = st.cyclesPerSampleFpBase || st.cyclesPerSampleFp;
+    var cps = cpsBase;
+    var targetFill = st.targetBufferSamples | 0;
+    if (targetFill <= 0) targetFill = 1;
+    var fillLevel = st.ringCount | 0;
+    var fillDelta = fillLevel - targetFill;
+    if (fillDelta > targetFill) fillDelta = targetFill;
+    else if (fillDelta < -targetFill) fillDelta = -targetFill;
+    var maxAdjust = Math.floor(cpsBase / 50); // +/-2%
+    if (maxAdjust < 1) maxAdjust = 1;
+    var adjust = Math.trunc((fillDelta * maxAdjust) / targetFill);
+    cps = cpsBase + adjust;
+    if (cps < cpsBase - maxAdjust) cps = cpsBase - maxAdjust;
+    else if (cps > cpsBase + maxAdjust) cps = cpsBase + maxAdjust;
+    if (cps < 1) cps = 1;
+    st.cyclesPerSampleFp = cps;
     var samplePhase = st.samplePhaseFp;
     if (target - cur > POKEY_AUDIO_MAX_CATCHUP_CYCLES) {
       cur = target - POKEY_AUDIO_MAX_CATCHUP_CYCLES;
@@ -1136,10 +1165,8 @@
     var got = pokeyAudioRingRead(st, out, out.length | 0);
     if (got > 0) st.lastSample = out[got - 1] || 0.0;
     var hold = st.lastSample || 0.0;
-    var decay = 0.999;
     for (var i = got; i < out.length; i++) {
       out[i] = hold;
-      hold *= decay;
     }
     st.lastSample = hold || 0.0;
   }
@@ -3382,6 +3409,7 @@
         if (!machine.audioCtx) return;
         // ScriptProcessorNode fallback for older browsers.
         var node = machine.audioCtx.createScriptProcessor(1024, 0, 1);
+        if (machine.audioState) pokeyAudioSetTargetBufferSamples(machine.audioState, ((node.bufferSize | 0) * 2) | 0);
         node.onaudioprocess = function (e) {
           var out = e.outputBuffer.getChannelData(0);
           try {
@@ -3412,6 +3440,8 @@
               numberOfOutputs: 1,
               outputChannelCount: [1],
             });
+            if (machine.audioState)
+              pokeyAudioSetTargetBufferSamples(machine.audioState, ((machine.audioCtx.sampleRate / 20) | 0) || 2048);
             node.connect(machine.audioCtx.destination);
             machine.audioNode = node;
             machine.audioMode = "worklet";

@@ -51,7 +51,6 @@
       this.lastSample = 0.0;
       this.maxQueuedSamples = (sampleRate | 0) * 1; // ~1s safety cap
       if (this.maxQueuedSamples <= 0) this.maxQueuedSamples = 48000;
-      this.underrunDecay = 0.999;
 
       var self = this;
       this.port.onmessage = function (e) {
@@ -89,7 +88,6 @@
       while (i < out.length) {
         if (!this.queue.length) {
           out[i++] = this.lastSample;
-          this.lastSample *= this.underrunDecay;
           continue;
         }
 
