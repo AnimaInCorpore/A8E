@@ -547,10 +547,11 @@
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
       // Quad for decode pass (full canvas quad, uv remaps to Atari viewport region).
-      var u0 = (viewX + 0.5) / texW;
-      var u1 = (viewX + viewW - 0.5) / texW;
-      var v0 = (viewY + 0.5) / texH;
-      var v1 = (viewY + viewH - 0.5) / texH;
+      // Use texel edges so the viewport spans the full source width/height when scaling.
+      var u0 = viewX / texW;
+      var u1 = (viewX + viewW) / texW;
+      var v0 = viewY / texH;
+      var v1 = (viewY + viewH) / texH;
       var decodeQuad = new Float32Array([
         -1.0, -1.0, u0, v1,
         -1.0, 1.0, u0, v0,
