@@ -2,6 +2,66 @@
 
 Small C-based Atari 800 XL emulator using SDL (SDL 1.2 style headers). Original codebase by Sascha Springer (2004).
 
+## Repository Structure
+
+```text
+a8e/
+|-- A8E/                         # Native C emulator sources
+|   |-- CMakeLists.txt
+|   |-- A8E.c
+|   |-- 6502.c
+|   |-- 6502.h
+|   |-- Antic.c
+|   |-- Antic.h
+|   |-- AtariIo.c
+|   |-- AtariIo.h
+|   |-- Gtia.c
+|   |-- Gtia.h
+|   |-- Pia.c
+|   |-- Pia.h
+|   |-- Pokey.c
+|   `-- Pokey.h
+|-- jsA8E/                       # Browser/JavaScript emulator
+|   |-- index.html
+|   |-- style.css
+|   |-- README.md
+|   `-- js/
+|       |-- app/
+|       |   |-- a8e.js
+|       |   `-- ui.js
+|       |-- audio/
+|       |   |-- runtime.js
+|       |   `-- worklet.js
+|       |-- core/
+|       |   |-- antic.js
+|       |   |-- atari.js
+|       |   |-- cpu.js
+|       |   |-- gtia.js
+|       |   |-- hw.js
+|       |   |-- input.js
+|       |   |-- io.js
+|       |   |-- keys.js
+|       |   |-- memory.js
+|       |   |-- playfield.js
+|       |   |-- pokey.js
+|       |   `-- state.js
+|       |-- render/
+|       |   |-- gl.js
+|       |   |-- palette.js
+|       |   |-- software.js
+|       |   `-- shaders/
+|       |       |-- webgl1.vert.glsl
+|       |       |-- webgl1.decode.frag.glsl
+|       |       |-- webgl1.crt.frag.glsl
+|       |       |-- webgl2.vert.glsl
+|       |       |-- webgl2.decode.frag.glsl
+|       |       `-- webgl2.crt.frag.glsl
+|       `-- shared/
+|           `-- util.js
+|-- CMakeLists.txt
+`-- README.md
+```
+
 ## Getting the Source Code
 
 Clone the repository:
