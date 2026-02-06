@@ -189,8 +189,8 @@
         "}\n" +
         "float tubeCornerMask(vec2 uv){\n" +
         "  vec2 outPx = max(u_outputSize, vec2(1.0));\n" +
-        "  float radiusPx = clamp(min(outPx.x, outPx.y) * 0.008, 3.0, 8.0);\n" +
-        "  float featherPx = 1.25;\n" +
+        "  float radiusPx = clamp(min(outPx.x, outPx.y) * 0.07, 16.0, 90.0);\n" +
+        "  float featherPx = clamp(radiusPx * 0.35, 3.0, 12.0);\n" +
         "  vec2 p = uv * outPx - outPx * 0.5;\n" +
         "  vec2 halfRect = max(outPx * 0.5 - vec2(radiusPx + 0.5), vec2(1.0));\n" +
         "  vec2 q = abs(p) - halfRect;\n" +
@@ -341,8 +341,8 @@
         "}\n" +
         "float tubeCornerMask(vec2 uv){\n" +
         "  vec2 outPx = max(u_outputSize, vec2(1.0));\n" +
-        "  float radiusPx = clamp(min(outPx.x, outPx.y) * 0.008, 3.0, 8.0);\n" +
-        "  float featherPx = 1.25;\n" +
+        "  float radiusPx = clamp(min(outPx.x, outPx.y) * 0.07, 16.0, 90.0);\n" +
+        "  float featherPx = clamp(radiusPx * 0.35, 3.0, 12.0);\n" +
         "  vec2 p = uv * outPx - outPx * 0.5;\n" +
         "  vec2 halfRect = max(outPx * 0.5 - vec2(radiusPx + 0.5), vec2(1.0));\n" +
         "  vec2 q = abs(p) - halfRect;\n" +
