@@ -108,6 +108,16 @@ button:hover:not(:disabled) {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  background: #000;
+}
+
+.screenViewport:fullscreen,
+.screenViewport:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  background: #000;
+  padding: 0;
 }
 
 .controlPanel {
@@ -131,6 +141,9 @@ canvas {
 
 canvas.crtEnabled {
   image-rendering: auto;
+  border-radius: 0;
+  border: 0;
+  background: transparent;
 }
 
 .hint {

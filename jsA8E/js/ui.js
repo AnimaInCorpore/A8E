@@ -49,6 +49,7 @@
     var onLayoutResize = null;
     var onCrtContextLost = null;
     var onCrtContextRestored = null;
+    var onFullscreenChange = null;
     var didCleanup = false;
 
     function resizeDisplayCanvas() {
@@ -109,6 +110,10 @@
       didCleanup = true;
       detachLayoutHooks();
       detachCrtHooks();
+      if (onFullscreenChange) {
+        document.removeEventListener("fullscreenchange", onFullscreenChange);
+        document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
+      }
       if (app && app.dispose) app.dispose();
     }
 
@@ -152,6 +157,7 @@
     var btnStart = document.getElementById("btnStart");
     var btnPause = document.getElementById("btnPause");
     var btnReset = document.getElementById("btnReset");
+    var btnFullscreen = document.getElementById("btnFullscreen");
     var chkTurbo = document.getElementById("chkTurbo");
     var chkSioTurbo = document.getElementById("chkSioTurbo");
     var chkAudio = document.getElementById("chkAudio");
@@ -217,6 +223,31 @@
       btnReset.disabled = !app.isReady();
     }
 
+    function getFullscreenElement() {
+      return document.fullscreenElement || document.webkitFullscreenElement || null;
+    }
+
+    function isViewportFullscreen() {
+      return getFullscreenElement() === screenViewport;
+    }
+
+    function updateFullscreenButton() {
+      if (!btnFullscreen) return;
+      btnFullscreen.textContent = isViewportFullscreen() ? "Exit fullscreen" : "Fullscreen";
+    }
+
+    function requestFullscreen(el) {
+      if (el.requestFullscreen) return el.requestFullscreen();
+      if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
+      return Promise.reject(new Error("Fullscreen is not supported in this browser."));
+    }
+
+    function exitFullscreen() {
+      if (document.exitFullscreen) return document.exitFullscreen();
+      if (document.webkitExitFullscreen) return document.webkitExitFullscreen();
+      return Promise.resolve();
+    }
+
     function updateStatus() {
       var rs = [];
       if (app.hasOsRom()) rs.push("ATARIXL.ROM loaded");
@@ -242,6 +273,28 @@
       updateStatus();
       canvas.focus();
     });
+
+    if (btnFullscreen) {
+      btnFullscreen.addEventListener("click", function () {
+        var op = isViewportFullscreen() ? exitFullscreen() : requestFullscreen(screenViewport);
+        Promise.resolve(op)
+          .then(function () {
+            updateFullscreenButton();
+            resizeCrtCanvas();
+            canvas.focus();
+          })
+          .catch(function (e) {
+            debugEl.textContent = String(e && e.message ? e.message : e);
+          });
+      });
+    }
+
+    onFullscreenChange = function () {
+      updateFullscreenButton();
+      resizeCrtCanvas();
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
 
     chkTurbo.addEventListener("change", function () {
       app.setTurbo(!!chkTurbo.checked);
@@ -309,6 +362,7 @@
     });
 
     updateStatus();
+    updateFullscreenButton();
   }
 
   window.A8EUI = { boot: boot };
