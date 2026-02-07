@@ -260,20 +260,20 @@ button:hover:not(:disabled) {
 
 .keyboardPanel {
   width: min(100%, 1040px);
-  border: 1px solid #756f5d;
-  border-radius: 14px;
+  border: 1px solid #c5bfb0;
+  border-radius: 12px;
   padding: 8px;
-  background: linear-gradient(180deg, #cdc5ad 0%, #b5ae96 58%, #9e987f 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 8px 24px rgba(0, 0, 0, 0.28);
+  background: linear-gradient(180deg, #e8e4d8 0%, #dcd7ca 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 8px 24px rgba(0, 0, 0, 0.15);
   overflow-x: auto;
 }
 
 .atariKeyboard {
   min-width: 860px;
-  border: 1px solid #79735f;
+  border: 1px solid #cac5b8;
   border-radius: 10px;
   padding: 8px;
-  background: linear-gradient(180deg, #d4ccb5 0%, #b5ad95 100%);
+  background: linear-gradient(180deg, #ebe7db 0%, #e0dcd0 100%);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -290,7 +290,7 @@ button:hover:not(:disabled) {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.18em;
-  color: #322f26;
+  color: #2a2822;
 }
 
 .kbAtariStripe {
@@ -350,24 +350,24 @@ button:hover:not(:disabled) {
   --w: 1;
   flex: var(--w) 1 0;
   min-height: 36px;
-  border: 1px solid #30281f;
-  border-radius: 6px;
-  background: linear-gradient(180deg, #5f5549 0%, #443c33 100%);
-  color: #ede4cc;
+  border: 1px solid #a8a399;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #c8c4b8 0%, #bab6aa 100%);
+  color: #2d2b26;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.05em;
   padding: 4px 5px;
   text-transform: uppercase;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 1px 2px rgba(0, 0, 0, 0.15);
   user-select: none;
   -webkit-user-select: none;
   touch-action: manipulation;
 }
 
 .kbKey:hover {
-  border-color: #3a2f24;
-  background: linear-gradient(180deg, #6a5f52 0%, #4c4237 100%);
+  border-color: #999488;
+  background: linear-gradient(180deg, #d0ccc0 0%, #c2beb2 100%);
 }
 
 .kbKey:focus-visible {
@@ -383,8 +383,8 @@ button:hover:not(:disabled) {
 .kbKey:active,
 .kbKey.active {
   transform: translateY(1px);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.38);
-  background: linear-gradient(180deg, #3f372f 0%, #352f28 100%);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
+  background: linear-gradient(180deg, #a8a499 0%, #9a968b 100%);
 }
 
 .kbUtilityKey {
@@ -395,7 +395,8 @@ button:hover:not(:disabled) {
 }
 
 .kbAtariKey {
-  color: #f1c47a;
+  background: linear-gradient(180deg, #d4c8a0 0%, #c6ba92 100%);
+  color: #4a3f20;
 }
 
 .kbCursorPad {
