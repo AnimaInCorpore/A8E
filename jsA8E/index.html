@@ -72,6 +72,12 @@
           <i class="fa-solid fa-volume-high audio-on"></i>
           <i class="fa-solid fa-volume-xmark audio-off"></i>
         </button>
+        <button id="btnKeyboard" class="toggle-btn" title="Show the on-screen Atari 800 XL keyboard." aria-label="Show the on-screen Atari 800 XL keyboard.">
+          <span class="fa-layers fa-fw keyboard-stack">
+            <i class="fa-solid fa-keyboard"></i>
+            <i class="fa-solid fa-slash keyboard-off-mark"></i>
+          </span>
+        </button>
         <button id="btnOptionOnStart" class="toggle-btn active" title="Toggle Option on Start. When enabled, OPTION is held during boot to disable BASIC ROM mapping for software that requires BASIC off." aria-label="Toggle Option on Start. When enabled, OPTION is held during boot to disable BASIC ROM mapping for software that requires BASIC off.">
           <i class="fa-solid fa-hand-point-down"></i>
         </button>
@@ -83,6 +89,143 @@
         <div class="screenViewport">
           <canvas id="screen" width="336" height="240"></canvas>
         </div>
+        <section
+          id="keyboardPanel"
+          class="keyboardPanel"
+          hidden
+          aria-label="On-screen Atari 800 XL keyboard"
+        >
+          <div id="atariKeyboard" class="atariKeyboard" role="group" aria-label="Atari 800 XL keyboard keys">
+            <div class="kbBrandRow" aria-hidden="true">
+              <div class="kbAtariWordmark">ATARI 800XL</div>
+              <div class="kbAtariStripe">
+                <span class="s1"></span>
+                <span class="s2"></span>
+                <span class="s3"></span>
+                <span class="s4"></span>
+              </div>
+            </div>
+            <div class="kbDeck">
+              <div class="kbMain">
+                <div class="kbRow">
+                  <button type="button" class="kbKey" data-key="Escape" data-code="Escape">ESC</button>
+                  <button type="button" class="kbKey" data-key="1" data-code="Digit1">1</button>
+                  <button type="button" class="kbKey" data-key="2" data-code="Digit2">2</button>
+                  <button type="button" class="kbKey" data-key="3" data-code="Digit3">3</button>
+                  <button type="button" class="kbKey" data-key="4" data-code="Digit4">4</button>
+                  <button type="button" class="kbKey" data-key="5" data-code="Digit5">5</button>
+                  <button type="button" class="kbKey" data-key="6" data-code="Digit6">6</button>
+                  <button type="button" class="kbKey" data-key="7" data-code="Digit7">7</button>
+                  <button type="button" class="kbKey" data-key="8" data-code="Digit8">8</button>
+                  <button type="button" class="kbKey" data-key="9" data-code="Digit9">9</button>
+                  <button type="button" class="kbKey" data-key="0" data-code="Digit0">0</button>
+                  <button type="button" class="kbKey" data-key="-" data-code="Minus">-</button>
+                  <button type="button" class="kbKey" data-key="=" data-code="Equal">=</button>
+                  <button type="button" class="kbKey wBackspace" data-key="Backspace" data-code="Backspace">BACKS</button>
+                </div>
+
+                <div class="kbRow">
+                  <button type="button" class="kbKey wTab" data-key="Tab" data-code="Tab">TAB</button>
+                  <button type="button" class="kbKey" data-key="q" data-code="KeyQ">Q</button>
+                  <button type="button" class="kbKey" data-key="w" data-code="KeyW">W</button>
+                  <button type="button" class="kbKey" data-key="e" data-code="KeyE">E</button>
+                  <button type="button" class="kbKey" data-key="r" data-code="KeyR">R</button>
+                  <button type="button" class="kbKey" data-key="t" data-code="KeyT">T</button>
+                  <button type="button" class="kbKey" data-key="y" data-code="KeyY">Y</button>
+                  <button type="button" class="kbKey" data-key="u" data-code="KeyU">U</button>
+                  <button type="button" class="kbKey" data-key="i" data-code="KeyI">I</button>
+                  <button type="button" class="kbKey" data-key="o" data-code="KeyO">O</button>
+                  <button type="button" class="kbKey" data-key="p" data-code="KeyP">P</button>
+                  <button type="button" class="kbKey" data-key="[" data-code="BracketLeft">[</button>
+                  <button type="button" class="kbKey" data-key="]" data-code="BracketRight">]</button>
+                  <button type="button" class="kbKey wReturn" data-key="Enter" data-code="Enter">RETURN</button>
+                </div>
+
+                <div class="kbRow">
+                  <button type="button" class="kbKey wCtrl" data-modifier="ctrl">CTRL</button>
+                  <button type="button" class="kbKey" data-key="a" data-code="KeyA">A</button>
+                  <button type="button" class="kbKey" data-key="s" data-code="KeyS">S</button>
+                  <button type="button" class="kbKey" data-key="d" data-code="KeyD">D</button>
+                  <button type="button" class="kbKey" data-key="f" data-code="KeyF">F</button>
+                  <button type="button" class="kbKey" data-key="g" data-code="KeyG">G</button>
+                  <button type="button" class="kbKey" data-key="h" data-code="KeyH">H</button>
+                  <button type="button" class="kbKey" data-key="j" data-code="KeyJ">J</button>
+                  <button type="button" class="kbKey" data-key="k" data-code="KeyK">K</button>
+                  <button type="button" class="kbKey" data-key="l" data-code="KeyL">L</button>
+                  <button type="button" class="kbKey" data-key=";" data-code="Semicolon">;</button>
+                  <button type="button" class="kbKey" data-key="'" data-code="Quote">'</button>
+                  <button type="button" class="kbKey wSlash" data-key="\\" data-code="Backslash" data-sdl="92">\</button>
+                </div>
+
+                <div class="kbRow">
+                  <button type="button" class="kbKey wShift" data-modifier="shift">SHIFT</button>
+                  <button type="button" class="kbKey" data-key="z" data-code="KeyZ">Z</button>
+                  <button type="button" class="kbKey" data-key="x" data-code="KeyX">X</button>
+                  <button type="button" class="kbKey" data-key="c" data-code="KeyC">C</button>
+                  <button type="button" class="kbKey" data-key="v" data-code="KeyV">V</button>
+                  <button type="button" class="kbKey" data-key="b" data-code="KeyB">B</button>
+                  <button type="button" class="kbKey" data-key="n" data-code="KeyN">N</button>
+                  <button type="button" class="kbKey" data-key="m" data-code="KeyM">M</button>
+                  <button type="button" class="kbKey" data-key="," data-code="Comma">,</button>
+                  <button type="button" class="kbKey" data-key="." data-code="Period">.</button>
+                  <button type="button" class="kbKey" data-key="/" data-code="Slash">/</button>
+                  <button type="button" class="kbKey wShift" data-modifier="shift">SHIFT</button>
+                </div>
+
+                <div class="kbRow">
+                  <button
+                    type="button"
+                    class="kbKey wCaps"
+                    data-key="CapsLock"
+                    data-code="CapsLock"
+                    data-sdl="301"
+                  >
+                    CAPS/LOWR
+                  </button>
+                  <button
+                    type="button"
+                    class="kbKey kbAtariKey wAtari"
+                    data-key="F6"
+                    data-code="F6"
+                    data-sdl="287"
+                  >
+                    ATARI
+                  </button>
+                  <button type="button" class="kbKey wSpace" data-key=" " data-code="Space">SPACE</button>
+                  <button type="button" class="kbKey wClear" data-key="F7" data-code="F7" data-sdl="288">CLEAR</button>
+                </div>
+              </div>
+
+              <div class="kbUtilityCol">
+                <button type="button" class="kbKey kbUtilityKey" data-key="F1" data-code="F1" data-sdl="282">HELP</button>
+                <button type="button" class="kbKey kbUtilityKey" data-key="F4" data-code="F4" data-sdl="285">START</button>
+                <button type="button" class="kbKey kbUtilityKey" data-key="F3" data-code="F3" data-sdl="284">SELECT</button>
+                <button type="button" class="kbKey kbUtilityKey" data-key="F2" data-code="F2" data-sdl="283">OPTION</button>
+                <button type="button" class="kbKey kbUtilityKey" data-key="F5" data-code="F5" data-sdl="286">RESET</button>
+                <button type="button" class="kbKey kbUtilityKey" data-key="F8" data-code="F8" data-sdl="289">BREAK</button>
+
+                <div class="kbCursorPad">
+                  <div class="kbCursorPadTop">
+                    <button type="button" class="kbKey wArrow" data-key="ArrowUp" data-code="ArrowUp">
+                      <i class="fa-solid fa-arrow-up" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                  <div class="kbCursorPadBottom">
+                    <button type="button" class="kbKey wArrow" data-key="ArrowLeft" data-code="ArrowLeft">
+                      <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" class="kbKey wArrow" data-key="ArrowDown" data-code="ArrowDown">
+                      <i class="fa-solid fa-arrow-down" aria-hidden="true"></i>
+                    </button>
+                    <button type="button" class="kbKey wArrow" data-key="ArrowRight" data-code="ArrowRight">
+                      <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </section>
     </main>
 

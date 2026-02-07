@@ -59,6 +59,10 @@
       var vv = window.visualViewport;
       var visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
       var availableH = Math.floor(visibleBottom - rect.top - 8);
+      if (keyboardPanel && !keyboardPanel.hidden) {
+        var kbRect = keyboardPanel.getBoundingClientRect();
+        availableH -= Math.max(0, Math.ceil(kbRect.height + 10));
+      }
       var maxW = Math.max(1, Math.floor(rect.width || nativeScreenW));
       var maxH = Math.max(1, availableH || Math.floor(rect.height || nativeScreenH));
       var aspect = nativeScreenW / nativeScreenH;
@@ -154,6 +158,7 @@
     var btnTurbo = document.getElementById("btnTurbo");
     var btnSioTurbo = document.getElementById("btnSioTurbo");
     var btnAudio = document.getElementById("btnAudio");
+    var btnKeyboard = document.getElementById("btnKeyboard");
     var btnOptionOnStart = document.getElementById("btnOptionOnStart");
 
     var romOs = document.getElementById("romOs");
@@ -162,6 +167,13 @@
     var romOsStatus = document.getElementById("romOsStatus");
     var romBasicStatus = document.getElementById("romBasicStatus");
     var diskStatus = document.getElementById("diskStatus");
+    var keyboardPanel = document.getElementById("keyboardPanel");
+    var atariKeyboard = document.getElementById("atariKeyboard");
+    var virtualModifiers = {
+      ctrl: false,
+      shift: false,
+    };
+    var pressedVirtualKeysByPointer = new Map();
 
     if (gl && window.A8EGlRenderer && window.A8EGlRenderer.loadShaderSources) {
       try {
@@ -264,6 +276,107 @@
       );
     }
 
+    function setModifierButtons(modifier, active) {
+      if (!atariKeyboard) return;
+      var buttons = atariKeyboard.querySelectorAll('button[data-modifier="' + modifier + '"]');
+      buttons.forEach(function (button) {
+        button.classList.toggle("active", active);
+      });
+    }
+
+    function setCtrlModifier(active) {
+      var next = !!active;
+      if (virtualModifiers.ctrl === next) return;
+      virtualModifiers.ctrl = next;
+      setModifierButtons("ctrl", next);
+    }
+
+    function makeVirtualKeyEvent(key, code, shiftOverride, sdlSym) {
+      var ev = {
+        key: key,
+        code: code || "",
+        ctrlKey: virtualModifiers.ctrl,
+        shiftKey: shiftOverride !== undefined ? !!shiftOverride : virtualModifiers.shift,
+      };
+      if (typeof sdlSym === "number" && isFinite(sdlSym)) ev.sdlSym = sdlSym | 0;
+      return ev;
+    }
+
+    function setShiftModifier(active) {
+      var next = !!active;
+      if (virtualModifiers.shift === next) return;
+      virtualModifiers.shift = next;
+      setModifierButtons("shift", next);
+      if (!app || !app.onKeyDown || !app.onKeyUp) return;
+      var ev = makeVirtualKeyEvent("Shift", "ShiftLeft", next);
+      if (next) app.onKeyDown(ev);
+      else app.onKeyUp(ev);
+    }
+
+    function clearVirtualModifiers() {
+      setShiftModifier(false);
+      setCtrlModifier(false);
+    }
+
+    function flashVirtualKey(btn, durationMs) {
+      if (!btn) return;
+      btn.classList.add("pressed");
+      window.setTimeout(function () {
+        btn.classList.remove("pressed");
+      }, durationMs || 120);
+    }
+
+    function pressVirtualKey(key, code, sdlSym) {
+      if (!app || !app.onKeyDown || !app.onKeyUp) return;
+      var ev = makeVirtualKeyEvent(key, code, undefined, sdlSym);
+      app.onKeyDown(ev);
+      app.onKeyUp(ev);
+      if (virtualModifiers.shift) setShiftModifier(false);
+      if (virtualModifiers.ctrl) setCtrlModifier(false);
+    }
+
+    function parseSdlSym(btn) {
+      if (!btn) return null;
+      var sdl = btn.getAttribute("data-sdl");
+      if (!sdl) return null;
+      var parsed = parseInt(sdl, 10);
+      return isFinite(parsed) ? parsed : null;
+    }
+
+    function releasePointerVirtualKey(pointerId) {
+      if (!pressedVirtualKeysByPointer.has(pointerId)) return;
+      var st = pressedVirtualKeysByPointer.get(pointerId);
+      pressedVirtualKeysByPointer.delete(pointerId);
+      if (st.btn) st.btn.classList.remove("pressed");
+      if (app && app.onKeyUp) {
+        app.onKeyUp(makeVirtualKeyEvent(st.key, st.code, undefined, st.sdlSym));
+      }
+      if (st.consumeShift && virtualModifiers.shift) setShiftModifier(false);
+      if (st.consumeCtrl && virtualModifiers.ctrl) setCtrlModifier(false);
+    }
+
+    function setKeyboardEnabled(active) {
+      if (!btnKeyboard || !keyboardPanel) return;
+      var enabled = !!active;
+      btnKeyboard.classList.toggle("active", enabled);
+      keyboardPanel.hidden = !enabled;
+
+      var label = enabled
+        ? "Hide the on-screen Atari 800 XL keyboard."
+        : "Show the on-screen Atari 800 XL keyboard.";
+      btnKeyboard.title = label;
+      btnKeyboard.setAttribute("aria-label", label);
+
+      if (!enabled) {
+        pressedVirtualKeysByPointer.forEach(function (_st, pid) {
+          releasePointerVirtualKey(pid);
+        });
+        clearVirtualModifiers();
+      }
+      resizeCrtCanvas();
+      canvas.focus();
+    }
+
     function requestFullscreen(el) {
       if (el.requestFullscreen) return el.requestFullscreen();
       if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
@@ -361,10 +474,107 @@
       app.setAudioEnabled(btnAudio.classList.contains("active"));
     });
 
+    if (btnKeyboard && keyboardPanel) {
+      btnKeyboard.addEventListener("click", function () {
+        setKeyboardEnabled(!btnKeyboard.classList.contains("active"));
+      });
+    }
+
     btnOptionOnStart.addEventListener("click", function () {
       btnOptionOnStart.classList.toggle("active");
       app.setOptionOnStart(btnOptionOnStart.classList.contains("active"));
     });
+
+    if (atariKeyboard) {
+      atariKeyboard.addEventListener("pointerdown", function (e) {
+        var btn = e.target.closest("button.kbKey");
+        if (!btn || !atariKeyboard.contains(btn)) return;
+        if (keyboardPanel && keyboardPanel.hidden) return;
+
+        var modifier = btn.getAttribute("data-modifier");
+        if (modifier === "shift") {
+          setShiftModifier(!virtualModifiers.shift);
+          flashVirtualKey(btn);
+          canvas.focus();
+          return;
+        }
+        if (modifier === "ctrl") {
+          setCtrlModifier(!virtualModifiers.ctrl);
+          flashVirtualKey(btn);
+          canvas.focus();
+          return;
+        }
+
+        var key = btn.getAttribute("data-key");
+        if (!key) return;
+        var code = btn.getAttribute("data-code") || "";
+        var sdlSym = parseSdlSym(btn);
+
+        e.preventDefault();
+        if (btn.setPointerCapture) {
+          try {
+            btn.setPointerCapture(e.pointerId);
+          } catch (err) {
+            // ignore capture errors
+          }
+        }
+
+        btn.classList.add("pressed");
+        if (app && app.onKeyDown) {
+          app.onKeyDown(makeVirtualKeyEvent(key, code, undefined, sdlSym));
+        }
+        pressedVirtualKeysByPointer.set(e.pointerId, {
+          btn: btn,
+          key: key,
+          code: code,
+          sdlSym: sdlSym,
+          consumeShift: virtualModifiers.shift,
+          consumeCtrl: virtualModifiers.ctrl,
+        });
+        canvas.focus();
+      });
+
+      atariKeyboard.addEventListener("pointerup", function (e) {
+        releasePointerVirtualKey(e.pointerId);
+      });
+      atariKeyboard.addEventListener("pointercancel", function (e) {
+        releasePointerVirtualKey(e.pointerId);
+      });
+      atariKeyboard.addEventListener("pointerleave", function (e) {
+        if ((e.buttons | 0) === 0) releasePointerVirtualKey(e.pointerId);
+      });
+      document.addEventListener("pointerup", function (e) {
+        releasePointerVirtualKey(e.pointerId);
+      });
+      document.addEventListener("pointercancel", function (e) {
+        releasePointerVirtualKey(e.pointerId);
+      });
+
+      // Keyboard accessibility fallback for focused on-screen key buttons.
+      atariKeyboard.addEventListener("keydown", function (e) {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        var btn = e.target.closest("button.kbKey");
+        if (!btn || !atariKeyboard.contains(btn)) return;
+        var modifier = btn.getAttribute("data-modifier");
+        if (modifier === "shift") {
+          setShiftModifier(!virtualModifiers.shift);
+          flashVirtualKey(btn);
+          e.preventDefault();
+          return;
+        }
+        if (modifier === "ctrl") {
+          setCtrlModifier(!virtualModifiers.ctrl);
+          flashVirtualKey(btn);
+          e.preventDefault();
+          return;
+        }
+        var key = btn.getAttribute("data-key");
+        if (!key) return;
+        pressVirtualKey(key, btn.getAttribute("data-code") || "", parseSdlSym(btn));
+        flashVirtualKey(btn, 80);
+        e.preventDefault();
+      });
+    }
 
     function attachFileInput(inputEl, handler) {
       inputEl.addEventListener("change", function () {
@@ -417,6 +627,9 @@
 
     updateStatus();
     updateFullscreenButton();
+    if (btnKeyboard && keyboardPanel) {
+      setKeyboardEnabled(btnKeyboard.classList.contains("active"));
+    }
   }
 
   window.A8EUI = { boot: boot };

@@ -191,6 +191,22 @@ button:hover:not(:disabled) {
   display: none;
 }
 
+.keyboard-stack {
+  position: relative;
+}
+
+.keyboard-off-mark {
+  position: absolute;
+  right: -0.04em;
+  bottom: -0.08em;
+  font-size: 0.8em;
+  color: #ef4444;
+}
+
+.toggle-btn.active .keyboard-off-mark {
+  display: none;
+}
+
 .chk {
   display: inline-flex;
   align-items: center;
@@ -240,6 +256,205 @@ button:hover:not(:disabled) {
   min-height: 100vh;
   background: #000;
   padding: 0;
+}
+
+.keyboardPanel {
+  width: min(100%, 1040px);
+  border: 1px solid #756f5d;
+  border-radius: 14px;
+  padding: 8px;
+  background: linear-gradient(180deg, #cdc5ad 0%, #b5ae96 58%, #9e987f 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 8px 24px rgba(0, 0, 0, 0.28);
+  overflow-x: auto;
+}
+
+.atariKeyboard {
+  min-width: 860px;
+  border: 1px solid #79735f;
+  border-radius: 10px;
+  padding: 8px;
+  background: linear-gradient(180deg, #d4ccb5 0%, #b5ad95 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kbBrandRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 20px;
+}
+
+.kbAtariWordmark {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #322f26;
+}
+
+.kbAtariStripe {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.kbAtariStripe span {
+  width: 12px;
+  height: 4px;
+  border-radius: 1px;
+}
+
+.kbAtariStripe .s1 {
+  background: #ec6a5f;
+}
+
+.kbAtariStripe .s2 {
+  background: #f2a252;
+}
+
+.kbAtariStripe .s3 {
+  background: #95c47b;
+}
+
+.kbAtariStripe .s4 {
+  background: #5ea3d8;
+}
+
+.kbDeck {
+  display: flex;
+  gap: 8px;
+}
+
+.kbMain {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kbUtilityCol {
+  width: 122px;
+  flex: 0 0 122px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kbRow {
+  display: flex;
+  gap: 6px;
+}
+
+.kbKey {
+  --w: 1;
+  flex: var(--w) 1 0;
+  min-height: 36px;
+  border: 1px solid #30281f;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #5f5549 0%, #443c33 100%);
+  color: #ede4cc;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 4px 5px;
+  text-transform: uppercase;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.34);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.kbKey:hover {
+  border-color: #3a2f24;
+  background: linear-gradient(180deg, #6a5f52 0%, #4c4237 100%);
+}
+
+.kbKey:focus-visible {
+  outline: 2px solid #84c4f2;
+  outline-offset: 1px;
+}
+
+.kbKey i {
+  font-size: 10px;
+}
+
+.kbKey.pressed,
+.kbKey:active,
+.kbKey.active {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.38);
+  background: linear-gradient(180deg, #3f372f 0%, #352f28 100%);
+}
+
+.kbUtilityKey {
+  width: 100%;
+  flex: 0 0 auto;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.kbAtariKey {
+  color: #f1c47a;
+}
+
+.kbCursorPad {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kbCursorPadTop,
+.kbCursorPadBottom {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.wBackspace {
+  --w: 1.9;
+}
+
+.wTab {
+  --w: 1.65;
+}
+
+.wReturn {
+  --w: 2.1;
+}
+
+.wCtrl {
+  --w: 1.75;
+}
+
+.wSlash {
+  --w: 1.4;
+}
+
+.wShift {
+  --w: 2.35;
+}
+
+.wAtari {
+  --w: 1.55;
+}
+
+.wCaps {
+  --w: 1.9;
+}
+
+.wArrow {
+  --w: 1;
+  min-height: 32px;
+}
+
+.wClear {
+  --w: 1.5;
+}
+
+.wSpace {
+  --w: 6.7;
 }
 
 
@@ -321,5 +536,32 @@ canvas.crtEnabled {
   }
   .layout {
     flex: none;
+  }
+  .keyboardPanel {
+    width: 100%;
+    padding: 6px;
+  }
+  .atariKeyboard {
+    min-width: 820px;
+    padding: 6px;
+  }
+  .kbDeck {
+    gap: 6px;
+  }
+  .kbRow {
+    gap: 4px;
+  }
+  .kbUtilityCol {
+    width: 108px;
+    flex-basis: 108px;
+    gap: 4px;
+  }
+  .kbKey {
+    min-height: 32px;
+    font-size: 10px;
+    padding: 3px 4px;
+  }
+  .kbKey i {
+    font-size: 9px;
   }
 }

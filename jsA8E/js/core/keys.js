@@ -40,6 +40,7 @@ var KEY_CODE_TABLE = [
 ];
 
 function browserKeyToSdlSym(e) {
+  if (e && typeof e.sdlSym === "number" && isFinite(e.sdlSym)) return e.sdlSym | 0;
   // SDL 1.2 keysyms mostly follow ASCII for printable keys.
   var k = e.key;
   if (k && k.length === 1) return k.toLowerCase().charCodeAt(0) & 0x1ff;
@@ -64,6 +65,8 @@ function browserKeyToSdlSym(e) {
       return 275;
     case "ArrowLeft":
       return 276;
+    case "F1":
+      return 282;
     case "F2":
       return 283;
     case "F3":
@@ -72,10 +75,16 @@ function browserKeyToSdlSym(e) {
       return 285;
     case "F5":
       return 286;
+    case "F6":
+      return 287;
+    case "F7":
+      return 288;
     case "F8":
       return 289;
     case "F11":
       return 292;
+    case "CapsLock":
+      return 301;
     case "Shift":
       // Prefer location-aware below; fall back to LSHIFT.
       return 304;
