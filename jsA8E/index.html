@@ -78,6 +78,12 @@
             <i class="fa-solid fa-slash keyboard-off-mark"></i>
           </span>
         </button>
+        <button id="btnJoystick" class="toggle-btn" title="Show the on-screen joystick controls." aria-label="Show the on-screen joystick controls.">
+          <span class="fa-layers fa-fw joystick-stack">
+            <i class="fa-solid fa-gamepad"></i>
+            <i class="fa-solid fa-slash joystick-off-mark"></i>
+          </span>
+        </button>
         <button id="btnOptionOnStart" class="toggle-btn active" title="Toggle Option on Start. When enabled, OPTION is held during boot to disable BASIC ROM mapping for software that requires BASIC off." aria-label="Toggle Option on Start. When enabled, OPTION is held during boot to disable BASIC ROM mapping for software that requires BASIC off.">
           <i class="fa-solid fa-hand-point-down"></i>
         </button>
@@ -182,6 +188,83 @@
                 <button type="button" class="kbKey kbFuncKey" data-key="F3" data-code="F3" data-sdl="284">SELECT</button>
                 <button type="button" class="kbKey kbFuncKey" data-key="F4" data-code="F4" data-sdl="285">START</button>
                 <button type="button" class="kbKey kbFuncKey" data-key="F1" data-code="F1" data-sdl="282">HELP</button>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section id="joystickPanel" class="joystickPanel" hidden aria-label="On-screen joystick controls">
+          <div class="joystickPanelInner">
+            <div class="cx40" id="joystickArea">
+              <div class="cx40-base">
+                <div class="cx40-cable"></div>
+                <div class="cx40-fire-housing">
+                  <button type="button" class="cx40-fire-btn" id="fireButton" aria-label="Joystick fire"></button>
+                </div>
+                <div class="cx40-ring-outer">
+                  <div class="cx40-arrows-ring">
+                    <svg class="arrows-svg" viewBox="0 0 252 252" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                      <defs>
+                        <g id="chevron">
+                          <polygon points="0,-6 5,2 0,0 -5,2" fill="#d4841a" />
+                        </g>
+                        <g id="dash">
+                          <rect x="-3" y="-1.5" width="6" height="3" rx="1" fill="#d4841a" />
+                        </g>
+                      </defs>
+                      <use href="#chevron" transform="translate(126,8) rotate(180)" />
+                      <use href="#chevron" transform="translate(209.4,42.6) rotate(225)" />
+                      <use href="#chevron" transform="translate(244,126) rotate(270)" />
+                      <use href="#chevron" transform="translate(209.4,209.4) rotate(315)" />
+                      <use href="#chevron" transform="translate(126,244) rotate(0)" />
+                      <use href="#chevron" transform="translate(42.6,209.4) rotate(45)" />
+                      <use href="#chevron" transform="translate(8,126) rotate(90)" />
+                      <use href="#chevron" transform="translate(42.6,42.6) rotate(135)" />
+                      <use href="#dash" transform="translate(170,16) rotate(202.5)" />
+                      <use href="#dash" transform="translate(234,74) rotate(247.5)" />
+                      <use href="#dash" transform="translate(236,178) rotate(292.5)" />
+                      <use href="#dash" transform="translate(178,236) rotate(337.5)" />
+                      <use href="#dash" transform="translate(82,236) rotate(22.5)" />
+                      <use href="#dash" transform="translate(18,178) rotate(67.5)" />
+                      <use href="#dash" transform="translate(16,74) rotate(112.5)" />
+                      <use href="#dash" transform="translate(74,16) rotate(157.5)" />
+                      <use href="#dash" transform="translate(148,10) rotate(191)" />
+                      <use href="#dash" transform="translate(192,28) rotate(214)" />
+                      <use href="#dash" transform="translate(224,54) rotate(237)" />
+                      <use href="#dash" transform="translate(242,98) rotate(260)" />
+                      <use href="#dash" transform="translate(242,154) rotate(280)" />
+                      <use href="#dash" transform="translate(224,198) rotate(304)" />
+                      <use href="#dash" transform="translate(192,224) rotate(326)" />
+                      <use href="#dash" transform="translate(148,242) rotate(349)" />
+                      <use href="#dash" transform="translate(104,242) rotate(11)" />
+                      <use href="#dash" transform="translate(60,224) rotate(34)" />
+                      <use href="#dash" transform="translate(28,198) rotate(56)" />
+                      <use href="#dash" transform="translate(10,154) rotate(80)" />
+                      <use href="#dash" transform="translate(10,98) rotate(100)" />
+                      <use href="#dash" transform="translate(28,54) rotate(124)" />
+                      <use href="#dash" transform="translate(60,28) rotate(146)" />
+                      <use href="#dash" transform="translate(104,10) rotate(169)" />
+                    </svg>
+                  </div>
+                  <div class="cx40-top-label">TOP</div>
+                </div>
+                <div class="cx40-ring-inner">
+                  <div class="cx40-glow up" id="glowUp"></div>
+                  <div class="cx40-glow down" id="glowDown"></div>
+                  <div class="cx40-glow left" id="glowLeft"></div>
+                  <div class="cx40-glow right" id="glowRight"></div>
+                </div>
+                <div class="cx40-boot">
+                  <div class="cx40-ridge"></div>
+                  <div class="cx40-ridge"></div>
+                  <div class="cx40-ridge"></div>
+                  <div class="cx40-ridge"></div>
+                  <div class="cx40-ridge"></div>
+                </div>
+                <div class="cx40-stick-area" id="joystickStick">
+                  <div class="cx40-stick-hex">
+                    <div class="cx40-stick-border"></div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

@@ -63,6 +63,10 @@
         var kbRect = keyboardPanel.getBoundingClientRect();
         availableH -= Math.max(0, Math.ceil(kbRect.height + 10));
       }
+      if (joystickPanel && !joystickPanel.hidden) {
+        var joyRect = joystickPanel.getBoundingClientRect();
+        availableH -= Math.max(0, Math.ceil(joyRect.height + 10));
+      }
       var maxW = Math.max(1, Math.floor(rect.width || nativeScreenW));
       var maxH = Math.max(1, availableH || Math.floor(rect.height || nativeScreenH));
       var aspect = nativeScreenW / nativeScreenH;
@@ -159,6 +163,7 @@
     var btnSioTurbo = document.getElementById("btnSioTurbo");
     var btnAudio = document.getElementById("btnAudio");
     var btnKeyboard = document.getElementById("btnKeyboard");
+    var btnJoystick = document.getElementById("btnJoystick");
     var btnOptionOnStart = document.getElementById("btnOptionOnStart");
 
     var romOs = document.getElementById("romOs");
@@ -169,11 +174,33 @@
     var diskStatus = document.getElementById("diskStatus");
     var keyboardPanel = document.getElementById("keyboardPanel");
     var atariKeyboard = document.getElementById("atariKeyboard");
+    var joystickPanel = document.getElementById("joystickPanel");
+    var joystickArea = document.getElementById("joystickArea");
+    var joystickStick = document.getElementById("joystickStick");
+    var fireButton = document.getElementById("fireButton");
+    var joystickGlows = {
+      up: document.getElementById("glowUp"),
+      down: document.getElementById("glowDown"),
+      left: document.getElementById("glowLeft"),
+      right: document.getElementById("glowRight"),
+    };
     var virtualModifiers = {
       ctrl: false,
       shift: false,
     };
     var pressedVirtualKeysByPointer = new Map();
+    var joystickState = {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+      fire: false,
+    };
+    var stickPointerId = null;
+    var firePointerId = null;
+    var stickCenter = { x: 0, y: 0 };
+    var JOYSTICK_MAX_DEFLECT = 20;
+    var JOYSTICK_DEAD_ZONE = 5;
 
     if (gl && window.A8EGlRenderer && window.A8EGlRenderer.loadShaderSources) {
       try {
@@ -355,6 +382,98 @@
       if (st.consumeCtrl && virtualModifiers.ctrl) setCtrlModifier(false);
     }
 
+    function makeJoystickEvent(key, code, sdlSym) {
+      return {
+        key: key,
+        code: code,
+        ctrlKey: false,
+        shiftKey: false,
+        sdlSym: sdlSym,
+      };
+    }
+
+    function setJoystickDirection(up, down, left, right) {
+      var next = {
+        up: !!up,
+        down: !!down,
+        left: !!left,
+        right: !!right,
+      };
+      var directionDefs = [
+        { name: "up", key: "ArrowUp", code: "ArrowUp", sdlSym: 273 },
+        { name: "down", key: "ArrowDown", code: "ArrowDown", sdlSym: 274 },
+        { name: "left", key: "ArrowLeft", code: "ArrowLeft", sdlSym: 276 },
+        { name: "right", key: "ArrowRight", code: "ArrowRight", sdlSym: 275 },
+      ];
+      directionDefs.forEach(function (entry) {
+        var nextPressed = next[entry.name];
+        if (joystickState[entry.name] === nextPressed) return;
+        joystickState[entry.name] = nextPressed;
+        var glow = joystickGlows[entry.name];
+        if (glow) glow.classList.toggle("active", nextPressed);
+        if (!app || !app.onKeyDown || !app.onKeyUp) return;
+        var ev = makeJoystickEvent(entry.key, entry.code, entry.sdlSym);
+        if (nextPressed) app.onKeyDown(ev);
+        else app.onKeyUp(ev);
+      });
+    }
+
+    function setJoystickFire(active) {
+      var next = !!active;
+      if (joystickState.fire === next) return;
+      joystickState.fire = next;
+      if (fireButton) fireButton.classList.toggle("active", next);
+      if (!app || !app.onKeyDown || !app.onKeyUp) return;
+      var ev = makeJoystickEvent("Alt", "AltLeft", 308);
+      if (next) app.onKeyDown(ev);
+      else app.onKeyUp(ev);
+    }
+
+    function getJoystickStickCenter() {
+      if (!joystickArea) return { x: 0, y: 0 };
+      var boot = joystickArea.querySelector(".cx40-boot");
+      var rect = boot ? boot.getBoundingClientRect() : joystickArea.getBoundingClientRect();
+      return {
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      };
+    }
+
+    function updateJoystickStick(dx, dy) {
+      if (!joystickStick) return;
+      var distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance > JOYSTICK_MAX_DEFLECT) {
+        dx = (dx / distance) * JOYSTICK_MAX_DEFLECT;
+        dy = (dy / distance) * JOYSTICK_MAX_DEFLECT;
+      }
+      joystickStick.style.transform = "translate(calc(-50% + " + dx + "px), calc(-50% + " + dy + "px))";
+    }
+
+    function resetJoystickStick() {
+      if (joystickStick) joystickStick.style.transform = "translate(-50%, -50%)";
+      setJoystickDirection(false, false, false, false);
+    }
+
+    function processJoystickMove(clientX, clientY) {
+      var dx = clientX - stickCenter.x;
+      var dy = clientY - stickCenter.y;
+      updateJoystickStick(dx, dy);
+      setJoystickDirection(
+        dy < -JOYSTICK_DEAD_ZONE,
+        dy > JOYSTICK_DEAD_ZONE,
+        dx < -JOYSTICK_DEAD_ZONE,
+        dx > JOYSTICK_DEAD_ZONE
+      );
+    }
+
+    function resetJoystickControls() {
+      stickPointerId = null;
+      firePointerId = null;
+      if (joystickStick) joystickStick.classList.remove("grabbing");
+      resetJoystickStick();
+      setJoystickFire(false);
+    }
+
     function setKeyboardEnabled(active) {
       if (!btnKeyboard || !keyboardPanel) return;
       var enabled = !!active;
@@ -373,6 +492,23 @@
         });
         clearVirtualModifiers();
       }
+      resizeCrtCanvas();
+      canvas.focus();
+    }
+
+    function setJoystickEnabled(active) {
+      if (!btnJoystick || !joystickPanel) return;
+      var enabled = !!active;
+      btnJoystick.classList.toggle("active", enabled);
+      joystickPanel.hidden = !enabled;
+
+      var label = enabled
+        ? "Hide the on-screen joystick controls."
+        : "Show the on-screen joystick controls.";
+      btnJoystick.title = label;
+      btnJoystick.setAttribute("aria-label", label);
+
+      if (!enabled) resetJoystickControls();
       resizeCrtCanvas();
       canvas.focus();
     }
@@ -479,6 +615,11 @@
         setKeyboardEnabled(!btnKeyboard.classList.contains("active"));
       });
     }
+    if (btnJoystick && joystickPanel) {
+      btnJoystick.addEventListener("click", function () {
+        setJoystickEnabled(!btnJoystick.classList.contains("active"));
+      });
+    }
 
     btnOptionOnStart.addEventListener("click", function () {
       btnOptionOnStart.classList.toggle("active");
@@ -576,6 +717,67 @@
       });
     }
 
+    if (joystickArea && joystickStick && fireButton) {
+      joystickArea.addEventListener("pointerdown", function (e) {
+        if (joystickPanel && joystickPanel.hidden) return;
+
+        var target = e.target;
+        var isFire = target === fireButton || (target.closest && target.closest(".cx40-fire-housing"));
+        if (isFire) {
+          if (firePointerId !== null) return;
+          firePointerId = e.pointerId;
+          setJoystickFire(true);
+        } else {
+          if (stickPointerId !== null) return;
+          stickPointerId = e.pointerId;
+          stickCenter = getJoystickStickCenter();
+          joystickStick.classList.add("grabbing");
+          processJoystickMove(e.clientX, e.clientY);
+        }
+
+        if (joystickArea.setPointerCapture) {
+          try {
+            joystickArea.setPointerCapture(e.pointerId);
+          } catch (err) {
+            // ignore capture errors
+          }
+        }
+        e.preventDefault();
+        canvas.focus();
+      });
+
+      joystickArea.addEventListener("pointermove", function (e) {
+        if (e.pointerId !== stickPointerId) return;
+        processJoystickMove(e.clientX, e.clientY);
+        e.preventDefault();
+      });
+
+      function handleJoystickPointerEnd(e) {
+        var changed = false;
+        if (e.pointerId === stickPointerId) {
+          stickPointerId = null;
+          joystickStick.classList.remove("grabbing");
+          resetJoystickStick();
+          changed = true;
+        }
+        if (e.pointerId === firePointerId) {
+          firePointerId = null;
+          setJoystickFire(false);
+          changed = true;
+        }
+        if (changed) {
+          e.preventDefault();
+          canvas.focus();
+        }
+      }
+
+      joystickArea.addEventListener("pointerup", handleJoystickPointerEnd);
+      joystickArea.addEventListener("pointercancel", handleJoystickPointerEnd);
+      joystickArea.addEventListener("lostpointercapture", handleJoystickPointerEnd);
+      document.addEventListener("pointerup", handleJoystickPointerEnd);
+      document.addEventListener("pointercancel", handleJoystickPointerEnd);
+    }
+
     function attachFileInput(inputEl, handler) {
       inputEl.addEventListener("change", function () {
         var file = inputEl.files && inputEl.files[0];
@@ -629,6 +831,9 @@
     updateFullscreenButton();
     if (btnKeyboard && keyboardPanel) {
       setKeyboardEnabled(btnKeyboard.classList.contains("active"));
+    }
+    if (btnJoystick && joystickPanel) {
+      setJoystickEnabled(btnJoystick.classList.contains("active"));
     }
   }
 
