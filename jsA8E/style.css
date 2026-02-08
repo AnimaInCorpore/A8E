@@ -579,9 +579,18 @@ canvas.crtEnabled {
   .keyboardPanel {
     width: 100%;
     padding: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    align-self: stretch;
   }
   .atariKeyboard {
-    min-width: 0;
+    width: max-content;
+    max-width: none;
+    min-width: max-content;
+    margin-inline: 0;
   }
   .kbShell {
     padding: 10px;
