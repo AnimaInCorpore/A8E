@@ -291,11 +291,10 @@ button:hover:not(:disabled) {
   width: min(100%, 1160px);
   border: 0;
   border-radius: 0;
-  padding: 4px 0;
+  padding: 8px 0 18px;
   background: transparent;
   box-shadow: none;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: visible;
   align-self: center;
 }
 
@@ -583,23 +582,26 @@ button:hover:not(:disabled) {
 
 .atariKeyboard .atari {
   border-radius: var(--radius);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
-  overflow: hidden;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+  overflow: visible;
   border: 1px solid rgba(255, 255, 255, 0.04);
   display: grid;
   grid-template-columns: 1fr auto;
 }
 
 .atariKeyboard .case-keyboard {
-  padding: clamp(12px, 1.8vw, 20px);
+  padding: clamp(12px, 1.8vw, 20px) clamp(12px, 1.8vw, 20px)
+    clamp(18px, 2.4vw, 30px);
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.12), rgba(255, 255, 255, 0) 18%),
     linear-gradient(180deg, var(--bed-hi), var(--bed));
+  border-radius: var(--radius) 0 0 var(--radius);
 }
 
 .atariKeyboard .deck {
   border-radius: var(--inner-radius);
-  padding: clamp(9px, 1.35vw, 15px);
+  padding: clamp(9px, 1.35vw, 15px) clamp(9px, 1.35vw, 15px)
+    clamp(16px, 2vw, 24px);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.18)),
     linear-gradient(180deg, #2e2e30, #222224);
@@ -611,6 +613,7 @@ button:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: var(--gap);
+  padding-bottom: clamp(4px, 0.8vw, 8px);
 }
 
 .atariKeyboard .row {
@@ -633,7 +636,7 @@ button:hover:not(:disabled) {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0) 40%),
     linear-gradient(180deg, var(--key-top), var(--key-bot));
-  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.5), 0 8px 14px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.5), 0 6px 12px rgba(0, 0, 0, 0.28);
   color: var(--legend);
   font-family: var(--mono);
   cursor: pointer;
@@ -705,7 +708,7 @@ button:hover:not(:disabled) {
 .atariKeyboard .key.pressed,
 .atariKeyboard .key:active,
 .atariKeyboard .key.active {
-  transform: translateY(3px);
+  transform: translateY(2px);
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.5), 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
@@ -718,6 +721,7 @@ button:hover:not(:disabled) {
   grid-template-columns: auto auto;
   gap: 0;
   border-left: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 0 var(--radius) var(--radius) 0;
 }
 
 .atariKeyboard .side-keys {
@@ -797,6 +801,10 @@ button:hover:not(:disabled) {
     grid-template-columns: 1fr;
     border-left: 0;
     border-top: 1px solid rgba(0, 0, 0, 0.25);
+    border-radius: 0 0 var(--radius) var(--radius);
+  }
+  .atariKeyboard .case-keyboard {
+    border-radius: var(--radius) var(--radius) 0 0;
   }
   .atariKeyboard .side-keys {
     flex-direction: row;
@@ -906,9 +914,9 @@ canvas.crtEnabled {
   }
   .keyboardPanel {
     width: 100%;
-    padding: 8px;
+    padding: 8px 8px 18px;
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: visible;
     overscroll-behavior-x: contain;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-x;
