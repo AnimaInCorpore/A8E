@@ -169,8 +169,6 @@
     var diskStatus = document.getElementById("diskStatus");
     var keyboardPanel = document.getElementById("keyboardPanel");
     var atariKeyboard = document.getElementById("atariKeyboard");
-    var powerKeyButton = atariKeyboard ? atariKeyboard.querySelector(".kbPowerKey") : null;
-    var powerLed = powerKeyButton ? powerKeyButton.querySelector(".kbPowerLed") : null;
     var virtualModifiers = {
       ctrl: false,
       shift: false,
@@ -575,14 +573,6 @@
         pressVirtualKey(key, btn.getAttribute("data-code") || "", parseSdlSym(btn));
         flashVirtualKey(btn, 80);
         e.preventDefault();
-      });
-    }
-
-    if (powerKeyButton && powerLed) {
-      powerKeyButton.addEventListener("click", function () {
-        powerLed.classList.toggle("on");
-        powerKeyButton.setAttribute("aria-pressed", powerLed.classList.contains("on") ? "true" : "false");
-        canvas.focus();
       });
     }
 
