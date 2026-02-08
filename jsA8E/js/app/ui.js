@@ -10,6 +10,9 @@
     var nativeScreenW = canvas.width | 0;
     var nativeScreenH = canvas.height | 0;
     var screenViewport = canvas.parentElement;
+    var layoutRoot = screenViewport && screenViewport.closest ? screenViewport.closest(".layout") : null;
+    var keyboardPanel = document.getElementById("keyboardPanel");
+    var joystickPanel = document.getElementById("joystickPanel");
     var app = null;
     var gl = null;
     try {
@@ -52,30 +55,64 @@
     var onFullscreenChange = null;
     var didCleanup = false;
 
+    function readFlexGapPx(el) {
+      if (!el || !window.getComputedStyle) return 0;
+      var st = window.getComputedStyle(el);
+      var raw = st.rowGap && st.rowGap !== "normal" ? st.rowGap : st.gap;
+      var parsed = parseFloat(raw || "0");
+      return isFinite(parsed) ? Math.max(0, parsed) : 0;
+    }
+
+    function isPanelVisible(el) {
+      return !!el && !el.hidden && el.getClientRects().length > 0;
+    }
+
+    function reservedPanelHeight(el) {
+      if (!isPanelVisible(el)) return 0;
+      var rect = el.getBoundingClientRect();
+      return Math.max(0, Math.ceil(rect.height + readFlexGapPx(el.parentElement)));
+    }
+
     function resizeDisplayCanvas() {
       var viewport = screenViewport || canvas.parentElement;
       if (!viewport) return;
       var rect = viewport.getBoundingClientRect();
-      var vv = window.visualViewport;
-      var visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
-      var availableH = Math.floor(visibleBottom - rect.top - 8);
-      if (keyboardPanel && !keyboardPanel.hidden) {
-        var kbRect = keyboardPanel.getBoundingClientRect();
-        availableH -= Math.max(0, Math.ceil(kbRect.height + 10));
-      }
-      if (joystickPanel && !joystickPanel.hidden) {
-        var joyRect = joystickPanel.getBoundingClientRect();
-        availableH -= Math.max(0, Math.ceil(joyRect.height + 10));
-      }
       var maxW = Math.max(1, Math.floor(rect.width || nativeScreenW));
-      var maxH = Math.max(1, availableH || Math.floor(rect.height || nativeScreenH));
       var aspect = nativeScreenW / nativeScreenH;
       var cssW = maxW;
       var cssH = Math.round(cssW / aspect);
-      if (cssH > maxH) {
-        cssH = maxH;
-        cssW = Math.round(cssH * aspect);
+
+      // In normal page layout, fit into both width and visible height while
+      // reserving space only for joystick. Keyboard may be below visible area.
+      // In fullscreen, fit only inside fullscreen viewport bounds.
+      if (isViewportFullscreen()) {
+        var vv = window.visualViewport;
+        var visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+        var availableH = Math.floor(visibleBottom - rect.top - 8);
+        var maxH = Math.max(1, availableH || Math.floor(rect.height || nativeScreenH));
+        if (cssH > maxH) {
+          cssH = maxH;
+          cssW = Math.round(cssH * aspect);
+        }
+      } else {
+        var availableNormalH = 0;
+        if (layoutRoot) {
+          var layoutRect = layoutRoot.getBoundingClientRect();
+          var topOffset = Math.max(0, rect.top - layoutRect.top);
+          availableNormalH = Math.floor(layoutRoot.clientHeight - topOffset - 8);
+        } else {
+          var vvNormal = window.visualViewport;
+          var visibleBottomNormal = vvNormal ? vvNormal.offsetTop + vvNormal.height : window.innerHeight;
+          availableNormalH = Math.floor(visibleBottomNormal - rect.top - 8);
+        }
+        availableNormalH -= reservedPanelHeight(joystickPanel);
+        var normalMaxH = Math.max(1, availableNormalH || Math.floor(rect.height || nativeScreenH));
+        if (cssH > normalMaxH) {
+          cssH = normalMaxH;
+          cssW = Math.round(cssH * aspect);
+        }
       }
+
       var nextW = Math.max(1, cssW) + "px";
       var nextH = Math.max(1, cssH) + "px";
       if (canvas.style.width !== nextW) canvas.style.width = nextW;
@@ -162,7 +199,6 @@
     var btnTurbo = document.getElementById("btnTurbo");
     var btnSioTurbo = document.getElementById("btnSioTurbo");
     var btnAudio = document.getElementById("btnAudio");
-    var btnKeyboard = document.getElementById("btnKeyboard");
     var btnJoystick = document.getElementById("btnJoystick");
     var btnOptionOnStart = document.getElementById("btnOptionOnStart");
 
@@ -172,9 +208,7 @@
     var romOsStatus = document.getElementById("romOsStatus");
     var romBasicStatus = document.getElementById("romBasicStatus");
     var diskStatus = document.getElementById("diskStatus");
-    var keyboardPanel = document.getElementById("keyboardPanel");
     var atariKeyboard = document.getElementById("atariKeyboard");
-    var joystickPanel = document.getElementById("joystickPanel");
     var joystickArea = document.getElementById("joystickArea");
     var joystickStick = document.getElementById("joystickStick");
     var fireButton = document.getElementById("fireButton");
@@ -239,6 +273,7 @@
           parent.replaceChild(nextCanvas, canvas);
           canvas = nextCanvas;
           screenViewport = canvas.parentElement;
+          layoutRoot = screenViewport && screenViewport.closest ? screenViewport.closest(".layout") : null;
           canvas.tabIndex = 0;
           gl = null;
           ctx2d = canvas.getContext("2d", { alpha: false });
@@ -415,11 +450,6 @@
       syncShiftStateToEmulator();
     }
 
-    function clearVirtualModifiers() {
-      setShiftModifier(false);
-      setCtrlModifier(false);
-    }
-
     function flashVirtualKey(btn, durationMs) {
       if (!btn) return;
       btn.classList.add("pressed");
@@ -549,28 +579,6 @@
       setJoystickFire(false);
     }
 
-    function setKeyboardEnabled(active) {
-      if (!btnKeyboard || !keyboardPanel) return;
-      var enabled = !!active;
-      btnKeyboard.classList.toggle("active", enabled);
-      keyboardPanel.hidden = !enabled;
-
-      var label = enabled
-        ? "Hide the on-screen Atari 800 XL keyboard."
-        : "Show the on-screen Atari 800 XL keyboard.";
-      btnKeyboard.title = label;
-      btnKeyboard.setAttribute("aria-label", label);
-
-      if (!enabled) {
-        pressedVirtualKeysByPointer.forEach(function (_st, pid) {
-          releasePointerVirtualKey(pid);
-        });
-        clearVirtualModifiers();
-      }
-      resizeCrtCanvas();
-      canvas.focus();
-    }
-
     function setJoystickEnabled(active) {
       if (!btnJoystick || !joystickPanel) return;
       var enabled = !!active;
@@ -685,11 +693,6 @@
       app.setAudioEnabled(btnAudio.classList.contains("active"));
     });
 
-    if (btnKeyboard && keyboardPanel) {
-      btnKeyboard.addEventListener("click", function () {
-        setKeyboardEnabled(!btnKeyboard.classList.contains("active"));
-      });
-    }
     if (btnJoystick && joystickPanel) {
       btnJoystick.addEventListener("click", function () {
         setJoystickEnabled(!btnJoystick.classList.contains("active"));
@@ -930,9 +933,6 @@
 
     updateStatus();
     updateFullscreenButton();
-    if (btnKeyboard && keyboardPanel) {
-      setKeyboardEnabled(btnKeyboard.classList.contains("active"));
-    }
     if (btnJoystick && joystickPanel) {
       setJoystickEnabled(btnJoystick.classList.contains("active"));
     }
