@@ -150,6 +150,10 @@
       onCrtContextRestored = null;
     }
 
+    function isMobile() {
+      return window.innerWidth <= 980 || (window.matchMedia && window.matchMedia("(max-width: 980px)").matches);
+    }
+
     function cleanup() {
       if (didCleanup) return;
       didCleanup = true;
@@ -200,6 +204,7 @@
     var btnSioTurbo = document.getElementById("btnSioTurbo");
     var btnAudio = document.getElementById("btnAudio");
     var btnJoystick = document.getElementById("btnJoystick");
+    var btnKeyboard = document.getElementById("btnKeyboard");
     var btnOptionOnStart = document.getElementById("btnOptionOnStart");
 
     var romOs = document.getElementById("romOs");
@@ -316,6 +321,19 @@
     function setButtons(running) {
       setRunPauseButton(running);
       btnReset.disabled = !app.isReady();
+    }
+
+    function focusCanvas(preventScroll) {
+      if (!canvas || typeof canvas.focus !== "function") return;
+      if (!preventScroll) {
+        canvas.focus();
+        return;
+      }
+      try {
+        canvas.focus({ preventScroll: true });
+      } catch (err) {
+        // Do not fallback to plain focus here; it would scroll the viewport.
+      }
     }
 
     function getFullscreenElement() {
@@ -593,7 +611,34 @@
 
       if (!enabled) resetJoystickControls();
       resizeCrtCanvas();
-      canvas.focus();
+      focusCanvas(true);
+    }
+
+    function resetKeyboardControls() {
+      if (pressedVirtualKeysByPointer.size > 0) {
+        Array.from(pressedVirtualKeysByPointer.keys()).forEach(function (pointerId) {
+          releasePointerVirtualKey(pointerId);
+        });
+      }
+      if (virtualModifiers.shift) setShiftModifier(false);
+      if (virtualModifiers.ctrl) setCtrlModifier(false);
+    }
+
+    function setKeyboardEnabled(active) {
+      if (!btnKeyboard || !keyboardPanel) return;
+      var enabled = !!active;
+      btnKeyboard.classList.toggle("active", enabled);
+      keyboardPanel.hidden = !enabled;
+
+      var label = enabled
+        ? "Hide the on-screen keyboard controls."
+        : "Show the on-screen keyboard controls.";
+      btnKeyboard.title = label;
+      btnKeyboard.setAttribute("aria-label", label);
+
+      if (!enabled) resetKeyboardControls();
+      resizeCrtCanvas();
+      focusCanvas(true);
     }
 
     function requestFullscreen(el) {
@@ -646,14 +691,14 @@
       } else {
         app.start();
         setButtons(app.isRunning());
-        canvas.focus();
+        focusCanvas(false);
       }
     });
 
     btnReset.addEventListener("click", function () {
       app.reset();
       updateStatus();
-      canvas.focus();
+      focusCanvas(false);
     });
 
     if (btnFullscreen) {
@@ -663,7 +708,7 @@
           .then(function () {
             updateFullscreenButton();
             resizeCrtCanvas();
-            canvas.focus();
+            focusCanvas(false);
           })
           .catch(function () {
             // Fullscreen error - silently ignore
@@ -699,6 +744,12 @@
       });
     }
 
+    if (btnKeyboard && keyboardPanel) {
+      btnKeyboard.addEventListener("click", function () {
+        setKeyboardEnabled(!btnKeyboard.classList.contains("active"));
+      });
+    }
+
     btnOptionOnStart.addEventListener("click", function () {
       btnOptionOnStart.classList.toggle("active");
       app.setOptionOnStart(btnOptionOnStart.classList.contains("active"));
@@ -714,13 +765,13 @@
         if (modifier === "shift") {
           setShiftModifier(!virtualModifiers.shift);
           flashVirtualKey(btn);
-          canvas.focus();
+          focusCanvas(true);
           return;
         }
         if (modifier === "ctrl") {
           setCtrlModifier(!virtualModifiers.ctrl);
           flashVirtualKey(btn);
-          canvas.focus();
+          focusCanvas(true);
           return;
         }
 
@@ -750,7 +801,7 @@
           consumeShift: virtualModifiers.shift,
           consumeCtrl: virtualModifiers.ctrl,
         });
-        canvas.focus();
+        focusCanvas(true);
       });
 
       atariKeyboard.addEventListener("pointerup", function (e) {
@@ -821,7 +872,7 @@
           }
         }
         e.preventDefault();
-        canvas.focus();
+        focusCanvas(true);
       });
 
       joystickArea.addEventListener("pointermove", function (e) {
@@ -845,7 +896,7 @@
         }
         if (changed) {
           e.preventDefault();
-          canvas.focus();
+          focusCanvas(true);
         }
       }
 
@@ -935,6 +986,11 @@
     updateFullscreenButton();
     if (btnJoystick && joystickPanel) {
       setJoystickEnabled(btnJoystick.classList.contains("active"));
+    }
+    if (btnKeyboard && keyboardPanel) {
+      var keyboardActive = !isMobile();
+      btnKeyboard.classList.toggle("active", keyboardActive);
+      setKeyboardEnabled(keyboardActive);
     }
   }
 

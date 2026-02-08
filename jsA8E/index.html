@@ -21,7 +21,8 @@
               <br />
               <strong>Getting Started:</strong><br />
               Load ATARIXL.ROM and ATARIBAS.ROM, then load an ATR disk image.<br />
-              Click Start to run the emulator. Focus the canvas to use keyboard/joystick.<br />
+              Click Start to run the emulator. Use the keyboard toggle for on-screen controls.<br />
+              Focus the canvas to use physical keyboard/joystick.<br />
               <br />
               <strong>Keyboard Controls:</strong><br />
               Type normally on the Atari keyboard. Use Ctrl and Shift as modifiers.<br />
@@ -76,6 +77,12 @@
             <span class="fa-layers fa-fw joystick-stack">
               <i class="fa-solid fa-gamepad"></i>
               <i class="fa-solid fa-slash joystick-off-mark"></i>
+            </span>
+          </button>
+          <button id="btnKeyboard" class="toggle-btn active" title="Hide the on-screen keyboard controls." aria-label="Hide the on-screen keyboard controls.">
+            <span class="fa-layers fa-fw keyboard-stack">
+              <i class="fa-solid fa-keyboard"></i>
+              <i class="fa-solid fa-slash keyboard-off-mark"></i>
             </span>
           </button>
           <button id="btnOptionOnStart" class="toggle-btn active" title="Toggle Option on Start. When enabled, OPTION is held during boot to disable BASIC ROM mapping for software that requires BASIC off." aria-label="Toggle Option on Start. When enabled, OPTION is held during boot to disable BASIC ROM mapping for software that requires BASIC off.">
