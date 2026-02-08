@@ -121,6 +121,17 @@ body {
   flex-wrap: wrap;
 }
 
+.iconControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.iconControls button {
+  padding: 7px 8px;
+}
+
 button {
   background: var(--panel);
   border: 1px solid var(--border);
