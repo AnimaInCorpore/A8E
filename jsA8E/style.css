@@ -570,6 +570,14 @@ button:hover:not(:disabled) {
   --key-h: clamp(38px, 4.6vw, 52px);
   --radius: clamp(10px, 1.2vw, 14px);
   --inner-radius: clamp(8px, 1vw, 12px);
+  --shell-pad-x: clamp(12px, 1.8vw, 20px);
+  --shell-pad-top: clamp(12px, 1.8vw, 20px);
+  --shell-pad-bottom: clamp(18px, 2.4vw, 30px);
+  --deck-pad-x: clamp(9px, 1.35vw, 15px);
+  --deck-pad-top: clamp(9px, 1.35vw, 15px);
+  --deck-pad-bottom: clamp(16px, 2vw, 24px);
+  --main-pad-bottom: clamp(4px, 0.8vw, 8px);
+  --side-pad-x: clamp(8px, 1.1vw, 14px);
   --mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
@@ -590,8 +598,7 @@ button:hover:not(:disabled) {
 }
 
 .atariKeyboard .case-keyboard {
-  padding: clamp(12px, 1.8vw, 20px) clamp(12px, 1.8vw, 20px)
-    clamp(18px, 2.4vw, 30px);
+  padding: var(--shell-pad-top) var(--shell-pad-x) var(--shell-pad-bottom);
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.12), rgba(255, 255, 255, 0) 18%),
     linear-gradient(180deg, var(--bed-hi), var(--bed));
@@ -600,8 +607,7 @@ button:hover:not(:disabled) {
 
 .atariKeyboard .deck {
   border-radius: var(--inner-radius);
-  padding: clamp(9px, 1.35vw, 15px) clamp(9px, 1.35vw, 15px)
-    clamp(16px, 2vw, 24px);
+  padding: var(--deck-pad-top) var(--deck-pad-x) var(--deck-pad-bottom);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.18)),
     linear-gradient(180deg, #2e2e30, #222224);
@@ -613,7 +619,7 @@ button:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: var(--gap);
-  padding-bottom: clamp(4px, 0.8vw, 8px);
+  padding-bottom: var(--main-pad-bottom);
 }
 
 .atariKeyboard .row {
@@ -716,7 +722,10 @@ button:hover:not(:disabled) {
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0) 15%),
     linear-gradient(180deg, var(--bed-hi), var(--bed));
-  padding: clamp(10px, 1.4vw, 16px) clamp(8px, 1.1vw, 14px);
+  padding:
+    calc(var(--shell-pad-top) + var(--deck-pad-top))
+    var(--side-pad-x)
+    calc(var(--shell-pad-bottom) + var(--deck-pad-bottom) + var(--main-pad-bottom));
   display: grid;
   grid-template-columns: auto auto;
   gap: 0;
@@ -775,6 +784,10 @@ button:hover:not(:disabled) {
   white-space: nowrap;
 }
 
+.atariKeyboard .strip-label:last-child {
+  margin-bottom: 0;
+}
+
 .atariKeyboard .kbKey:focus-visible {
   box-shadow:
     0 4px 0 rgba(0, 0, 0, 0.5),
@@ -798,6 +811,7 @@ button:hover:not(:disabled) {
     grid-template-rows: auto auto;
   }
   .atariKeyboard .case-side {
+    padding: clamp(10px, 1.4vw, 16px) var(--side-pad-x);
     grid-template-columns: 1fr;
     border-left: 0;
     border-top: 1px solid rgba(0, 0, 0, 0.25);
