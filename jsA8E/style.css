@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700&display=swap");
+
 :root {
   color-scheme: dark;
   --bg: #0b0f16;
@@ -259,203 +261,262 @@ button:hover:not(:disabled) {
 }
 
 .keyboardPanel {
-  width: min(100%, 1040px);
-  border: 1px solid #c5bfb0;
-  border-radius: 12px;
-  padding: 8px;
-  background: linear-gradient(180deg, #e8e4d8 0%, #dcd7ca 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 8px 24px rgba(0, 0, 0, 0.15);
+  width: min(100%, 1160px);
+  border: 1px solid #262626;
+  border-radius: 10px;
+  padding: 10px;
+  background: #2e2e2e;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
   overflow-x: auto;
 }
 
 .atariKeyboard {
-  min-width: 860px;
-  border: 1px solid #cac5b8;
-  border-radius: 10px;
-  padding: 8px;
-  background: linear-gradient(180deg, #ebe7db 0%, #e0dcd0 100%);
+  min-width: 1040px;
+  width: max-content;
+  border: 1px solid #303030;
+  border-radius: 8px;
+  padding: 0;
+  background: #3a3a3a;
+}
+
+.kbShell {
+  display: flex;
+  gap: 10px;
+  background: #3a3a3a;
+  border-radius: 6px;
+  padding: 14px 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.kbMainSection {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
-.kbBrandRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 20px;
-}
-
-.kbAtariWordmark {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  color: #2a2822;
-}
-
-.kbAtariStripe {
-  display: inline-flex;
-  gap: 2px;
-}
-
-.kbAtariStripe span {
-  width: 12px;
-  height: 4px;
-  border-radius: 1px;
-}
-
-.kbAtariStripe .s1 {
-  background: #ec6a5f;
-}
-
-.kbAtariStripe .s2 {
-  background: #f2a252;
-}
-
-.kbAtariStripe .s3 {
-  background: #95c47b;
-}
-
-.kbAtariStripe .s4 {
-  background: #5ea3d8;
-}
-
-.kbDeck {
-  display: flex;
-  gap: 8px;
-}
-
-.kbMain {
-  flex: 1 1 auto;
-  min-width: 0;
+.kbFuncSection {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.kbUtilityCol {
-  width: 122px;
-  flex: 0 0 122px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  margin-left: 2px;
 }
 
 .kbRow {
   display: flex;
-  gap: 6px;
+  gap: 4px;
+  align-items: stretch;
 }
 
 .kbKey {
-  --w: 1;
-  flex: var(--w) 1 0;
-  min-height: 36px;
-  border: 1px solid #a8a399;
-  border-radius: 4px;
-  background: linear-gradient(180deg, #c8c4b8 0%, #bab6aa 100%);
-  color: #2d2b26;
-  font-size: 11px;
+  height: 44px;
+  min-width: 44px;
+  border: 1px solid #2a2a2a;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #5a5a5a 0%, #4a4a4a 40%, #3e3e3e 100%);
+  color: #d0d0d0;
+  font-family: "Roboto Condensed", sans-serif;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  padding: 4px 5px;
+  letter-spacing: 0.5px;
+  padding: 0 6px;
   text-transform: uppercase;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 1px 2px rgba(0, 0, 0, 0.15);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 3px 1px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: all 0.06s ease;
   user-select: none;
   -webkit-user-select: none;
+  flex-shrink: 0;
   touch-action: manipulation;
+  position: relative;
 }
 
 .kbKey:hover {
-  border-color: #999488;
-  background: linear-gradient(180deg, #d0ccc0 0%, #c2beb2 100%);
+  background: linear-gradient(180deg, #656565 0%, #555555 40%, #484848 100%);
+  color: #e8e8e8;
 }
 
 .kbKey:focus-visible {
-  outline: 2px solid #84c4f2;
-  outline-offset: 1px;
-}
-
-.kbKey i {
-  font-size: 10px;
+  outline: 2px solid #5cc8ff;
+  outline-offset: 2px;
 }
 
 .kbKey.pressed,
 .kbKey:active,
 .kbKey.active {
   transform: translateY(1px);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.25);
-  background: linear-gradient(180deg, #a8a499 0%, #9a968b 100%);
+  background: linear-gradient(180deg, #3a3a3a 0%, #444444 40%, #4a4a4a 100%);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3), inset 0 2px 3px rgba(0, 0, 0, 0.3);
 }
 
-.kbUtilityKey {
-  width: 100%;
-  flex: 0 0 auto;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-}
-
-.kbAtariKey {
-  background: linear-gradient(180deg, #d4c8a0 0%, #c6ba92 100%);
-  color: #4a3f20;
-}
-
-.kbCursorPad {
-  margin-top: auto;
+.kbDualKey {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-
-.kbCursorPadTop,
-.kbCursorPadBottom {
-  display: flex;
   justify-content: center;
-  gap: 4px;
+  gap: 0;
+  line-height: 1;
 }
 
-.wBackspace {
-  --w: 1.9;
+.kbShiftChar {
+  font-size: 10px;
+  color: #aaa;
+  margin-bottom: 1px;
 }
 
-.wTab {
-  --w: 1.65;
+.kbMainChar {
+  font-size: 14px;
 }
 
-.wReturn {
-  --w: 2.1;
+.kbTopLabel {
+  font-size: 8px;
+  color: #999;
+  position: absolute;
+  top: 5px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  letter-spacing: 0;
 }
 
-.wCtrl {
-  --w: 1.75;
+.kbBottomLabel {
+  font-size: 9px;
+  position: absolute;
+  bottom: 6px;
+  left: 0;
+  right: 0;
+  text-align: center;
 }
 
-.wSlash {
-  --w: 1.4;
+.kbEscKey {
+  min-width: 52px;
 }
 
-.wShift {
-  --w: 2.35;
+.kbTabKey {
+  min-width: 60px;
+  font-size: 10px;
 }
 
-.wAtari {
-  --w: 1.55;
+.kbControlKey {
+  min-width: 68px;
+  font-size: 10px;
 }
 
-.wCaps {
-  --w: 1.9;
+.kbShiftKey {
+  min-width: 86px;
 }
 
-.wArrow {
-  --w: 1;
-  min-height: 32px;
+.kbShiftRightKey {
+  min-width: 66px;
 }
 
-.wClear {
-  --w: 1.5;
+.kbReturnKey {
+  min-width: 72px;
+  font-size: 11px;
 }
 
-.wSpace {
-  --w: 6.7;
+.kbCapsKey {
+  min-width: 58px;
+  font-size: 10px;
+}
+
+.kbSpaceKey {
+  flex-grow: 1;
+  min-width: 280px;
+}
+
+.kbBreakKey {
+  min-width: 56px;
+  font-size: 10px;
+}
+
+.kbClearKey,
+.kbInsertKey {
+  min-width: 50px;
+  font-size: 10px;
+}
+
+.kbDeleteKey {
+  min-width: 56px;
+  font-size: 9px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.kbSymbolKey {
+  font-size: 11px;
+}
+
+.kbInverseKey {
+  min-width: 44px;
+  background: linear-gradient(135deg, #555 50%, #777 50%);
+}
+
+.kbLogoKey {
+  font-size: 16px;
+}
+
+.kbFuncKey,
+.kbPowerKey {
+  height: 44px;
+  min-width: 64px;
+  border: 1px solid #2a2a2a;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #6a6a6a 0%, #585858 40%, #4e4e4e 100%);
+  color: #ccc;
+  font-family: "Roboto Condensed", sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 3px 1px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: all 0.06s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.kbFuncKey:hover,
+.kbPowerKey:hover {
+  background: linear-gradient(180deg, #757575 0%, #636363 40%, #585858 100%);
+  color: #e0e0e0;
+}
+
+.kbFuncKey.pressed,
+.kbFuncKey:active,
+.kbFuncKey.active,
+.kbPowerKey:active {
+  transform: translateY(1px);
+  background: linear-gradient(180deg, #484848 0%, #525252 40%, #585858 100%);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3), inset 0 2px 3px rgba(0, 0, 0, 0.3);
+}
+
+.kbPowerKey {
+  position: relative;
+  cursor: pointer;
+}
+
+.kbPowerKey:focus-visible {
+  outline: 2px solid #5cc8ff;
+  outline-offset: 2px;
+}
+
+.kbPowerLed {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #600;
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+  transition: all 0.3s ease;
+}
+
+.kbPowerLed.on {
+  background: #f33;
+  box-shadow: 0 0 6px rgba(255, 50, 50, 0.6), 0 0 12px rgba(255, 50, 50, 0.3),
+    inset 0 1px 2px rgba(255, 150, 150, 0.3);
 }
 
 
@@ -540,29 +601,40 @@ canvas.crtEnabled {
   }
   .keyboardPanel {
     width: 100%;
-    padding: 6px;
+    padding: 8px;
   }
   .atariKeyboard {
-    min-width: 820px;
-    padding: 6px;
+    min-width: 920px;
   }
-  .kbDeck {
-    gap: 6px;
+  .kbShell {
+    padding: 10px;
+    gap: 8px;
   }
+  .kbMainSection,
   .kbRow {
     gap: 4px;
   }
-  .kbUtilityCol {
-    width: 108px;
-    flex-basis: 108px;
+  .kbFuncSection {
+    margin-left: 0;
     gap: 4px;
   }
   .kbKey {
-    min-height: 32px;
-    font-size: 10px;
-    padding: 3px 4px;
+    height: 38px;
+    min-width: 38px;
+    font-size: 11px;
   }
-  .kbKey i {
+  .kbMainChar {
+    font-size: 12px;
+  }
+  .kbShiftChar {
     font-size: 9px;
+  }
+  .kbSpaceKey {
+    min-width: 220px;
+  }
+  .kbFuncKey,
+  .kbPowerKey {
+    height: 38px;
+    min-width: 56px;
   }
 }
