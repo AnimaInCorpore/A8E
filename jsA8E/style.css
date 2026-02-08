@@ -303,12 +303,12 @@ button:hover:not(:disabled) {
 }
 
 .joystickPanel {
-  width: min(100%, 480px);
+  width: min(100%, 500px);
   border: 1px solid #262626;
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 10px;
-  background: #2e2e2e;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, #2f2f2f 0%, #272727 100%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   align-self: center;
 }
 
@@ -320,160 +320,167 @@ button:hover:not(:disabled) {
   display: flex;
   justify-content: center;
   align-items: center;
+  padding: 2px;
 }
 
 .cx40 {
-  width: 340px;
-  height: 340px;
+  width: 352px;
+  height: 352px;
   position: relative;
+  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.55));
 }
 
 .cx40-base {
   width: 100%;
   height: 100%;
-  background: linear-gradient(160deg, #454545 0%, #353535 30%, #2c2c2c 60%, #252525 100%);
-  border-radius: 28px;
+  background: #1a1a1a;
+  border-radius: 53px;
   position: relative;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.7), 0 2px 4px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 -2px 0 rgba(0, 0, 0, 0.2);
-  background-image: linear-gradient(160deg, #454545 0%, #353535 30%, #2c2c2c 60%, #252525 100%),
-    url("data:image/svg+xml,%3Csvg width='4' height='4' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='0' y='0' width='1' height='1' fill='rgba(255,255,255,0.015)'/%3E%3C/svg%3E");
-  overflow: visible;
+  box-shadow:
+    inset 0 4px 10px rgba(255, 255, 255, 0.1),
+    10px 30px 60px rgba(0, 0, 0, 0.6),
+    0 0 0 2px #111;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   touch-action: none;
   user-select: none;
 }
 
 .cx40-cable {
   position: absolute;
-  top: -18px;
-  right: 60px;
-  width: 8px;
-  height: 26px;
-  background: linear-gradient(180deg, #222, #333);
-  border-radius: 4px 4px 0 0;
-  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.05), -1px 0 0 rgba(0, 0, 0, 0.3);
+  top: -35px;
+  right: 70px;
+  width: 11px;
+  height: 44px;
+  background: #2a2a2a;
+  border-radius: 6px 6px 0 0;
+  box-shadow: inset -3px 0 5px rgba(0, 0, 0, 0.5);
 }
 
-.cx40-ring-outer {
+.cx40-markings-ring {
   position: absolute;
-  top: 50%;
+  top: 55%;
   left: 50%;
-  width: 260px;
-  height: 260px;
+  width: 246px;
+  height: 246px;
   transform: translate(-50%, -50%);
+  border: 4px dashed #ff7b00;
   border-radius: 50%;
-  background: #222;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.04),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
-}
-
-.cx40-arrows-ring {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 252px;
-  height: 252px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
+  opacity: 0.8;
   pointer-events: none;
   z-index: 3;
 }
 
-.arrows-svg {
-  width: 100%;
-  height: 100%;
+.cx40-arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 11px solid #ff7b00;
+}
+
+.cx40-arrow-up {
+  top: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.cx40-arrow-down {
+  bottom: 9px;
+  left: 50%;
+  transform: translateX(-50%) rotate(180deg);
+}
+
+.cx40-arrow-left {
+  left: 9px;
+  top: 50%;
+  transform: translateY(-50%) rotate(-90deg);
+}
+
+.cx40-arrow-right {
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%) rotate(90deg);
 }
 
 .cx40-top-label {
   position: absolute;
-  top: 50%;
+  top: 55%;
   left: 50%;
-  transform: translate(-50%, -50%) translateY(-118px);
-  font-size: 9px;
+  transform: translate(-50%, -50%) translateY(-135px);
+  font-size: 12px;
   font-weight: 700;
-  color: #d4841a;
-  letter-spacing: 3px;
+  color: #ff7b00;
+  font-family: "Roboto Condensed", "Courier New", monospace;
+  letter-spacing: 2px;
   text-transform: uppercase;
   pointer-events: none;
   z-index: 4;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
-.cx40-ring-inner {
+.cx40-fire-housing {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 222px;
-  height: 222px;
-  transform: translate(-50%, -50%);
+  top: 22px;
+  left: 30px;
+  width: 46px;
+  height: 46px;
+  z-index: 12;
+}
+
+.cx40-fire-btn {
+  width: 46px;
+  height: 46px;
   border-radius: 50%;
-  background: #1e1e1e;
-  box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.6), 0 1px 0 rgba(255, 255, 255, 0.03);
+  border: none;
+  background: radial-gradient(circle at 30% 30%, #ff5f52, #a31100);
+  box-shadow:
+    0 4px 0 #7a0d00,
+    0 6px 15px rgba(0, 0, 0, 0.5);
+  transition: transform 0.1s, box-shadow 0.1s;
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+}
+
+.cx40-fire-btn:active,
+.cx40-fire-btn.active {
+  transform: translateY(3px);
+  box-shadow:
+    0 1px 0 #7a0d00,
+    0 2px 5px rgba(0, 0, 0, 0.5);
+  background: radial-gradient(circle at 30% 30%, #e6453a, #8a0e00);
 }
 
 .cx40-boot {
   position: absolute;
-  top: 50%;
+  top: 55%;
   left: 50%;
-  width: 180px;
-  height: 180px;
+  width: 176px;
+  height: 176px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: radial-gradient(circle at 45% 42%, #3a3a3a, #1a1a1a 70%, #111);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5), inset 0 2px 4px rgba(255, 255, 255, 0.04),
-    inset 0 -3px 6px rgba(0, 0, 0, 0.5);
-}
-
-.cx40-ridge {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  border-radius: 50%;
-  border: 2px solid rgba(50, 50, 50, 0.7);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 0 rgba(0, 0, 0, 0.3);
-  pointer-events: none;
-}
-
-.cx40-ridge:nth-child(1) {
-  width: 170px;
-  height: 170px;
-  transform: translate(-50%, -50%);
-}
-
-.cx40-ridge:nth-child(2) {
-  width: 148px;
-  height: 148px;
-  transform: translate(-50%, -50%);
-}
-
-.cx40-ridge:nth-child(3) {
-  width: 126px;
-  height: 126px;
-  transform: translate(-50%, -50%);
-}
-
-.cx40-ridge:nth-child(4) {
-  width: 104px;
-  height: 104px;
-  transform: translate(-50%, -50%);
-}
-
-.cx40-ridge:nth-child(5) {
-  width: 82px;
-  height: 82px;
-  transform: translate(-50%, -50%);
+  background: repeating-radial-gradient(
+    circle,
+    #181818,
+    #181818 10px,
+    #080808 12px,
+    #080808 15px
+  );
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 .cx40-stick-area {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 60px;
-  height: 60px;
-  transform: translate(-50%, -50%);
+  width: 70px;
+  height: 70px;
+  position: relative;
   z-index: 10;
   cursor: grab;
-  transition: transform 0.08s ease-out;
+  transition: transform 0.05s linear;
 }
 
 .cx40-stick-area.grabbing {
@@ -482,12 +489,14 @@ button:hover:not(:disabled) {
 }
 
 .cx40-stick-hex {
-  width: 100%;
-  height: 100%;
-  clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
-  background: linear-gradient(160deg, #4a4a4a 0%, #353535 40%, #2a2a2a 100%);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
-  position: relative;
+  width: 70px;
+  height: 70px;
+  background: #2a2a2a;
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  box-shadow:
+    inset 0 5px 10px rgba(255, 255, 255, 0.1),
+    inset 0 -5px 10px rgba(0, 0, 0, 0.5);
+  position: absolute;
 }
 
 .cx40-stick-hex::after {
@@ -495,72 +504,31 @@ button:hover:not(:disabled) {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 10px;
-  height: 10px;
+  width: 35px;
+  height: 35px;
   transform: translate(-50%, -50%);
+  background: #222;
+  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  box-shadow: inset 0 2px 5px rgba(255, 255, 255, 0.05);
+}
+
+.cx40-stick-shaft {
+  position: absolute;
+  width: 53px;
+  height: 53px;
+  background: #1a1a1a;
   border-radius: 50%;
-  background: radial-gradient(circle, #333, #222);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.cx40-stick-border {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);
-  background: transparent;
-  box-shadow: inset 0 2px 3px rgba(255, 255, 255, 0.08), inset 0 -2px 3px rgba(0, 0, 0, 0.3);
-  pointer-events: none;
-}
-
-.cx40-fire-housing {
-  position: absolute;
-  top: 30px;
-  left: 26px;
-  width: 64px;
-  height: 58px;
-  z-index: 12;
-  background: #2e2e2e;
-  border-radius: 30px 14px 14px 30px;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
-}
-
-.cx40-fire-btn {
-  position: absolute;
-  top: 50%;
-  left: 6px;
-  transform: translateY(-50%);
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  border: 1px solid #7a1410;
-  background: radial-gradient(circle at 38% 35%, #d44030, #b82418 50%, #8e1a10);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4),
-    inset 0 3px 4px rgba(255, 160, 140, 0.25), inset 0 -2px 4px rgba(0, 0, 0, 0.25);
-  transition: all 0.06s;
-  padding: 0;
-}
-
-.cx40-fire-btn:hover {
-  background: radial-gradient(circle at 38% 35%, #e55040, #c83020 50%, #a02218);
-}
-
-.cx40-fire-btn:active,
-.cx40-fire-btn.active {
-  background: radial-gradient(circle at 38% 35%, #a82018, #8e1510 50%, #701210);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), inset 0 3px 5px rgba(0, 0, 0, 0.35);
-  transform: translateY(calc(-50% + 1px));
+  top: 9px;
+  left: 9px;
+  z-index: -1;
 }
 
 .cx40-glow {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 222px;
-  height: 222px;
+  width: 176px;
+  height: 176px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
   pointer-events: none;
@@ -570,19 +538,19 @@ button:hover:not(:disabled) {
 }
 
 .cx40-glow.up {
-  background: linear-gradient(to bottom, rgba(212, 132, 26, 0.12) 0%, transparent 45%);
+  background: linear-gradient(to bottom, rgba(255, 123, 0, 0.2) 0%, transparent 46%);
 }
 
 .cx40-glow.down {
-  background: linear-gradient(to top, rgba(212, 132, 26, 0.12) 0%, transparent 45%);
+  background: linear-gradient(to top, rgba(255, 123, 0, 0.2) 0%, transparent 46%);
 }
 
 .cx40-glow.left {
-  background: linear-gradient(to right, rgba(212, 132, 26, 0.12) 0%, transparent 45%);
+  background: linear-gradient(to right, rgba(255, 123, 0, 0.2) 0%, transparent 46%);
 }
 
 .cx40-glow.right {
-  background: linear-gradient(to left, rgba(212, 132, 26, 0.12) 0%, transparent 45%);
+  background: linear-gradient(to left, rgba(255, 123, 0, 0.2) 0%, transparent 46%);
 }
 
 .cx40-glow.active {
@@ -906,8 +874,8 @@ canvas.crtEnabled {
     align-self: stretch;
   }
   .cx40 {
-    width: min(340px, calc(100vw - 64px));
-    height: min(340px, calc(100vw - 64px));
+    width: min(352px, calc(100vw - 64px));
+    height: min(352px, calc(100vw - 64px));
   }
   .joystickPanelInner {
     overflow-x: auto;

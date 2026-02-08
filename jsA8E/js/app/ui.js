@@ -521,11 +521,11 @@
         dx = (dx / distance) * JOYSTICK_MAX_DEFLECT;
         dy = (dy / distance) * JOYSTICK_MAX_DEFLECT;
       }
-      joystickStick.style.transform = "translate(calc(-50% + " + dx + "px), calc(-50% + " + dy + "px))";
+      joystickStick.style.transform = "translate(" + dx + "px, " + dy + "px)";
     }
 
     function resetJoystickStick() {
-      if (joystickStick) joystickStick.style.transform = "translate(-50%, -50%)";
+      if (joystickStick) joystickStick.style.transform = "";
       setJoystickDirection(false, false, false, false);
     }
 
