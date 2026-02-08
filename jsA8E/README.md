@@ -14,7 +14,8 @@ Because most browsers block `fetch()` from `file://` URLs, run it via a local st
 ## Input
 
 - Joystick 1: Arrow keys
-- Triggers: Left Alt = TRIG0, Ctrl = TRIG1, Right Alt = TRIG2, Meta = TRIG3
+- Triggers: Left Alt = TRIG0, Right Alt = TRIG2, Meta = TRIG3
+- Keyboard modifiers: Ctrl, Shift
 
 ## ROMs
 

@@ -188,6 +188,11 @@
       ctrl: false,
       shift: false,
     };
+    var physicalModifierKeys = {
+      ctrl: new Set(),
+      shift: new Set(),
+    };
+    var emulatedShiftDown = false;
     var pressedVirtualKeysByPointer = new Map();
     var joystickState = {
       up: false,
@@ -311,33 +316,103 @@
       });
     }
 
+    function isModifierActive(modifier) {
+      var heldPhysical = physicalModifierKeys[modifier] && physicalModifierKeys[modifier].size > 0;
+      return !!virtualModifiers[modifier] || heldPhysical;
+    }
+
+    function refreshModifierButtons(modifier) {
+      setModifierButtons(modifier, isModifierActive(modifier));
+    }
+
+    function modifierForPhysicalEvent(e) {
+      var key = (e && e.key) || "";
+      var code = (e && e.code) || "";
+      if (key === "Shift" || code === "ShiftLeft" || code === "ShiftRight") return "shift";
+      if (key === "Control" || code === "ControlLeft" || code === "ControlRight") return "ctrl";
+      return null;
+    }
+
+    function physicalModifierToken(e) {
+      if (e && e.code) return e.code;
+      var key = (e && e.key) || "Modifier";
+      var location = e && typeof e.location === "number" ? e.location : 0;
+      return key + ":" + location;
+    }
+
+    function trackPhysicalModifier(e, isDown) {
+      var modifier = modifierForPhysicalEvent(e);
+      if (!modifier) return;
+      var keySet = physicalModifierKeys[modifier];
+      var token = physicalModifierToken(e);
+      if (isDown) keySet.add(token);
+      else keySet.delete(token);
+      refreshModifierButtons(modifier);
+      if (modifier === "shift") syncShiftStateToEmulator();
+    }
+
+    function clearPhysicalModifiers() {
+      var hadShift = physicalModifierKeys.shift.size > 0;
+      var hadCtrl = physicalModifierKeys.ctrl.size > 0;
+      physicalModifierKeys.shift.clear();
+      physicalModifierKeys.ctrl.clear();
+      if (hadShift) refreshModifierButtons("shift");
+      if (hadCtrl) refreshModifierButtons("ctrl");
+      if (hadShift) syncShiftStateToEmulator();
+    }
+
+    function normalizePhysicalKeyEvent(e, isDown) {
+      trackPhysicalModifier(e, isDown);
+      if (modifierForPhysicalEvent(e) === "shift") return null;
+      return {
+        key: e.key,
+        code: e.code || "",
+        ctrlKey: !!e.ctrlKey || isModifierActive("ctrl"),
+        shiftKey: !!e.shiftKey || isModifierActive("shift"),
+      };
+    }
+
+    function shouldTrackGlobalModifierEvent() {
+      var active = document.activeElement;
+      if (active === canvas) return true;
+      if (atariKeyboard && active && atariKeyboard.contains(active)) return true;
+      return false;
+    }
+
     function setCtrlModifier(active) {
       var next = !!active;
       if (virtualModifiers.ctrl === next) return;
       virtualModifiers.ctrl = next;
-      setModifierButtons("ctrl", next);
+      refreshModifierButtons("ctrl");
     }
 
     function makeVirtualKeyEvent(key, code, shiftOverride, sdlSym) {
       var ev = {
         key: key,
         code: code || "",
-        ctrlKey: virtualModifiers.ctrl,
-        shiftKey: shiftOverride !== undefined ? !!shiftOverride : virtualModifiers.shift,
+        ctrlKey: isModifierActive("ctrl"),
+        shiftKey: shiftOverride !== undefined ? !!shiftOverride : isModifierActive("shift"),
       };
       if (typeof sdlSym === "number" && isFinite(sdlSym)) ev.sdlSym = sdlSym | 0;
       return ev;
+    }
+
+    function syncShiftStateToEmulator() {
+      if (!app || !app.onKeyDown || !app.onKeyUp) return;
+      var next = isModifierActive("shift");
+      if (next === emulatedShiftDown) return;
+      emulatedShiftDown = next;
+      var ev = makeVirtualKeyEvent("Shift", "ShiftLeft", next);
+      if (next) app.onKeyDown(ev);
+      else app.onKeyUp(ev);
     }
 
     function setShiftModifier(active) {
       var next = !!active;
       if (virtualModifiers.shift === next) return;
       virtualModifiers.shift = next;
-      setModifierButtons("shift", next);
-      if (!app || !app.onKeyDown || !app.onKeyUp) return;
-      var ev = makeVirtualKeyEvent("Shift", "ShiftLeft", next);
-      if (next) app.onKeyDown(ev);
-      else app.onKeyUp(ev);
+      refreshModifierButtons("shift");
+      syncShiftStateToEmulator();
     }
 
     function clearVirtualModifiers() {
@@ -807,10 +882,36 @@
 
     // Keyboard input forwarded to emulator.
     canvas.addEventListener("keydown", function (e) {
-      if (app.onKeyDown(e)) e.preventDefault();
+      var ev = normalizePhysicalKeyEvent(e, true);
+      if (!ev) {
+        e.preventDefault();
+        return;
+      }
+      if (app.onKeyDown(ev)) e.preventDefault();
     });
     canvas.addEventListener("keyup", function (e) {
-      if (app.onKeyUp(e)) e.preventDefault();
+      var ev = normalizePhysicalKeyEvent(e, false);
+      if (!ev) {
+        e.preventDefault();
+        return;
+      }
+      if (app.onKeyUp(ev)) e.preventDefault();
+    });
+    window.addEventListener("keydown", function (e) {
+      if (!shouldTrackGlobalModifierEvent()) return;
+      trackPhysicalModifier(e, true);
+    });
+    window.addEventListener("keyup", function (e) {
+      if (!shouldTrackGlobalModifierEvent()) return;
+      trackPhysicalModifier(e, false);
+    });
+    canvas.addEventListener("blur", function () {
+      clearPhysicalModifiers();
+      if (app && app.releaseAllKeys) app.releaseAllKeys();
+    });
+    window.addEventListener("blur", function () {
+      clearPhysicalModifiers();
+      if (app && app.releaseAllKeys) app.releaseAllKeys();
     });
 
     // Attempt auto-load from repo root (works when serving repo root).

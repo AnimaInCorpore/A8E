@@ -748,6 +748,7 @@
     });
     var onKeyDown = inputRuntime.onKeyDown;
     var onKeyUp = inputRuntime.onKeyUp;
+    var releaseAllKeys = inputRuntime.releaseAll;
 
     // Initial paint (black).
     paint();
@@ -774,6 +775,7 @@
       dispose: dispose,
       onKeyDown: onKeyDown,
       onKeyUp: onKeyUp,
+      releaseAllKeys: releaseAllKeys,
     };
   }
 

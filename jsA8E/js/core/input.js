@@ -20,11 +20,14 @@
     function createRuntime(opts) {
       var machine = opts.machine;
       var isReady = opts.isReady;
+      var pressedKeys = {};
 
       function onKeyDown(e) {
         if (!isReady()) return false;
         var sym = browserKeyToSdlSym(e);
         if (sym === null) return false;
+        if (pressedKeys[sym]) return true;
+        pressedKeys[sym] = true;
 
         // Joystick / console / reset/break follow C behavior.
         if (sym === 273) {
@@ -49,7 +52,7 @@
           return true;
         }
         if (sym === 306) {
-          machine.ctx.ram[IO_GRAFM_TRIG1] = 0;
+          // C/SDL parity: Ctrl is a keyboard modifier, not a joystick trigger.
           return true;
         }
         if (sym === 307) {
@@ -108,6 +111,8 @@
         if (!isReady()) return false;
         var sym = browserKeyToSdlSym(e);
         if (sym === null) return false;
+        if (!pressedKeys[sym]) return false;
+        delete pressedKeys[sym];
 
         if (sym === 273) {
           machine.ctx.ram[IO_PORTA] |= 0x01;
@@ -130,7 +135,7 @@
           return true;
         }
         if (sym === 306) {
-          machine.ctx.ram[IO_GRAFM_TRIG1] = 1;
+          // C/SDL parity: Ctrl is a keyboard modifier, not a joystick trigger.
           return true;
         }
         if (sym === 307) {
@@ -166,9 +171,21 @@
         return true;
       }
 
+      function releaseAll() {
+        pressedKeys = {};
+        machine.ctx.ioData.keyPressCounter = 0;
+        machine.ctx.ram[IO_PORTA] |= 0x0F;
+        machine.ctx.ram[IO_GRAFP3_TRIG0] = 1;
+        machine.ctx.ram[IO_COLPM0_TRIG2] = 1;
+        machine.ctx.ram[IO_COLPM1_TRIG3] = 1;
+        machine.ctx.ram[IO_CONSOL] |= 0x07;
+        machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x0C;
+      }
+
       return {
         onKeyDown: onKeyDown,
         onKeyUp: onKeyUp,
+        releaseAll: releaseAll,
       };
     }
 
