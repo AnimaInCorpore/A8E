@@ -12,6 +12,16 @@ if(POLICY CMP0074)
 endif()
 
 # --- Dependencies ---
+# Add common Homebrew prefixes before dependency discovery.
+if(APPLE)
+  if(EXISTS "/opt/homebrew")
+    list(PREPEND CMAKE_PREFIX_PATH "/opt/homebrew")
+  endif()
+  if(EXISTS "/usr/local")
+    list(PREPEND CMAKE_PREFIX_PATH "/usr/local")
+  endif()
+endif()
+
 # 1. SDL (Legacy 1.x)
 # Note: If you port the C code to SDL2, change this to find_package(SDL2 REQUIRED)
 # and update the target_link_libraries below.
@@ -53,15 +63,15 @@ if(MINGW)
 endif()
 
 if(APPLE)
-  # macOS needs Cocoa and SDLmain for legacy SDL 1.x
-  find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
-  
-  # Append Homebrew paths if on Apple Silicon
-  if(EXISTS "/opt/homebrew")
-    list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew")
+  # Avoid duplicate link items when FindSDL already returns SDLmain/Cocoa.
+  if(SDLMAIN_LIBRARY AND NOT SDL_LIBRARY MATCHES "SDLmain")
+    target_link_libraries(A8E PRIVATE "${SDLMAIN_LIBRARY}")
   endif()
 
-  target_link_libraries(A8E PRIVATE "${COCOA_FRAMEWORK}" ${SDLMAIN_LIBRARY})
+  if(NOT SDL_LIBRARY MATCHES "Cocoa")
+    find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
+    target_link_libraries(A8E PRIVATE "${COCOA_FRAMEWORK}")
+  endif()
 endif()
 
 if(UNIX AND NOT APPLE)
