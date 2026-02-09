@@ -31,7 +31,7 @@
 var POKEY_FP_ONE = 4294967296; // 1<<32 as an exact integer.
 
 function pokeyAudioCreateState(sampleRate) {
-  var ringSize = 16384; // power-of-two
+  var ringSize = 8192; // power-of-two
   var st = {
     sampleRate: sampleRate || 48000,
     cpuHzBase: ATARI_CPU_HZ_PAL,
@@ -528,7 +528,7 @@ function pokeyAudioSync(ctx, st, cycleCounter) {
   var fillDelta = fillLevel - targetFill;
   if (fillDelta > targetFill) fillDelta = targetFill;
   else if (fillDelta < -targetFill) fillDelta = -targetFill;
-  var maxAdjust = Math.floor(cpsBase / 50); // +/-2%
+  var maxAdjust = Math.floor(cpsBase / 25); // +/-4%
   if (maxAdjust < 1) maxAdjust = 1;
   var adjust = Math.trunc((fillDelta * maxAdjust) / targetFill);
   cps = cpsBase + adjust;

@@ -22,8 +22,8 @@
     var SERIAL_INPUT_FIRST_DATA_READY_CYCLES = 3000;
     var SERIAL_INPUT_DATA_READY_CYCLES = 900;
     var SIO_TURBO_EMU_MULTIPLIER = 4.0;
-    // Keep enough history to survive slow frames without dropping audible state.
-    var POKEY_AUDIO_MAX_CATCHUP_CYCLES = 200000;
+    // Keep enough history to survive moderate frame delays without excessive latency.
+    var POKEY_AUDIO_MAX_CATCHUP_CYCLES = 100000;
 
     var NMI_DLI = 0x80;
     var NMI_VBI = 0x40;

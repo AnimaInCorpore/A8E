@@ -89,7 +89,7 @@
                 outputChannelCount: [1],
               });
               if (machine.audioState)
-                pokeyAudioSetTargetBufferSamples(machine.audioState, ((machine.audioCtx.sampleRate / 20) | 0) || 2048);
+                pokeyAudioSetTargetBufferSamples(machine.audioState, ((machine.audioCtx.sampleRate / 40) | 0) || 1024);
               node.connect(machine.audioCtx.destination);
               machine.audioNode = node;
               machine.audioMode = "worklet";
