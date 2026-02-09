@@ -35,7 +35,7 @@
 
 // --- POKEY audio (ported from Pokey.c; still simplified, but cycle-based) ---
 var POKEY_FP_ONE = 4294967296; // 1<<32 as an exact integer.
-var POKEY_MIX_GAIN = 0.5;
+var POKEY_MIX_GAIN = 0.35;
 var POKEY_DC_BLOCK_HZ = 20.0;
 
 function pokeyAudioCreateState(sampleRate) {
@@ -491,12 +491,41 @@ function pokeyAudioCounterDecrementNoPulse(counter, ticks) {
   return next | 0;
 }
 
+function pokeyAudioPolyAdvance(st, n) {
+  // Advance each LFSR by n steps using modular reduction by its period.
+  // Periods: lfsr4=15, lfsr5=31, lfsr9=511, lfsr17=131071.
+  var n4 = n % 15;
+  for (var i4 = 0; i4 < n4; i4++) {
+    var l4 = st.lfsr4 & 0x0f;
+    st.lfsr4 = ((l4 << 1) | ((~(((l4 >>> 2) ^ (l4 >>> 3)) & 1)) & 1)) & 0x0f;
+  }
+  var n5 = n % 31;
+  for (var i5 = 0; i5 < n5; i5++) {
+    var l5 = st.lfsr5 & 0x1f;
+    st.lfsr5 = ((l5 << 1) | ((~(((l5 >>> 2) ^ (l5 >>> 4)) & 1)) & 1)) & 0x1f;
+  }
+  var n9 = n % 511;
+  for (var i9 = 0; i9 < n9; i9++) {
+    var l9 = st.lfsr9 & 0x1ff;
+    st.lfsr9 = ((l9 >>> 1) | ((((l9 >>> 0) ^ (l9 >>> 5)) & 1) << 8)) & 0x1ff;
+  }
+  var n17 = n % 131071;
+  for (var i17 = 0; i17 < n17; i17++) {
+    var l17 = st.lfsr17 & 0x1ffff;
+    var in8 = ((l17 >>> 8) ^ (l17 >>> 13)) & 1;
+    var in0 = l17 & 1;
+    l17 = l17 >>> 1;
+    l17 = (l17 & 0xff7f) | (in8 << 7);
+    st.lfsr17 = ((l17 & 0xffff) | (in0 << 16)) & 0x1ffff;
+  }
+}
+
 function pokeyAudioFastForwardNoPulse(st, cycles) {
   if (!cycles) return;
   var n = cycles;
   if (n < 1) return;
 
-  for (var i = 0; i < n; i++) pokeyAudioPolyStep(st);
+  pokeyAudioPolyAdvance(st, n);
 
   var audctl = st.audctl & 0xff;
   var pair12 = (audctl & 0x10) !== 0;
@@ -666,7 +695,7 @@ function pokeyAudioSync(ctx, st, cycleCounter) {
   var fillDelta = fillLevel - targetFill;
   if (fillDelta > targetFill) fillDelta = targetFill;
   else if (fillDelta < -targetFill) fillDelta = -targetFill;
-  var maxAdjust = Math.floor(cpsBase / 500); // +/- 0.2%
+  var maxAdjust = Math.floor(cpsBase / 100); // +/- 1%
   if (maxAdjust < 1) maxAdjust = 1;
   var adjust = Math.trunc((fillDelta * maxAdjust) / targetFill);
   cps = cpsBase + adjust;
