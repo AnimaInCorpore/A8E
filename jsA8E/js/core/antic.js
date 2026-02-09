@@ -18,7 +18,8 @@
     var IRQ_TIMER_1 = cfg.IRQ_TIMER_1;
     var IRQ_TIMER_2 = cfg.IRQ_TIMER_2;
     var IRQ_TIMER_4 = cfg.IRQ_TIMER_4;
-    var IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE = cfg.IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
+    var IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE =
+      cfg.IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
     var IRQ_SERIAL_OUTPUT_DATA_NEEDED = cfg.IRQ_SERIAL_OUTPUT_DATA_NEEDED;
     var IRQ_SERIAL_INPUT_DATA_READY = cfg.IRQ_SERIAL_INPUT_DATA_READY;
 
@@ -105,7 +106,8 @@
 
       CPU.stall(ctx, 9);
 
-      if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 1) io.nextDisplayListLine = 8;
+      if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 1)
+        io.nextDisplayListLine = 8;
 
       // VBI around scanline 248 (VCOUNT=124)
       if (io.video.currentDisplayLine === 248) {
@@ -118,8 +120,13 @@
       if (sram[IO_DMACTL] & 0x20) {
         if (io.video.currentDisplayLine === io.nextDisplayListLine) {
           var oldCmd = io.currentDisplayListCommand & 0xff;
-          io.currentDisplayListCommand = ram[io.displayListAddress & 0xffff] & 0xff;
-          io.displayListAddress = Util.fixedAdd(io.displayListAddress, 0x03ff, 1);
+          io.currentDisplayListCommand =
+            ram[io.displayListAddress & 0xffff] & 0xff;
+          io.displayListAddress = Util.fixedAdd(
+            io.displayListAddress,
+            0x03ff,
+            1,
+          );
           CPU.stall(ctx, 1);
 
           var cmd = io.currentDisplayListCommand;
@@ -134,14 +141,14 @@
           if ((oldCmd & 0x2f) < 0x22 && (cmd & 0x2f) >= 0x22) {
             io.nextDisplayListLine = Math.max(
               io.video.currentDisplayLine + 1,
-              io.nextDisplayListLine - (sram[IO_VSCROL] & 0xff)
+              io.nextDisplayListLine - (sram[IO_VSCROL] & 0xff),
             );
             io.video.verticalScrollOffset = 0;
           } else if ((oldCmd & 0x2f) >= 0x22 && (cmd & 0x2f) < 0x22) {
             var temp = io.nextDisplayListLine;
             io.nextDisplayListLine = Math.min(
               io.nextDisplayListLine,
-              io.video.currentDisplayLine + (sram[IO_VSCROL] & 0xff) + 1
+              io.video.currentDisplayLine + (sram[IO_VSCROL] & 0xff) + 1,
             );
             io.video.verticalScrollOffset = temp - io.nextDisplayListLine;
           } else {
@@ -150,14 +157,18 @@
 
           // DLI scheduling
           if (cmd & 0x80) {
-            io.dliCycle = ctx.cycleCounter + (io.nextDisplayListLine - io.video.currentDisplayLine - 1) * CYCLES_PER_LINE;
+            io.dliCycle =
+              ctx.cycleCounter +
+              (io.nextDisplayListLine - io.video.currentDisplayLine - 1) *
+                CYCLES_PER_LINE;
             cycleTimedEventUpdate(ctx);
           }
 
           // JMP
           if ((cmd & 0x0f) === 0x01) {
             io.displayListAddress =
-              ram[io.displayListAddress & 0xffff] | (ram[(io.displayListAddress + 1) & 0xffff] << 8);
+              ram[io.displayListAddress & 0xffff] |
+              (ram[(io.displayListAddress + 1) & 0xffff] << 8);
           }
 
           // Wait for VBL (JVB)
@@ -165,10 +176,20 @@
 
           // Load memory scan (LMS)
           if ((cmd & 0x4f) >= 0x42) {
-            io.displayMemoryAddress = ram[io.displayListAddress & 0xffff] & 0xff;
-            io.displayListAddress = Util.fixedAdd(io.displayListAddress, 0x03ff, 1);
-            io.displayMemoryAddress |= (ram[io.displayListAddress & 0xffff] & 0xff) << 8;
-            io.displayListAddress = Util.fixedAdd(io.displayListAddress, 0x03ff, 1);
+            io.displayMemoryAddress =
+              ram[io.displayListAddress & 0xffff] & 0xff;
+            io.displayListAddress = Util.fixedAdd(
+              io.displayListAddress,
+              0x03ff,
+              1,
+            );
+            io.displayMemoryAddress |=
+              (ram[io.displayListAddress & 0xffff] & 0xff) << 8;
+            io.displayListAddress = Util.fixedAdd(
+              io.displayListAddress,
+              0x03ff,
+              1,
+            );
           }
         }
       }
@@ -206,7 +227,8 @@
 
       if (ctx.cycleCounter >= io.serialOutputTransmissionDoneCycle) {
         ram[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
-        if (sram[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE) CPU.irq(ctx);
+        if (sram[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE)
+          CPU.irq(ctx);
         io.serialOutputTransmissionDoneCycle = CYCLE_NEVER;
       }
 

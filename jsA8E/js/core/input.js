@@ -23,7 +23,8 @@
       var pressedKeys = {};
 
       function normalizeSourceToken(e) {
-        if (!e || e.sourceToken === undefined || e.sourceToken === null) return null;
+        if (!e || e.sourceToken === undefined || e.sourceToken === null)
+          return null;
         return String(e.sourceToken);
       }
 
@@ -48,7 +49,8 @@
         var wasDown = isSymDown(st);
         var source = normalizeSourceToken(e);
         if (source !== null) {
-          if (st.sources.has(source)) return { handled: true, newlyPressed: false };
+          if (st.sources.has(source))
+            return { handled: true, newlyPressed: false };
           st.sources.add(source);
           return { handled: true, newlyPressed: !wasDown };
         }
@@ -63,10 +65,12 @@
         if (!st) return { handled: false, newlyReleased: false };
         var source = normalizeSourceToken(e);
         if (source !== null) {
-          if (!st.sources.has(source)) return { handled: false, newlyReleased: false };
+          if (!st.sources.has(source))
+            return { handled: false, newlyReleased: false };
           st.sources.delete(source);
         } else {
-          if (st.anonymousCount <= 0) return { handled: false, newlyReleased: false };
+          if (st.anonymousCount <= 0)
+            return { handled: false, newlyReleased: false };
           st.anonymousCount--;
         }
         var stillDown = isSymDown(st);
@@ -135,7 +139,8 @@
         }
         if (sym === 289) {
           machine.ctx.ram[IO_IRQEN_IRQST] &= ~IRQ_BREAK_KEY_PRESSED;
-          if (machine.ctx.sram[IO_IRQEN_IRQST] & IRQ_BREAK_KEY_PRESSED) CPU.irq(machine.ctx);
+          if (machine.ctx.sram[IO_IRQEN_IRQST] & IRQ_BREAK_KEY_PRESSED)
+            CPU.irq(machine.ctx);
           return true;
         }
 
@@ -156,7 +161,8 @@
         machine.ctx.ram[IO_STIMER_KBCODE] = kc & 0xff;
 
         machine.ctx.ram[IO_IRQEN_IRQST] &= ~IRQ_OTHER_KEY_PRESSED;
-        if (machine.ctx.sram[IO_IRQEN_IRQST] & IRQ_OTHER_KEY_PRESSED) CPU.irq(machine.ctx);
+        if (machine.ctx.sram[IO_IRQEN_IRQST] & IRQ_OTHER_KEY_PRESSED)
+          CPU.irq(machine.ctx);
 
         machine.ctx.ioData.keyPressCounter++;
         machine.ctx.ram[IO_SKCTL_SKSTAT] &= ~0x04;
@@ -223,20 +229,22 @@
         var kc = KEY_CODE_TABLE[sym] !== undefined ? KEY_CODE_TABLE[sym] : 255;
         if (kc === 255) return false;
 
-        if (machine.ctx.ioData.keyPressCounter > 0) machine.ctx.ioData.keyPressCounter--;
-        if (machine.ctx.ioData.keyPressCounter === 0) machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x04;
+        if (machine.ctx.ioData.keyPressCounter > 0)
+          machine.ctx.ioData.keyPressCounter--;
+        if (machine.ctx.ioData.keyPressCounter === 0)
+          machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x04;
         return true;
       }
 
       function releaseAll() {
         pressedKeys = {};
         machine.ctx.ioData.keyPressCounter = 0;
-        machine.ctx.ram[IO_PORTA] |= 0x0F;
+        machine.ctx.ram[IO_PORTA] |= 0x0f;
         machine.ctx.ram[IO_GRAFP3_TRIG0] = 1;
         machine.ctx.ram[IO_COLPM0_TRIG2] = 1;
         machine.ctx.ram[IO_COLPM1_TRIG3] = 1;
         machine.ctx.ram[IO_CONSOL] |= 0x07;
-        machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x0C;
+        machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x0c;
       }
 
       return {

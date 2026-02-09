@@ -10,7 +10,10 @@
     var nativeScreenW = canvas.width | 0;
     var nativeScreenH = canvas.height | 0;
     var screenViewport = canvas.parentElement;
-    var layoutRoot = screenViewport && screenViewport.closest ? screenViewport.closest(".layout") : null;
+    var layoutRoot =
+      screenViewport && screenViewport.closest
+        ? screenViewport.closest(".layout")
+        : null;
     var keyboardPanel = document.getElementById("keyboardPanel");
     var joystickPanel = document.getElementById("joystickPanel");
     var app = null;
@@ -70,7 +73,10 @@
     function reservedPanelHeight(el) {
       if (!isPanelVisible(el)) return 0;
       var rect = el.getBoundingClientRect();
-      return Math.max(0, Math.ceil(rect.height + readFlexGapPx(el.parentElement)));
+      return Math.max(
+        0,
+        Math.ceil(rect.height + readFlexGapPx(el.parentElement)),
+      );
     }
 
     function resizeDisplayCanvas() {
@@ -89,7 +95,10 @@
         var vv = window.visualViewport;
         var visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
         var availableH = Math.floor(visibleBottom - rect.top - 8);
-        var maxH = Math.max(1, availableH || Math.floor(rect.height || nativeScreenH));
+        var maxH = Math.max(
+          1,
+          availableH || Math.floor(rect.height || nativeScreenH),
+        );
         if (cssH > maxH) {
           cssH = maxH;
           cssW = Math.round(cssH * aspect);
@@ -99,14 +108,21 @@
         if (layoutRoot) {
           var layoutRect = layoutRoot.getBoundingClientRect();
           var topOffset = Math.max(0, rect.top - layoutRect.top);
-          availableNormalH = Math.floor(layoutRoot.clientHeight - topOffset - 8);
+          availableNormalH = Math.floor(
+            layoutRoot.clientHeight - topOffset - 8,
+          );
         } else {
           var vvNormal = window.visualViewport;
-          var visibleBottomNormal = vvNormal ? vvNormal.offsetTop + vvNormal.height : window.innerHeight;
+          var visibleBottomNormal = vvNormal
+            ? vvNormal.offsetTop + vvNormal.height
+            : window.innerHeight;
           availableNormalH = Math.floor(visibleBottomNormal - rect.top - 8);
         }
         availableNormalH -= reservedPanelHeight(joystickPanel);
-        var normalMaxH = Math.max(1, availableNormalH || Math.floor(rect.height || nativeScreenH));
+        var normalMaxH = Math.max(
+          1,
+          availableNormalH || Math.floor(rect.height || nativeScreenH),
+        );
         if (cssH > normalMaxH) {
           cssH = normalMaxH;
           cssW = Math.round(cssH * aspect);
@@ -137,21 +153,35 @@
     function detachLayoutHooks() {
       if (!onLayoutResize) return;
       window.removeEventListener("resize", onLayoutResize);
-      if (window.visualViewport) window.visualViewport.removeEventListener("resize", onLayoutResize);
+      if (window.visualViewport)
+        window.visualViewport.removeEventListener("resize", onLayoutResize);
       onLayoutResize = null;
     }
 
     function detachCrtHooks() {
       if (!crtCanvas) return;
-      if (onCrtContextLost) crtCanvas.removeEventListener("webglcontextlost", onCrtContextLost, false);
-      if (onCrtContextRestored) crtCanvas.removeEventListener("webglcontextrestored", onCrtContextRestored, false);
+      if (onCrtContextLost)
+        crtCanvas.removeEventListener(
+          "webglcontextlost",
+          onCrtContextLost,
+          false,
+        );
+      if (onCrtContextRestored)
+        crtCanvas.removeEventListener(
+          "webglcontextrestored",
+          onCrtContextRestored,
+          false,
+        );
       crtCanvas = null;
       onCrtContextLost = null;
       onCrtContextRestored = null;
     }
 
     function isMobile() {
-      return window.innerWidth <= 980 || (window.matchMedia && window.matchMedia("(max-width: 980px)").matches);
+      return (
+        window.innerWidth <= 980 ||
+        (window.matchMedia && window.matchMedia("(max-width: 980px)").matches)
+      );
     }
 
     function cleanup() {
@@ -161,7 +191,10 @@
       detachCrtHooks();
       if (onFullscreenChange) {
         document.removeEventListener("fullscreenchange", onFullscreenChange);
-        document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
+        document.removeEventListener(
+          "webkitfullscreenchange",
+          onFullscreenChange,
+        );
       }
       if (app && app.dispose) app.dispose();
     }
@@ -186,7 +219,11 @@
       };
 
       crtCanvas.addEventListener("webglcontextlost", onCrtContextLost, false);
-      crtCanvas.addEventListener("webglcontextrestored", onCrtContextRestored, false);
+      crtCanvas.addEventListener(
+        "webglcontextrestored",
+        onCrtContextRestored,
+        false,
+      );
     } else {
       canvas.classList.remove("crtEnabled");
       ctx2d = canvas.getContext("2d", { alpha: false });
@@ -194,7 +231,8 @@
 
     onLayoutResize = resizeCrtCanvas;
     window.addEventListener("resize", onLayoutResize);
-    if (window.visualViewport) window.visualViewport.addEventListener("resize", onLayoutResize);
+    if (window.visualViewport)
+      window.visualViewport.addEventListener("resize", onLayoutResize);
     requestAnimationFrame(onLayoutResize);
 
     var btnStart = document.getElementById("btnStart");
@@ -285,7 +323,10 @@
           parent.replaceChild(nextCanvas, canvas);
           canvas = nextCanvas;
           screenViewport = canvas.parentElement;
-          layoutRoot = screenViewport && screenViewport.closest ? screenViewport.closest(".layout") : null;
+          layoutRoot =
+            screenViewport && screenViewport.closest
+              ? screenViewport.closest(".layout")
+              : null;
           canvas.tabIndex = 0;
           gl = null;
           ctx2d = canvas.getContext("2d", { alpha: false });
@@ -321,7 +362,7 @@
         "aria-label",
         running
           ? "Pause emulation. Use this button again to continue from the current state."
-          : "Start emulation and run the loaded Atari system."
+          : "Start emulation and run the loaded Atari system.",
       );
     }
 
@@ -344,7 +385,9 @@
     }
 
     function getFullscreenElement() {
-      return document.fullscreenElement || document.webkitFullscreenElement || null;
+      return (
+        document.fullscreenElement || document.webkitFullscreenElement || null
+      );
     }
 
     function isViewportFullscreen() {
@@ -364,7 +407,7 @@
         "aria-label",
         active
           ? "Exit fullscreen mode and return to the normal emulator layout."
-          : "Enter fullscreen mode for the emulator display area."
+          : "Enter fullscreen mode for the emulator display area.",
       );
     }
 
@@ -392,11 +435,15 @@
       if (!atariKeyboard) return;
       var buttons = atariKeyboard.querySelectorAll("button.kbKey");
       buttons.forEach(function (button) {
-        addButtonLookupEntry(keyboardButtonsByCode, button.getAttribute("data-code") || "", button);
+        addButtonLookupEntry(
+          keyboardButtonsByCode,
+          button.getAttribute("data-code") || "",
+          button,
+        );
         addButtonLookupEntry(
           keyboardButtonsByKey,
           normalizeKeyboardDataKey(button.getAttribute("data-key")),
-          button
+          button,
         );
       });
     }
@@ -461,9 +508,11 @@
       var modifier = modifierForPhysicalEvent(e);
       if (modifier === "shift" || modifier === "ctrl") return [];
       var code = (e && e.code) || "";
-      if (code && keyboardButtonsByCode.has(code)) return keyboardButtonsByCode.get(code);
+      if (code && keyboardButtonsByCode.has(code))
+        return keyboardButtonsByCode.get(code);
       var key = normalizeKeyboardDataKey((e && e.key) || "");
-      if (key && keyboardButtonsByKey.has(key)) return keyboardButtonsByKey.get(key);
+      if (key && keyboardButtonsByKey.has(key))
+        return keyboardButtonsByKey.get(key);
       return [];
     }
 
@@ -494,14 +543,18 @@
 
     function setModifierButtons(modifier, active) {
       if (!atariKeyboard) return;
-      var buttons = atariKeyboard.querySelectorAll('button[data-modifier="' + modifier + '"]');
+      var buttons = atariKeyboard.querySelectorAll(
+        'button[data-modifier="' + modifier + '"]',
+      );
       buttons.forEach(function (button) {
         button.classList.toggle("active", active);
       });
     }
 
     function isModifierActive(modifier) {
-      var heldPhysical = physicalModifierKeys[modifier] && physicalModifierKeys[modifier].size > 0;
+      var heldPhysical =
+        physicalModifierKeys[modifier] &&
+        physicalModifierKeys[modifier].size > 0;
       return !!virtualModifiers[modifier] || heldPhysical;
     }
 
@@ -512,8 +565,14 @@
     function modifierForPhysicalEvent(e) {
       var key = (e && e.key) || "";
       var code = (e && e.code) || "";
-      if (key === "Shift" || code === "ShiftLeft" || code === "ShiftRight") return "shift";
-      if (key === "Control" || code === "ControlLeft" || code === "ControlRight") return "ctrl";
+      if (key === "Shift" || code === "ShiftLeft" || code === "ShiftRight")
+        return "shift";
+      if (
+        key === "Control" ||
+        code === "ControlLeft" ||
+        code === "ControlRight"
+      )
+        return "ctrl";
       return null;
     }
 
@@ -560,7 +619,8 @@
     function shouldTrackGlobalModifierEvent() {
       var active = document.activeElement;
       if (active === canvas) return true;
-      if (atariKeyboard && active && atariKeyboard.contains(active)) return true;
+      if (atariKeyboard && active && atariKeyboard.contains(active))
+        return true;
       return false;
     }
 
@@ -571,15 +631,26 @@
       refreshModifierButtons("ctrl");
     }
 
-    function makeVirtualKeyEvent(key, code, shiftOverride, sdlSym, sourceToken) {
+    function makeVirtualKeyEvent(
+      key,
+      code,
+      shiftOverride,
+      sdlSym,
+      sourceToken,
+    ) {
       var ev = {
         key: key,
         code: code || "",
         ctrlKey: isModifierActive("ctrl"),
-        shiftKey: shiftOverride !== undefined ? !!shiftOverride : isModifierActive("shift"),
+        shiftKey:
+          shiftOverride !== undefined
+            ? !!shiftOverride
+            : isModifierActive("shift"),
       };
-      if (typeof sdlSym === "number" && isFinite(sdlSym)) ev.sdlSym = sdlSym | 0;
-      if (sourceToken !== undefined && sourceToken !== null) ev.sourceToken = String(sourceToken);
+      if (typeof sdlSym === "number" && isFinite(sdlSym))
+        ev.sdlSym = sdlSym | 0;
+      if (sourceToken !== undefined && sourceToken !== null)
+        ev.sourceToken = String(sourceToken);
       return ev;
     }
 
@@ -588,7 +659,13 @@
       var next = isModifierActive("shift");
       if (next === emulatedShiftDown) return;
       emulatedShiftDown = next;
-      var ev = makeVirtualKeyEvent("Shift", "ShiftLeft", next, undefined, "modifier:shift");
+      var ev = makeVirtualKeyEvent(
+        "Shift",
+        "ShiftLeft",
+        next,
+        undefined,
+        "modifier:shift",
+      );
       if (next) app.onKeyDown(ev);
       else app.onKeyUp(ev);
     }
@@ -612,7 +689,13 @@
 
     function pressVirtualKey(key, code, sdlSym) {
       if (!app || !app.onKeyDown || !app.onKeyUp) return;
-      var ev = makeVirtualKeyEvent(key, code, undefined, sdlSym, "vktap:" + ++virtualTapTokenCounter);
+      var ev = makeVirtualKeyEvent(
+        key,
+        code,
+        undefined,
+        sdlSym,
+        "vktap:" + ++virtualTapTokenCounter,
+      );
       app.onKeyDown(ev);
       app.onKeyUp(ev);
       if (virtualModifiers.shift) setShiftModifier(false);
@@ -633,7 +716,15 @@
       pressedVirtualKeysByPointer.delete(pointerId);
       clearButtonPressSource(st.sourceToken);
       if (app && app.onKeyUp) {
-        app.onKeyUp(makeVirtualKeyEvent(st.key, st.code, undefined, st.sdlSym, st.sourceToken));
+        app.onKeyUp(
+          makeVirtualKeyEvent(
+            st.key,
+            st.code,
+            undefined,
+            st.sdlSym,
+            st.sourceToken,
+          ),
+        );
       }
       if (st.consumeShift && virtualModifiers.shift) setShiftModifier(false);
       if (st.consumeCtrl && virtualModifiers.ctrl) setCtrlModifier(false);
@@ -670,7 +761,12 @@
         var glow = joystickGlows[entry.name];
         if (glow) glow.classList.toggle("active", nextPressed);
         if (!app || !app.onKeyDown || !app.onKeyUp) return;
-        var ev = makeJoystickEvent(entry.key, entry.code, entry.sdlSym, "joy:" + entry.name);
+        var ev = makeJoystickEvent(
+          entry.key,
+          entry.code,
+          entry.sdlSym,
+          "joy:" + entry.name,
+        );
         if (nextPressed) app.onKeyDown(ev);
         else app.onKeyUp(ev);
       });
@@ -690,7 +786,9 @@
     function getJoystickStickCenter() {
       if (!joystickArea) return { x: 0, y: 0 };
       var boot = joystickArea.querySelector(".cx40-boot");
-      var rect = boot ? boot.getBoundingClientRect() : joystickArea.getBoundingClientRect();
+      var rect = boot
+        ? boot.getBoundingClientRect()
+        : joystickArea.getBoundingClientRect();
       return {
         x: rect.left + rect.width / 2,
         y: rect.top + rect.height / 2,
@@ -720,7 +818,7 @@
         dy < -JOYSTICK_DEAD_ZONE,
         dy > JOYSTICK_DEAD_ZONE,
         dx < -JOYSTICK_DEAD_ZONE,
-        dx > JOYSTICK_DEAD_ZONE
+        dx > JOYSTICK_DEAD_ZONE,
       );
     }
 
@@ -751,9 +849,11 @@
 
     function resetKeyboardControls() {
       if (pressedVirtualKeysByPointer.size > 0) {
-        Array.from(pressedVirtualKeysByPointer.keys()).forEach(function (pointerId) {
-          releasePointerVirtualKey(pointerId);
-        });
+        Array.from(pressedVirtualKeysByPointer.keys()).forEach(
+          function (pointerId) {
+            releasePointerVirtualKey(pointerId);
+          },
+        );
       }
       if (virtualModifiers.shift) setShiftModifier(false);
       if (virtualModifiers.ctrl) setCtrlModifier(false);
@@ -779,7 +879,9 @@
     function requestFullscreen(el) {
       if (el.requestFullscreen) return el.requestFullscreen();
       if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
-      return Promise.reject(new Error("Fullscreen is not supported in this browser."));
+      return Promise.reject(
+        new Error("Fullscreen is not supported in this browser."),
+      );
     }
 
     function exitFullscreen() {
@@ -838,7 +940,9 @@
 
     if (btnFullscreen) {
       btnFullscreen.addEventListener("click", function () {
-        var op = isViewportFullscreen() ? exitFullscreen() : requestFullscreen(screenViewport);
+        var op = isViewportFullscreen()
+          ? exitFullscreen()
+          : requestFullscreen(screenViewport);
         Promise.resolve(op)
           .then(function () {
             updateFullscreenButton();
@@ -929,7 +1033,9 @@
         var sourceToken = "vkptr:" + e.pointerId;
         setButtonPressed(btn, sourceToken, true);
         if (app && app.onKeyDown) {
-          app.onKeyDown(makeVirtualKeyEvent(key, code, undefined, sdlSym, sourceToken));
+          app.onKeyDown(
+            makeVirtualKeyEvent(key, code, undefined, sdlSym, sourceToken),
+          );
         }
         pressedVirtualKeysByPointer.set(e.pointerId, {
           btn: btn,
@@ -979,7 +1085,11 @@
         }
         var key = btn.getAttribute("data-key");
         if (!key) return;
-        pressVirtualKey(key, btn.getAttribute("data-code") || "", parseSdlSym(btn));
+        pressVirtualKey(
+          key,
+          btn.getAttribute("data-code") || "",
+          parseSdlSym(btn),
+        );
         flashVirtualKey(btn, 80);
         e.preventDefault();
       });
@@ -990,7 +1100,9 @@
         if (joystickPanel && joystickPanel.hidden) return;
 
         var target = e.target;
-        var isFire = target === fireButton || (target.closest && target.closest(".cx40-fire-housing"));
+        var isFire =
+          target === fireButton ||
+          (target.closest && target.closest(".cx40-fire-housing"));
         if (isFire) {
           if (firePointerId !== null) return;
           firePointerId = e.pointerId;
@@ -1041,7 +1153,10 @@
 
       joystickArea.addEventListener("pointerup", handleJoystickPointerEnd);
       joystickArea.addEventListener("pointercancel", handleJoystickPointerEnd);
-      joystickArea.addEventListener("lostpointercapture", handleJoystickPointerEnd);
+      joystickArea.addEventListener(
+        "lostpointercapture",
+        handleJoystickPointerEnd,
+      );
       document.addEventListener("pointerup", handleJoystickPointerEnd);
       document.addEventListener("pointercancel", handleJoystickPointerEnd);
     }

@@ -19,7 +19,8 @@
       var getAudioEnabled = opts.getAudioEnabled;
       var getTurbo = opts.getTurbo;
       var pokeyAudioCreateState = opts.pokeyAudioCreateState;
-      var pokeyAudioSetTargetBufferSamples = opts.pokeyAudioSetTargetBufferSamples;
+      var pokeyAudioSetTargetBufferSamples =
+        opts.pokeyAudioSetTargetBufferSamples;
       var pokeyAudioSetTurbo = opts.pokeyAudioSetTurbo;
       var pokeyAudioResetState = opts.pokeyAudioResetState;
       var pokeyAudioOnRegisterWrite = opts.pokeyAudioOnRegisterWrite;
@@ -39,16 +40,56 @@
         // Initialize audio regs from current POKEY write-shadow.
         {
           var sram = machine.ctx.sram;
-          pokeyAudioOnRegisterWrite(machine.audioState, IO_AUDF1_POT0, sram[IO_AUDF1_POT0] & 0xff);
-          pokeyAudioOnRegisterWrite(machine.audioState, IO_AUDC1_POT1, sram[IO_AUDC1_POT1] & 0xff);
-          pokeyAudioOnRegisterWrite(machine.audioState, IO_AUDF2_POT2, sram[IO_AUDF2_POT2] & 0xff);
-          pokeyAudioOnRegisterWrite(machine.audioState, IO_AUDC2_POT3, sram[IO_AUDC2_POT3] & 0xff);
-          pokeyAudioOnRegisterWrite(machine.audioState, IO_AUDF3_POT4, sram[IO_AUDF3_POT4] & 0xff);
-          pokeyAudioOnRegisterWrite(machine.audioState, IO_AUDC3_POT5, sram[IO_AUDC3_POT5] & 0xff);
-          pokeyAudioOnRegisterWrite(machine.audioState, IO_AUDF4_POT6, sram[IO_AUDF4_POT6] & 0xff);
-          pokeyAudioOnRegisterWrite(machine.audioState, IO_AUDC4_POT7, sram[IO_AUDC4_POT7] & 0xff);
-          pokeyAudioOnRegisterWrite(machine.audioState, IO_SKCTL_SKSTAT, sram[IO_SKCTL_SKSTAT] & 0xff);
-          pokeyAudioOnRegisterWrite(machine.audioState, IO_AUDCTL_ALLPOT, sram[IO_AUDCTL_ALLPOT] & 0xff);
+          pokeyAudioOnRegisterWrite(
+            machine.audioState,
+            IO_AUDF1_POT0,
+            sram[IO_AUDF1_POT0] & 0xff,
+          );
+          pokeyAudioOnRegisterWrite(
+            machine.audioState,
+            IO_AUDC1_POT1,
+            sram[IO_AUDC1_POT1] & 0xff,
+          );
+          pokeyAudioOnRegisterWrite(
+            machine.audioState,
+            IO_AUDF2_POT2,
+            sram[IO_AUDF2_POT2] & 0xff,
+          );
+          pokeyAudioOnRegisterWrite(
+            machine.audioState,
+            IO_AUDC2_POT3,
+            sram[IO_AUDC2_POT3] & 0xff,
+          );
+          pokeyAudioOnRegisterWrite(
+            machine.audioState,
+            IO_AUDF3_POT4,
+            sram[IO_AUDF3_POT4] & 0xff,
+          );
+          pokeyAudioOnRegisterWrite(
+            machine.audioState,
+            IO_AUDC3_POT5,
+            sram[IO_AUDC3_POT5] & 0xff,
+          );
+          pokeyAudioOnRegisterWrite(
+            machine.audioState,
+            IO_AUDF4_POT6,
+            sram[IO_AUDF4_POT6] & 0xff,
+          );
+          pokeyAudioOnRegisterWrite(
+            machine.audioState,
+            IO_AUDC4_POT7,
+            sram[IO_AUDC4_POT7] & 0xff,
+          );
+          pokeyAudioOnRegisterWrite(
+            machine.audioState,
+            IO_SKCTL_SKSTAT,
+            sram[IO_SKCTL_SKSTAT] & 0xff,
+          );
+          pokeyAudioOnRegisterWrite(
+            machine.audioState,
+            IO_AUDCTL_ALLPOT,
+            sram[IO_AUDCTL_ALLPOT] & 0xff,
+          );
           machine.audioState.lastCycle = machine.ctx.cycleCounter;
         }
         machine.ctx.ioData.pokeyAudio = machine.audioState;
@@ -57,7 +98,11 @@
           if (!machine.audioCtx) return;
           // ScriptProcessorNode fallback for older browsers.
           var node = machine.audioCtx.createScriptProcessor(512, 0, 1);
-          if (machine.audioState) pokeyAudioSetTargetBufferSamples(machine.audioState, node.bufferSize | 0);
+          if (machine.audioState)
+            pokeyAudioSetTargetBufferSamples(
+              machine.audioState,
+              node.bufferSize | 0,
+            );
           node.onaudioprocess = function (e) {
             var out = e.outputBuffer.getChannelData(0);
             try {
@@ -65,7 +110,11 @@
                 out.fill(0.0);
                 return;
               }
-              pokeyAudioSync(machine.ctx, machine.audioState, machine.ctx.cycleCounter);
+              pokeyAudioSync(
+                machine.ctx,
+                machine.audioState,
+                machine.ctx.cycleCounter,
+              );
               pokeyAudioConsume(machine.audioState, out);
             } catch (err) {
               out.fill(0.0);
@@ -83,17 +132,25 @@
             .addModule("js/audio/worklet.js")
             .then(function () {
               if (!machine.audioCtx || !getAudioEnabled()) return;
-              var node = new window.AudioWorkletNode(machine.audioCtx, "a8e-sample-queue", {
-                numberOfInputs: 0,
-                numberOfOutputs: 1,
-                outputChannelCount: [1],
-              });
+              var node = new window.AudioWorkletNode(
+                machine.audioCtx,
+                "a8e-sample-queue",
+                {
+                  numberOfInputs: 0,
+                  numberOfOutputs: 1,
+                  outputChannelCount: [1],
+                },
+              );
               if (machine.audioState)
-                pokeyAudioSetTargetBufferSamples(machine.audioState, ((machine.audioCtx.sampleRate / 80) | 0) || 512);
+                pokeyAudioSetTargetBufferSamples(
+                  machine.audioState,
+                  (machine.audioCtx.sampleRate / 80) | 0 || 512,
+                );
               try {
                 node.port.postMessage({
                   type: "config",
-                  maxQueuedSamples: ((machine.audioCtx.sampleRate / 20) | 0) || 2048,
+                  maxQueuedSamples:
+                    (machine.audioCtx.sampleRate / 20) | 0 || 2048,
                 });
               } catch (e) {
                 // ignore
@@ -118,7 +175,11 @@
       function stopAudio() {
         if (!machine.audioCtx) return;
         try {
-          if (machine.audioMode === "worklet" && machine.audioNode && machine.audioNode.port) {
+          if (
+            machine.audioMode === "worklet" &&
+            machine.audioNode &&
+            machine.audioNode.port
+          ) {
             try {
               machine.audioNode.port.postMessage({ type: "clear" });
             } catch (e) {
@@ -153,7 +214,11 @@
         if (!machine.audioState) return;
         var next = !!nextTurbo;
         if (next === machine.audioTurbo) return;
-        pokeyAudioSync(machine.ctx, machine.audioState, machine.ctx.cycleCounter);
+        pokeyAudioSync(
+          machine.ctx,
+          machine.audioState,
+          machine.ctx.cycleCounter,
+        );
         pokeyAudioSetTurbo(machine.audioState, next);
         machine.audioTurbo = next;
       }

@@ -78,9 +78,12 @@
       if (io.drawLineCycle < next) next = io.drawLineCycle;
       if (io.displayListFetchCycle < next) next = io.displayListFetchCycle;
       if (io.dliCycle < next) next = io.dliCycle;
-      if (io.serialOutputTransmissionDoneCycle < next) next = io.serialOutputTransmissionDoneCycle;
-      if (io.serialOutputNeedDataCycle < next) next = io.serialOutputNeedDataCycle;
-      if (io.serialInputDataReadyCycle < next) next = io.serialInputDataReadyCycle;
+      if (io.serialOutputTransmissionDoneCycle < next)
+        next = io.serialOutputTransmissionDoneCycle;
+      if (io.serialOutputNeedDataCycle < next)
+        next = io.serialOutputNeedDataCycle;
+      if (io.serialInputDataReadyCycle < next)
+        next = io.serialInputDataReadyCycle;
       if (io.timer1Cycle < next) next = io.timer1Cycle;
       if (io.timer2Cycle < next) next = io.timer2Cycle;
       if (io.timer4Cycle < next) next = io.timer4Cycle;

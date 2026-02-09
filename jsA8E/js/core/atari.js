@@ -5,7 +5,8 @@
   var CPU = window.A8E6502;
   var Palette = window.A8EPalette;
 
-  var hwApi = window.A8EHw && window.A8EHw.createApi ? window.A8EHw.createApi() : null;
+  var hwApi =
+    window.A8EHw && window.A8EHw.createApi ? window.A8EHw.createApi() : null;
   if (!hwApi) throw new Error("A8EHw is not loaded");
 
   var PIXELS_PER_LINE = hwApi.PIXELS_PER_LINE;
@@ -16,8 +17,10 @@
   var FIRST_VISIBLE_LINE = hwApi.FIRST_VISIBLE_LINE;
   var LAST_VISIBLE_LINE = hwApi.LAST_VISIBLE_LINE;
   var SERIAL_OUTPUT_DATA_NEEDED_CYCLES = hwApi.SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
-  var SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES = hwApi.SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
-  var SERIAL_INPUT_FIRST_DATA_READY_CYCLES = hwApi.SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
+  var SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES =
+    hwApi.SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
+  var SERIAL_INPUT_FIRST_DATA_READY_CYCLES =
+    hwApi.SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
   var SERIAL_INPUT_DATA_READY_CYCLES = hwApi.SERIAL_INPUT_DATA_READY_CYCLES;
   var SIO_TURBO_EMU_MULTIPLIER = hwApi.SIO_TURBO_EMU_MULTIPLIER;
   var POKEY_AUDIO_MAX_CATCHUP_CYCLES = hwApi.POKEY_AUDIO_MAX_CATCHUP_CYCLES;
@@ -78,7 +81,8 @@
   var IRQ_TIMER_1 = hwApi.IRQ_TIMER_1;
   var IRQ_TIMER_2 = hwApi.IRQ_TIMER_2;
   var IRQ_TIMER_4 = hwApi.IRQ_TIMER_4;
-  var IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE = hwApi.IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
+  var IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE =
+    hwApi.IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
   var IRQ_SERIAL_OUTPUT_DATA_NEEDED = hwApi.IRQ_SERIAL_OUTPUT_DATA_NEEDED;
   var IRQ_SERIAL_INPUT_DATA_READY = hwApi.IRQ_SERIAL_INPUT_DATA_READY;
   var IRQ_OTHER_KEY_PRESSED = hwApi.IRQ_OTHER_KEY_PRESSED;
@@ -151,7 +155,7 @@
     if (!(ch & 0x80)) return ch;
     if (chactl & 0x01) return 0x00; // blank/space for high-bit characters
     ch &= 0x7f;
-    return (chactl & 0x02) ? (ch | 0x100) : ch;
+    return chactl & 0x02 ? ch | 0x100 : ch;
   }
 
   var softwareApi =
@@ -247,8 +251,10 @@
           POKEY_AUDIO_MAX_CATCHUP_CYCLES: POKEY_AUDIO_MAX_CATCHUP_CYCLES,
           CYCLE_NEVER: CYCLE_NEVER,
           SERIAL_OUTPUT_DATA_NEEDED_CYCLES: SERIAL_OUTPUT_DATA_NEEDED_CYCLES,
-          SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES: SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES,
-          SERIAL_INPUT_FIRST_DATA_READY_CYCLES: SERIAL_INPUT_FIRST_DATA_READY_CYCLES,
+          SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES:
+            SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES,
+          SERIAL_INPUT_FIRST_DATA_READY_CYCLES:
+            SERIAL_INPUT_FIRST_DATA_READY_CYCLES,
           SERIAL_INPUT_DATA_READY_CYCLES: SERIAL_INPUT_DATA_READY_CYCLES,
           IO_AUDF1_POT0: IO_AUDF1_POT0,
           IO_AUDC1_POT1: IO_AUDC1_POT1,
@@ -430,7 +436,8 @@
           IRQ_TIMER_1: IRQ_TIMER_1,
           IRQ_TIMER_2: IRQ_TIMER_2,
           IRQ_TIMER_4: IRQ_TIMER_4,
-          IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE: IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE,
+          IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE:
+            IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE,
           IRQ_SERIAL_OUTPUT_DATA_NEEDED: IRQ_SERIAL_OUTPUT_DATA_NEEDED,
           IRQ_SERIAL_INPUT_DATA_READY: IRQ_SERIAL_INPUT_DATA_READY,
           IO_VCOUNT: IO_VCOUNT,
@@ -644,13 +651,24 @@
       CPU.run(machine.ctx, machine.ctx.cycleCounter + cyclesToRun);
 
       if (machine.audioState) {
-        pokeyAudioSync(machine.ctx, machine.audioState, machine.ctx.cycleCounter);
-        if (machine.audioMode === "worklet" && machine.audioNode && machine.audioNode.port) {
+        pokeyAudioSync(
+          machine.ctx,
+          machine.audioState,
+          machine.ctx.cycleCounter,
+        );
+        if (
+          machine.audioMode === "worklet" &&
+          machine.audioNode &&
+          machine.audioNode.port
+        ) {
           while (true) {
             var chunk = pokeyAudioDrain(machine.audioState, 4096);
             if (!chunk) break;
             try {
-              machine.audioNode.port.postMessage({ type: "samples", samples: chunk }, [chunk.buffer]);
+              machine.audioNode.port.postMessage(
+                { type: "samples", samples: chunk },
+                [chunk.buffer],
+              );
             } catch (e) {
               break;
             }
@@ -682,7 +700,11 @@
       if (machine.rafId) cancelAnimationFrame(machine.rafId);
       machine.rafId = 0;
       if (machine.audioState) pokeyAudioClear(machine.audioState);
-      if (machine.audioMode === "worklet" && machine.audioNode && machine.audioNode.port) {
+      if (
+        machine.audioMode === "worklet" &&
+        machine.audioNode &&
+        machine.audioNode.port
+      ) {
         try {
           machine.audioNode.port.postMessage({ type: "clear" });
         } catch (e) {
@@ -702,7 +724,9 @@
       var next = !!v;
       if (next === turbo) return;
       turbo = next;
-      syncAudioTurboMode(turbo || (!turbo && sioTurbo && isSioActive(machine.ctx.ioData)));
+      syncAudioTurboMode(
+        turbo || (!turbo && sioTurbo && isSioActive(machine.ctx.ioData)),
+      );
     }
 
     function setAudioEnabled(v) {
@@ -718,13 +742,17 @@
 
     function setSioTurbo(v) {
       sioTurbo = !!v;
-      if (machine.ctx && machine.ctx.ioData) machine.ctx.ioData.sioTurbo = sioTurbo;
-      syncAudioTurboMode(turbo || (!turbo && sioTurbo && isSioActive(machine.ctx.ioData)));
+      if (machine.ctx && machine.ctx.ioData)
+        machine.ctx.ioData.sioTurbo = sioTurbo;
+      syncAudioTurboMode(
+        turbo || (!turbo && sioTurbo && isSioActive(machine.ctx.ioData)),
+      );
     }
 
     function setOptionOnStart(v) {
       optionOnStart = !!v;
-      if (machine.ctx && machine.ctx.ioData) machine.ctx.ioData.optionOnStart = optionOnStart;
+      if (machine.ctx && machine.ctx.ioData)
+        machine.ctx.ioData.optionOnStart = optionOnStart;
     }
 
     function dispose() {

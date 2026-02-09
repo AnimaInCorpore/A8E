@@ -92,7 +92,11 @@
           pokeyAudioSetTurbo(machine.audioState, turbo);
           machine.audioTurbo = turbo;
         }
-        if (machine.audioMode === "worklet" && machine.audioNode && machine.audioNode.port) {
+        if (
+          machine.audioMode === "worklet" &&
+          machine.audioNode &&
+          machine.audioNode.port
+        ) {
           try {
             machine.audioNode.port.postMessage({ type: "clear" });
           } catch (e) {
@@ -104,15 +108,21 @@
       function loadOsRom(arrayBuffer) {
         var bytes = new Uint8Array(arrayBuffer);
         if (bytes.length !== 0x4000) {
-          throw new Error("ATARIXL.ROM must be 16KB (0x4000), got " + bytes.length);
+          throw new Error(
+            "ATARIXL.ROM must be 16KB (0x4000), got " + bytes.length,
+          );
         }
         // Layout matches AtariIoOpen():
         // 0x0000-0x0FFF => $C000-$CFFF
         // 0x1000-0x17FF => self-test => $5000-$57FF (if enabled)
         // 0x1800-0x3FFF => floating point => $D800-$FFFF
         machine.media.osRom = new Uint8Array(bytes.subarray(0x0000, 0x1000));
-        machine.media.selfTestRom = new Uint8Array(bytes.subarray(0x1000, 0x1800));
-        machine.media.floatingPointRom = new Uint8Array(bytes.subarray(0x1800, 0x4000));
+        machine.media.selfTestRom = new Uint8Array(
+          bytes.subarray(0x1000, 0x1800),
+        );
+        machine.media.floatingPointRom = new Uint8Array(
+          bytes.subarray(0x1800, 0x4000),
+        );
         machine.ctx.ioData.osRom = machine.media.osRom;
         machine.ctx.ioData.selfTestRom = machine.media.selfTestRom;
         machine.ctx.ioData.floatingPointRom = machine.media.floatingPointRom;
@@ -123,7 +133,9 @@
       function loadBasicRom(arrayBuffer) {
         var bytes = new Uint8Array(arrayBuffer);
         if (bytes.length !== 0x2000) {
-          throw new Error("ATARIBAS.ROM must be 8KB (0x2000), got " + bytes.length);
+          throw new Error(
+            "ATARIBAS.ROM must be 8KB (0x2000), got " + bytes.length,
+          );
         }
         machine.media.basicRom = new Uint8Array(bytes);
         machine.ctx.ioData.basicRom = machine.media.basicRom;

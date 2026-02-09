@@ -5,8 +5,10 @@
     var IO_SEROUT_SERIN = cfg.IO_SEROUT_SERIN;
 
     var SERIAL_OUTPUT_DATA_NEEDED_CYCLES = cfg.SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
-    var SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES = cfg.SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
-    var SERIAL_INPUT_FIRST_DATA_READY_CYCLES = cfg.SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
+    var SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES =
+      cfg.SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
+    var SERIAL_INPUT_FIRST_DATA_READY_CYCLES =
+      cfg.SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
     var SERIAL_INPUT_DATA_READY_CYCLES = cfg.SERIAL_INPUT_DATA_READY_CYCLES;
 
     var cycleTimedEventUpdate = cfg.cycleTimedEventUpdate;
@@ -69,18 +71,19 @@
         var expected = (io.sioPendingBytes | 0) + 1; // data + checksum
         if (dataIndex !== expected) return;
 
-        io.serialOutputTransmissionDoneCycle = now + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
+        io.serialOutputTransmissionDoneCycle =
+          now + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
         cycleTimedEventUpdate(ctx);
 
         var dataBytes = io.sioPendingBytes | 0;
         var provided = buf[SIO_DATA_OFFSET + dataBytes] & 0xff;
         var calculated = sioChecksum(
           buf.subarray(SIO_DATA_OFFSET, SIO_DATA_OFFSET + dataBytes),
-          dataBytes
+          dataBytes,
         );
 
         var disk = io.disk1;
-        var diskSize = (io.disk1Size | 0) || (disk ? disk.length : 0);
+        var diskSize = io.disk1Size | 0 || (disk ? disk.length : 0);
         var sectorSize = diskSectorSize(disk);
         var si = sectorBytesAndOffset(io.sioPendingSector | 0, sectorSize);
         var cmd = io.sioPendingCmd & 0xff;
@@ -99,7 +102,10 @@
           // VERIFY SECTOR: compare payload to current disk content.
           var ok = true;
           for (var vi = 0; vi < si.bytes; vi++) {
-            if ((disk[si.offset + vi] & 0xff) !== (buf[SIO_DATA_OFFSET + vi] & 0xff)) {
+            if (
+              (disk[si.offset + vi] & 0xff) !==
+              (buf[SIO_DATA_OFFSET + vi] & 0xff)
+            ) {
               ok = false;
               break;
             }
@@ -109,7 +115,10 @@
           queueSerinResponse(ctx, now, 2);
         } else {
           // WRITE / PUT: write sector payload.
-          disk.set(buf.subarray(SIO_DATA_OFFSET, SIO_DATA_OFFSET + si.bytes), si.offset);
+          disk.set(
+            buf.subarray(SIO_DATA_OFFSET, SIO_DATA_OFFSET + si.bytes),
+            si.offset,
+          );
           buf[0] = "A".charCodeAt(0);
           buf[1] = "C".charCodeAt(0);
           queueSerinResponse(ctx, now, 2);
@@ -150,7 +159,8 @@
         return;
       }
 
-      io.serialOutputTransmissionDoneCycle = now + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
+      io.serialOutputTransmissionDoneCycle =
+        now + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
       cycleTimedEventUpdate(ctx);
 
       var dev = buf[0] & 0xff;
@@ -166,14 +176,19 @@
       }
 
       var disk2 = io.disk1;
-      var diskSize2 = (io.disk1Size | 0) || (disk2 ? disk2.length : 0);
+      var diskSize2 = io.disk1Size | 0 || (disk2 ? disk2.length : 0);
       var sectorSize2 = diskSectorSize(disk2);
 
       if (cmd2 === 0x52) {
         // READ SECTOR
         var sectorIndex = (aux1 | (aux2 << 8)) & 0xffff;
         var si2 = sectorBytesAndOffset(sectorIndex, sectorSize2);
-        if (!disk2 || !si2 || si2.offset < 16 || si2.offset + si2.bytes > diskSize2) {
+        if (
+          !disk2 ||
+          !si2 ||
+          si2.offset < 16 ||
+          si2.offset + si2.bytes > diskSize2
+        ) {
           buf[0] = "N".charCodeAt(0);
           queueSerinResponse(ctx, now, 1);
           return;
@@ -181,7 +196,10 @@
         buf[0] = "A".charCodeAt(0);
         buf[1] = "C".charCodeAt(0);
         buf.set(disk2.subarray(si2.offset, si2.offset + si2.bytes), 2);
-        buf[si2.bytes + 2] = sioChecksum(buf.subarray(2, 2 + si2.bytes), si2.bytes);
+        buf[si2.bytes + 2] = sioChecksum(
+          buf.subarray(2, 2 + si2.bytes),
+          si2.bytes,
+        );
         queueSerinResponse(ctx, now, si2.bytes + 3);
         return;
       }
@@ -216,7 +234,12 @@
         // WRITE / PUT / VERIFY SECTOR (expects a data frame).
         var sectorIndex2 = (aux1 | (aux2 << 8)) & 0xffff;
         var si3 = sectorBytesAndOffset(sectorIndex2, sectorSize2);
-        if (!disk2 || !si3 || si3.offset < 16 || si3.offset + si3.bytes > diskSize2) {
+        if (
+          !disk2 ||
+          !si3 ||
+          si3.offset < 16 ||
+          si3.offset + si3.bytes > diskSize2
+        ) {
           buf[0] = "N".charCodeAt(0);
           queueSerinResponse(ctx, now, 1);
           return;
@@ -270,7 +293,8 @@
         ctx.ram[IO_SEROUT_SERIN] = b;
 
         if ((io.sioInSize | 0) > 0) {
-          io.serialInputDataReadyCycle = ctx.cycleCounter + SERIAL_INPUT_DATA_READY_CYCLES;
+          io.serialInputDataReadyCycle =
+            ctx.cycleCounter + SERIAL_INPUT_DATA_READY_CYCLES;
           cycleTimedEventUpdate(ctx);
         } else {
           io.sioInIndex = 0;

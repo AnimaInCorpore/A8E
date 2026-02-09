@@ -221,14 +221,12 @@
   }
   function amZeroPageX(ctx) {
     ctx.accessFunctionOverride = null;
-    ctx.accessAddress =
-      (ctx.ram[ctx.cpu.pc & 0xffff] + ctx.cpu.x) & 0xff;
+    ctx.accessAddress = (ctx.ram[ctx.cpu.pc & 0xffff] + ctx.cpu.x) & 0xff;
     ctx.cpu.pc = (ctx.cpu.pc + 1) & 0xffff;
   }
   function amZeroPageY(ctx) {
     ctx.accessFunctionOverride = null;
-    ctx.accessAddress =
-      (ctx.ram[ctx.cpu.pc & 0xffff] + ctx.cpu.y) & 0xff;
+    ctx.accessAddress = (ctx.ram[ctx.cpu.pc & 0xffff] + ctx.cpu.y) & 0xff;
     ctx.cpu.pc = (ctx.cpu.pc + 1) & 0xffff;
   }
   function amAbsoluteX(ctx) {
@@ -306,9 +304,9 @@
       var a = cpu.a & 0xff;
       var sum = a + value + (ps.c ? 1 : 0);
       var bin = sum & 0xff;
-      ps.v = !((a ^ value) & 0x80) && ((a ^ bin) & 0x80) ? 1 : 0;
+      ps.v = !((a ^ value) & 0x80) && (a ^ bin) & 0x80 ? 1 : 0;
 
-      if (((a & 0x0f) + (value & 0x0f) + (ps.c ? 1 : 0)) > 9) sum += 0x06;
+      if ((a & 0x0f) + (value & 0x0f) + (ps.c ? 1 : 0) > 9) sum += 0x06;
       ps.c = sum > 0x99 ? 1 : 0;
       if (ps.c) sum += 0x60;
 
@@ -316,7 +314,8 @@
       setZN(ctx, bin);
     } else {
       var s = (cpu.a & 0xff) + value + (ps.c ? 1 : 0);
-      ps.v = ((cpu.a ^ value) & 0x80) === 0 && ((cpu.a ^ s) & 0x80) !== 0 ? 1 : 0;
+      ps.v =
+        ((cpu.a ^ value) & 0x80) === 0 && ((cpu.a ^ s) & 0x80) !== 0 ? 1 : 0;
       cpu.a = s & 0xff;
       ps.c = (s >> 8) & 1;
       setZN(ctx, cpu.a);
@@ -334,7 +333,7 @@
       var carry = diff & 0x100 ? 0 : 1; // carry==1 means no borrow
       ps.v = ((a ^ bin) & (a ^ value) & 0x80) !== 0 ? 1 : 0;
 
-      if (((a & 0x0f) - (ps.c ? 0 : 1)) < (value & 0x0f)) diff -= 0x06;
+      if ((a & 0x0f) - (ps.c ? 0 : 1) < (value & 0x0f)) diff -= 0x06;
       if (!carry) diff -= 0x60;
 
       cpu.a = diff & 0xff;
@@ -402,7 +401,7 @@
     adcValue(ctx, readAccess(ctx));
   }
   function opAND(ctx) {
-    ctx.cpu.a = (ctx.cpu.a & readAccess(ctx)) & 0xff;
+    ctx.cpu.a = ctx.cpu.a & readAccess(ctx) & 0xff;
     setZN(ctx, ctx.cpu.a);
   }
   function opEOR(ctx) {
@@ -475,7 +474,7 @@
   }
   function opBIT(ctx) {
     var v = readAccess(ctx);
-    ctx.cpu.ps.z = (v & ctx.cpu.a) ? 0 : 1;
+    ctx.cpu.ps.z = v & ctx.cpu.a ? 0 : 1;
     ctx.cpu.ps.v = v & 0x40;
     ctx.cpu.ps.n = v & 0x80;
   }
@@ -498,28 +497,36 @@
     ctx.cpu.ps.c = (ctx.cpu.y & 0xff) >= v ? 1 : 0;
   }
   function opBCC(ctx) {
-    if (!ctx.cpu.ps.c) ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+    if (!ctx.cpu.ps.c)
+      ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
   }
   function opBCS(ctx) {
-    if (ctx.cpu.ps.c) ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+    if (ctx.cpu.ps.c)
+      ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
   }
   function opBEQ(ctx) {
-    if (ctx.cpu.ps.z) ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+    if (ctx.cpu.ps.z)
+      ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
   }
   function opBMI(ctx) {
-    if (ctx.cpu.ps.n) ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+    if (ctx.cpu.ps.n)
+      ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
   }
   function opBNE(ctx) {
-    if (!ctx.cpu.ps.z) ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+    if (!ctx.cpu.ps.z)
+      ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
   }
   function opBPL(ctx) {
-    if (!ctx.cpu.ps.n) ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+    if (!ctx.cpu.ps.n)
+      ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
   }
   function opBVC(ctx) {
-    if (!ctx.cpu.ps.v) ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+    if (!ctx.cpu.ps.v)
+      ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
   }
   function opBVS(ctx) {
-    if (ctx.cpu.ps.v) ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+    if (ctx.cpu.ps.v)
+      ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
   }
   function opBRK(ctx) {
     serviceInterrupt(ctx, 0xfffe, 1, (ctx.cpu.pc + 1) & 0xffff);
@@ -609,7 +616,7 @@
         " X=$" +
         Util.toHex2(cpu.x) +
         " Y=$" +
-        Util.toHex2(cpu.y)
+        Util.toHex2(cpu.y),
     );
   }
   function opLAX(ctx) {
@@ -626,7 +633,7 @@
     setZN(ctx, ctx.cpu.a);
   }
   function opATX(ctx) {
-    ctx.cpu.a = (ctx.cpu.a & readAccess(ctx)) & 0xff;
+    ctx.cpu.a = ctx.cpu.a & readAccess(ctx) & 0xff;
     ctx.cpu.x = ctx.cpu.a;
     setZN(ctx, ctx.cpu.a);
   }
@@ -640,7 +647,7 @@
     readAccess(ctx);
   }
   function opASR(ctx) {
-    ctx.cpu.a = (ctx.cpu.a & readAccess(ctx)) & 0xff;
+    ctx.cpu.a = ctx.cpu.a & readAccess(ctx) & 0xff;
     ctx.cpu.ps.c = ctx.cpu.a & 0x01;
     ctx.cpu.a = (ctx.cpu.a >> 1) & 0xff;
     setZN(ctx, ctx.cpu.a);
@@ -663,17 +670,17 @@
     ctx.cpu.ps.c = v & 0x80;
     v = ((v << 1) & 0xff) | oldCarry;
     v = writeAccess(ctx, v);
-    ctx.cpu.a = (ctx.cpu.a & v) & 0xff;
+    ctx.cpu.a = ctx.cpu.a & v & 0xff;
     setZN(ctx, ctx.cpu.a);
   }
   function opAAC(ctx) {
-    ctx.cpu.a = (ctx.cpu.a & readAccess(ctx)) & 0xff;
+    ctx.cpu.a = ctx.cpu.a & readAccess(ctx) & 0xff;
     setZN(ctx, ctx.cpu.a);
     ctx.cpu.ps.c = ctx.cpu.ps.n ? 1 : 0;
   }
   function opXAA(ctx) {
     ctx.cpu.a = ctx.cpu.x & 0xff;
-    ctx.cpu.a = (ctx.cpu.a & readAccess(ctx)) & 0xff;
+    ctx.cpu.a = ctx.cpu.a & readAccess(ctx) & 0xff;
     setZN(ctx, ctx.cpu.a);
   }
   function opDCP(ctx) {
@@ -762,7 +769,10 @@
     var cpu = ctx.cpu;
     var cycles = ctx.cycleCounter;
     while (cycles < cycleTarget) {
-      if (ctx.ioCycleTimedEventFunction && ctx.cycleCounter >= ctx.ioCycleTimedEventCycle) {
+      if (
+        ctx.ioCycleTimedEventFunction &&
+        ctx.cycleCounter >= ctx.ioCycleTimedEventCycle
+      ) {
         ctx.ioCycleTimedEventFunction(ctx);
       }
 
@@ -779,7 +789,8 @@
         ADDRESS_FUNCS[meta.addressType](ctx);
 
         ctx.accessFunction =
-          ctx.accessFunctionOverride || ctx.accessFunctionList[ctx.accessAddress & 0xffff];
+          ctx.accessFunctionOverride ||
+          ctx.accessFunctionList[ctx.accessAddress & 0xffff];
 
         OPCODE_FUNCS[meta.opcodeId](ctx);
 
@@ -810,4 +821,3 @@
     BIN_TO_BCD: BIN_TO_BCD,
   };
 })();
-

@@ -60,7 +60,11 @@
           var samples = msg.samples;
           if (!(samples instanceof Float32Array)) {
             if (ArrayBuffer.isView(samples) && samples.buffer) {
-              samples = new Float32Array(samples.buffer, samples.byteOffset | 0, samples.length | 0);
+              samples = new Float32Array(
+                samples.buffer,
+                samples.byteOffset | 0,
+                samples.length | 0,
+              );
             } else if (Array.isArray(samples)) {
               samples = new Float32Array(samples);
             } else {
@@ -68,7 +72,11 @@
             }
           }
           self.queue.push(samples);
-          self.queueIndex = clampQueueSamples(self.queue, self.queueIndex, self.maxQueuedSamples);
+          self.queueIndex = clampQueueSamples(
+            self.queue,
+            self.queueIndex,
+            self.maxQueuedSamples,
+          );
           return;
         }
         if (msg.type === "config") {
@@ -76,7 +84,11 @@
           if (maxQueued > 0) {
             if (maxQueued < 256) maxQueued = 256;
             self.maxQueuedSamples = maxQueued;
-            self.queueIndex = clampQueueSamples(self.queue, self.queueIndex, self.maxQueuedSamples);
+            self.queueIndex = clampQueueSamples(
+              self.queue,
+              self.queueIndex,
+              self.maxQueuedSamples,
+            );
           }
           return;
         }

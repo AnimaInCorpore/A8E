@@ -56,7 +56,10 @@
   }
 
   function isWebGL2(gl) {
-    return typeof window.WebGL2RenderingContext !== "undefined" && gl instanceof window.WebGL2RenderingContext;
+    return (
+      typeof window.WebGL2RenderingContext !== "undefined" &&
+      gl instanceof window.WebGL2RenderingContext
+    );
   }
 
   function createTexture(gl, unit, minFilter, magFilter, wrapS, wrapT) {
@@ -83,7 +86,6 @@
     }
   }
 
-
   var SHADER_PATHS = {
     webgl2: {
       vs: "js/render/shaders/webgl2.vert.glsl",
@@ -102,7 +104,14 @@
 
   function fetchShaderText(url) {
     return fetch(url).then(function (resp) {
-      if (!resp.ok) throw new Error("A8EGlRenderer: failed to fetch shader: " + url + " (" + resp.status + ")");
+      if (!resp.ok)
+        throw new Error(
+          "A8EGlRenderer: failed to fetch shader: " +
+            url +
+            " (" +
+            resp.status +
+            ")",
+        );
       return resp.text();
     });
   }
@@ -116,7 +125,7 @@
       tasks.push(
         fetchShaderText(url).then(function (text) {
           return { profile: profile, key: key, text: text };
-        })
+        }),
       );
     }
 
@@ -150,11 +159,12 @@
 
   function getShaderSources(gl2) {
     if (!shaderSourceCache) {
-      throw new Error("A8EGlRenderer: shaders not loaded (call loadShaderSources() before create())");
+      throw new Error(
+        "A8EGlRenderer: shaders not loaded (call loadShaderSources() before create())",
+      );
     }
     return gl2 ? shaderSourceCache.webgl2 : shaderSourceCache.webgl1;
   }
-
 
   function create(opts) {
     var gl = opts.gl;
@@ -169,12 +179,15 @@
 
     if (!gl) throw new Error("A8EGlRenderer: missing WebGL context");
     if (!canvas) throw new Error("A8EGlRenderer: missing canvas");
-    if (!paletteRgb || paletteRgb.length < 256 * 3) throw new Error("A8EGlRenderer: missing palette");
+    if (!paletteRgb || paletteRgb.length < 256 * 3)
+      throw new Error("A8EGlRenderer: missing palette");
     // Keep CRT internal scene resolution fixed to 2x horizontal, 1x vertical.
     var sceneScaleX = 2;
     var sceneScaleY = 1;
-    if (texW <= 0 || texH <= 0) throw new Error("A8EGlRenderer: invalid texture size");
-    if (viewW <= 0 || viewH <= 0) throw new Error("A8EGlRenderer: invalid viewport size");
+    if (texW <= 0 || texH <= 0)
+      throw new Error("A8EGlRenderer: invalid texture size");
+    if (viewW <= 0 || viewH <= 0)
+      throw new Error("A8EGlRenderer: invalid viewport size");
 
     var sceneW = viewW * sceneScaleX;
     var sceneH = viewH * sceneScaleY;
@@ -237,8 +250,30 @@
       // Upload indexed framebuffer.
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, indexTex);
-      if (gl2) gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, texW, texH, gl.RED, gl.UNSIGNED_BYTE, video.pixels);
-      else gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, texW, texH, gl.LUMINANCE, gl.UNSIGNED_BYTE, video.pixels);
+      if (gl2)
+        gl.texSubImage2D(
+          gl.TEXTURE_2D,
+          0,
+          0,
+          0,
+          texW,
+          texH,
+          gl.RED,
+          gl.UNSIGNED_BYTE,
+          video.pixels,
+        );
+      else
+        gl.texSubImage2D(
+          gl.TEXTURE_2D,
+          0,
+          0,
+          0,
+          texW,
+          texH,
+          gl.LUMINANCE,
+          gl.UNSIGNED_BYTE,
+          video.pixels,
+        );
 
       // Pass 1: index + palette -> scene texture (at internal sceneScaleX/sceneScaleY resolution).
       gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo);
@@ -258,7 +293,8 @@
       setupQuad(gl, crtBuf, crtPosLoc, crtUvLoc);
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, sceneTex);
-      if (crtOutputSizeLoc !== null) gl.uniform2f(crtOutputSizeLoc, canvas.width | 0, canvas.height | 0);
+      if (crtOutputSizeLoc !== null)
+        gl.uniform2f(crtOutputSizeLoc, canvas.width | 0, canvas.height | 0);
       gl.viewport(0, 0, canvas.width | 0, canvas.height | 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -284,12 +320,32 @@
         gl.NEAREST,
         gl.NEAREST,
         gl.CLAMP_TO_EDGE,
-        gl.CLAMP_TO_EDGE
+        gl.CLAMP_TO_EDGE,
       );
       if (gl2) {
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, texW, texH, 0, gl.RED, gl.UNSIGNED_BYTE, null);
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.R8,
+          texW,
+          texH,
+          0,
+          gl.RED,
+          gl.UNSIGNED_BYTE,
+          null,
+        );
       } else {
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, texW, texH, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, null);
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.LUMINANCE,
+          texW,
+          texH,
+          0,
+          gl.LUMINANCE,
+          gl.UNSIGNED_BYTE,
+          null,
+        );
       }
 
       // Palette lookup texture.
@@ -299,7 +355,7 @@
         gl.NEAREST,
         gl.NEAREST,
         gl.CLAMP_TO_EDGE,
-        gl.CLAMP_TO_EDGE
+        gl.CLAMP_TO_EDGE,
       );
       gl.texImage2D(
         gl.TEXTURE_2D,
@@ -310,7 +366,7 @@
         0,
         gl.RGBA,
         gl.UNSIGNED_BYTE,
-        buildPaletteRgba(paletteRgb)
+        buildPaletteRgba(paletteRgb),
       );
 
       // Offscreen scene texture (RGB after palette pass, at internal sceneScaleX/sceneScaleY resolution).
@@ -320,14 +376,32 @@
         gl.NEAREST,
         gl.NEAREST,
         gl.CLAMP_TO_EDGE,
-        gl.CLAMP_TO_EDGE
+        gl.CLAMP_TO_EDGE,
       );
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, sceneW, sceneH, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA,
+        sceneW,
+        sceneH,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        null,
+      );
 
       sceneFbo = gl.createFramebuffer();
       gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo);
-      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sceneTex, 0);
-      if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER,
+        gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D,
+        sceneTex,
+        0,
+      );
+      if (
+        gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE
+      ) {
         throw new Error("A8EGlRenderer: framebuffer incomplete");
       }
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -339,10 +413,22 @@
       var v0 = viewY / texH;
       var v1 = (viewY + viewH) / texH;
       var decodeQuad = new Float32Array([
-        -1.0, -1.0, u0, v1,
-        -1.0, 1.0, u0, v0,
-        1.0, -1.0, u1, v1,
-        1.0, 1.0, u1, v0,
+        -1.0,
+        -1.0,
+        u0,
+        v1,
+        -1.0,
+        1.0,
+        u0,
+        v0,
+        1.0,
+        -1.0,
+        u1,
+        v1,
+        1.0,
+        1.0,
+        u1,
+        v0,
       ]);
 
       decodeBuf = gl.createBuffer();
@@ -351,10 +437,8 @@
 
       // Quad for final CRT post-process pass.
       var crtQuad = new Float32Array([
-        -1.0, -1.0, 0.0, 0.0,
-        -1.0, 1.0, 0.0, 1.0,
-        1.0, -1.0, 1.0, 0.0,
-        1.0, 1.0, 1.0, 1.0,
+        -1.0, -1.0, 0.0, 0.0, -1.0, 1.0, 0.0, 1.0, 1.0, -1.0, 1.0, 0.0, 1.0,
+        1.0, 1.0, 1.0,
       ]);
 
       crtBuf = gl.createBuffer();
@@ -379,8 +463,10 @@
 
       gl.useProgram(crtProgram);
       if (crtSceneLoc !== null) gl.uniform1i(crtSceneLoc, 2);
-      if (crtSourceSizeLoc !== null) gl.uniform2f(crtSourceSizeLoc, sceneW, sceneH);
-      if (crtScanlineSizeLoc !== null) gl.uniform2f(crtScanlineSizeLoc, viewW, viewH);
+      if (crtSourceSizeLoc !== null)
+        gl.uniform2f(crtSourceSizeLoc, sceneW, sceneH);
+      if (crtScanlineSizeLoc !== null)
+        gl.uniform2f(crtScanlineSizeLoc, viewW, viewH);
 
       return {
         paint: paint,

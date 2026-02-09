@@ -55,4 +55,3 @@
     createAtariPaletteRgb: createAtariPaletteRgb,
   };
 })();
-
