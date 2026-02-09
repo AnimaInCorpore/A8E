@@ -56,8 +56,8 @@
         function setupScriptProcessor() {
           if (!machine.audioCtx) return;
           // ScriptProcessorNode fallback for older browsers.
-          var node = machine.audioCtx.createScriptProcessor(1024, 0, 1);
-          if (machine.audioState) pokeyAudioSetTargetBufferSamples(machine.audioState, ((node.bufferSize | 0) * 2) | 0);
+          var node = machine.audioCtx.createScriptProcessor(512, 0, 1);
+          if (machine.audioState) pokeyAudioSetTargetBufferSamples(machine.audioState, node.bufferSize | 0);
           node.onaudioprocess = function (e) {
             var out = e.outputBuffer.getChannelData(0);
             try {
@@ -89,7 +89,15 @@
                 outputChannelCount: [1],
               });
               if (machine.audioState)
-                pokeyAudioSetTargetBufferSamples(machine.audioState, ((machine.audioCtx.sampleRate / 40) | 0) || 1024);
+                pokeyAudioSetTargetBufferSamples(machine.audioState, ((machine.audioCtx.sampleRate / 80) | 0) || 512);
+              try {
+                node.port.postMessage({
+                  type: "config",
+                  maxQueuedSamples: ((machine.audioCtx.sampleRate / 20) | 0) || 2048,
+                });
+              } catch (e) {
+                // ignore
+              }
               node.connect(machine.audioCtx.destination);
               machine.audioNode = node;
               machine.audioMode = "worklet";

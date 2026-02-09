@@ -37,16 +37,19 @@
 var POKEY_FP_ONE = 4294967296; // 1<<32 as an exact integer.
 var POKEY_MIX_GAIN = 0.35;
 var POKEY_DC_BLOCK_HZ = 20.0;
+var POKEY_AUDIO_RING_SIZE = 4096; // power-of-two
+var POKEY_AUDIO_TARGET_BUFFER_SAMPLES = 512;
+var POKEY_AUDIO_MAX_ADJUST_DIVISOR = 40; // +/-2.5%
 
 function pokeyAudioCreateState(sampleRate) {
-  var ringSize = 8192; // power-of-two
+  var ringSize = POKEY_AUDIO_RING_SIZE;
   var st = {
     sampleRate: sampleRate || 48000,
     cpuHzBase: ATARI_CPU_HZ_PAL,
     cpuHz: ATARI_CPU_HZ_PAL,
     cyclesPerSampleFp: 0,
     cyclesPerSampleFpBase: 0,
-    targetBufferSamples: 2048,
+    targetBufferSamples: POKEY_AUDIO_TARGET_BUFFER_SAMPLES,
     lastCycle: 0,
     samplePhaseFp: 0,
     sampleAccum: 0,
@@ -695,7 +698,7 @@ function pokeyAudioSync(ctx, st, cycleCounter) {
   var fillDelta = fillLevel - targetFill;
   if (fillDelta > targetFill) fillDelta = targetFill;
   else if (fillDelta < -targetFill) fillDelta = -targetFill;
-  var maxAdjust = Math.floor(cpsBase / 100); // +/- 1%
+  var maxAdjust = Math.floor(cpsBase / POKEY_AUDIO_MAX_ADJUST_DIVISOR);
   if (maxAdjust < 1) maxAdjust = 1;
   var adjust = Math.trunc((fillDelta * maxAdjust) / targetFill);
   cps = cpsBase + adjust;

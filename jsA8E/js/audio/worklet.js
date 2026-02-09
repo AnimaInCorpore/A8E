@@ -49,8 +49,8 @@
       this.queue = [];
       this.queueIndex = 0;
       this.lastSample = 0.0;
-      this.maxQueuedSamples = (sampleRate | 0) * 1; // ~1s safety cap
-      if (this.maxQueuedSamples <= 0) this.maxQueuedSamples = 48000;
+      this.maxQueuedSamples = (sampleRate / 20) | 0; // ~50ms cap for lower latency
+      if (this.maxQueuedSamples < 256) this.maxQueuedSamples = 256;
 
       var self = this;
       this.port.onmessage = function (e) {
@@ -69,6 +69,15 @@
           }
           self.queue.push(samples);
           self.queueIndex = clampQueueSamples(self.queue, self.queueIndex, self.maxQueuedSamples);
+          return;
+        }
+        if (msg.type === "config") {
+          var maxQueued = msg.maxQueuedSamples | 0;
+          if (maxQueued > 0) {
+            if (maxQueued < 256) maxQueued = 256;
+            self.maxQueuedSamples = maxQueued;
+            self.queueIndex = clampQueueSamples(self.queue, self.queueIndex, self.maxQueuedSamples);
+          }
           return;
         }
         if (msg.type === "clear") {
