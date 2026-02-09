@@ -17,18 +17,26 @@
     var IO_AUDCTL_ALLPOT = cfg.IO_AUDCTL_ALLPOT;
     var IO_STIMER_KBCODE = cfg.IO_STIMER_KBCODE;
     var IO_SKCTL_SKSTAT = cfg.IO_SKCTL_SKSTAT;
-    var IO_SEROUT_SERIN = cfg.IO_SEROUT_SERIN;
 
     var CYCLE_NEVER = cfg.CYCLE_NEVER;
-    var SERIAL_OUTPUT_DATA_NEEDED_CYCLES = cfg.SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
-    var SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES = cfg.SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
-    var SERIAL_INPUT_FIRST_DATA_READY_CYCLES = cfg.SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
-    var SERIAL_INPUT_DATA_READY_CYCLES = cfg.SERIAL_INPUT_DATA_READY_CYCLES;
-
     var cycleTimedEventUpdate = cfg.cycleTimedEventUpdate;
+    var pokeySioApi =
+      window.A8EPokeySio && window.A8EPokeySio.createApi
+        ? window.A8EPokeySio.createApi({
+            IO_SEROUT_SERIN: cfg.IO_SEROUT_SERIN,
+            SERIAL_OUTPUT_DATA_NEEDED_CYCLES: cfg.SERIAL_OUTPUT_DATA_NEEDED_CYCLES,
+            SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES: cfg.SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES,
+            SERIAL_INPUT_FIRST_DATA_READY_CYCLES: cfg.SERIAL_INPUT_FIRST_DATA_READY_CYCLES,
+            SERIAL_INPUT_DATA_READY_CYCLES: cfg.SERIAL_INPUT_DATA_READY_CYCLES,
+            cycleTimedEventUpdate: cycleTimedEventUpdate,
+          })
+        : null;
+    if (!pokeySioApi) throw new Error("A8EPokeySio is not loaded");
 
 // --- POKEY audio (ported from Pokey.c; still simplified, but cycle-based) ---
 var POKEY_FP_ONE = 4294967296; // 1<<32 as an exact integer.
+var POKEY_MIX_GAIN = 0.5;
+var POKEY_DC_BLOCK_HZ = 20.0;
 
 function pokeyAudioCreateState(sampleRate) {
   var ringSize = 8192; // power-of-two
@@ -41,6 +49,12 @@ function pokeyAudioCreateState(sampleRate) {
     targetBufferSamples: 2048,
     lastCycle: 0,
     samplePhaseFp: 0,
+    sampleAccum: 0,
+    sampleAccumCount: 0,
+    mixGain: POKEY_MIX_GAIN,
+    dcBlockR: 0.0,
+    dcBlockX1: 0.0,
+    dcBlockY1: 0.0,
 
     lfsr17: 0x1ffff,
     lfsr9: 0x01ff,
@@ -69,6 +83,7 @@ function pokeyAudioCreateState(sampleRate) {
   };
 
   pokeyAudioRecomputeCyclesPerSample(st);
+  pokeyAudioRecomputeDcBlock(st);
   pokeyAudioRecomputeClocks(st.channels, st.audctl);
   return st;
 }
@@ -81,6 +96,23 @@ function pokeyAudioRecomputeCyclesPerSample(st) {
   if (cps < 1) cps = 1;
   st.cyclesPerSampleFpBase = cps;
   st.cyclesPerSampleFp = cps;
+}
+
+function pokeyAudioRecomputeDcBlock(st) {
+  if (!st) return;
+  var sr = st.sampleRate || 48000;
+  if (sr < 1) sr = 1;
+  var r = Math.exp((-2.0 * Math.PI * POKEY_DC_BLOCK_HZ) / sr);
+  if (!(r >= 0.0)) r = 0.0;
+  if (r >= 0.999999) r = 0.999999;
+  st.dcBlockR = r;
+}
+
+function pokeyAudioApplyDcBlock(st, sample) {
+  var out = sample - st.dcBlockX1 + st.dcBlockR * st.dcBlockY1;
+  st.dcBlockX1 = sample;
+  st.dcBlockY1 = out;
+  return out;
 }
 
 function pokeyAudioSetTargetBufferSamples(st, n) {
@@ -178,6 +210,11 @@ function pokeyAudioResetState(st) {
   if (!st) return;
   st.lastCycle = 0;
   st.samplePhaseFp = 0;
+  st.sampleAccum = 0;
+  st.sampleAccumCount = 0;
+  st.mixGain = POKEY_MIX_GAIN;
+  st.dcBlockX1 = 0.0;
+  st.dcBlockY1 = 0.0;
   st.lfsr17 = 0x1ffff;
   st.lfsr9 = 0x01ff;
   st.lfsr5 = 0x00;
@@ -391,8 +428,109 @@ function pokeyAudioMixCycleSample(st) {
   if (sum < 0) sum = 0;
   if (sum > 60) sum = 60;
 
-  // Center for WebAudio (simple DC removal) while keeping peak-to-peak similar.
-  return ((sum - 30) / 60) * 0.35;
+  // Keep a centered raw mix in [-0.5..+0.5]. Gain and DC filtering are applied
+  // after resampling so they operate in the final audio sample domain.
+  return (sum - 30) / 60;
+}
+
+function pokeyAudioNextPulseCycles(counter, clockCh) {
+  var c = counter | 0;
+  if (c < 1) c = 1;
+  var div = clockCh.clkDivCycles | 0;
+  if (div <= 1) return c;
+  var acc = clockCh.clkAccCycles | 0;
+  var firstTick = (div - acc) | 0;
+  if (firstTick < 1) firstTick = 1;
+  return firstTick + ((c - 1) * div);
+}
+
+function pokeyAudioCyclesUntilNextEvent(st) {
+  var audctl = st.audctl & 0xff;
+  var pair12 = (audctl & 0x10) !== 0;
+  var pair34 = (audctl & 0x08) !== 0;
+  var next = 0x7fffffff;
+
+  if (pair12) {
+    var n12 = pokeyAudioNextPulseCycles(st.channels[1].counter | 0, st.channels[0]);
+    if (n12 < next) next = n12;
+  } else {
+    var n0 = pokeyAudioNextPulseCycles(st.channels[0].counter | 0, st.channels[0]);
+    var n1 = pokeyAudioNextPulseCycles(st.channels[1].counter | 0, st.channels[1]);
+    if (n0 < next) next = n0;
+    if (n1 < next) next = n1;
+  }
+
+  if (pair34) {
+    var n34 = pokeyAudioNextPulseCycles(st.channels[3].counter | 0, st.channels[2]);
+    if (n34 < next) next = n34;
+  } else {
+    var n2 = pokeyAudioNextPulseCycles(st.channels[2].counter | 0, st.channels[2]);
+    var n3 = pokeyAudioNextPulseCycles(st.channels[3].counter | 0, st.channels[3]);
+    if (n2 < next) next = n2;
+    if (n3 < next) next = n3;
+  }
+
+  if (next < 1) next = 1;
+  return next;
+}
+
+function pokeyAudioAdvanceClockNoPulse(ch, cycles) {
+  if (!cycles) return 0;
+  var div = ch.clkDivCycles | 0;
+  if (div <= 1) return cycles;
+  var acc = (ch.clkAccCycles | 0) + cycles;
+  var ticks = Math.floor(acc / div);
+  ch.clkAccCycles = (acc - ticks * div) | 0;
+  return ticks;
+}
+
+function pokeyAudioCounterDecrementNoPulse(counter, ticks) {
+  if (!ticks) return counter | 0;
+  var next = (counter | 0) - (ticks | 0);
+  if (next < 1) next = 1;
+  return next | 0;
+}
+
+function pokeyAudioFastForwardNoPulse(st, cycles) {
+  if (!cycles) return;
+  var n = cycles;
+  if (n < 1) return;
+
+  for (var i = 0; i < n; i++) pokeyAudioPolyStep(st);
+
+  var audctl = st.audctl & 0xff;
+  var pair12 = (audctl & 0x10) !== 0;
+  var pair34 = (audctl & 0x08) !== 0;
+
+  if (pair12) {
+    var ticks12 = pokeyAudioAdvanceClockNoPulse(st.channels[0], n);
+    st.channels[1].counter = pokeyAudioCounterDecrementNoPulse(st.channels[1].counter, ticks12);
+  } else {
+    for (var c = 0; c < 2; c++) {
+      var ch = st.channels[c];
+      var ticks = pokeyAudioAdvanceClockNoPulse(ch, n);
+      ch.counter = pokeyAudioCounterDecrementNoPulse(ch.counter, ticks);
+    }
+  }
+
+  if (pair34) {
+    var ticks34 = pokeyAudioAdvanceClockNoPulse(st.channels[2], n);
+    st.channels[3].counter = pokeyAudioCounterDecrementNoPulse(st.channels[3].counter, ticks34);
+  } else {
+    for (var c2 = 2; c2 < 4; c2++) {
+      var ch2 = st.channels[c2];
+      var ticks2 = pokeyAudioAdvanceClockNoPulse(ch2, n);
+      ch2.counter = pokeyAudioCounterDecrementNoPulse(ch2.counter, ticks2);
+    }
+  }
+}
+
+function pokeyAudioFinalizeSample(st, sample) {
+  var out = sample * st.mixGain;
+  out = pokeyAudioApplyDcBlock(st, out);
+  if (out > 1.0) out = 1.0;
+  else if (out < -1.0) out = -1.0;
+  return out;
 }
 
 function pokeyAudioReloadDividerCounters(st) {
@@ -528,7 +666,7 @@ function pokeyAudioSync(ctx, st, cycleCounter) {
   var fillDelta = fillLevel - targetFill;
   if (fillDelta > targetFill) fillDelta = targetFill;
   else if (fillDelta < -targetFill) fillDelta = -targetFill;
-  var maxAdjust = Math.floor(cpsBase / 25); // +/-4%
+  var maxAdjust = Math.floor(cpsBase / 500); // +/- 0.2%
   if (maxAdjust < 1) maxAdjust = 1;
   var adjust = Math.trunc((fillDelta * maxAdjust) / targetFill);
   cps = cpsBase + adjust;
@@ -542,20 +680,55 @@ function pokeyAudioSync(ctx, st, cycleCounter) {
   }
 
   while (cur < target) {
-    var level = pokeyAudioMixCycleSample(st);
+    var remaining = target - cur;
+    var runCycles = remaining;
+    var nextEvent = 0;
+    var skctlRun = st.skctl & 0x03;
+    if (skctlRun !== 0) {
+      nextEvent = pokeyAudioCyclesUntilNextEvent(st);
+      if (nextEvent < runCycles) runCycles = nextEvent;
+    }
 
-    samplePhase += POKEY_FP_ONE;
-    while (samplePhase >= cps) {
-      tmp[tmpCount++] = level;
-      samplePhase -= cps;
-      if (tmpCount === tmp.length) {
-        pokeyAudioRingWrite(st, tmp, tmpCount);
-        tmpCount = 0;
+    var level = pokeyAudioMixCycleSample(st);
+    var left = runCycles;
+
+    while (left > 0) {
+      var cyclesUntilSample = (((cps - samplePhase) + POKEY_FP_ONE - 1) / POKEY_FP_ONE) | 0;
+      if (cyclesUntilSample < 1) cyclesUntilSample = 1;
+      var batch = left < cyclesUntilSample ? left : cyclesUntilSample;
+
+      st.sampleAccum += level * batch;
+      st.sampleAccumCount = (st.sampleAccumCount + batch) | 0;
+      samplePhase += POKEY_FP_ONE * batch;
+      left -= batch;
+
+      while (samplePhase >= cps) {
+        if (st.sampleAccumCount > 0) {
+          tmp[tmpCount++] = pokeyAudioFinalizeSample(st, st.sampleAccum / st.sampleAccumCount);
+          st.sampleAccum = 0;
+          st.sampleAccumCount = 0;
+        } else {
+          tmp[tmpCount++] = pokeyAudioFinalizeSample(st, level);
+        }
+        samplePhase -= cps;
+        if (tmpCount === tmp.length) {
+          pokeyAudioRingWrite(st, tmp, tmpCount);
+          tmpCount = 0;
+        }
       }
     }
 
-    pokeyAudioStepCpuCycle(st);
-    cur++;
+    if (skctlRun !== 0) {
+      var hitEvent = nextEvent > 0 && runCycles === nextEvent;
+      if (hitEvent) {
+        if (runCycles > 1) pokeyAudioFastForwardNoPulse(st, runCycles - 1);
+        pokeyAudioStepCpuCycle(st);
+      } else {
+        pokeyAudioFastForwardNoPulse(st, runCycles);
+      }
+    }
+
+    cur += runCycles;
   }
 
   if (tmpCount) pokeyAudioRingWrite(st, tmp, tmpCount);
@@ -573,15 +746,6 @@ function pokeyAudioConsume(st, out) {
     out[i] = hold;
   }
   st.lastSample = hold || 0.0;
-}
-
-function sioChecksum(buf, size) {
-  var checksum = 0;
-  for (var i = 0; i < size; i++) {
-    var b = buf[i] & 0xff;
-    checksum = (checksum + (((checksum + b) >> 8) & 0xff) + b) & 0xff;
-  }
-  return checksum & 0xff;
 }
 
 function pokeyStepLfsr17(io) {
@@ -744,251 +908,6 @@ function pokeyRestartTimers(ctx) {
   cycleTimedEventUpdate(ctx);
 }
 
-function pokeySeroutWrite(ctx, value) {
-  var io = ctx.ioData;
-  var now = ctx.cycleCounter;
-
-  io.serialOutputNeedDataCycle = now + SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
-  cycleTimedEventUpdate(ctx);
-
-  var buf = io.sioBuffer;
-  var SIO_DATA_OFFSET = 32;
-
-  function queueSerinResponse(size) {
-    io.sioInSize = size | 0;
-    io.sioInIndex = 0;
-    io.serialInputDataReadyCycle = now + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
-    cycleTimedEventUpdate(ctx);
-  }
-
-  function diskSectorSize(disk) {
-    var s = 128;
-    if (disk && disk.length >= 6) {
-      s = (disk[4] & 0xff) | ((disk[5] & 0xff) << 8);
-      if (s !== 128 && s !== 256) s = 128;
-    }
-    return s;
-  }
-
-  function sectorBytesAndOffset(sectorIndex, sectorSize) {
-    if (sectorIndex <= 0) return null;
-    var bytes = sectorIndex < 4 ? 128 : sectorSize;
-    var index = sectorIndex < 4 ? (sectorIndex - 1) * 128 : (sectorIndex - 4) * sectorSize + 128 * 3;
-    var offset = 16 + index;
-    return { bytes: bytes | 0, offset: offset | 0 };
-  }
-
-  // --- Data phase (write/put/verify) ---
-  if ((io.sioOutPhase | 0) === 1) {
-    var dataIndex = io.sioDataIndex | 0;
-    buf[SIO_DATA_OFFSET + dataIndex] = value & 0xff;
-    dataIndex = (dataIndex + 1) | 0;
-    io.sioDataIndex = dataIndex;
-
-    var expected = (io.sioPendingBytes | 0) + 1; // data + checksum
-    if (dataIndex !== expected) return;
-
-    io.serialOutputTransmissionDoneCycle = now + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
-    cycleTimedEventUpdate(ctx);
-
-    var dataBytes = io.sioPendingBytes | 0;
-    var provided = buf[SIO_DATA_OFFSET + dataBytes] & 0xff;
-    var calculated = sioChecksum(buf.subarray(SIO_DATA_OFFSET, SIO_DATA_OFFSET + dataBytes), dataBytes);
-
-    var disk = io.disk1;
-    var diskSize = (io.disk1Size | 0) || (disk ? disk.length : 0);
-    var sectorSize = diskSectorSize(disk);
-    var si = sectorBytesAndOffset(io.sioPendingSector | 0, sectorSize);
-    var cmd = io.sioPendingCmd & 0xff;
-
-    if (calculated !== provided || !disk || !si || si.offset < 16 || si.offset + si.bytes > diskSize || si.bytes !== dataBytes) {
-      buf[0] = "N".charCodeAt(0);
-      queueSerinResponse(1);
-    } else if (cmd === 0x56) {
-      // VERIFY SECTOR: compare payload to current disk content.
-      var ok = true;
-      for (var vi = 0; vi < si.bytes; vi++) {
-        if ((disk[si.offset + vi] & 0xff) !== (buf[SIO_DATA_OFFSET + vi] & 0xff)) {
-          ok = false;
-          break;
-        }
-      }
-      buf[0] = "A".charCodeAt(0);
-      buf[1] = ok ? "C".charCodeAt(0) : "E".charCodeAt(0);
-      queueSerinResponse(2);
-    } else {
-      // WRITE / PUT: write sector payload.
-      disk.set(buf.subarray(SIO_DATA_OFFSET, SIO_DATA_OFFSET + si.bytes), si.offset);
-      buf[0] = "A".charCodeAt(0);
-      buf[1] = "C".charCodeAt(0);
-      queueSerinResponse(2);
-    }
-
-    // Reset state.
-    io.sioOutPhase = 0;
-    io.sioDataIndex = 0;
-    io.sioPendingCmd = 0;
-    io.sioPendingSector = 0;
-    io.sioPendingBytes = 0;
-    io.sioOutIndex = 0;
-    return;
-  }
-
-  // --- Command phase ---
-  var outIdx = io.sioOutIndex | 0;
-  if (outIdx === 0) {
-    if (value > 0 && value < 255) {
-      buf[0] = value & 0xff;
-      io.sioOutIndex = 1;
-    }
-    return;
-  }
-
-  buf[outIdx] = value & 0xff;
-  outIdx = (outIdx + 1) | 0;
-  io.sioOutIndex = outIdx;
-
-  if (outIdx !== 5) return;
-
-  // Reset outgoing command state (always, like the C emulator).
-  io.sioOutIndex = 0;
-
-  if (sioChecksum(buf, 4) !== (buf[4] & 0xff)) {
-    buf[0] = "N".charCodeAt(0);
-    queueSerinResponse(1);
-    return;
-  }
-
-  io.serialOutputTransmissionDoneCycle = now + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
-  cycleTimedEventUpdate(ctx);
-
-  var dev = buf[0] & 0xff;
-  var cmd2 = buf[1] & 0xff;
-  var aux1 = buf[2] & 0xff;
-  var aux2 = buf[3] & 0xff;
-
-  // Only D1: for now.
-  if (dev !== 0x31) {
-    buf[0] = "N".charCodeAt(0);
-    queueSerinResponse(1);
-    return;
-  }
-
-  var disk2 = io.disk1;
-  var diskSize2 = (io.disk1Size | 0) || (disk2 ? disk2.length : 0);
-  var sectorSize2 = diskSectorSize(disk2);
-
-  if (cmd2 === 0x52) {
-    // READ SECTOR
-    var sectorIndex = (aux1 | (aux2 << 8)) & 0xffff;
-    var si2 = sectorBytesAndOffset(sectorIndex, sectorSize2);
-    if (!disk2 || !si2 || si2.offset < 16 || si2.offset + si2.bytes > diskSize2) {
-      buf[0] = "N".charCodeAt(0);
-      queueSerinResponse(1);
-      return;
-    }
-    buf[0] = "A".charCodeAt(0);
-    buf[1] = "C".charCodeAt(0);
-    buf.set(disk2.subarray(si2.offset, si2.offset + si2.bytes), 2);
-    buf[si2.bytes + 2] = sioChecksum(buf.subarray(2, 2 + si2.bytes), si2.bytes);
-    queueSerinResponse(si2.bytes + 3);
-    return;
-  }
-
-  if (cmd2 === 0x53) {
-    // STATUS
-    if (!disk2 || !disk2.length || disk2[0] === 0) {
-      buf[0] = "N".charCodeAt(0);
-      queueSerinResponse(1);
-      return;
-    }
-    buf[0] = "A".charCodeAt(0);
-    buf[1] = "C".charCodeAt(0);
-    if (sectorSize2 === 128) {
-      buf[2] = 0x10;
-      buf[3] = 0x00;
-      buf[4] = 0x01;
-      buf[5] = 0x00;
-      buf[6] = 0x11;
-    } else {
-      buf[2] = 0x30;
-      buf[3] = 0x00;
-      buf[4] = 0x01;
-      buf[5] = 0x00;
-      buf[6] = 0x31;
-    }
-    queueSerinResponse(7);
-    return;
-  }
-
-  if (cmd2 === 0x57 || cmd2 === 0x50 || cmd2 === 0x56) {
-    // WRITE / PUT / VERIFY SECTOR (expects a data frame).
-    var sectorIndex2 = (aux1 | (aux2 << 8)) & 0xffff;
-    var si3 = sectorBytesAndOffset(sectorIndex2, sectorSize2);
-    if (!disk2 || !si3 || si3.offset < 16 || si3.offset + si3.bytes > diskSize2) {
-      buf[0] = "N".charCodeAt(0);
-      queueSerinResponse(1);
-      return;
-    }
-
-    io.sioOutPhase = 1;
-    io.sioDataIndex = 0;
-    io.sioPendingCmd = cmd2 & 0xff;
-    io.sioPendingSector = sectorIndex2 & 0xffff;
-    io.sioPendingBytes = si3.bytes | 0;
-
-    // ACK command frame; host will then send the data frame.
-    buf[0] = "A".charCodeAt(0);
-    queueSerinResponse(1);
-    return;
-  }
-
-  if (cmd2 === 0x21) {
-    // FORMAT: clear data area (very minimal).
-    if (!disk2 || !diskSize2 || diskSize2 <= 16) {
-      buf[0] = "N".charCodeAt(0);
-      queueSerinResponse(1);
-      return;
-    }
-    disk2.fill(0, 16);
-    buf[0] = "A".charCodeAt(0);
-    buf[1] = "C".charCodeAt(0);
-    queueSerinResponse(2);
-    return;
-  }
-
-  if (cmd2 === 0x55) {
-    // MOTOR ON: no-op, but ACK.
-    buf[0] = "A".charCodeAt(0);
-    buf[1] = "C".charCodeAt(0);
-    queueSerinResponse(2);
-    return;
-  }
-
-  // Unsupported command.
-  buf[0] = "N".charCodeAt(0);
-  queueSerinResponse(1);
-}
-
-function pokeySerinRead(ctx) {
-  var io = ctx.ioData;
-  if ((io.sioInSize | 0) > 0) {
-    var b = io.sioBuffer[io.sioInIndex & 0xffff] & 0xff;
-    io.sioInIndex = (io.sioInIndex + 1) & 0xffff;
-    io.sioInSize = (io.sioInSize - 1) | 0;
-    ctx.ram[IO_SEROUT_SERIN] = b;
-
-    if ((io.sioInSize | 0) > 0) {
-      io.serialInputDataReadyCycle =
-        ctx.cycleCounter + SERIAL_INPUT_DATA_READY_CYCLES;
-      cycleTimedEventUpdate(ctx);
-    } else {
-      io.sioInIndex = 0;
-    }
-  }
-  return ctx.ram[IO_SEROUT_SERIN] & 0xff;
-}
-
     return {
       createState: pokeyAudioCreateState,
       setTargetBufferSamples: pokeyAudioSetTargetBufferSamples,
@@ -1004,8 +923,8 @@ function pokeySerinRead(ctx) {
       potUpdate: pokeyPotUpdate,
       timerPeriodCpuCycles: pokeyTimerPeriodCpuCycles,
       restartTimers: pokeyRestartTimers,
-      seroutWrite: pokeySeroutWrite,
-      serinRead: pokeySerinRead
+      seroutWrite: pokeySioApi.seroutWrite,
+      serinRead: pokeySioApi.serinRead
     };
   }
 
