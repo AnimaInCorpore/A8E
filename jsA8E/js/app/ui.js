@@ -233,6 +233,13 @@
     };
     var emulatedShiftDown = false;
     var pressedVirtualKeysByPointer = new Map();
+    var pressedPhysicalKeysByToken = new Map();
+    var keyboardButtonsByCode = new Map();
+    var keyboardButtonsByKey = new Map();
+    var pressedButtonRefCount = new WeakMap();
+    var pressedButtonsBySource = new Map();
+    var flashTokenCounter = 0;
+    var virtualTapTokenCounter = 0;
     var joystickState = {
       up: false,
       down: false,
@@ -361,6 +368,130 @@
       );
     }
 
+    function addButtonLookupEntry(map, key, button) {
+      if (!key || !button) return;
+      var list = map.get(key);
+      if (!list) {
+        list = [];
+        map.set(key, list);
+      }
+      list.push(button);
+    }
+
+    function normalizeKeyboardDataKey(key) {
+      if (key === null || key === undefined) return "";
+      var v = String(key);
+      if (v === "Spacebar" || v === "Space") return " ";
+      if (v.length === 1) return v.toLowerCase();
+      return v;
+    }
+
+    function indexKeyboardButtons() {
+      keyboardButtonsByCode.clear();
+      keyboardButtonsByKey.clear();
+      if (!atariKeyboard) return;
+      var buttons = atariKeyboard.querySelectorAll("button.kbKey");
+      buttons.forEach(function (button) {
+        addButtonLookupEntry(keyboardButtonsByCode, button.getAttribute("data-code") || "", button);
+        addButtonLookupEntry(
+          keyboardButtonsByKey,
+          normalizeKeyboardDataKey(button.getAttribute("data-key")),
+          button
+        );
+      });
+    }
+
+    function setButtonPressed(button, sourceToken, isDown) {
+      if (!button || !sourceToken) return;
+      var source = String(sourceToken);
+      var sourceButtons = pressedButtonsBySource.get(source);
+      if (isDown) {
+        if (!sourceButtons) {
+          sourceButtons = new Set();
+          pressedButtonsBySource.set(source, sourceButtons);
+        }
+        if (sourceButtons.has(button)) return;
+        sourceButtons.add(button);
+        var nextCount = (pressedButtonRefCount.get(button) || 0) + 1;
+        pressedButtonRefCount.set(button, nextCount);
+        if (nextCount === 1) button.classList.add("pressed");
+        return;
+      }
+      if (!sourceButtons || !sourceButtons.has(button)) return;
+      sourceButtons.delete(button);
+      if (sourceButtons.size === 0) pressedButtonsBySource.delete(source);
+      var next = (pressedButtonRefCount.get(button) || 0) - 1;
+      if (next <= 0) {
+        pressedButtonRefCount.delete(button);
+        button.classList.remove("pressed");
+      } else {
+        pressedButtonRefCount.set(button, next);
+      }
+    }
+
+    function setButtonsPressed(buttons, sourceToken, isDown) {
+      if (!buttons || !buttons.length) return;
+      buttons.forEach(function (button) {
+        setButtonPressed(button, sourceToken, isDown);
+      });
+    }
+
+    function clearButtonPressSource(sourceToken) {
+      if (!sourceToken) return;
+      var source = String(sourceToken);
+      var sourceButtons = pressedButtonsBySource.get(source);
+      if (!sourceButtons || sourceButtons.size === 0) {
+        pressedButtonsBySource.delete(source);
+        return;
+      }
+      Array.from(sourceButtons).forEach(function (button) {
+        setButtonPressed(button, source, false);
+      });
+    }
+
+    function physicalKeyToken(e) {
+      if (e && e.code) return e.code;
+      var key = normalizeKeyboardDataKey((e && e.key) || "Unknown");
+      var location = e && typeof e.location === "number" ? e.location : 0;
+      return key + ":" + location;
+    }
+
+    function findButtonsForPhysicalEvent(e) {
+      if (!atariKeyboard) return [];
+      var modifier = modifierForPhysicalEvent(e);
+      if (modifier === "shift" || modifier === "ctrl") return [];
+      var code = (e && e.code) || "";
+      if (code && keyboardButtonsByCode.has(code)) return keyboardButtonsByCode.get(code);
+      var key = normalizeKeyboardDataKey((e && e.key) || "");
+      if (key && keyboardButtonsByKey.has(key)) return keyboardButtonsByKey.get(key);
+      return [];
+    }
+
+    function syncPhysicalKeyVisual(e, isDown) {
+      var token = physicalKeyToken(e);
+      var sourceToken = "physbtn:" + token;
+      if (isDown) {
+        if (pressedPhysicalKeysByToken.has(token)) return;
+        var buttons = findButtonsForPhysicalEvent(e);
+        if (!buttons.length) return;
+        pressedPhysicalKeysByToken.set(token, buttons);
+        setButtonsPressed(buttons, sourceToken, true);
+        return;
+      }
+      if (!pressedPhysicalKeysByToken.has(token)) return;
+      var prevButtons = pressedPhysicalKeysByToken.get(token) || [];
+      pressedPhysicalKeysByToken.delete(token);
+      setButtonsPressed(prevButtons, sourceToken, false);
+    }
+
+    function clearPhysicalKeyVisuals() {
+      Array.from(pressedPhysicalKeysByToken.keys()).forEach(function (token) {
+        var buttons = pressedPhysicalKeysByToken.get(token) || [];
+        pressedPhysicalKeysByToken.delete(token);
+        setButtonsPressed(buttons, "physbtn:" + token, false);
+      });
+    }
+
     function setModifierButtons(modifier, active) {
       if (!atariKeyboard) return;
       var buttons = atariKeyboard.querySelectorAll('button[data-modifier="' + modifier + '"]');
@@ -422,6 +553,7 @@
         code: e.code || "",
         ctrlKey: !!e.ctrlKey || isModifierActive("ctrl"),
         shiftKey: !!e.shiftKey || isModifierActive("shift"),
+        sourceToken: "phys:" + physicalKeyToken(e),
       };
     }
 
@@ -439,7 +571,7 @@
       refreshModifierButtons("ctrl");
     }
 
-    function makeVirtualKeyEvent(key, code, shiftOverride, sdlSym) {
+    function makeVirtualKeyEvent(key, code, shiftOverride, sdlSym, sourceToken) {
       var ev = {
         key: key,
         code: code || "",
@@ -447,6 +579,7 @@
         shiftKey: shiftOverride !== undefined ? !!shiftOverride : isModifierActive("shift"),
       };
       if (typeof sdlSym === "number" && isFinite(sdlSym)) ev.sdlSym = sdlSym | 0;
+      if (sourceToken !== undefined && sourceToken !== null) ev.sourceToken = String(sourceToken);
       return ev;
     }
 
@@ -455,7 +588,7 @@
       var next = isModifierActive("shift");
       if (next === emulatedShiftDown) return;
       emulatedShiftDown = next;
-      var ev = makeVirtualKeyEvent("Shift", "ShiftLeft", next);
+      var ev = makeVirtualKeyEvent("Shift", "ShiftLeft", next, undefined, "modifier:shift");
       if (next) app.onKeyDown(ev);
       else app.onKeyUp(ev);
     }
@@ -470,15 +603,16 @@
 
     function flashVirtualKey(btn, durationMs) {
       if (!btn) return;
-      btn.classList.add("pressed");
+      var sourceToken = "flash:" + ++flashTokenCounter;
+      setButtonPressed(btn, sourceToken, true);
       window.setTimeout(function () {
-        btn.classList.remove("pressed");
+        setButtonPressed(btn, sourceToken, false);
       }, durationMs || 120);
     }
 
     function pressVirtualKey(key, code, sdlSym) {
       if (!app || !app.onKeyDown || !app.onKeyUp) return;
-      var ev = makeVirtualKeyEvent(key, code, undefined, sdlSym);
+      var ev = makeVirtualKeyEvent(key, code, undefined, sdlSym, "vktap:" + ++virtualTapTokenCounter);
       app.onKeyDown(ev);
       app.onKeyUp(ev);
       if (virtualModifiers.shift) setShiftModifier(false);
@@ -497,21 +631,22 @@
       if (!pressedVirtualKeysByPointer.has(pointerId)) return;
       var st = pressedVirtualKeysByPointer.get(pointerId);
       pressedVirtualKeysByPointer.delete(pointerId);
-      if (st.btn) st.btn.classList.remove("pressed");
+      clearButtonPressSource(st.sourceToken);
       if (app && app.onKeyUp) {
-        app.onKeyUp(makeVirtualKeyEvent(st.key, st.code, undefined, st.sdlSym));
+        app.onKeyUp(makeVirtualKeyEvent(st.key, st.code, undefined, st.sdlSym, st.sourceToken));
       }
       if (st.consumeShift && virtualModifiers.shift) setShiftModifier(false);
       if (st.consumeCtrl && virtualModifiers.ctrl) setCtrlModifier(false);
     }
 
-    function makeJoystickEvent(key, code, sdlSym) {
+    function makeJoystickEvent(key, code, sdlSym, sourceToken) {
       return {
         key: key,
         code: code,
         ctrlKey: false,
         shiftKey: false,
         sdlSym: sdlSym,
+        sourceToken: sourceToken,
       };
     }
 
@@ -535,7 +670,7 @@
         var glow = joystickGlows[entry.name];
         if (glow) glow.classList.toggle("active", nextPressed);
         if (!app || !app.onKeyDown || !app.onKeyUp) return;
-        var ev = makeJoystickEvent(entry.key, entry.code, entry.sdlSym);
+        var ev = makeJoystickEvent(entry.key, entry.code, entry.sdlSym, "joy:" + entry.name);
         if (nextPressed) app.onKeyDown(ev);
         else app.onKeyUp(ev);
       });
@@ -547,7 +682,7 @@
       joystickState.fire = next;
       if (fireButton) fireButton.classList.toggle("active", next);
       if (!app || !app.onKeyDown || !app.onKeyUp) return;
-      var ev = makeJoystickEvent("Alt", "AltLeft", 308);
+      var ev = makeJoystickEvent("Alt", "AltLeft", 308, "joy:fire");
       if (next) app.onKeyDown(ev);
       else app.onKeyUp(ev);
     }
@@ -756,6 +891,7 @@
     });
 
     if (atariKeyboard) {
+      indexKeyboardButtons();
       atariKeyboard.addEventListener("pointerdown", function (e) {
         var btn = e.target.closest("button.kbKey");
         if (!btn || !atariKeyboard.contains(btn)) return;
@@ -789,15 +925,18 @@
           }
         }
 
-        btn.classList.add("pressed");
+        releasePointerVirtualKey(e.pointerId);
+        var sourceToken = "vkptr:" + e.pointerId;
+        setButtonPressed(btn, sourceToken, true);
         if (app && app.onKeyDown) {
-          app.onKeyDown(makeVirtualKeyEvent(key, code, undefined, sdlSym));
+          app.onKeyDown(makeVirtualKeyEvent(key, code, undefined, sdlSym, sourceToken));
         }
         pressedVirtualKeysByPointer.set(e.pointerId, {
           btn: btn,
           key: key,
           code: code,
           sdlSym: sdlSym,
+          sourceToken: sourceToken,
           consumeShift: virtualModifiers.shift,
           consumeCtrl: virtualModifiers.ctrl,
         });
@@ -936,6 +1075,7 @@
 
     // Keyboard input forwarded to emulator.
     canvas.addEventListener("keydown", function (e) {
+      syncPhysicalKeyVisual(e, true);
       var ev = normalizePhysicalKeyEvent(e, true);
       if (!ev) {
         e.preventDefault();
@@ -944,6 +1084,7 @@
       if (app.onKeyDown(ev)) e.preventDefault();
     });
     canvas.addEventListener("keyup", function (e) {
+      syncPhysicalKeyVisual(e, false);
       var ev = normalizePhysicalKeyEvent(e, false);
       if (!ev) {
         e.preventDefault();
@@ -961,10 +1102,14 @@
     });
     canvas.addEventListener("blur", function () {
       clearPhysicalModifiers();
+      clearPhysicalKeyVisuals();
+      resetKeyboardControls();
       if (app && app.releaseAllKeys) app.releaseAllKeys();
     });
     window.addEventListener("blur", function () {
       clearPhysicalModifiers();
+      clearPhysicalKeyVisuals();
+      resetKeyboardControls();
       if (app && app.releaseAllKeys) app.releaseAllKeys();
     });
 

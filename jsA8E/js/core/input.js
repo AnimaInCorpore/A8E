@@ -22,12 +22,65 @@
       var isReady = opts.isReady;
       var pressedKeys = {};
 
+      function normalizeSourceToken(e) {
+        if (!e || e.sourceToken === undefined || e.sourceToken === null) return null;
+        return String(e.sourceToken);
+      }
+
+      function getPressedState(sym, createIfMissing) {
+        var st = pressedKeys[sym];
+        if (!st && createIfMissing) {
+          st = {
+            anonymousCount: 0,
+            sources: new Set(),
+          };
+          pressedKeys[sym] = st;
+        }
+        return st || null;
+      }
+
+      function isSymDown(st) {
+        return !!st && (st.anonymousCount > 0 || st.sources.size > 0);
+      }
+
+      function pressSym(sym, e) {
+        var st = getPressedState(sym, true);
+        var wasDown = isSymDown(st);
+        var source = normalizeSourceToken(e);
+        if (source !== null) {
+          if (st.sources.has(source)) return { handled: true, newlyPressed: false };
+          st.sources.add(source);
+          return { handled: true, newlyPressed: !wasDown };
+        }
+        if (e && e.repeat) return { handled: true, newlyPressed: false };
+        if (wasDown) return { handled: true, newlyPressed: false };
+        st.anonymousCount++;
+        return { handled: true, newlyPressed: !wasDown };
+      }
+
+      function releaseSym(sym, e) {
+        var st = getPressedState(sym, false);
+        if (!st) return { handled: false, newlyReleased: false };
+        var source = normalizeSourceToken(e);
+        if (source !== null) {
+          if (!st.sources.has(source)) return { handled: false, newlyReleased: false };
+          st.sources.delete(source);
+        } else {
+          if (st.anonymousCount <= 0) return { handled: false, newlyReleased: false };
+          st.anonymousCount--;
+        }
+        var stillDown = isSymDown(st);
+        if (!stillDown) delete pressedKeys[sym];
+        return { handled: true, newlyReleased: !stillDown };
+      }
+
       function onKeyDown(e) {
         if (!isReady()) return false;
         var sym = browserKeyToSdlSym(e);
         if (sym === null) return false;
-        if (pressedKeys[sym]) return true;
-        pressedKeys[sym] = true;
+        var down = pressSym(sym, e);
+        if (!down.handled) return false;
+        if (!down.newlyPressed) return true;
 
         // Joystick / console / reset/break follow C behavior.
         if (sym === 273) {
@@ -92,7 +145,10 @@
         }
 
         var kc = KEY_CODE_TABLE[sym] !== undefined ? KEY_CODE_TABLE[sym] : 255;
-        if (kc === 255) return false;
+        if (kc === 255) {
+          releaseSym(sym, e);
+          return false;
+        }
 
         if (e.ctrlKey) kc |= 0x80;
         if (e.shiftKey) kc |= 0x40;
@@ -111,8 +167,9 @@
         if (!isReady()) return false;
         var sym = browserKeyToSdlSym(e);
         if (sym === null) return false;
-        if (!pressedKeys[sym]) return false;
-        delete pressedKeys[sym];
+        var up = releaseSym(sym, e);
+        if (!up.handled) return false;
+        if (!up.newlyReleased) return true;
 
         if (sym === 273) {
           machine.ctx.ram[IO_PORTA] |= 0x01;
