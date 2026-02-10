@@ -395,6 +395,10 @@
           pokeyPotUpdate(ctx);
           return ram[addr] & 0xff;
 
+        case IO_SKCTL_SKSTAT:
+          pokeySyncLfsr17(ctx);
+          return ram[addr] & 0xff;
+
         default:
           return ram[addr] & 0xff;
       }

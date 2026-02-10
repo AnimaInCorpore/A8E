@@ -111,9 +111,16 @@ typedef struct
 
 	u32 lKeyPressCounter;
 
+	/* POKEY pot scan state */
+	u8 cPotScanActive;
+	u64 llPotScanStartCycle;
+	u8 aPotValues[8];    /* target values per pot (set by input layer) */
+	u8 aPotLatched[8];   /* 1 = latched at target */
+	u8 cAllPot;          /* ALLPOT shadow (bits clear when pot latched) */
+
 	u8 *pDisk1;
 	u32 lDiskSize;
-	
+
 	u8 *pBasicRom;
 	u8 *pOsRom;
 	u8 *pSelfTestRom;

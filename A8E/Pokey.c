@@ -979,11 +979,87 @@ int Pokey_ShouldThrottle(_6502_Context_t *pContext)
 /* $D200 - $D2FF (POKEY) */
 /***********************************************/
 
+/* Pot scanning constants */
+#define POKEY_POT_MAX 228
+#define POKEY_POT_CYCLES_PER_COUNT 28
+
+void Pokey_PotStartScan(_6502_Context_t *pContext)
+{
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+	u32 i;
+
+	if(!pIoData)
+		return;
+
+	pIoData->cPotScanActive = 1;
+	pIoData->llPotScanStartCycle = pContext->llCycleCounter;
+	pIoData->cAllPot = 0xff;
+	memset(pIoData->aPotLatched, 0, sizeof(pIoData->aPotLatched));
+
+	for(i = 0; i < 8; i++)
+		RAM[(IO_AUDF1_POT0 + i) & 0xffff] = 0x00;
+	RAM[IO_AUDCTL_ALLPOT] = 0xff;
+}
+
+void Pokey_PotUpdate(_6502_Context_t *pContext)
+{
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+	u64 elapsed;
+	u32 count;
+	u32 i;
+	u8 allpot;
+	u8 anyPending;
+
+	if(!pIoData || !pIoData->cPotScanActive)
+		return;
+
+	elapsed = pContext->llCycleCounter - pIoData->llPotScanStartCycle;
+	count = (u32)(elapsed / POKEY_POT_CYCLES_PER_COUNT);
+	if(count > 255)
+		count = 255;
+
+	allpot = pIoData->cAllPot;
+	anyPending = 0;
+
+	for(i = 0; i < 8; i++)
+	{
+		u8 target;
+
+		if(pIoData->aPotLatched[i])
+			continue;
+
+		anyPending = 1;
+		target = pIoData->aPotValues[i];
+		if(target > POKEY_POT_MAX)
+			target = POKEY_POT_MAX;
+
+		if(count >= target)
+		{
+			pIoData->aPotLatched[i] = 1;
+			RAM[(IO_AUDF1_POT0 + i) & 0xffff] = target;
+			allpot &= ~(1 << i);
+		}
+		else
+		{
+			u32 cur = count;
+			if(cur > POKEY_POT_MAX)
+				cur = POKEY_POT_MAX;
+			RAM[(IO_AUDF1_POT0 + i) & 0xffff] = (u8)cur;
+		}
+	}
+
+	pIoData->cAllPot = allpot;
+	RAM[IO_AUDCTL_ALLPOT] = allpot;
+
+	if(!anyPending || (allpot & 0xff) == 0)
+		pIoData->cPotScanActive = 0;
+}
+
 /* $D200 AUDF1/POT0 */
 u8 *Pokey_AUDF1_POT0(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
- 	{	
+ 	{
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_AUDF1_POT0] = *pValue;
 		{
@@ -1005,6 +1081,10 @@ u8 *Pokey_AUDF1_POT0(_6502_Context_t *pContext, u8 *pValue)
 		printf(" AUDF1: %02X\n", *pValue);
 #endif
 	}
+	else
+	{
+		Pokey_PotUpdate(pContext);
+	}
 
 	return &RAM[IO_AUDF1_POT0];
 }
@@ -1013,13 +1093,17 @@ u8 *Pokey_AUDF1_POT0(_6502_Context_t *pContext, u8 *pValue)
 u8 *Pokey_AUDC1_POT1(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
- 	{	
+ 	{
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_AUDC1_POT1] = *pValue;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
 		printf(" AUDC1: %02X\n", *pValue);
 #endif
+	}
+	else
+	{
+		Pokey_PotUpdate(pContext);
 	}
 
 	return &RAM[IO_AUDC1_POT1];
@@ -1051,6 +1135,10 @@ u8 *Pokey_AUDF2_POT2(_6502_Context_t *pContext, u8 *pValue)
 		printf(" AUDF2: %02X\n", *pValue);
 #endif
 	}
+	else
+	{
+		Pokey_PotUpdate(pContext);
+	}
 
 	return &RAM[IO_AUDF2_POT2];
 }
@@ -1059,13 +1147,17 @@ u8 *Pokey_AUDF2_POT2(_6502_Context_t *pContext, u8 *pValue)
 u8 *Pokey_AUDC2_POT3(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
- 	{	
+ 	{
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_AUDC2_POT3] = *pValue;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
 		printf(" AUDC2: %02X\n", *pValue);
 #endif
+	}
+	else
+	{
+		Pokey_PotUpdate(pContext);
 	}
 
 	return &RAM[IO_AUDC2_POT3];
@@ -1097,6 +1189,10 @@ u8 *Pokey_AUDF3_POT4(_6502_Context_t *pContext, u8 *pValue)
 		printf(" AUDF3: %02X\n", *pValue);
 #endif
 	}
+	else
+	{
+		Pokey_PotUpdate(pContext);
+	}
 
 	return &RAM[IO_AUDF3_POT4];
 }
@@ -1105,13 +1201,17 @@ u8 *Pokey_AUDF3_POT4(_6502_Context_t *pContext, u8 *pValue)
 u8 *Pokey_AUDC3_POT5(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
- 	{	
+ 	{
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_AUDC3_POT5] = *pValue;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
 		printf(" AUDC3: %02X\n", *pValue);
 #endif
+	}
+	else
+	{
+		Pokey_PotUpdate(pContext);
 	}
 
 	return &RAM[IO_AUDC3_POT5];
@@ -1143,6 +1243,10 @@ u8 *Pokey_AUDF4_POT6(_6502_Context_t *pContext, u8 *pValue)
 		printf(" AUDF4: %02X\n", *pValue);
 #endif
 	}
+	else
+	{
+		Pokey_PotUpdate(pContext);
+	}
 
 	return &RAM[IO_AUDF4_POT6];
 }
@@ -1151,13 +1255,17 @@ u8 *Pokey_AUDF4_POT6(_6502_Context_t *pContext, u8 *pValue)
 u8 *Pokey_AUDC4_POT7(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
- 	{	
+ 	{
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_AUDC4_POT7] = *pValue;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
 		printf(" AUDC4: %02X\n", *pValue);
 #endif
+	}
+	else
+	{
+		Pokey_PotUpdate(pContext);
 	}
 
 	return &RAM[IO_AUDC4_POT7];
@@ -1207,6 +1315,10 @@ u8 *Pokey_AUDCTL_ALLPOT(_6502_Context_t *pContext, u8 *pValue)
 		printf(" AUDCTL: %02X\n", *pValue);
 #endif
 	}
+	else
+	{
+		Pokey_PotUpdate(pContext);
+	}
 
 	return &RAM[IO_AUDCTL_ALLPOT];
 }
@@ -1241,21 +1353,34 @@ u8 *Pokey_STIMER_KBCODE(_6502_Context_t *pContext, u8 *pValue)
 	return &RAM[IO_STIMER_KBCODE];
 }
 
+/* Standalone LFSR17 for RANDOM when audio state is unavailable. */
+static u32 m_lStandaloneLfsr17 = 0x1ffffu;
+
+static u8 Pokey_StepStandaloneLfsr17(void)
+{
+	u32 l17 = m_lStandaloneLfsr17 & 0x1ffffu;
+	u32 in8 = ((l17 >> 8) ^ (l17 >> 13)) & 1u;
+	u32 in0 = l17 & 1u;
+	l17 >>= 1;
+	l17 = (l17 & 0xff7fu) | (in8 << 7);
+	l17 = (l17 & 0xffffu) | (in0 << 16);
+	m_lStandaloneLfsr17 = l17 & 0x1ffffu;
+	return (u8)(m_lStandaloneLfsr17 & 0xffu);
+}
+
 /* $D20A SKREST/RANDOM */
-u8 *Pokey_STIMER_KBCODE(_6502_Context_t *pContext, u8 *pValue); // forward
 u8 *Pokey_SKREST_RANDOM(_6502_Context_t *pContext, u8 *pValue)
 {
 	PokeyState_t *pPokey = Pokey_GetState(pContext);
 
 	if(pValue)
- 	{	
+ 	{
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_SKREST_RANDOM] = *pValue;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
 		printf(" SKREST: %02X\n", *pValue);
 #endif
-		
 	}
 
 	if(pPokey)
@@ -1264,9 +1389,9 @@ u8 *Pokey_SKREST_RANDOM(_6502_Context_t *pContext, u8 *pValue)
 	}
 	else
 	{
-		RAM[IO_SKREST_RANDOM] = rand();
+		RAM[IO_SKREST_RANDOM] = Pokey_StepStandaloneLfsr17();
 	}
-	
+
 	return &RAM[IO_SKREST_RANDOM];
 }
 
@@ -1274,9 +1399,10 @@ u8 *Pokey_SKREST_RANDOM(_6502_Context_t *pContext, u8 *pValue)
 u8 *Pokey_POTGO(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
- 	{	
+ 	{
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_POTGO] = *pValue;
+		Pokey_PotStartScan(pContext);
 #ifdef VERBOSE_REGISTER
 		printf("             [%16lld]", pContext->llCycleCounter);
 		printf(" POTGO: %02X\n", *pValue);
@@ -1291,18 +1417,52 @@ static u16 cSioOutIndex = 0;
 static u16 sSioInIndex = 0;
 static u16 sSioInSize = 0;
 
+/* SIO data phase state (for WRITE/PUT/VERIFY commands) */
+#define SIO_DATA_OFFSET 32
+static u8 cSioOutPhase = 0;
+static u16 sSioDataIndex = 0;
+static u8 cSioPendingCmd = 0;
+static u16 sSioPendingSector = 0;
+static u16 sSioPendingBytes = 0;
+
 static u8 AtariIo_SioChecksum(u8 *pBuffer, u32 lSize)
 {
 	u8 cChecksum = 0;
-	
+
 	while(lSize--)
 	{
-		cChecksum += (((u16 )cChecksum + (u16 )*pBuffer) >> 8) + *pBuffer;
-		
+		cChecksum += (((u16)cChecksum + (u16)*pBuffer) >> 8) + *pBuffer;
+
 		pBuffer++;
 	}
-	
+
 	return cChecksum;
+}
+
+static void Pokey_SioQueueSerinResponse(_6502_Context_t *pContext, u16 size)
+{
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+
+	sSioInSize = size;
+	sSioInIndex = 0;
+	pIoData->llSerialInputDataReadyCycle =
+		pContext->llCycleCounter + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
+	AtariIoCycleTimedEventUpdate(pContext);
+}
+
+static void Pokey_SioSectorBytesAndOffset(u16 sSectorIndex, u16 sSectorSize,
+	u16 *pBytesToRead, u32 *pOffset)
+{
+	if(sSectorIndex < 4)
+	{
+		*pBytesToRead = 128;
+		*pOffset = (u32)(sSectorIndex - 1) * 128;
+	}
+	else
+	{
+		*pBytesToRead = sSectorSize;
+		*pOffset = (u32)(sSectorIndex - 4) * sSectorSize + 128 * 3;
+	}
 }
 
 /* $D20D SEROUT/SERIN */
@@ -1316,12 +1476,81 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 #ifdef VERBOSE_SIO
 		printf("             [%16lld] SEROUT ", pContext->llCycleCounter);
 		printf("(%02X)!\n", *pValue);
-#endif		
-		pIoData->llSerialOutputNeedDataCycle = 
+#endif
+		pIoData->llSerialOutputNeedDataCycle =
 			pContext->llCycleCounter + SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
 
 		AtariIoCycleTimedEventUpdate(pContext);
 
+		/* --- Data phase (WRITE/PUT/VERIFY) --- */
+		if(cSioOutPhase == 1)
+		{
+			u16 expected;
+
+			aSioBuffer[SIO_DATA_OFFSET + sSioDataIndex] = *pValue;
+			sSioDataIndex++;
+
+			expected = sSioPendingBytes + 1; /* data + checksum */
+			if(sSioDataIndex == expected)
+			{
+				u16 sSectorSize = ((AtrHeader_t *)pIoData->pDisk1)->sSectorSize;
+				u16 sBytesToRead;
+				u32 lOffset;
+				u8 provided = aSioBuffer[SIO_DATA_OFFSET + sSioPendingBytes];
+				u8 calculated = AtariIo_SioChecksum(&aSioBuffer[SIO_DATA_OFFSET], sSioPendingBytes);
+
+				pIoData->llSerialOutputTransmissionDoneCycle =
+					pContext->llCycleCounter + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
+				AtariIoCycleTimedEventUpdate(pContext);
+
+				Pokey_SioSectorBytesAndOffset(sSioPendingSector, sSectorSize, &sBytesToRead, &lOffset);
+
+				if(calculated != provided || !pIoData->pDisk1 ||
+				   sSioPendingSector == 0 || lOffset + 16 >= pIoData->lDiskSize ||
+				   sBytesToRead != sSioPendingBytes)
+				{
+					aSioBuffer[0] = 'N';
+					Pokey_SioQueueSerinResponse(pContext, 1);
+				}
+				else if(cSioPendingCmd == 0x56) /* VERIFY */
+				{
+					u32 vi;
+					u8 ok = 1;
+
+					for(vi = 0; vi < sBytesToRead; vi++)
+					{
+						if(pIoData->pDisk1[16 + lOffset + vi] != aSioBuffer[SIO_DATA_OFFSET + vi])
+						{
+							ok = 0;
+							break;
+						}
+					}
+					aSioBuffer[0] = 'A';
+					aSioBuffer[1] = ok ? 'C' : 'E';
+					Pokey_SioQueueSerinResponse(pContext, 2);
+				}
+				else /* WRITE / PUT */
+				{
+					memcpy(pIoData->pDisk1 + 16 + lOffset,
+						&aSioBuffer[SIO_DATA_OFFSET], sBytesToRead);
+					aSioBuffer[0] = 'A';
+					aSioBuffer[1] = 'C';
+					Pokey_SioQueueSerinResponse(pContext, 2);
+				}
+
+				/* Reset data phase state */
+				cSioOutPhase = 0;
+				sSioDataIndex = 0;
+				cSioPendingCmd = 0;
+				sSioPendingSector = 0;
+				sSioPendingBytes = 0;
+				cSioOutIndex = 0;
+			}
+
+			return &RAM[IO_SEROUT_SERIN];
+		}
+
+		/* --- Command phase --- */
 		if(cSioOutIndex == 0 && *pValue > 0 && *pValue < 255)
 		{
 			aSioBuffer[cSioOutIndex++] = *pValue;
@@ -1329,7 +1558,7 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 		else if(cSioOutIndex > 0)
 		{
 			aSioBuffer[cSioOutIndex++] = *pValue;
-			
+
 			if(cSioOutIndex == 5)
 			{
 				if(AtariIo_SioChecksum(aSioBuffer, 4) == aSioBuffer[4])
@@ -1338,78 +1567,84 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 					u16 sSectorIndex;
 					u16 sSectorSize = ((AtrHeader_t *)pIoData->pDisk1)->sSectorSize;
 					u16 sBytesToRead;
-					u32 lIndex;
+					u32 lOffset;
 #ifdef VERBOSE_SIO
-					printf("SIO data send (checksum calculated: %02X): ", 
-						AtariIo_SioChecksum(aSioBuffer, 4));
+					{
+						u32 lIndex;
+						printf("SIO data send (checksum calculated: %02X): ",
+							AtariIo_SioChecksum(aSioBuffer, 4));
 
-					for(lIndex = 0; lIndex < 5; lIndex++)
-						printf("%02X ", aSioBuffer[lIndex]);
+						for(lIndex = 0; lIndex < 5; lIndex++)
+							printf("%02X ", aSioBuffer[lIndex]);
 
-					printf("\n");
-#endif			
-					pIoData->llSerialOutputTransmissionDoneCycle = 
+						printf("\n");
+					}
+#endif
+					pIoData->llSerialOutputTransmissionDoneCycle =
 						pContext->llCycleCounter + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
 
 					AtariIoCycleTimedEventUpdate(pContext);
 
 					switch(aSioBuffer[1])
 					{
-					case 0x52:
+					case 0x52: /* READ SECTOR */
 						sSectorIndex = aSioBuffer[2] + (aSioBuffer[3] << 8);
 
 						sprintf(aCaption, APPLICATION_CAPTION "  [%d]", sSectorIndex);
 						SDL_WM_SetCaption(aCaption, NULL);
 #ifdef VERBOSE_SIO
-						printf("SIO read sector %d\n", aSioBuffer[2] + (aSioBuffer[3] << 8));
+						printf("SIO read sector %d\n", sSectorIndex);
 #endif
-						if(sSectorIndex < 4)
-						{
-							sBytesToRead = 128;
-							lIndex = (sSectorIndex - 1) * 128;
-						}
-						else
-						{
-							sBytesToRead = sSectorSize;
-							lIndex = (sSectorIndex - 4) * sSectorSize + 128 * 3;
-						}
-
-						if(lIndex + 16 >= pIoData->lDiskSize)
+						if(sSectorIndex == 0)
 						{
 							aSioBuffer[0] = 'N';
 							sSioInSize = 1;
-#ifdef VERBOSE_SIO
-							printf("Not accepted (sector %d, index = %ld, disk size = %ld!\n",
-								sSectorIndex, lIndex, pIoData->lDiskSize);
-#endif
 						}
 						else
 						{
-							aSioBuffer[0] = 'A';
-							aSioBuffer[1] = 'C';
+							Pokey_SioSectorBytesAndOffset(sSectorIndex, sSectorSize,
+								&sBytesToRead, &lOffset);
 
-							memcpy(aSioBuffer + 2, pIoData->pDisk1 + 16 + lIndex, sBytesToRead);
-
-							aSioBuffer[sBytesToRead + 2] = AtariIo_SioChecksum(aSioBuffer + 2, sBytesToRead);
-
-							sSioInSize = sBytesToRead + 3;
+							if(lOffset + 16 >= pIoData->lDiskSize)
+							{
+								aSioBuffer[0] = 'N';
+								sSioInSize = 1;
 #ifdef VERBOSE_SIO
-							printf("%04X: ", sSectorIndex);
-						
-							for(lIndex = 0; lIndex < sSioInSize; lIndex++)
-								printf("%02X ", aSioBuffer[lIndex]);
-
-							printf("\n");
+								printf("Not accepted (sector %d, offset = %u, disk size = %u!\n",
+									sSectorIndex, lOffset, pIoData->lDiskSize);
 #endif
-							pIoData->llSerialInputDataReadyCycle = 
-								pContext->llCycleCounter + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
+							}
+							else
+							{
+								aSioBuffer[0] = 'A';
+								aSioBuffer[1] = 'C';
+
+								memcpy(aSioBuffer + 2, pIoData->pDisk1 + 16 + lOffset, sBytesToRead);
+
+								aSioBuffer[sBytesToRead + 2] = AtariIo_SioChecksum(aSioBuffer + 2, sBytesToRead);
+
+								sSioInSize = sBytesToRead + 3;
+#ifdef VERBOSE_SIO
+								{
+									u32 lIndex;
+									printf("%04X: ", sSectorIndex);
+
+									for(lIndex = 0; lIndex < sSioInSize; lIndex++)
+										printf("%02X ", aSioBuffer[lIndex]);
+
+									printf("\n");
+								}
+#endif
+								pIoData->llSerialInputDataReadyCycle =
+									pContext->llCycleCounter + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
+							}
 						}
-							
+
 						AtariIoCycleTimedEventUpdate(pContext);
-						
+
 						break;
-						
-					case 0x53:
+
+					case 0x53: /* STATUS */
 						SDL_WM_SetCaption(APPLICATION_CAPTION "  [-]", NULL);
 #ifdef VERBOSE_SIO
 						printf("SIO get status\n");
@@ -1436,20 +1671,90 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 						}
 
 						sSioInSize = 7;
-						
+
 						if(pIoData->pDisk1[0] != 0)
 						{
-							pIoData->llSerialInputDataReadyCycle = 
+							pIoData->llSerialInputDataReadyCycle =
 								pContext->llCycleCounter + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
 
 							AtariIoCycleTimedEventUpdate(pContext);
 						}
-							
+
 						break;
-		
+
+					case 0x57: /* WRITE SECTOR */
+					case 0x50: /* PUT SECTOR */
+					case 0x56: /* VERIFY SECTOR */
+						sSectorIndex = aSioBuffer[2] + (aSioBuffer[3] << 8);
+#ifdef VERBOSE_SIO
+						printf("SIO %s sector %d\n",
+							aSioBuffer[1] == 0x57 ? "write" :
+							aSioBuffer[1] == 0x50 ? "put" : "verify",
+							sSectorIndex);
+#endif
+						if(sSectorIndex == 0)
+						{
+							aSioBuffer[0] = 'N';
+							Pokey_SioQueueSerinResponse(pContext, 1);
+						}
+						else
+						{
+							Pokey_SioSectorBytesAndOffset(sSectorIndex, sSectorSize,
+								&sBytesToRead, &lOffset);
+
+							if(lOffset + 16 >= pIoData->lDiskSize)
+							{
+								aSioBuffer[0] = 'N';
+								Pokey_SioQueueSerinResponse(pContext, 1);
+							}
+							else
+							{
+								/* Enter data phase: ACK command, wait for data frame */
+								cSioOutPhase = 1;
+								sSioDataIndex = 0;
+								cSioPendingCmd = aSioBuffer[1];
+								sSioPendingSector = sSectorIndex;
+								sSioPendingBytes = sBytesToRead;
+
+								aSioBuffer[0] = 'A';
+								Pokey_SioQueueSerinResponse(pContext, 1);
+							}
+						}
+
+						break;
+
+					case 0x21: /* FORMAT */
+#ifdef VERBOSE_SIO
+						printf("SIO format\n");
+#endif
+						if(!pIoData->pDisk1 || pIoData->lDiskSize <= 16)
+						{
+							aSioBuffer[0] = 'N';
+							Pokey_SioQueueSerinResponse(pContext, 1);
+						}
+						else
+						{
+							memset(pIoData->pDisk1 + 16, 0, pIoData->lDiskSize - 16);
+							aSioBuffer[0] = 'A';
+							aSioBuffer[1] = 'C';
+							Pokey_SioQueueSerinResponse(pContext, 2);
+						}
+
+						break;
+
+					case 0x55: /* MOTOR ON */
+#ifdef VERBOSE_SIO
+						printf("SIO motor on\n");
+#endif
+						aSioBuffer[0] = 'A';
+						aSioBuffer[1] = 'C';
+						Pokey_SioQueueSerinResponse(pContext, 2);
+
+						break;
+
 					default:
 						printf("Unsupported SIO command $%02X!\n", aSioBuffer[1]);
-						
+
 						break;
 					}
 				}
@@ -1457,8 +1762,8 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 				else
 				{
 					u32 lIndex;
-				
-					printf("Wrong SIO checksum (expected %02X): ", 
+
+					printf("Wrong SIO checksum (expected %02X): ",
 						AtariIo_SioChecksum(aSioBuffer, 4));
 
 					for(lIndex = 0; lIndex < 5; lIndex++)
@@ -1466,7 +1771,7 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 
 					printf("\n");
 				}
-#endif			
+#endif
 				cSioOutIndex = 0;
 			}
 		}
@@ -1478,10 +1783,10 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 #ifdef VERBOSE_SIO
 		printf("             [%16lld] SERIN ", pContext->llCycleCounter);
 		printf("(%02X, %d bytes left)!\n", RAM[IO_SEROUT_SERIN], sSioInSize);
-#endif		
+#endif
 		if(sSioInSize > 0)
 		{
-			pIoData->llSerialInputDataReadyCycle = 
+			pIoData->llSerialInputDataReadyCycle =
 				pContext->llCycleCounter + SERIAL_INPUT_DATA_READY_CYCLES;
 
 			AtariIoCycleTimedEventUpdate(pContext);
