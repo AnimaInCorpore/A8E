@@ -69,6 +69,7 @@ typedef struct _6502_Context
 
 	u8 *(*AccessFunction)(struct _6502_Context *, u8 *);
 	u16 sAccessAddress;
+	u8 cPageCrossed;
 
 	u64 llCycleCounter;
 	u64 llStallCycleCounter;

@@ -57,6 +57,7 @@
       accessFunctionOverride: null,
       accessFunction: null,
       accessAddress: 0,
+      pageCrossed: 0,
       cycleCounter: 0,
       stallCycleCounter: 0,
       ioCycleTimedEventCycle: 0xffffffffffffffff,
@@ -93,7 +94,7 @@
     const ps = ctx.cpu.ps;
     ps.n = cPs & FLAG_N;
     ps.v = cPs & FLAG_V;
-    ps.b = cPs & FLAG_B;
+    // ps.b is ignored when pulling from stack
     ps.d = cPs & FLAG_D;
     ps.i = cPs & FLAG_I;
     ps.z = cPs & FLAG_Z;
@@ -215,9 +216,10 @@
   function amIndirectIndexed(ctx) {
     const zp = ctx.ram[ctx.cpu.pc & 0xffff] & 0xff;
     ctx.cpu.pc = (ctx.cpu.pc + 1) & 0xffff;
+    const base = ctx.ram[zp] | (ctx.ram[(zp + 1) & 0xff] << 8);
     ctx.accessFunctionOverride = null;
-    ctx.accessAddress =
-      ((ctx.ram[zp] | (ctx.ram[(zp + 1) & 0xff] << 8)) + ctx.cpu.y) & 0xffff;
+    ctx.accessAddress = (base + ctx.cpu.y) & 0xffff;
+    ctx.pageCrossed = (base & 0xff00) !== (ctx.accessAddress & 0xff00) ? 1 : 0;
   }
   function amZeroPageX(ctx) {
     ctx.accessFunctionOverride = null;
@@ -234,16 +236,20 @@
     ctx.cpu.pc = (ctx.cpu.pc + 1) & 0xffff;
     const hi = ctx.ram[ctx.cpu.pc & 0xffff];
     ctx.cpu.pc = (ctx.cpu.pc + 1) & 0xffff;
+    const base = lo | (hi << 8);
     ctx.accessFunctionOverride = null;
-    ctx.accessAddress = ((lo | (hi << 8)) + ctx.cpu.x) & 0xffff;
+    ctx.accessAddress = (base + ctx.cpu.x) & 0xffff;
+    ctx.pageCrossed = (base & 0xff00) !== (ctx.accessAddress & 0xff00) ? 1 : 0;
   }
   function amAbsoluteY(ctx) {
     const lo = ctx.ram[ctx.cpu.pc & 0xffff];
     ctx.cpu.pc = (ctx.cpu.pc + 1) & 0xffff;
     const hi = ctx.ram[ctx.cpu.pc & 0xffff];
     ctx.cpu.pc = (ctx.cpu.pc + 1) & 0xffff;
+    const base = lo | (hi << 8);
     ctx.accessFunctionOverride = null;
-    ctx.accessAddress = ((lo | (hi << 8)) + ctx.cpu.y) & 0xffff;
+    ctx.accessAddress = (base + ctx.cpu.y) & 0xffff;
+    ctx.pageCrossed = (base & 0xff00) !== (ctx.accessAddress & 0xff00) ? 1 : 0;
   }
   function amRelative(ctx) {
     ctx.accessFunctionOverride = null;
@@ -354,16 +360,19 @@
   function opLDA(ctx) {
     ctx.cpu.a = readAccess(ctx);
     setZN(ctx, ctx.cpu.a);
+    if (ctx.pageCrossed) ctx.cycleCounter++;
   }
   function opLDX(ctx) {
     ctx.cpu.x = readAccess(ctx);
     ctx.cpu.ps.z = ctx.cpu.x === 0 ? 1 : 0;
     ctx.cpu.ps.n = ctx.cpu.x & 0x80;
+    if (ctx.pageCrossed) ctx.cycleCounter++;
   }
   function opLDY(ctx) {
     ctx.cpu.y = readAccess(ctx);
     ctx.cpu.ps.z = ctx.cpu.y === 0 ? 1 : 0;
     ctx.cpu.ps.n = ctx.cpu.y & 0x80;
+    if (ctx.pageCrossed) ctx.cycleCounter++;
   }
   function opSTA(ctx) {
     writeAccess(ctx, ctx.cpu.a);
@@ -399,21 +408,26 @@
   }
   function opADC(ctx) {
     adcValue(ctx, readAccess(ctx));
+    if (ctx.pageCrossed) ctx.cycleCounter++;
   }
   function opAND(ctx) {
     ctx.cpu.a = ctx.cpu.a & readAccess(ctx) & 0xff;
     setZN(ctx, ctx.cpu.a);
+    if (ctx.pageCrossed) ctx.cycleCounter++;
   }
   function opEOR(ctx) {
     ctx.cpu.a = (ctx.cpu.a ^ readAccess(ctx)) & 0xff;
     setZN(ctx, ctx.cpu.a);
+    if (ctx.pageCrossed) ctx.cycleCounter++;
   }
   function opORA(ctx) {
     ctx.cpu.a = (ctx.cpu.a | readAccess(ctx)) & 0xff;
     setZN(ctx, ctx.cpu.a);
+    if (ctx.pageCrossed) ctx.cycleCounter++;
   }
   function opSBC(ctx) {
     sbcValue(ctx, readAccess(ctx));
+    if (ctx.pageCrossed) ctx.cycleCounter++;
   }
   function opDEC(ctx) {
     let v = (readAccess(ctx) - 1) & 0xff;
@@ -483,6 +497,7 @@
     ctx.cpu.ps.z = (ctx.cpu.a & 0xff) === v ? 1 : 0;
     ctx.cpu.ps.n = ((ctx.cpu.a - v) & 0x80) !== 0 ? 0x80 : 0;
     ctx.cpu.ps.c = (ctx.cpu.a & 0xff) >= v ? 1 : 0;
+    if (ctx.pageCrossed) ctx.cycleCounter++;
   }
   function opCPX(ctx) {
     const v = readAccess(ctx);
@@ -497,36 +512,68 @@
     ctx.cpu.ps.c = (ctx.cpu.y & 0xff) >= v ? 1 : 0;
   }
   function opBCC(ctx) {
-    if (!ctx.cpu.ps.c)
+    if (!ctx.cpu.ps.c) {
+      const oldPc = ctx.cpu.pc;
       ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+      ctx.cycleCounter++;
+      if ((oldPc & 0xff00) !== (ctx.cpu.pc & 0xff00)) ctx.cycleCounter++;
+    }
   }
   function opBCS(ctx) {
-    if (ctx.cpu.ps.c)
+    if (ctx.cpu.ps.c) {
+      const oldPc = ctx.cpu.pc;
       ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+      ctx.cycleCounter++;
+      if ((oldPc & 0xff00) !== (ctx.cpu.pc & 0xff00)) ctx.cycleCounter++;
+    }
   }
   function opBEQ(ctx) {
-    if (ctx.cpu.ps.z)
+    if (ctx.cpu.ps.z) {
+      const oldPc = ctx.cpu.pc;
       ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+      ctx.cycleCounter++;
+      if ((oldPc & 0xff00) !== (ctx.cpu.pc & 0xff00)) ctx.cycleCounter++;
+    }
   }
   function opBMI(ctx) {
-    if (ctx.cpu.ps.n)
+    if (ctx.cpu.ps.n) {
+      const oldPc = ctx.cpu.pc;
       ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+      ctx.cycleCounter++;
+      if ((oldPc & 0xff00) !== (ctx.cpu.pc & 0xff00)) ctx.cycleCounter++;
+    }
   }
   function opBNE(ctx) {
-    if (!ctx.cpu.ps.z)
+    if (!ctx.cpu.ps.z) {
+      const oldPc = ctx.cpu.pc;
       ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+      ctx.cycleCounter++;
+      if ((oldPc & 0xff00) !== (ctx.cpu.pc & 0xff00)) ctx.cycleCounter++;
+    }
   }
   function opBPL(ctx) {
-    if (!ctx.cpu.ps.n)
+    if (!ctx.cpu.ps.n) {
+      const oldPc = ctx.cpu.pc;
       ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+      ctx.cycleCounter++;
+      if ((oldPc & 0xff00) !== (ctx.cpu.pc & 0xff00)) ctx.cycleCounter++;
+    }
   }
   function opBVC(ctx) {
-    if (!ctx.cpu.ps.v)
+    if (!ctx.cpu.ps.v) {
+      const oldPc = ctx.cpu.pc;
       ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+      ctx.cycleCounter++;
+      if ((oldPc & 0xff00) !== (ctx.cpu.pc & 0xff00)) ctx.cycleCounter++;
+    }
   }
   function opBVS(ctx) {
-    if (ctx.cpu.ps.v)
+    if (ctx.cpu.ps.v) {
+      const oldPc = ctx.cpu.pc;
       ctx.cpu.pc = (ctx.cpu.pc + signed8(readAccess(ctx))) & 0xffff;
+      ctx.cycleCounter++;
+      if ((oldPc & 0xff00) !== (ctx.cpu.pc & 0xff00)) ctx.cycleCounter++;
+    }
   }
   function opBRK(ctx) {
     serviceInterrupt(ctx, 0xfffe, 1, (ctx.cpu.pc + 1) & 0xffff);
@@ -624,6 +671,7 @@
     ctx.cpu.a = v;
     ctx.cpu.x = v;
     setZN(ctx, v);
+    if (ctx.pageCrossed) ctx.cycleCounter++;
   }
   function opSLO(ctx) {
     let v = readAccess(ctx);
@@ -784,6 +832,7 @@
 
         ctx.accessFunctionOverride = null;
         ctx.accessFunction = null;
+        ctx.pageCrossed = 0;
 
         const meta = CODE_TABLE[opcode];
         ADDRESS_FUNCS[meta.addressType](ctx);

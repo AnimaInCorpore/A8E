@@ -555,7 +555,7 @@ static void _6502_SetPs(_6502_Context_t *pContext, u8 cPs)
 {
 	PS.n = cPs & FLAG_N;
 	PS.v = cPs & FLAG_V;
-	PS.b = cPs & FLAG_B;
+	/* PS.b is ignored on PLP and RTI */
 	PS.d = cPs & FLAG_D;
 	PS.i = cPs & FLAG_I;
 	PS.z = cPs & FLAG_Z;
@@ -977,6 +977,7 @@ u64 _6502_Run(_6502_Context_t *pContext, u64 llCycles)
 			cCode = RAM[CPU.pc++];
 
 			pContext->AccessFunction = NULL;
+			pContext->cPageCrossed = 0;
 			m_a6502AddressTypeFunctionList[m_a6502CodeTable[cCode].cAddressType](pContext);
 
 			if(pContext->AccessFunction == NULL)
@@ -1009,6 +1010,7 @@ void _6502_LDA(_6502_Context_t *pContext)
 
 	PS.z = !CPU.a;
 	PS.n = CPU.a & 0x80;
+	if (pContext->cPageCrossed) pContext->llCycleCounter++;
 }
 
 void _6502_LDX(_6502_Context_t *pContext) 
@@ -1017,6 +1019,7 @@ void _6502_LDX(_6502_Context_t *pContext)
 	
 	PS.z = !CPU.x;
 	PS.n = CPU.x & 0x80;
+	if (pContext->cPageCrossed) pContext->llCycleCounter++;
 }
 
 void _6502_LDY(_6502_Context_t *pContext) 
@@ -1025,6 +1028,7 @@ void _6502_LDY(_6502_Context_t *pContext)
 	
 	PS.z = !CPU.y;
 	PS.n = CPU.y & 0x80;
+	if (pContext->cPageCrossed) pContext->llCycleCounter++;
 }
 
 void _6502_STA(_6502_Context_t *pContext) 
@@ -1106,8 +1110,10 @@ static void _6502_AdcValue(_6502_Context_t *pContext, u8 cValue)
 			sSum += 0x60;
 
 		CPU.a = (u8)sSum;
-		PS.z = !CPU.a;
-		PS.n = CPU.a & 0x80;
+
+		/* NMOS 6502: N and Z are set based on the BINARY result, V too. */
+		PS.z = !cBin;
+		PS.n = cBin & 0x80;
 	}
 	else
 	{
@@ -1141,8 +1147,10 @@ static void _6502_SbcValue(_6502_Context_t *pContext, u8 cValue)
 
 		CPU.a = (u8)sDiff;
 		PS.c = cCarry;
-		PS.z = !CPU.a;
-		PS.n = CPU.a & 0x80;
+
+		/* NMOS 6502: N and Z are set based on the BINARY result, V too. */
+		PS.z = !cBin;
+		PS.n = cBin & 0x80;
 	}
 	else
 	{
@@ -1162,6 +1170,7 @@ static void _6502_SbcValue(_6502_Context_t *pContext, u8 cValue)
 void _6502_ADC(_6502_Context_t *pContext) 
 {
 	_6502_AdcValue(pContext, *READ_ACCESS);
+	if (pContext->cPageCrossed) pContext->llCycleCounter++;
 }
 
 void _6502_AND(_6502_Context_t *pContext) 
@@ -1170,6 +1179,7 @@ void _6502_AND(_6502_Context_t *pContext)
 	
 	PS.z = !CPU.a;
 	PS.n = CPU.a & 0x80;
+	if (pContext->cPageCrossed) pContext->llCycleCounter++;
 }
 
 void _6502_EOR(_6502_Context_t *pContext) 
@@ -1178,6 +1188,7 @@ void _6502_EOR(_6502_Context_t *pContext)
 	
 	PS.z = !CPU.a;
 	PS.n = CPU.a & 0x80;
+	if (pContext->cPageCrossed) pContext->llCycleCounter++;
 }
 
 void _6502_ORA(_6502_Context_t *pContext) 
@@ -1186,11 +1197,13 @@ void _6502_ORA(_6502_Context_t *pContext)
 	
 	PS.z = !CPU.a;
 	PS.n = CPU.a & 0x80;
+	if (pContext->cPageCrossed) pContext->llCycleCounter++;
 }
 
 void _6502_SBC(_6502_Context_t *pContext) 
 {
 	_6502_SbcValue(pContext, *READ_ACCESS);
+	if (pContext->cPageCrossed) pContext->llCycleCounter++;
 }
 
 void _6502_DEC(_6502_Context_t *pContext) 
@@ -1321,6 +1334,7 @@ void _6502_CMP(_6502_Context_t *pContext)
 	PS.z = (CPU.a == cValue);
 	PS.n = (CPU.a - cValue) & 0x80;
 	PS.c = (CPU.a >= cValue);
+	if (pContext->cPageCrossed) pContext->llCycleCounter++;
 }
 
 void _6502_CPX(_6502_Context_t *pContext) 
@@ -1344,49 +1358,97 @@ void _6502_CPY(_6502_Context_t *pContext)
 void _6502_BCC(_6502_Context_t *pContext) 
 {
 	if(!PS.c)
+	{
+		u16 sOldPc = CPU.pc;
 		CPU.pc += (s8)*READ_ACCESS;
+		pContext->llCycleCounter++;
+		if((sOldPc & 0xff00) != (CPU.pc & 0xff00))
+			pContext->llCycleCounter++;
+	}
 }
 
 void _6502_BCS(_6502_Context_t *pContext) 
 {
 	if(PS.c)
+	{
+		u16 sOldPc = CPU.pc;
 		CPU.pc += (s8)*READ_ACCESS;
+		pContext->llCycleCounter++;
+		if((sOldPc & 0xff00) != (CPU.pc & 0xff00))
+			pContext->llCycleCounter++;
+	}
 }
 
 void _6502_BEQ(_6502_Context_t *pContext) 
 {
 	if(PS.z)
+	{
+		u16 sOldPc = CPU.pc;
 		CPU.pc += (s8)*READ_ACCESS;
+		pContext->llCycleCounter++;
+		if((sOldPc & 0xff00) != (CPU.pc & 0xff00))
+			pContext->llCycleCounter++;
+	}
 }
 
 void _6502_BMI(_6502_Context_t *pContext) 
 {
 	if(PS.n)
+	{
+		u16 sOldPc = CPU.pc;
 		CPU.pc += (s8)*READ_ACCESS;
+		pContext->llCycleCounter++;
+		if((sOldPc & 0xff00) != (CPU.pc & 0xff00))
+			pContext->llCycleCounter++;
+	}
 }
 
 void _6502_BNE(_6502_Context_t *pContext) 
 {
 	if(!PS.z)
+	{
+		u16 sOldPc = CPU.pc;
 		CPU.pc += (s8)*READ_ACCESS;
+		pContext->llCycleCounter++;
+		if((sOldPc & 0xff00) != (CPU.pc & 0xff00))
+			pContext->llCycleCounter++;
+	}
 }
 
 void _6502_BPL(_6502_Context_t *pContext) 
 {
 	if(!PS.n)
+	{
+		u16 sOldPc = CPU.pc;
 		CPU.pc += (s8)*READ_ACCESS;
+		pContext->llCycleCounter++;
+		if((sOldPc & 0xff00) != (CPU.pc & 0xff00))
+			pContext->llCycleCounter++;
+	}
 }
 
 void _6502_BVC(_6502_Context_t *pContext) 
 {
 	if(!PS.v)
+	{
+		u16 sOldPc = CPU.pc;
 		CPU.pc += (s8)*READ_ACCESS;
+		pContext->llCycleCounter++;
+		if((sOldPc & 0xff00) != (CPU.pc & 0xff00))
+			pContext->llCycleCounter++;
+	}
 }
 
 void _6502_BVS(_6502_Context_t *pContext) 
 {
 	if(PS.v)
+	{
+		u16 sOldPc = CPU.pc;
 		CPU.pc += (s8)*READ_ACCESS;
+		pContext->llCycleCounter++;
+		if((sOldPc & 0xff00) != (CPU.pc & 0xff00))
+			pContext->llCycleCounter++;
+	}
 }
 
 void _6502_BRK(_6502_Context_t *pContext) 
@@ -1521,17 +1583,18 @@ void _6502_LAX(_6502_Context_t *pContext)
 
 	PS.z = !CPU.a;
 	PS.n = CPU.a & 0x80;
+	if (pContext->cPageCrossed) pContext->llCycleCounter++;
 }
 
 void _6502_SLO(_6502_Context_t *pContext) 
 {
 	u8 cValue = *READ_ACCESS;
-
-	PS.c = cValue & 0x80;
 	
+	PS.c = cValue >> 7;
 	cValue <<= 1;
+	cValue = *WRITE_ACCESS(&cValue);
 	
-	CPU.a |= *WRITE_ACCESS(&cValue);
+	CPU.a |= cValue;
 	
 	PS.z = !CPU.a;
 	PS.n = CPU.a & 0x80;
@@ -1691,9 +1754,11 @@ void _6502_IndexedIndirect(_6502_Context_t *pContext)
 
 void _6502_IndirectIndexed(_6502_Context_t *pContext) 
 {
-	u16 sAddress = RAM[CPU.pc++];
+	u16 sPointer = RAM[CPU.pc++];
+	u16 sBase = (RAM[sPointer] | (RAM[(sPointer + 1) & 0xff] << 8));
 
-	pContext->sAccessAddress = (RAM[sAddress] | (RAM[(sAddress + 1) & 0xff] << 8)) + CPU.y;
+	pContext->sAccessAddress = sBase + CPU.y;
+	pContext->cPageCrossed = ((sBase & 0xff00) != (pContext->sAccessAddress & 0xff00));
 }
 
 void _6502_ZeroPageX(_6502_Context_t *pContext) 
@@ -1708,24 +1773,22 @@ void _6502_ZeroPageY(_6502_Context_t *pContext)
 
 void _6502_AbsoluteX(_6502_Context_t *pContext) 
 {
-	u16 sAddress;
+	u16 sBase;
 	
-	sAddress = RAM[CPU.pc++];
-	sAddress |= RAM[CPU.pc++] << 8;
-	sAddress += CPU.x;
-
-	pContext->sAccessAddress = sAddress;
+	sBase = RAM[CPU.pc++];
+	sBase |= RAM[CPU.pc++] << 8;
+	pContext->sAccessAddress = sBase + CPU.x;
+	pContext->cPageCrossed = ((sBase & 0xff00) != (pContext->sAccessAddress & 0xff00));
 }
 
 void _6502_AbsoluteY(_6502_Context_t *pContext) 
 {
-	u16 sAddress;
+	u16 sBase;
 	
-	sAddress = RAM[CPU.pc++];
-	sAddress |= RAM[CPU.pc++] << 8;
-	sAddress += CPU.y;
-
-	pContext->sAccessAddress = sAddress;
+	sBase = RAM[CPU.pc++];
+	sBase |= RAM[CPU.pc++] << 8;
+	pContext->sAccessAddress = sBase + CPU.y;
+	pContext->cPageCrossed = ((sBase & 0xff00) != (pContext->sAccessAddress & 0xff00));
 }
 
 void _6502_Relative(_6502_Context_t *pContext) 
