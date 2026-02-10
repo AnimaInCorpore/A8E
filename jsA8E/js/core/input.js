@@ -20,7 +20,7 @@
     function createRuntime(opts) {
       const machine = opts.machine;
       const isReady = opts.isReady;
-      const pressedKeys = {};
+      let pressedKeys = {};
 
       function normalizeSourceToken(e) {
         if (!e || e.sourceToken === undefined || e.sourceToken === null)
@@ -29,7 +29,7 @@
       }
 
       function getPressedState(sym, createIfMissing) {
-        const st = pressedKeys[sym];
+        let st = pressedKeys[sym];
         if (!st && createIfMissing) {
           st = {
             anonymousCount: 0,
@@ -149,7 +149,7 @@
           return true;
         }
 
-        const kc = KEY_CODE_TABLE[sym] !== undefined ? KEY_CODE_TABLE[sym] : 255;
+        let kc = KEY_CODE_TABLE[sym] !== undefined ? KEY_CODE_TABLE[sym] : 255;
         if (kc === 255) {
           releaseSym(sym, e);
           return false;

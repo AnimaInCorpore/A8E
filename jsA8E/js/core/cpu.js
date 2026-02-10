@@ -21,10 +21,10 @@
   // parts are used after the newer decimal implementation was added upstream).
   const BCD_TO_BIN = (function () {
     const a = new Uint8Array(256);
-    for (const i = 0; i < 256; i++) a[i] = 0;
-    const n = 0;
-    for (const tens = 0; tens < 10; tens++) {
-      for (const ones = 0; ones < 10; ones++) {
+    for (let i = 0; i < 256; i++) a[i] = 0;
+    let n = 0;
+    for (let tens = 0; tens < 10; tens++) {
+      for (let ones = 0; ones < 10; ones++) {
         a[(tens << 4) | ones] = n++;
       }
     }
@@ -33,7 +33,7 @@
 
   const BIN_TO_BCD = (function () {
     const a = new Uint8Array(100);
-    for (const i = 0; i < 100; i++) {
+    for (let i = 0; i < 100; i++) {
       const tens = (i / 10) | 0;
       const ones = i % 10;
       a[i] = (tens << 4) | ones;
@@ -66,13 +66,13 @@
       ioData: null,
     };
 
-    for (const i = 0; i < 0x10000; i++) ctx.accessFunctionList[i] = ramAccess;
+    for (let i = 0; i < 0x10000; i++) ctx.accessFunctionList[i] = ramAccess;
     return ctx;
   }
 
   function getPs(ctx) {
     const ps = ctx.cpu.ps;
-    const cPs = 0x20;
+    let cPs = 0x20;
     if (ps.n) cPs |= FLAG_N;
     if (ps.v) cPs |= FLAG_V;
     if (ps.b) cPs |= FLAG_B;
@@ -84,7 +84,7 @@
   }
 
   function getPsWithB(ctx, breakFlag) {
-    const cPs = getPs(ctx) & ~FLAG_B;
+    let cPs = getPs(ctx) & ~FLAG_B;
     if (breakFlag) cPs |= FLAG_B;
     return cPs & 0xff;
   }
@@ -139,12 +139,12 @@
   }
 
   function setRom(ctx, start, end) {
-    for (const a = start & 0xffff; a <= (end & 0xffff); a++)
+    for (let a = start & 0xffff; a <= (end & 0xffff); a++)
       ctx.accessFunctionList[a] = romAccess;
   }
 
   function setRam(ctx, start, end) {
-    for (const a = start & 0xffff; a <= (end & 0xffff); a++)
+    for (let a = start & 0xffff; a <= (end & 0xffff); a++)
       ctx.accessFunctionList[a] = ramAccess;
   }
 
@@ -302,7 +302,7 @@
     value &= 0xff;
     if (ps.d) {
       const a = cpu.a & 0xff;
-      const sum = a + value + (ps.c ? 1 : 0);
+      let sum = a + value + (ps.c ? 1 : 0);
       const bin = sum & 0xff;
       ps.v = !((a ^ value) & 0x80) && (a ^ bin) & 0x80 ? 1 : 0;
 
@@ -328,7 +328,7 @@
     value &= 0xff;
     if (ps.d) {
       const a = cpu.a & 0xff;
-      const diff = a - value - (ps.c ? 0 : 1);
+      let diff = a - value - (ps.c ? 0 : 1);
       const bin = diff & 0xff;
       const carry = diff & 0x100 ? 0 : 1; // carry==1 means no borrow
       ps.v = ((a ^ bin) & (a ^ value) & 0x80) !== 0 ? 1 : 0;
@@ -416,7 +416,7 @@
     sbcValue(ctx, readAccess(ctx));
   }
   function opDEC(ctx) {
-    const v = (readAccess(ctx) - 1) & 0xff;
+    let v = (readAccess(ctx) - 1) & 0xff;
     v = writeAccess(ctx, v);
     setZN(ctx, v);
   }
@@ -429,7 +429,7 @@
     setZN(ctx, ctx.cpu.y);
   }
   function opINC(ctx) {
-    const v = (readAccess(ctx) + 1) & 0xff;
+    let v = (readAccess(ctx) + 1) & 0xff;
     v = writeAccess(ctx, v);
     setZN(ctx, v);
   }
@@ -442,14 +442,14 @@
     setZN(ctx, ctx.cpu.y);
   }
   function opASL(ctx) {
-    const v = readAccess(ctx);
+    let v = readAccess(ctx);
     ctx.cpu.ps.c = v & 0x80;
     v = (v << 1) & 0xff;
     v = writeAccess(ctx, v);
     setZN(ctx, v);
   }
   function opLSR(ctx) {
-    const v = readAccess(ctx);
+    let v = readAccess(ctx);
     ctx.cpu.ps.c = v & 0x01;
     v = (v >> 1) & 0xff;
     v = writeAccess(ctx, v);
@@ -457,7 +457,7 @@
   }
   function opROL(ctx) {
     const oldCarry = ctx.cpu.ps.c ? 1 : 0;
-    const v = readAccess(ctx);
+    let v = readAccess(ctx);
     ctx.cpu.ps.c = v & 0x80;
     v = ((v << 1) & 0xff) | (oldCarry ? 1 : 0);
     v = writeAccess(ctx, v);
@@ -465,7 +465,7 @@
   }
   function opROR(ctx) {
     const oldCarry = ctx.cpu.ps.c ? 1 : 0;
-    const v = readAccess(ctx);
+    let v = readAccess(ctx);
     ctx.cpu.ps.c = v & 0x01;
     v = (v >> 1) & 0xff;
     if (oldCarry) v |= 0x80;
@@ -473,13 +473,13 @@
     setZN(ctx, v);
   }
   function opBIT(ctx) {
-    const v = readAccess(ctx);
+    let v = readAccess(ctx);
     ctx.cpu.ps.z = v & ctx.cpu.a ? 0 : 1;
     ctx.cpu.ps.v = v & 0x40;
     ctx.cpu.ps.n = v & 0x80;
   }
   function opCMP(ctx) {
-    const v = readAccess(ctx);
+    let v = readAccess(ctx);
     ctx.cpu.ps.z = (ctx.cpu.a & 0xff) === v ? 1 : 0;
     ctx.cpu.ps.n = ((ctx.cpu.a - v) & 0x80) !== 0 ? 0x80 : 0;
     ctx.cpu.ps.c = (ctx.cpu.a & 0xff) >= v ? 1 : 0;
@@ -626,7 +626,7 @@
     setZN(ctx, v);
   }
   function opSLO(ctx) {
-    const v = readAccess(ctx);
+    let v = readAccess(ctx);
     ctx.cpu.ps.c = v & 0x80;
     v = (v << 1) & 0xff;
     ctx.cpu.a = (ctx.cpu.a | writeAccess(ctx, v)) & 0xff;
@@ -653,12 +653,12 @@
     setZN(ctx, ctx.cpu.a);
   }
   function opISC(ctx) {
-    const v = (readAccess(ctx) + 1) & 0xff;
+    let v = (readAccess(ctx) + 1) & 0xff;
     v = writeAccess(ctx, v);
     sbcValue(ctx, v);
   }
   function opSRE(ctx) {
-    const v = readAccess(ctx);
+    let v = readAccess(ctx);
     ctx.cpu.ps.c = v & 0x01;
     v = (v >> 1) & 0xff;
     ctx.cpu.a = (ctx.cpu.a ^ writeAccess(ctx, v)) & 0xff;
@@ -666,7 +666,7 @@
   }
   function opRLA(ctx) {
     const oldCarry = ctx.cpu.ps.c ? 1 : 0;
-    const v = readAccess(ctx);
+    let v = readAccess(ctx);
     ctx.cpu.ps.c = v & 0x80;
     v = ((v << 1) & 0xff) | oldCarry;
     v = writeAccess(ctx, v);
@@ -684,7 +684,7 @@
     setZN(ctx, ctx.cpu.a);
   }
   function opDCP(ctx) {
-    const v = (readAccess(ctx) - 1) & 0xff;
+    let v = (readAccess(ctx) - 1) & 0xff;
     v = writeAccess(ctx, v);
     ctx.cpu.ps.z = (ctx.cpu.a & 0xff) === v ? 1 : 0;
     ctx.cpu.ps.n = ((ctx.cpu.a - v) & 0x80) !== 0 ? 0x80 : 0;
@@ -767,7 +767,7 @@
 
   function run(ctx, cycleTarget) {
     const cpu = ctx.cpu;
-    const cycles = ctx.cycleCounter;
+    let cycles = ctx.cycleCounter;
     while (cycles < cycleTarget) {
       if (
         ctx.ioCycleTimedEventFunction &&

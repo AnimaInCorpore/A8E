@@ -124,9 +124,9 @@
 
     function pokeyAudioRecomputeCyclesPerSample(st) {
       if (!st) return;
-      const sr = st.sampleRate || 48000;
+      let sr = st.sampleRate || 48000;
       const hz = st.cpuHz || ATARI_CPU_HZ_PAL;
-      const cps = Math.floor((hz * POKEY_FP_ONE) / sr);
+      let cps = Math.floor((hz * POKEY_FP_ONE) / sr);
       if (cps < 1) cps = 1;
       st.cyclesPerSampleFpBase = cps;
       st.cyclesPerSampleFp = cps;
@@ -134,16 +134,16 @@
 
     function pokeyAudioRecomputeDcBlock(st) {
       if (!st) return;
-      const sr = st.sampleRate || 48000;
+      let sr = st.sampleRate || 48000;
       if (sr < 1) sr = 1;
-      const r = Math.exp((-2.0 * Math.PI * POKEY_DC_BLOCK_HZ) / sr);
+      let r = Math.exp((-2.0 * Math.PI * POKEY_DC_BLOCK_HZ) / sr);
       if (!(r >= 0.0)) r = 0.0;
       if (r >= 0.999999) r = 0.999999;
       st.dcBlockR = r;
     }
 
     function pokeyAudioApplyDcBlock(st, sample) {
-      const out = sample - st.dcBlockX1 + st.dcBlockR * st.dcBlockY1;
+      let out = sample - st.dcBlockX1 + st.dcBlockR * st.dcBlockY1;
       st.dcBlockX1 = sample;
       st.dcBlockY1 = out;
       return out;
@@ -152,9 +152,9 @@
     function pokeyAudioSetTargetBufferSamples(st, n) {
       if (!st) return;
       const ringSize = st.ringSize | 0;
-      const max = ((ringSize * 3) / 4) | 0;
+      let max = ((ringSize * 3) / 4) | 0;
       if (max < 1) max = ringSize > 0 ? (ringSize - 1) | 0 : 1;
-      const target = n | 0;
+      let target = n | 0;
       if (target < 256) target = 256;
       if (target > max) target = max;
       st.targetBufferSamples = target | 0;
@@ -188,7 +188,7 @@
         st.ringCount = (st.ringCount - drop) | 0;
       }
 
-      const first = count;
+      let first = count;
       const toEnd = ringSize - (st.ringWrite | 0);
       if (first > toEnd) first = toEnd;
       ring.set(samples.subarray(0, first), st.ringWrite | 0);
@@ -209,7 +209,7 @@
       const avail = st.ringCount | 0;
       const toRead = count < avail ? count : avail;
 
-      const first = toRead;
+      let first = toRead;
       const toEnd = ringSize - (st.ringRead | 0);
       if (first > toEnd) first = toEnd;
       out.set(ring.subarray(st.ringRead | 0, (st.ringRead + first) | 0), 0);
@@ -223,10 +223,10 @@
 
     function pokeyAudioDrain(st, maxSamples) {
       if (!st) return null;
-      const n = st.ringCount | 0;
+      let n = st.ringCount | 0;
       if (n <= 0) return null;
       if (maxSamples && n > maxSamples) n = maxSamples | 0;
-      const out = new Float32Array(n);
+      let out = new Float32Array(n);
       const got = pokeyAudioRingRead(st, out, n);
       if (got !== n) out = out.subarray(0, got);
       return out;
@@ -257,7 +257,7 @@
       st.hp2Latch = 0;
       st.audctl = 0x00;
       st.skctl = 0x00;
-      for (const i = 0; i < 4; i++) {
+      for (let i = 0; i < 4; i++) {
         const ch = st.channels[i];
         ch.audf = 0;
         ch.audc = 0;
@@ -291,7 +291,7 @@
       const in9 = ((l9 >>> 0) ^ (l9 >>> 5)) & 1;
       st.lfsr9 = ((l9 >>> 1) | (in9 << 8)) & 0x1ff;
 
-      const l17 = st.lfsr17 & 0x1ffff;
+      let l17 = st.lfsr17 & 0x1ffff;
       const in8 = ((l17 >>> 8) ^ (l17 >>> 13)) & 1;
       const in0 = l17 & 1;
       l17 = l17 >>> 1;
@@ -336,7 +336,7 @@
       if (ch.counter > 0) ch.counter = (ch.counter - 1) | 0;
       if (ch.counter !== 0) return 0;
 
-      const reload = ((ch.audf & 0xff) + 1) | 0;
+      let reload = ((ch.audf & 0xff) + 1) | 0;
       if (ch === st.channels[0] && audctl & 0x40)
         reload = ((ch.audf & 0xff) + 4) | 0;
       if (ch === st.channels[2] && audctl & 0x20)
@@ -354,7 +354,7 @@
       if (chHigh.counter > 0) chHigh.counter = (chHigh.counter - 1) | 0;
       if (chHigh.counter !== 0) return 0;
 
-      const reload = (period + 1) >>> 0;
+      let reload = (period + 1) >>> 0;
       if (chLow === st.channels[0] && audctl & 0x40)
         reload = (period + 7) >>> 0;
       if (chLow === st.channels[2] && audctl & 0x20)
@@ -372,8 +372,8 @@
       const audctl = st.audctl & 0xff;
       const pair12 = (audctl & 0x10) !== 0;
       const pair34 = (audctl & 0x08) !== 0;
-      const pulse2 = 0;
-      const pulse3 = 0;
+      let pulse2 = 0;
+      let pulse3 = 0;
 
       pokeyAudioPolyStep(st);
 
@@ -389,7 +389,7 @@
           }
         }
       } else {
-        for (const i = 0; i < 2; i++) {
+        for (let i = 0; i < 2; i++) {
           const ch = st.channels[i];
           if (ch.clkDivCycles === 1) {
             pokeyAudioChannelTick(st, ch, audctl);
@@ -427,7 +427,7 @@
           }
         }
       } else {
-        for (const j = 2; j < 4; j++) {
+        for (let j = 2; j < 4; j++) {
           const ch2 = st.channels[j];
           if (ch2.clkDivCycles === 1) {
             const pulse = pokeyAudioChannelTick(st, ch2, audctl);
@@ -453,9 +453,9 @@
       const audctl = st.audctl & 0xff;
       const pair12 = (audctl & 0x10) !== 0;
       const pair34 = (audctl & 0x08) !== 0;
-      const sum = 0;
+      let sum = 0;
 
-      for (const i = 0; i < 4; i++) {
+      for (let i = 0; i < 4; i++) {
         if (i === 0 && pair12) continue;
         if (i === 2 && pair34) continue;
 
@@ -465,7 +465,7 @@
         if (!vol) continue;
 
         const volOnly = (audc & 0x10) !== 0;
-        const bit = volOnly ? 1 : ch.output & 1;
+        let bit = volOnly ? 1 : ch.output & 1;
 
         if (!volOnly) {
           if (i === 0 && audctl & 0x04) bit ^= st.hp1Latch & 1;
@@ -484,12 +484,12 @@
     }
 
     function pokeyAudioNextPulseCycles(counter, clockCh) {
-      const c = counter | 0;
+      let c = counter | 0;
       if (c < 1) c = 1;
       const div = clockCh.clkDivCycles | 0;
       if (div <= 1) return c;
       const acc = clockCh.clkAccCycles | 0;
-      const firstTick = (div - acc) | 0;
+      let firstTick = (div - acc) | 0;
       if (firstTick < 1) firstTick = 1;
       return firstTick + (c - 1) * div;
     }
@@ -498,7 +498,7 @@
       const audctl = st.audctl & 0xff;
       const pair12 = (audctl & 0x10) !== 0;
       const pair34 = (audctl & 0x08) !== 0;
-      const next = 0x7fffffff;
+      let next = 0x7fffffff;
 
       if (pair12) {
         const n12 = pokeyAudioNextPulseCycles(
@@ -554,7 +554,7 @@
 
     function pokeyAudioCounterDecrementNoPulse(counter, ticks) {
       if (!ticks) return counter | 0;
-      const next = (counter | 0) - (ticks | 0);
+      let next = (counter | 0) - (ticks | 0);
       if (next < 1) next = 1;
       return next | 0;
     }
@@ -563,24 +563,24 @@
       // Advance each LFSR by n steps using modular reduction by its period.
       // Periods: lfsr4=15, lfsr5=31, lfsr9=511, lfsr17=131071.
       const n4 = n % 15;
-      for (const i4 = 0; i4 < n4; i4++) {
+      for (let i4 = 0; i4 < n4; i4++) {
         const l4 = st.lfsr4 & 0x0f;
         st.lfsr4 = ((l4 << 1) | (~(((l4 >>> 2) ^ (l4 >>> 3)) & 1) & 1)) & 0x0f;
       }
       const n5 = n % 31;
-      for (const i5 = 0; i5 < n5; i5++) {
+      for (let i5 = 0; i5 < n5; i5++) {
         const l5 = st.lfsr5 & 0x1f;
         st.lfsr5 = ((l5 << 1) | (~(((l5 >>> 2) ^ (l5 >>> 4)) & 1) & 1)) & 0x1f;
       }
       const n9 = n % 511;
-      for (const i9 = 0; i9 < n9; i9++) {
+      for (let i9 = 0; i9 < n9; i9++) {
         const l9 = st.lfsr9 & 0x1ff;
         st.lfsr9 =
           ((l9 >>> 1) | ((((l9 >>> 0) ^ (l9 >>> 5)) & 1) << 8)) & 0x1ff;
       }
       const n17 = n % 131071;
-      for (const i17 = 0; i17 < n17; i17++) {
-        const l17 = st.lfsr17 & 0x1ffff;
+      for (let i17 = 0; i17 < n17; i17++) {
+        let l17 = st.lfsr17 & 0x1ffff;
         const in8 = ((l17 >>> 8) ^ (l17 >>> 13)) & 1;
         const in0 = l17 & 1;
         l17 = l17 >>> 1;
@@ -591,7 +591,7 @@
 
     function pokeyAudioFastForwardNoPulse(st, cycles) {
       if (!cycles) return;
-      const n = cycles;
+      let n = cycles;
       if (n < 1) return;
 
       pokeyAudioPolyAdvance(st, n);
@@ -607,7 +607,7 @@
           ticks12,
         );
       } else {
-        for (const c = 0; c < 2; c++) {
+        for (let c = 0; c < 2; c++) {
           const ch = st.channels[c];
           const ticks = pokeyAudioAdvanceClockNoPulse(ch, n);
           ch.counter = pokeyAudioCounterDecrementNoPulse(ch.counter, ticks);
@@ -621,7 +621,7 @@
           ticks34,
         );
       } else {
-        for (const c2 = 2; c2 < 4; c2++) {
+        for (let c2 = 2; c2 < 4; c2++) {
           const ch2 = st.channels[c2];
           const ticks2 = pokeyAudioAdvanceClockNoPulse(ch2, n);
           ch2.counter = pokeyAudioCounterDecrementNoPulse(ch2.counter, ticks2);
@@ -630,7 +630,7 @@
     }
 
     function pokeyAudioFinalizeSample(st, sample) {
-      const out = sample * st.mixGain;
+      let out = sample * st.mixGain;
       out = pokeyAudioApplyDcBlock(st, out);
       if (out > 1.0) out = 1.0;
       else if (out < -1.0) out = -1.0;
@@ -741,7 +741,7 @@
 
         case IO_STIMER_KBCODE: {
           // STIMER restarts POKEY timers/dividers and is used for phase sync.
-          for (const r = 0; r < 4; r++) st.channels[r].clkAccCycles = 0;
+          for (let r = 0; r < 4; r++) st.channels[r].clkAccCycles = 0;
           pokeyAudioReloadDividerCounters(st);
           break;
         }
@@ -755,7 +755,7 @@
             st.lfsr9 = 0x01ff;
             st.lfsr5 = 0x00;
             st.lfsr4 = 0x00;
-            for (const i = 0; i < 4; i++) st.channels[i].clkAccCycles = 0;
+            for (let i = 0; i < 4; i++) st.channels[i].clkAccCycles = 0;
             st.hp1Latch = 0;
             st.hp2Latch = 0;
           }
@@ -771,24 +771,24 @@
       if (!ctx || !st) return;
       if (!ctx.ioData) return;
 
-      const target = cycleCounter;
+      let target = cycleCounter;
 
       if (target <= st.lastCycle) return;
 
-      const tmp = st._tmpOut;
+      let tmp = st._tmpOut;
       if (!tmp || tmp.length !== 512) tmp = st._tmpOut = new Float32Array(512);
 
-      const tmpCount = 0;
-      const cur = st.lastCycle;
+      let tmpCount = 0;
+      let cur = st.lastCycle;
       const cpsBase = st.cyclesPerSampleFpBase || st.cyclesPerSampleFp;
-      const cps = cpsBase;
-      const targetFill = st.targetBufferSamples | 0;
+      let cps = cpsBase;
+      let targetFill = st.targetBufferSamples | 0;
       if (targetFill <= 0) targetFill = 1;
       const fillLevel = st.ringCount | 0;
-      const fillDelta = fillLevel - targetFill;
+      let fillDelta = fillLevel - targetFill;
       if (fillDelta > targetFill) fillDelta = targetFill;
       else if (fillDelta < -targetFill) fillDelta = -targetFill;
-      const maxAdjust = Math.floor(cpsBase / POKEY_AUDIO_MAX_ADJUST_DIVISOR);
+      let maxAdjust = Math.floor(cpsBase / POKEY_AUDIO_MAX_ADJUST_DIVISOR);
       if (maxAdjust < 1) maxAdjust = 1;
       const adjust = Math.trunc((fillDelta * maxAdjust) / targetFill);
       cps = cpsBase + adjust;
@@ -796,15 +796,15 @@
       else if (cps > cpsBase + maxAdjust) cps = cpsBase + maxAdjust;
       if (cps < 1) cps = 1;
       st.cyclesPerSampleFp = cps;
-      const samplePhase = st.samplePhaseFp;
+      let samplePhase = st.samplePhaseFp;
       if (target - cur > POKEY_AUDIO_MAX_CATCHUP_CYCLES) {
         cur = target - POKEY_AUDIO_MAX_CATCHUP_CYCLES;
       }
 
       while (cur < target) {
         const remaining = target - cur;
-        const runCycles = remaining;
-        const nextEvent = 0;
+        let runCycles = remaining;
+        let nextEvent = 0;
         const skctlRun = st.skctl & 0x03;
         if (skctlRun !== 0) {
           nextEvent = pokeyAudioCyclesUntilNextEvent(st);
@@ -812,10 +812,10 @@
         }
 
         const level = pokeyAudioMixCycleSample(st);
-        const left = runCycles;
+        let left = runCycles;
 
         while (left > 0) {
-          const cyclesUntilSample =
+          let cyclesUntilSample =
             ((cps - samplePhase + POKEY_FP_ONE - 1) / POKEY_FP_ONE) | 0;
           if (cyclesUntilSample < 1) cyclesUntilSample = 1;
           const batch = left < cyclesUntilSample ? left : cyclesUntilSample;
@@ -868,7 +868,7 @@
       const got = pokeyAudioRingRead(st, out, out.length | 0);
       if (got > 0) st.lastSample = out[got - 1] || 0.0;
       const hold = st.lastSample || 0.0;
-      for (const i = got; i < out.length; i++) {
+      for (let i = got; i < out.length; i++) {
         out[i] = hold;
       }
       st.lastSample = hold || 0.0;
@@ -876,7 +876,7 @@
 
     function pokeyStepLfsr17(io) {
       // Matches the poly17 step used in PokeyAudio_PolyStep() (Pokey.c).
-      const l17 = io.pokeyLfsr17 & 0x1ffff;
+      let l17 = io.pokeyLfsr17 & 0x1ffff;
       const in8 = ((l17 >> 8) ^ (l17 >> 13)) & 1;
       const in0 = l17 & 1;
       l17 = l17 >>> 1;
@@ -906,9 +906,9 @@
         return;
       }
 
-      const last = io.pokeyLfsr17LastCycle;
+      let last = io.pokeyLfsr17LastCycle;
       if (last > now) last = now;
-      const delta = now - last;
+      let delta = now - last;
 
       while (delta > 0) {
         pokeyStepLfsr17(io);
@@ -931,7 +931,7 @@
       io.pokeyPotLatched.fill(0);
 
       // Reset visible pot counters (read-side).
-      for (const i = 0; i < 8; i++) ctx.ram[(IO_AUDF1_POT0 + i) & 0xffff] = 0x00;
+      for (let i = 0; i < 8; i++) ctx.ram[(IO_AUDF1_POT0 + i) & 0xffff] = 0x00;
       ctx.ram[IO_AUDCTL_ALLPOT] = 0xff;
     }
 
@@ -939,19 +939,19 @@
       const io = ctx.ioData;
       if (!io || !io.pokeyPotScanActive) return;
 
-      const elapsed = ctx.cycleCounter - io.pokeyPotScanStartCycle;
+      let elapsed = ctx.cycleCounter - io.pokeyPotScanStartCycle;
       if (elapsed < 0) elapsed = 0;
-      const count = Math.floor(elapsed / POKEY_POT_CYCLES_PER_COUNT);
+      let count = Math.floor(elapsed / POKEY_POT_CYCLES_PER_COUNT);
       if (count > 255) count = 255;
 
-      const allpot = io.pokeyPotAllPot & 0xff;
-      const anyPending = 0;
+      let allpot = io.pokeyPotAllPot & 0xff;
+      let anyPending = 0;
 
-      for (const p = 0; p < 8; p++) {
+      for (let p = 0; p < 8; p++) {
         if (io.pokeyPotLatched[p]) continue;
         anyPending = 1;
 
-        const target = io.pokeyPotValues[p] & 0xff;
+        let target = io.pokeyPotValues[p] & 0xff;
         if (target > POKEY_POT_MAX) target = POKEY_POT_MAX;
 
         if (count >= target) {
@@ -959,7 +959,7 @@
           ctx.ram[(IO_AUDF1_POT0 + p) & 0xffff] = target & 0xff;
           allpot &= ~(1 << p);
         } else {
-          const cur = count;
+          let cur = count;
           if (cur > POKEY_POT_MAX) cur = POKEY_POT_MAX;
           ctx.ram[(IO_AUDF1_POT0 + p) & 0xffff] = cur & 0xff;
         }
@@ -1061,3 +1061,4 @@
     createApi: createApi,
   };
 })();
+
