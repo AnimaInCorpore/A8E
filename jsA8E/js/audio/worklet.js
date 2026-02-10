@@ -51,6 +51,9 @@
       this.lastSample = 0.0;
       this.maxQueuedSamples = (sampleRate / 20) | 0; // ~50ms cap for lower latency
       if (this.maxQueuedSamples < 256) this.maxQueuedSamples = 256;
+      this.statusEveryBlocks = 8;
+      this.statusBlockCounter = 0;
+      this.underrunBlocks = 0;
 
       let self = this;
       this.port.onmessage = function (e) {
@@ -96,6 +99,8 @@
           self.queue.length = 0;
           self.queueIndex = 0;
           self.lastSample = 0.0;
+          self.statusBlockCounter = 0;
+          self.underrunBlocks = 0;
           return;
         }
       };
@@ -106,9 +111,11 @@
       if (!out) return true;
 
       let i = 0;
+      let underrun = false;
       while (i < out.length) {
         if (!this.queue.length) {
           out[i++] = this.lastSample;
+          underrun = true;
           continue;
         }
 
@@ -140,6 +147,21 @@
         if ((this.queueIndex | 0) >= (buf.length | 0)) {
           this.queue.shift();
           this.queueIndex = 0;
+        }
+      }
+
+      if (underrun) this.underrunBlocks = (this.underrunBlocks + 1) | 0;
+      this.statusBlockCounter = (this.statusBlockCounter + 1) | 0;
+      if (underrun || this.statusBlockCounter >= this.statusEveryBlocks) {
+        this.statusBlockCounter = 0;
+        try {
+          this.port.postMessage({
+            type: "status",
+            queuedSamples: countQueuedSamples(this.queue, this.queueIndex),
+            underrunBlocks: this.underrunBlocks | 0,
+          });
+        } catch (e) {
+          // ignore
         }
       }
 

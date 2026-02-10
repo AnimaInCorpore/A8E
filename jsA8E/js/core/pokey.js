@@ -53,6 +53,7 @@
         cyclesPerSampleFp: 0,
         cyclesPerSampleFpBase: 0,
         targetBufferSamples: POKEY_AUDIO_TARGET_BUFFER_SAMPLES,
+        externalFillLevelSamples: -1,
         lastCycle: 0,
         samplePhaseFp: 0,
         sampleAccum: 0,
@@ -158,6 +159,13 @@
       if (target < 256) target = 256;
       if (target > max) target = max;
       st.targetBufferSamples = target | 0;
+    }
+
+    function pokeyAudioSetFillLevelHint(st, n) {
+      if (!st) return;
+      let hint = n | 0;
+      if (hint < 0) hint = -1;
+      st.externalFillLevelSamples = hint;
     }
 
     function pokeyAudioSetTurbo(st, turbo) {
@@ -784,7 +792,9 @@
       let cps = cpsBase;
       let targetFill = st.targetBufferSamples | 0;
       if (targetFill <= 0) targetFill = 1;
-      const fillLevel = st.ringCount | 0;
+      let fillLevel = st.ringCount | 0;
+      if ((st.externalFillLevelSamples | 0) >= 0)
+        fillLevel = st.externalFillLevelSamples | 0;
       let fillDelta = fillLevel - targetFill;
       if (fillDelta > targetFill) fillDelta = targetFill;
       else if (fillDelta < -targetFill) fillDelta = -targetFill;
@@ -1040,6 +1050,7 @@
     return {
       createState: pokeyAudioCreateState,
       setTargetBufferSamples: pokeyAudioSetTargetBufferSamples,
+      setFillLevelHint: pokeyAudioSetFillLevelHint,
       setTurbo: pokeyAudioSetTurbo,
       drain: pokeyAudioDrain,
       clear: pokeyAudioClear,

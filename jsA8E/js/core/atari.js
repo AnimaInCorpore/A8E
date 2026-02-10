@@ -275,6 +275,7 @@
 
   let pokeyAudioCreateState = pokeyAudioApi.createState;
   let pokeyAudioSetTargetBufferSamples = pokeyAudioApi.setTargetBufferSamples;
+  let pokeyAudioSetFillLevelHint = pokeyAudioApi.setFillLevelHint;
   let pokeyAudioSetTurbo = pokeyAudioApi.setTurbo;
   let pokeyAudioDrain = pokeyAudioApi.drain;
   let pokeyAudioClear = pokeyAudioApi.clear;
@@ -583,6 +584,7 @@
       },
       pokeyAudioCreateState: pokeyAudioCreateState,
       pokeyAudioSetTargetBufferSamples: pokeyAudioSetTargetBufferSamples,
+      pokeyAudioSetFillLevelHint: pokeyAudioSetFillLevelHint,
       pokeyAudioSetTurbo: pokeyAudioSetTurbo,
       pokeyAudioResetState: pokeyAudioResetState,
       pokeyAudioOnRegisterWrite: pokeyAudioOnRegisterWrite,

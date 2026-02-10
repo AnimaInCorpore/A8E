@@ -21,6 +21,7 @@
       const pokeyAudioCreateState = opts.pokeyAudioCreateState;
       const pokeyAudioSetTargetBufferSamples =
         opts.pokeyAudioSetTargetBufferSamples;
+      const pokeyAudioSetFillLevelHint = opts.pokeyAudioSetFillLevelHint;
       const pokeyAudioSetTurbo = opts.pokeyAudioSetTurbo;
       const pokeyAudioResetState = opts.pokeyAudioResetState;
       const pokeyAudioOnRegisterWrite = opts.pokeyAudioOnRegisterWrite;
@@ -36,6 +37,8 @@
         machine.audioState = pokeyAudioCreateState(machine.audioCtx.sampleRate);
         pokeyAudioResetState(machine.audioState);
         pokeyAudioSetTurbo(machine.audioState, !!getTurbo());
+        if (pokeyAudioSetFillLevelHint)
+          pokeyAudioSetFillLevelHint(machine.audioState, -1);
         machine.audioTurbo = !!getTurbo();
         // Initialize audio regs from current POKEY write-shadow.
         {
@@ -98,11 +101,14 @@
           if (!machine.audioCtx) return;
           // ScriptProcessorNode fallback for older browsers.
           const node = machine.audioCtx.createScriptProcessor(512, 0, 1);
-          if (machine.audioState)
+          if (machine.audioState) {
             pokeyAudioSetTargetBufferSamples(
               machine.audioState,
               node.bufferSize | 0,
             );
+            if (pokeyAudioSetFillLevelHint)
+              pokeyAudioSetFillLevelHint(machine.audioState, -1);
+          }
           node.onaudioprocess = function (e) {
             const out = e.outputBuffer.getChannelData(0);
             try {
@@ -132,6 +138,9 @@
             .addModule("js/audio/worklet.js")
             .then(function () {
               if (!machine.audioCtx || !getAudioEnabled()) return;
+              const queueTarget = (machine.audioCtx.sampleRate / 50) | 0 || 960;
+              const maxQueuedSamples =
+                (machine.audioCtx.sampleRate / 10) | 0 || 4096;
               const node = new window.AudioWorkletNode(
                 machine.audioCtx,
                 "a8e-sample-queue",
@@ -141,16 +150,33 @@
                   outputChannelCount: [1],
                 },
               );
-              if (machine.audioState)
+              if (machine.audioState) {
                 pokeyAudioSetTargetBufferSamples(
                   machine.audioState,
-                  (machine.audioCtx.sampleRate / 80) | 0 || 512,
+                  queueTarget,
                 );
+                if (pokeyAudioSetFillLevelHint)
+                  pokeyAudioSetFillLevelHint(machine.audioState, queueTarget);
+              }
+              node.port.onmessage = function (e) {
+                const msg = e && e.data ? e.data : null;
+                if (
+                  !msg ||
+                  msg.type !== "status" ||
+                  !machine.audioState ||
+                  !pokeyAudioSetFillLevelHint
+                )
+                  return;
+                if (typeof msg.queuedSamples !== "number") return;
+                pokeyAudioSetFillLevelHint(
+                  machine.audioState,
+                  msg.queuedSamples | 0,
+                );
+              };
               try {
                 node.port.postMessage({
                   type: "config",
-                  maxQueuedSamples:
-                    (machine.audioCtx.sampleRate / 20) | 0 || 2048,
+                  maxQueuedSamples: maxQueuedSamples,
                 });
               } catch (e) {
                 // ignore
@@ -160,6 +186,8 @@
               machine.audioMode = "worklet";
               try {
                 node.port.postMessage({ type: "clear" });
+                if (machine.audioState && pokeyAudioSetFillLevelHint)
+                  pokeyAudioSetFillLevelHint(machine.audioState, 0);
               } catch (e) {
                 // ignore
               }
@@ -186,6 +214,8 @@
               // ignore
             }
           }
+          if (machine.audioState && pokeyAudioSetFillLevelHint)
+            pokeyAudioSetFillLevelHint(machine.audioState, -1);
           if (machine.audioNode) machine.audioNode.disconnect();
           machine.audioNode = null;
           machine.audioCtx.close();
