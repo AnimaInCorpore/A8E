@@ -822,12 +822,20 @@
       );
     }
 
+    function handleJoystickPointerMove(e) {
+      if (e.pointerId !== stickPointerId) return;
+      processJoystickMove(e.clientX, e.clientY);
+      e.preventDefault();
+    }
+
     function resetJoystickControls() {
       stickPointerId = null;
       firePointerId = null;
       if (joystickStick) joystickStick.classList.remove("grabbing");
       resetJoystickStick();
       setJoystickFire(false);
+      if (joystickArea)
+        joystickArea.removeEventListener("pointermove", handleJoystickPointerMove);
     }
 
     function setJoystickEnabled(active) {
@@ -1113,6 +1121,7 @@
           stickCenter = getJoystickStickCenter();
           joystickStick.classList.add("grabbing");
           processJoystickMove(e.clientX, e.clientY);
+          joystickArea.addEventListener("pointermove", handleJoystickPointerMove);
         }
 
         if (joystickArea.setPointerCapture) {
@@ -1126,18 +1135,16 @@
         focusCanvas(true);
       });
 
-      joystickArea.addEventListener("pointermove", function (e) {
-        if (e.pointerId !== stickPointerId) return;
-        processJoystickMove(e.clientX, e.clientY);
-        e.preventDefault();
-      });
-
       function handleJoystickPointerEnd(e) {
         let changed = false;
         if (e.pointerId === stickPointerId) {
           stickPointerId = null;
           joystickStick.classList.remove("grabbing");
           resetJoystickStick();
+          joystickArea.removeEventListener(
+            "pointermove",
+            handleJoystickPointerMove,
+          );
           changed = true;
         }
         if (e.pointerId === firePointerId) {
