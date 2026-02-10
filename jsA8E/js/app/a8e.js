@@ -2,7 +2,7 @@
   "use strict";
 
   function main() {
-    var p = window.A8EUI.boot();
+    const p = window.A8EUI.boot();
     if (p && typeof p.then === "function") {
       p.catch(function (err) {
         window.setTimeout(function () {

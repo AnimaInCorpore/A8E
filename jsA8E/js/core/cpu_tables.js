@@ -4,7 +4,7 @@
   // m_a6502CodeList from 6502.c, converted to compact tuples:
   // [opcodeByte, opcodeId, cycles, addressType]
   // addressType matches AT_* numeric IDs in 6502.c.
-  var CODE_LIST = [
+  const CODE_LIST = [
     [0xa9, 0, 2, 0],
     [0xad, 0, 4, 1],
     [0xa5, 0, 3, 2],
@@ -236,12 +236,12 @@
   ];
 
   function buildCodeTable() {
-    var table = new Array(256);
-    for (var i = 0; i < 256; i++) {
+    const table = new Array(256);
+    for (const i = 0; i < 256; i++) {
       table[i] = { opcodeId: 56, addressType: 4, cycles: 2 };
     }
-    for (var j = 0; j < CODE_LIST.length; j++) {
-      var e = CODE_LIST[j];
+    for (const j = 0; j < CODE_LIST.length; j++) {
+      const e = CODE_LIST[j];
       table[e[0]] = { opcodeId: e[1], addressType: e[3], cycles: e[2] };
     }
     return table;

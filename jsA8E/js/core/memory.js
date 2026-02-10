@@ -2,30 +2,30 @@
   "use strict";
 
   function createApi(cfg) {
-    var CPU = cfg.CPU;
-    var IO_PORTB = cfg.IO_PORTB;
+    const CPU = cfg.CPU;
+    const IO_PORTB = cfg.IO_PORTB;
 
     function createRuntime(opts) {
-      var machine = opts.machine;
-      var video = opts.video;
-      var ioCycleTimedEvent = opts.ioCycleTimedEvent;
-      var makeIoData = opts.makeIoData;
-      var cycleTimedEventUpdate = opts.cycleTimedEventUpdate;
-      var initHardwareDefaults = opts.initHardwareDefaults;
-      var installIoHandlers = opts.installIoHandlers;
-      var ioAccess = opts.ioAccess;
-      var getOptionOnStart = opts.getOptionOnStart;
-      var getSioTurbo = opts.getSioTurbo;
-      var getTurbo = opts.getTurbo;
-      var pokeyAudioResetState = opts.pokeyAudioResetState;
-      var pokeyAudioSetTurbo = opts.pokeyAudioSetTurbo;
+      const machine = opts.machine;
+      const video = opts.video;
+      const ioCycleTimedEvent = opts.ioCycleTimedEvent;
+      const makeIoData = opts.makeIoData;
+      const cycleTimedEventUpdate = opts.cycleTimedEventUpdate;
+      const initHardwareDefaults = opts.initHardwareDefaults;
+      const installIoHandlers = opts.installIoHandlers;
+      const ioAccess = opts.ioAccess;
+      const getOptionOnStart = opts.getOptionOnStart;
+      const getSioTurbo = opts.getSioTurbo;
+      const getTurbo = opts.getTurbo;
+      const pokeyAudioResetState = opts.pokeyAudioResetState;
+      const pokeyAudioSetTurbo = opts.pokeyAudioSetTurbo;
 
       function setupMemoryMap() {
-        var ctx = machine.ctx;
-        var ram = ctx.ram;
-        var sram = ctx.sram;
-        var io = ctx.ioData;
-        var portB = sram[IO_PORTB] & 0xff;
+        const ctx = machine.ctx;
+        const ram = ctx.ram;
+        const sram = ctx.sram;
+        const io = ctx.ioData;
+        const portB = sram[IO_PORTB] & 0xff;
 
         // Mirror the C setup: I/O is ROM-mapped and overridden per-register.
         CPU.setRom(ctx, 0xd000, 0xd7ff);
@@ -87,7 +87,7 @@
         setupMemoryMap();
         CPU.reset(machine.ctx);
         if (machine.audioState) {
-          var turbo = !!getTurbo();
+          const turbo = !!getTurbo();
           pokeyAudioResetState(machine.audioState);
           pokeyAudioSetTurbo(machine.audioState, turbo);
           machine.audioTurbo = turbo;
@@ -106,7 +106,7 @@
       }
 
       function loadOsRom(arrayBuffer) {
-        var bytes = new Uint8Array(arrayBuffer);
+        const bytes = new Uint8Array(arrayBuffer);
         if (bytes.length !== 0x4000) {
           throw new Error(
             "ATARIXL.ROM must be 16KB (0x4000), got " + bytes.length,
@@ -131,7 +131,7 @@
       }
 
       function loadBasicRom(arrayBuffer) {
-        var bytes = new Uint8Array(arrayBuffer);
+        const bytes = new Uint8Array(arrayBuffer);
         if (bytes.length !== 0x2000) {
           throw new Error(
             "ATARIBAS.ROM must be 8KB (0x2000), got " + bytes.length,
@@ -144,7 +144,7 @@
       }
 
       function loadDisk1(arrayBuffer, name) {
-        var bytes = new Uint8Array(arrayBuffer);
+        const bytes = new Uint8Array(arrayBuffer);
         machine.media.disk1 = bytes;
         machine.media.disk1Size = bytes.length | 0;
         machine.media.disk1Name = name || "disk.atr";

@@ -2,64 +2,64 @@
   "use strict";
 
   function createApi(cfg) {
-    var CPU = cfg.CPU;
-    var Util = cfg.Util;
+    const CPU = cfg.CPU;
+    const Util = cfg.Util;
 
-    var PIXELS_PER_LINE = cfg.PIXELS_PER_LINE;
-    var CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
-    var LINES_PER_SCREEN_PAL = cfg.LINES_PER_SCREEN_PAL;
-    var CYCLE_NEVER = cfg.CYCLE_NEVER;
-    var FIRST_VISIBLE_LINE = cfg.FIRST_VISIBLE_LINE;
-    var LAST_VISIBLE_LINE = cfg.LAST_VISIBLE_LINE;
+    const PIXELS_PER_LINE = cfg.PIXELS_PER_LINE;
+    const CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
+    const LINES_PER_SCREEN_PAL = cfg.LINES_PER_SCREEN_PAL;
+    const CYCLE_NEVER = cfg.CYCLE_NEVER;
+    const FIRST_VISIBLE_LINE = cfg.FIRST_VISIBLE_LINE;
+    const LAST_VISIBLE_LINE = cfg.LAST_VISIBLE_LINE;
 
-    var NMI_DLI = cfg.NMI_DLI;
-    var NMI_VBI = cfg.NMI_VBI;
+    const NMI_DLI = cfg.NMI_DLI;
+    const NMI_VBI = cfg.NMI_VBI;
 
-    var IRQ_TIMER_1 = cfg.IRQ_TIMER_1;
-    var IRQ_TIMER_2 = cfg.IRQ_TIMER_2;
-    var IRQ_TIMER_4 = cfg.IRQ_TIMER_4;
-    var IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE =
+    const IRQ_TIMER_1 = cfg.IRQ_TIMER_1;
+    const IRQ_TIMER_2 = cfg.IRQ_TIMER_2;
+    const IRQ_TIMER_4 = cfg.IRQ_TIMER_4;
+    const IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE =
       cfg.IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
-    var IRQ_SERIAL_OUTPUT_DATA_NEEDED = cfg.IRQ_SERIAL_OUTPUT_DATA_NEEDED;
-    var IRQ_SERIAL_INPUT_DATA_READY = cfg.IRQ_SERIAL_INPUT_DATA_READY;
+    const IRQ_SERIAL_OUTPUT_DATA_NEEDED = cfg.IRQ_SERIAL_OUTPUT_DATA_NEEDED;
+    const IRQ_SERIAL_INPUT_DATA_READY = cfg.IRQ_SERIAL_INPUT_DATA_READY;
 
-    var IO_VCOUNT = cfg.IO_VCOUNT;
-    var IO_NMIEN = cfg.IO_NMIEN;
-    var IO_NMIRES_NMIST = cfg.IO_NMIRES_NMIST;
-    var IO_IRQEN_IRQST = cfg.IO_IRQEN_IRQST;
-    var IO_DMACTL = cfg.IO_DMACTL;
-    var IO_VSCROL = cfg.IO_VSCROL;
-    var IO_CHACTL = cfg.IO_CHACTL;
-    var IO_CHBASE = cfg.IO_CHBASE;
-    var IO_COLBK = cfg.IO_COLBK;
-    var IO_COLPF0 = cfg.IO_COLPF0;
-    var IO_COLPF1 = cfg.IO_COLPF1;
-    var IO_COLPF2 = cfg.IO_COLPF2;
-    var IO_COLPF3 = cfg.IO_COLPF3;
-    var IO_COLPM0_TRIG2 = cfg.IO_COLPM0_TRIG2;
-    var IO_PRIOR = cfg.IO_PRIOR;
-    var IO_HSCROL = cfg.IO_HSCROL;
+    const IO_VCOUNT = cfg.IO_VCOUNT;
+    const IO_NMIEN = cfg.IO_NMIEN;
+    const IO_NMIRES_NMIST = cfg.IO_NMIRES_NMIST;
+    const IO_IRQEN_IRQST = cfg.IO_IRQEN_IRQST;
+    const IO_DMACTL = cfg.IO_DMACTL;
+    const IO_VSCROL = cfg.IO_VSCROL;
+    const IO_CHACTL = cfg.IO_CHACTL;
+    const IO_CHBASE = cfg.IO_CHBASE;
+    const IO_COLBK = cfg.IO_COLBK;
+    const IO_COLPF0 = cfg.IO_COLPF0;
+    const IO_COLPF1 = cfg.IO_COLPF1;
+    const IO_COLPF2 = cfg.IO_COLPF2;
+    const IO_COLPF3 = cfg.IO_COLPF3;
+    const IO_COLPM0_TRIG2 = cfg.IO_COLPM0_TRIG2;
+    const IO_PRIOR = cfg.IO_PRIOR;
+    const IO_HSCROL = cfg.IO_HSCROL;
 
-    var ANTIC_MODE_INFO = cfg.ANTIC_MODE_INFO;
-    var drawPlayerMissiles = cfg.drawPlayerMissiles;
-    var pokeyTimerPeriodCpuCycles = cfg.pokeyTimerPeriodCpuCycles;
-    var cycleTimedEventUpdate = cfg.cycleTimedEventUpdate;
-    var PRIO_BKG = cfg.PRIO_BKG;
-    var PRIO_PF0 = cfg.PRIO_PF0;
-    var PRIO_PF1 = cfg.PRIO_PF1;
-    var PRIO_PF2 = cfg.PRIO_PF2;
-    var PRIORITY_TABLE_BKG_PF012 = cfg.PRIORITY_TABLE_BKG_PF012;
-    var PRIORITY_TABLE_BKG_PF013 = cfg.PRIORITY_TABLE_BKG_PF013;
-    var PRIORITY_TABLE_PF0123 = cfg.PRIORITY_TABLE_PF0123;
-    var SCRATCH_GTIA_COLOR_TABLE = cfg.SCRATCH_GTIA_COLOR_TABLE;
-    var SCRATCH_COLOR_TABLE_A = cfg.SCRATCH_COLOR_TABLE_A;
-    var SCRATCH_COLOR_TABLE_B = cfg.SCRATCH_COLOR_TABLE_B;
-    var SCRATCH_BACKGROUND_TABLE = cfg.SCRATCH_BACKGROUND_TABLE;
-    var fillGtiaColorTable = cfg.fillGtiaColorTable;
-    var fillBkgPf012ColorTable = cfg.fillBkgPf012ColorTable;
-    var decodeTextModeCharacter = cfg.decodeTextModeCharacter;
-    var fillLine = cfg.fillLine;
-    var playfieldApi =
+    const ANTIC_MODE_INFO = cfg.ANTIC_MODE_INFO;
+    const drawPlayerMissiles = cfg.drawPlayerMissiles;
+    const pokeyTimerPeriodCpuCycles = cfg.pokeyTimerPeriodCpuCycles;
+    const cycleTimedEventUpdate = cfg.cycleTimedEventUpdate;
+    const PRIO_BKG = cfg.PRIO_BKG;
+    const PRIO_PF0 = cfg.PRIO_PF0;
+    const PRIO_PF1 = cfg.PRIO_PF1;
+    const PRIO_PF2 = cfg.PRIO_PF2;
+    const PRIORITY_TABLE_BKG_PF012 = cfg.PRIORITY_TABLE_BKG_PF012;
+    const PRIORITY_TABLE_BKG_PF013 = cfg.PRIORITY_TABLE_BKG_PF013;
+    const PRIORITY_TABLE_PF0123 = cfg.PRIORITY_TABLE_PF0123;
+    const SCRATCH_GTIA_COLOR_TABLE = cfg.SCRATCH_GTIA_COLOR_TABLE;
+    const SCRATCH_COLOR_TABLE_A = cfg.SCRATCH_COLOR_TABLE_A;
+    const SCRATCH_COLOR_TABLE_B = cfg.SCRATCH_COLOR_TABLE_B;
+    const SCRATCH_BACKGROUND_TABLE = cfg.SCRATCH_BACKGROUND_TABLE;
+    const fillGtiaColorTable = cfg.fillGtiaColorTable;
+    const fillBkgPf012ColorTable = cfg.fillBkgPf012ColorTable;
+    const decodeTextModeCharacter = cfg.decodeTextModeCharacter;
+    const fillLine = cfg.fillLine;
+    const playfieldApi =
       window.A8EPlayfield && window.A8EPlayfield.createApi
         ? window.A8EPlayfield.createApi({
             CPU: CPU,
@@ -97,12 +97,12 @@
           })
         : null;
     if (!playfieldApi) throw new Error("A8EPlayfield is not loaded");
-    var drawLine = playfieldApi.drawLine;
+    const drawLine = playfieldApi.drawLine;
 
     function fetchLine(ctx) {
-      var io = ctx.ioData;
-      var ram = ctx.ram;
-      var sram = ctx.sram;
+      const io = ctx.ioData;
+      const ram = ctx.ram;
+      const sram = ctx.sram;
 
       CPU.stall(ctx, 9);
 
@@ -119,7 +119,7 @@
       // Playfield DMA active?
       if (sram[IO_DMACTL] & 0x20) {
         if (io.video.currentDisplayLine === io.nextDisplayListLine) {
-          var oldCmd = io.currentDisplayListCommand & 0xff;
+          const oldCmd = io.currentDisplayListCommand & 0xff;
           io.currentDisplayListCommand =
             ram[io.displayListAddress & 0xffff] & 0xff;
           io.displayListAddress = Util.fixedAdd(
@@ -129,8 +129,8 @@
           );
           CPU.stall(ctx, 1);
 
-          var cmd = io.currentDisplayListCommand;
-          var mode = cmd & 0x0f;
+          const cmd = io.currentDisplayListCommand;
+          const mode = cmd & 0x0f;
           if (mode <= 0x01) {
             io.nextDisplayListLine += ((cmd & 0x70) >> 4) + 1;
           } else {
@@ -145,7 +145,7 @@
             );
             io.video.verticalScrollOffset = 0;
           } else if ((oldCmd & 0x2f) >= 0x22 && (cmd & 0x2f) < 0x22) {
-            var temp = io.nextDisplayListLine;
+            const temp = io.nextDisplayListLine;
             io.nextDisplayListLine = Math.min(
               io.nextDisplayListLine,
               io.video.currentDisplayLine + (sram[IO_VSCROL] & 0xff) + 1,
@@ -196,9 +196,9 @@
     }
 
     function ioCycleTimedEvent(ctx) {
-      var io = ctx.ioData;
-      var ram = ctx.ram;
-      var sram = ctx.sram;
+      const io = ctx.ioData;
+      const ram = ctx.ram;
+      const sram = ctx.sram;
 
       if (ctx.cycleCounter >= io.displayListFetchCycle) {
         io.video.currentDisplayLine++;
@@ -245,7 +245,7 @@
       }
 
       if (ctx.cycleCounter >= io.timer1Cycle) {
-        var p1 = pokeyTimerPeriodCpuCycles(ctx, 1);
+        const p1 = pokeyTimerPeriodCpuCycles(ctx, 1);
         ram[IO_IRQEN_IRQST] &= ~IRQ_TIMER_1;
         if (sram[IO_IRQEN_IRQST] & IRQ_TIMER_1) CPU.irq(ctx);
         if (p1 === 0) io.timer1Cycle = CYCLE_NEVER;
@@ -255,7 +255,7 @@
       }
 
       if (ctx.cycleCounter >= io.timer2Cycle) {
-        var p2 = pokeyTimerPeriodCpuCycles(ctx, 2);
+        const p2 = pokeyTimerPeriodCpuCycles(ctx, 2);
         ram[IO_IRQEN_IRQST] &= ~IRQ_TIMER_2;
         if (sram[IO_IRQEN_IRQST] & IRQ_TIMER_2) CPU.irq(ctx);
         if (p2 === 0) io.timer2Cycle = CYCLE_NEVER;
@@ -265,7 +265,7 @@
       }
 
       if (ctx.cycleCounter >= io.timer4Cycle) {
-        var p4 = pokeyTimerPeriodCpuCycles(ctx, 4);
+        const p4 = pokeyTimerPeriodCpuCycles(ctx, 4);
         ram[IO_IRQEN_IRQST] &= ~IRQ_TIMER_4;
         if (sram[IO_IRQEN_IRQST] & IRQ_TIMER_4) CPU.irq(ctx);
         if (p4 === 0) io.timer4Cycle = CYCLE_NEVER;

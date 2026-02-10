@@ -4,7 +4,7 @@
   function createApi() {
     // Key mapping table from AtariIo.c (indexed by SDL 1.2 keysym.sym).
     // Values are Atari POKEY KBCODE codes; 255 => unmapped.
-    var KEY_CODE_TABLE = [
+    const KEY_CODE_TABLE = [
       255, 255, 255, 255, 255, 255, 255, 255, 52, 44, 255, 255, 255, 12, 255,
       255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
       255, 255, 33, 255, 255, 255, 255, 255, 255, 6, 255, 255, 255, 255, 32, 54,
@@ -45,7 +45,7 @@
       if (e && typeof e.sdlSym === "number" && isFinite(e.sdlSym))
         return e.sdlSym | 0;
       // SDL 1.2 keysyms mostly follow ASCII for printable keys.
-      var k = e.key;
+      const k = e.key;
       if (k && k.length === 1) return k.toLowerCase().charCodeAt(0) & 0x1ff;
       switch (k) {
         case "Enter":

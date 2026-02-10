@@ -2,35 +2,35 @@
   "use strict";
 
   function createApi(cfg) {
-    var CYCLE_NEVER = cfg.CYCLE_NEVER;
-    var IO_AUDF1_POT0 = cfg.IO_AUDF1_POT0;
-    var IO_AUDC1_POT1 = cfg.IO_AUDC1_POT1;
-    var IO_AUDF2_POT2 = cfg.IO_AUDF2_POT2;
-    var IO_AUDC2_POT3 = cfg.IO_AUDC2_POT3;
-    var IO_AUDF3_POT4 = cfg.IO_AUDF3_POT4;
-    var IO_AUDC3_POT5 = cfg.IO_AUDC3_POT5;
-    var IO_AUDF4_POT6 = cfg.IO_AUDF4_POT6;
-    var IO_AUDC4_POT7 = cfg.IO_AUDC4_POT7;
-    var IO_SKCTL_SKSTAT = cfg.IO_SKCTL_SKSTAT;
-    var IO_AUDCTL_ALLPOT = cfg.IO_AUDCTL_ALLPOT;
+    const CYCLE_NEVER = cfg.CYCLE_NEVER;
+    const IO_AUDF1_POT0 = cfg.IO_AUDF1_POT0;
+    const IO_AUDC1_POT1 = cfg.IO_AUDC1_POT1;
+    const IO_AUDF2_POT2 = cfg.IO_AUDF2_POT2;
+    const IO_AUDC2_POT3 = cfg.IO_AUDC2_POT3;
+    const IO_AUDF3_POT4 = cfg.IO_AUDF3_POT4;
+    const IO_AUDC3_POT5 = cfg.IO_AUDC3_POT5;
+    const IO_AUDF4_POT6 = cfg.IO_AUDF4_POT6;
+    const IO_AUDC4_POT7 = cfg.IO_AUDC4_POT7;
+    const IO_SKCTL_SKSTAT = cfg.IO_SKCTL_SKSTAT;
+    const IO_AUDCTL_ALLPOT = cfg.IO_AUDCTL_ALLPOT;
 
     function createRuntime(opts) {
-      var machine = opts.machine;
-      var getAudioEnabled = opts.getAudioEnabled;
-      var getTurbo = opts.getTurbo;
-      var pokeyAudioCreateState = opts.pokeyAudioCreateState;
-      var pokeyAudioSetTargetBufferSamples =
+      const machine = opts.machine;
+      const getAudioEnabled = opts.getAudioEnabled;
+      const getTurbo = opts.getTurbo;
+      const pokeyAudioCreateState = opts.pokeyAudioCreateState;
+      const pokeyAudioSetTargetBufferSamples =
         opts.pokeyAudioSetTargetBufferSamples;
-      var pokeyAudioSetTurbo = opts.pokeyAudioSetTurbo;
-      var pokeyAudioResetState = opts.pokeyAudioResetState;
-      var pokeyAudioOnRegisterWrite = opts.pokeyAudioOnRegisterWrite;
-      var pokeyAudioSync = opts.pokeyAudioSync;
-      var pokeyAudioConsume = opts.pokeyAudioConsume;
+      const pokeyAudioSetTurbo = opts.pokeyAudioSetTurbo;
+      const pokeyAudioResetState = opts.pokeyAudioResetState;
+      const pokeyAudioOnRegisterWrite = opts.pokeyAudioOnRegisterWrite;
+      const pokeyAudioSync = opts.pokeyAudioSync;
+      const pokeyAudioConsume = opts.pokeyAudioConsume;
 
       function ensureAudio() {
         if (!getAudioEnabled()) return;
         if (machine.audioCtx) return;
-        var AC = window.AudioContext || window.webkitAudioContext;
+        const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return;
         machine.audioCtx = new AC();
         machine.audioState = pokeyAudioCreateState(machine.audioCtx.sampleRate);
@@ -39,7 +39,7 @@
         machine.audioTurbo = !!getTurbo();
         // Initialize audio regs from current POKEY write-shadow.
         {
-          var sram = machine.ctx.sram;
+          const sram = machine.ctx.sram;
           pokeyAudioOnRegisterWrite(
             machine.audioState,
             IO_AUDF1_POT0,
@@ -97,14 +97,14 @@
         function setupScriptProcessor() {
           if (!machine.audioCtx) return;
           // ScriptProcessorNode fallback for older browsers.
-          var node = machine.audioCtx.createScriptProcessor(512, 0, 1);
+          const node = machine.audioCtx.createScriptProcessor(512, 0, 1);
           if (machine.audioState)
             pokeyAudioSetTargetBufferSamples(
               machine.audioState,
               node.bufferSize | 0,
             );
           node.onaudioprocess = function (e) {
-            var out = e.outputBuffer.getChannelData(0);
+            const out = e.outputBuffer.getChannelData(0);
             try {
               if (!machine.running || !machine.audioState) {
                 out.fill(0.0);
@@ -132,7 +132,7 @@
             .addModule("js/audio/worklet.js")
             .then(function () {
               if (!machine.audioCtx || !getAudioEnabled()) return;
-              var node = new window.AudioWorkletNode(
+              const node = new window.AudioWorkletNode(
                 machine.audioCtx,
                 "a8e-sample-queue",
                 {
@@ -212,7 +212,7 @@
 
       function syncAudioTurboMode(nextTurbo) {
         if (!machine.audioState) return;
-        var next = !!nextTurbo;
+        const next = !!nextTurbo;
         if (next === machine.audioTurbo) return;
         pokeyAudioSync(
           machine.ctx,

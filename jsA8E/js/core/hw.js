@@ -1,158 +1,158 @@
 (function () {
   "use strict";
 
-  var api = null;
+  const api = null;
 
   function createApi() {
     if (api) return api;
 
     // --- Constants (from AtariIo.h / Antic.h / Gtia.h / Pokey.h / Pia.h) ---
-    var PIXELS_PER_LINE = 456;
-    var LINES_PER_SCREEN_PAL = 312;
-    var COLOR_CLOCKS_PER_LINE = PIXELS_PER_LINE / 2;
-    var CYCLES_PER_LINE = COLOR_CLOCKS_PER_LINE / 2; // 114
-    var ATARI_CPU_HZ_PAL = 1773447;
-    var CYCLE_NEVER = Infinity;
+    const PIXELS_PER_LINE = 456;
+    const LINES_PER_SCREEN_PAL = 312;
+    const COLOR_CLOCKS_PER_LINE = PIXELS_PER_LINE / 2;
+    const CYCLES_PER_LINE = COLOR_CLOCKS_PER_LINE / 2; // 114
+    const ATARI_CPU_HZ_PAL = 1773447;
+    const CYCLE_NEVER = Infinity;
 
-    var FIRST_VISIBLE_LINE = 8;
-    var LAST_VISIBLE_LINE = 247;
+    const FIRST_VISIBLE_LINE = 8;
+    const LAST_VISIBLE_LINE = 247;
 
-    var SERIAL_OUTPUT_DATA_NEEDED_CYCLES = 900;
-    var SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES = 1500;
-    var SERIAL_INPUT_FIRST_DATA_READY_CYCLES = 3000;
-    var SERIAL_INPUT_DATA_READY_CYCLES = 900;
-    var SIO_TURBO_EMU_MULTIPLIER = 4.0;
+    const SERIAL_OUTPUT_DATA_NEEDED_CYCLES = 900;
+    const SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES = 1500;
+    const SERIAL_INPUT_FIRST_DATA_READY_CYCLES = 3000;
+    const SERIAL_INPUT_DATA_READY_CYCLES = 900;
+    const SIO_TURBO_EMU_MULTIPLIER = 4.0;
     // Keep enough history to survive moderate frame delays without excessive latency.
-    var POKEY_AUDIO_MAX_CATCHUP_CYCLES = 100000;
+    const POKEY_AUDIO_MAX_CATCHUP_CYCLES = 100000;
 
-    var NMI_DLI = 0x80;
-    var NMI_VBI = 0x40;
-    var NMI_RESET = 0x20;
+    const NMI_DLI = 0x80;
+    const NMI_VBI = 0x40;
+    const NMI_RESET = 0x20;
 
     // PIA
-    var IO_PORTA = 0xd300;
-    var IO_PORTB = 0xd301;
-    var IO_PACTL = 0xd302;
-    var IO_PBCTL = 0xd303;
+    const IO_PORTA = 0xd300;
+    const IO_PORTB = 0xd301;
+    const IO_PACTL = 0xd302;
+    const IO_PBCTL = 0xd303;
 
     // GTIA
-    var IO_HPOSP0_M0PF = 0xd000;
-    var IO_HPOSP1_M1PF = 0xd001;
-    var IO_HPOSP2_M2PF = 0xd002;
-    var IO_HPOSP3_M3PF = 0xd003;
-    var IO_HPOSM0_P0PF = 0xd004;
-    var IO_HPOSM1_P1PF = 0xd005;
-    var IO_HPOSM2_P2PF = 0xd006;
-    var IO_HPOSM3_P3PF = 0xd007;
-    var IO_SIZEP0_M0PL = 0xd008;
-    var IO_SIZEP1_M1PL = 0xd009;
-    var IO_SIZEP2_M2PL = 0xd00a;
-    var IO_SIZEP3_M3PL = 0xd00b;
-    var IO_SIZEM_P0PL = 0xd00c;
-    var IO_GRAFP0_P1PL = 0xd00d;
-    var IO_GRAFP1_P2PL = 0xd00e;
-    var IO_GRAFP2_P3PL = 0xd00f;
-    var IO_GRAFP3_TRIG0 = 0xd010;
-    var IO_GRAFM_TRIG1 = 0xd011;
-    var IO_COLPM0_TRIG2 = 0xd012;
-    var IO_COLPM1_TRIG3 = 0xd013;
-    var IO_COLPM2_PAL = 0xd014;
-    var IO_COLPM3 = 0xd015;
-    var IO_COLPF0 = 0xd016;
-    var IO_COLPF1 = 0xd017;
-    var IO_COLPF2 = 0xd018;
-    var IO_COLPF3 = 0xd019;
-    var IO_COLBK = 0xd01a;
-    var IO_PRIOR = 0xd01b;
-    var IO_VDELAY = 0xd01c;
-    var IO_GRACTL = 0xd01d;
-    var IO_HITCLR = 0xd01e;
-    var IO_CONSOL = 0xd01f;
+    const IO_HPOSP0_M0PF = 0xd000;
+    const IO_HPOSP1_M1PF = 0xd001;
+    const IO_HPOSP2_M2PF = 0xd002;
+    const IO_HPOSP3_M3PF = 0xd003;
+    const IO_HPOSM0_P0PF = 0xd004;
+    const IO_HPOSM1_P1PF = 0xd005;
+    const IO_HPOSM2_P2PF = 0xd006;
+    const IO_HPOSM3_P3PF = 0xd007;
+    const IO_SIZEP0_M0PL = 0xd008;
+    const IO_SIZEP1_M1PL = 0xd009;
+    const IO_SIZEP2_M2PL = 0xd00a;
+    const IO_SIZEP3_M3PL = 0xd00b;
+    const IO_SIZEM_P0PL = 0xd00c;
+    const IO_GRAFP0_P1PL = 0xd00d;
+    const IO_GRAFP1_P2PL = 0xd00e;
+    const IO_GRAFP2_P3PL = 0xd00f;
+    const IO_GRAFP3_TRIG0 = 0xd010;
+    const IO_GRAFM_TRIG1 = 0xd011;
+    const IO_COLPM0_TRIG2 = 0xd012;
+    const IO_COLPM1_TRIG3 = 0xd013;
+    const IO_COLPM2_PAL = 0xd014;
+    const IO_COLPM3 = 0xd015;
+    const IO_COLPF0 = 0xd016;
+    const IO_COLPF1 = 0xd017;
+    const IO_COLPF2 = 0xd018;
+    const IO_COLPF3 = 0xd019;
+    const IO_COLBK = 0xd01a;
+    const IO_PRIOR = 0xd01b;
+    const IO_VDELAY = 0xd01c;
+    const IO_GRACTL = 0xd01d;
+    const IO_HITCLR = 0xd01e;
+    const IO_CONSOL = 0xd01f;
 
     // POKEY
-    var IO_AUDF1_POT0 = 0xd200;
-    var IO_AUDC1_POT1 = 0xd201;
-    var IO_AUDF2_POT2 = 0xd202;
-    var IO_AUDC2_POT3 = 0xd203;
-    var IO_AUDF3_POT4 = 0xd204;
-    var IO_AUDC3_POT5 = 0xd205;
-    var IO_AUDF4_POT6 = 0xd206;
-    var IO_AUDC4_POT7 = 0xd207;
-    var IO_AUDCTL_ALLPOT = 0xd208;
+    const IO_AUDF1_POT0 = 0xd200;
+    const IO_AUDC1_POT1 = 0xd201;
+    const IO_AUDF2_POT2 = 0xd202;
+    const IO_AUDC2_POT3 = 0xd203;
+    const IO_AUDF3_POT4 = 0xd204;
+    const IO_AUDC3_POT5 = 0xd205;
+    const IO_AUDF4_POT6 = 0xd206;
+    const IO_AUDC4_POT7 = 0xd207;
+    const IO_AUDCTL_ALLPOT = 0xd208;
     // combined read/write addresses:
-    var IO_STIMER_KBCODE = 0xd209; // write STIMER / read KBCODE
-    var IO_SKREST_RANDOM = 0xd20a; // write SKREST / read RANDOM
-    var IO_POTGO = 0xd20b;
-    var IO_SEROUT_SERIN = 0xd20d; // write SEROUT / read SERIN
-    var IO_IRQEN_IRQST = 0xd20e; // write IRQEN / read IRQST
-    var IO_SKCTL_SKSTAT = 0xd20f; // write SKCTL / read SKSTAT
+    const IO_STIMER_KBCODE = 0xd209; // write STIMER / read KBCODE
+    const IO_SKREST_RANDOM = 0xd20a; // write SKREST / read RANDOM
+    const IO_POTGO = 0xd20b;
+    const IO_SEROUT_SERIN = 0xd20d; // write SEROUT / read SERIN
+    const IO_IRQEN_IRQST = 0xd20e; // write IRQEN / read IRQST
+    const IO_SKCTL_SKSTAT = 0xd20f; // write SKCTL / read SKSTAT
 
-    var IRQ_TIMER_1 = 0x01;
-    var IRQ_TIMER_2 = 0x02;
-    var IRQ_TIMER_4 = 0x04;
-    var IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE = 0x08;
-    var IRQ_SERIAL_OUTPUT_DATA_NEEDED = 0x10;
-    var IRQ_SERIAL_INPUT_DATA_READY = 0x20;
-    var IRQ_OTHER_KEY_PRESSED = 0x40;
-    var IRQ_BREAK_KEY_PRESSED = 0x80;
+    const IRQ_TIMER_1 = 0x01;
+    const IRQ_TIMER_2 = 0x02;
+    const IRQ_TIMER_4 = 0x04;
+    const IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE = 0x08;
+    const IRQ_SERIAL_OUTPUT_DATA_NEEDED = 0x10;
+    const IRQ_SERIAL_INPUT_DATA_READY = 0x20;
+    const IRQ_OTHER_KEY_PRESSED = 0x40;
+    const IRQ_BREAK_KEY_PRESSED = 0x80;
 
     // ANTIC
-    var IO_DMACTL = 0xd400;
-    var IO_CHACTL = 0xd401;
-    var IO_DLISTL = 0xd402;
-    var IO_DLISTH = 0xd403;
-    var IO_HSCROL = 0xd404;
-    var IO_VSCROL = 0xd405;
-    var IO_PMBASE = 0xd407;
-    var IO_CHBASE = 0xd409;
-    var IO_WSYNC = 0xd40a;
-    var IO_VCOUNT = 0xd40b;
-    var IO_PENH = 0xd40c;
-    var IO_PENV = 0xd40d;
-    var IO_NMIEN = 0xd40e;
-    var IO_NMIRES_NMIST = 0xd40f;
+    const IO_DMACTL = 0xd400;
+    const IO_CHACTL = 0xd401;
+    const IO_DLISTL = 0xd402;
+    const IO_DLISTH = 0xd403;
+    const IO_HSCROL = 0xd404;
+    const IO_VSCROL = 0xd405;
+    const IO_PMBASE = 0xd407;
+    const IO_CHBASE = 0xd409;
+    const IO_WSYNC = 0xd40a;
+    const IO_VCOUNT = 0xd40b;
+    const IO_PENH = 0xd40c;
+    const IO_PENV = 0xd40d;
+    const IO_NMIEN = 0xd40e;
+    const IO_NMIRES_NMIST = 0xd40f;
 
     // Viewport from A8E.c
-    var VIEW_W = 336;
-    var VIEW_H = 240;
-    var VIEW_X = (16 + 12 + 6 + 10 + 4) * 2 + 160 - VIEW_W / 2; // 88
-    var VIEW_Y = 8;
+    const VIEW_W = 336;
+    const VIEW_H = 240;
+    const VIEW_X = (16 + 12 + 6 + 10 + 4) * 2 + 160 - VIEW_W / 2; // 88
+    const VIEW_Y = 8;
 
     // Priority bits (from Antic.c)
-    var PRIO_BKG = 0x00;
-    var PRIO_PF0 = 0x01;
-    var PRIO_PF1 = 0x02;
-    var PRIO_PF2 = 0x04;
-    var PRIO_PF3 = 0x08;
-    var PRIO_PM0 = 0x10;
-    var PRIO_PM1 = 0x20;
-    var PRIO_PM2 = 0x40;
-    var PRIO_PM3 = 0x80;
-    var PRIORITY_TABLE_BKG_PF012 = new Uint8Array([
+    const PRIO_BKG = 0x00;
+    const PRIO_PF0 = 0x01;
+    const PRIO_PF1 = 0x02;
+    const PRIO_PF2 = 0x04;
+    const PRIO_PF3 = 0x08;
+    const PRIO_PM0 = 0x10;
+    const PRIO_PM1 = 0x20;
+    const PRIO_PM2 = 0x40;
+    const PRIO_PM3 = 0x80;
+    const PRIORITY_TABLE_BKG_PF012 = new Uint8Array([
       PRIO_BKG,
       PRIO_PF0,
       PRIO_PF1,
       PRIO_PF2,
     ]);
-    var PRIORITY_TABLE_BKG_PF013 = new Uint8Array([
+    const PRIORITY_TABLE_BKG_PF013 = new Uint8Array([
       PRIO_BKG,
       PRIO_PF0,
       PRIO_PF1,
       PRIO_PF3,
     ]);
-    var PRIORITY_TABLE_PF0123 = new Uint8Array([
+    const PRIORITY_TABLE_PF0123 = new Uint8Array([
       PRIO_PF0,
       PRIO_PF1,
       PRIO_PF2,
       PRIO_PF3,
     ]);
-    var SCRATCH_GTIA_COLOR_TABLE = new Uint8Array(16);
-    var SCRATCH_COLOR_TABLE_A = new Uint8Array(4);
-    var SCRATCH_COLOR_TABLE_B = new Uint8Array(4);
-    var SCRATCH_BACKGROUND_TABLE = new Uint8Array(4);
+    const SCRATCH_GTIA_COLOR_TABLE = new Uint8Array(16);
+    const SCRATCH_COLOR_TABLE_A = new Uint8Array(4);
+    const SCRATCH_COLOR_TABLE_B = new Uint8Array(4);
+    const SCRATCH_BACKGROUND_TABLE = new Uint8Array(4);
 
     // --- Minimal ANTIC mode info (ported from AtariIo.c) ---
-    var ANTIC_MODE_INFO = [
+    const ANTIC_MODE_INFO = [
       { lines: 0, ppb: 0 }, // 0
       { lines: 0, ppb: 0 }, // 1 (JMP)
       { lines: 8, ppb: 8 }, // 2
@@ -172,7 +172,7 @@
     ];
 
     // IO register defaults (write-shadow vs read-side RAM) from AtariIo.c.
-    var IO_INIT_VALUES = [
+    const IO_INIT_VALUES = [
       // GTIA
       { addr: IO_HPOSP0_M0PF, write: 0x00, read: 0x00 },
       { addr: IO_HPOSP1_M1PF, write: 0x00, read: 0x00 },

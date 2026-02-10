@@ -1,128 +1,128 @@
 (function () {
   "use strict";
 
-  var Util = window.A8EUtil;
-  var CPU = window.A8E6502;
-  var Palette = window.A8EPalette;
+  const Util = window.A8EUtil;
+  const CPU = window.A8E6502;
+  const Palette = window.A8EPalette;
 
-  var hwApi =
+  const hwApi =
     window.A8EHw && window.A8EHw.createApi ? window.A8EHw.createApi() : null;
   if (!hwApi) throw new Error("A8EHw is not loaded");
 
-  var PIXELS_PER_LINE = hwApi.PIXELS_PER_LINE;
-  var LINES_PER_SCREEN_PAL = hwApi.LINES_PER_SCREEN_PAL;
-  var CYCLES_PER_LINE = hwApi.CYCLES_PER_LINE;
-  var ATARI_CPU_HZ_PAL = hwApi.ATARI_CPU_HZ_PAL;
-  var CYCLE_NEVER = hwApi.CYCLE_NEVER;
-  var FIRST_VISIBLE_LINE = hwApi.FIRST_VISIBLE_LINE;
-  var LAST_VISIBLE_LINE = hwApi.LAST_VISIBLE_LINE;
-  var SERIAL_OUTPUT_DATA_NEEDED_CYCLES = hwApi.SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
-  var SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES =
+  const PIXELS_PER_LINE = hwApi.PIXELS_PER_LINE;
+  const LINES_PER_SCREEN_PAL = hwApi.LINES_PER_SCREEN_PAL;
+  const CYCLES_PER_LINE = hwApi.CYCLES_PER_LINE;
+  const ATARI_CPU_HZ_PAL = hwApi.ATARI_CPU_HZ_PAL;
+  const CYCLE_NEVER = hwApi.CYCLE_NEVER;
+  const FIRST_VISIBLE_LINE = hwApi.FIRST_VISIBLE_LINE;
+  const LAST_VISIBLE_LINE = hwApi.LAST_VISIBLE_LINE;
+  const SERIAL_OUTPUT_DATA_NEEDED_CYCLES = hwApi.SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
+  const SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES =
     hwApi.SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
-  var SERIAL_INPUT_FIRST_DATA_READY_CYCLES =
+  const SERIAL_INPUT_FIRST_DATA_READY_CYCLES =
     hwApi.SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
-  var SERIAL_INPUT_DATA_READY_CYCLES = hwApi.SERIAL_INPUT_DATA_READY_CYCLES;
-  var SIO_TURBO_EMU_MULTIPLIER = hwApi.SIO_TURBO_EMU_MULTIPLIER;
-  var POKEY_AUDIO_MAX_CATCHUP_CYCLES = hwApi.POKEY_AUDIO_MAX_CATCHUP_CYCLES;
-  var NMI_DLI = hwApi.NMI_DLI;
-  var NMI_VBI = hwApi.NMI_VBI;
-  var NMI_RESET = hwApi.NMI_RESET;
-  var IO_PORTA = hwApi.IO_PORTA;
-  var IO_PORTB = hwApi.IO_PORTB;
-  var IO_PACTL = hwApi.IO_PACTL;
-  var IO_PBCTL = hwApi.IO_PBCTL;
-  var IO_HPOSP0_M0PF = hwApi.IO_HPOSP0_M0PF;
-  var IO_HPOSP1_M1PF = hwApi.IO_HPOSP1_M1PF;
-  var IO_HPOSP2_M2PF = hwApi.IO_HPOSP2_M2PF;
-  var IO_HPOSP3_M3PF = hwApi.IO_HPOSP3_M3PF;
-  var IO_HPOSM0_P0PF = hwApi.IO_HPOSM0_P0PF;
-  var IO_HPOSM1_P1PF = hwApi.IO_HPOSM1_P1PF;
-  var IO_HPOSM2_P2PF = hwApi.IO_HPOSM2_P2PF;
-  var IO_HPOSM3_P3PF = hwApi.IO_HPOSM3_P3PF;
-  var IO_SIZEP0_M0PL = hwApi.IO_SIZEP0_M0PL;
-  var IO_SIZEP1_M1PL = hwApi.IO_SIZEP1_M1PL;
-  var IO_SIZEP2_M2PL = hwApi.IO_SIZEP2_M2PL;
-  var IO_SIZEP3_M3PL = hwApi.IO_SIZEP3_M3PL;
-  var IO_SIZEM_P0PL = hwApi.IO_SIZEM_P0PL;
-  var IO_GRAFP0_P1PL = hwApi.IO_GRAFP0_P1PL;
-  var IO_GRAFP1_P2PL = hwApi.IO_GRAFP1_P2PL;
-  var IO_GRAFP2_P3PL = hwApi.IO_GRAFP2_P3PL;
-  var IO_GRAFP3_TRIG0 = hwApi.IO_GRAFP3_TRIG0;
-  var IO_GRAFM_TRIG1 = hwApi.IO_GRAFM_TRIG1;
-  var IO_COLPM0_TRIG2 = hwApi.IO_COLPM0_TRIG2;
-  var IO_COLPM1_TRIG3 = hwApi.IO_COLPM1_TRIG3;
-  var IO_COLPM2_PAL = hwApi.IO_COLPM2_PAL;
-  var IO_COLPM3 = hwApi.IO_COLPM3;
-  var IO_COLPF0 = hwApi.IO_COLPF0;
-  var IO_COLPF1 = hwApi.IO_COLPF1;
-  var IO_COLPF2 = hwApi.IO_COLPF2;
-  var IO_COLPF3 = hwApi.IO_COLPF3;
-  var IO_COLBK = hwApi.IO_COLBK;
-  var IO_PRIOR = hwApi.IO_PRIOR;
-  var IO_VDELAY = hwApi.IO_VDELAY;
-  var IO_GRACTL = hwApi.IO_GRACTL;
-  var IO_HITCLR = hwApi.IO_HITCLR;
-  var IO_CONSOL = hwApi.IO_CONSOL;
-  var IO_AUDF1_POT0 = hwApi.IO_AUDF1_POT0;
-  var IO_AUDC1_POT1 = hwApi.IO_AUDC1_POT1;
-  var IO_AUDF2_POT2 = hwApi.IO_AUDF2_POT2;
-  var IO_AUDC2_POT3 = hwApi.IO_AUDC2_POT3;
-  var IO_AUDF3_POT4 = hwApi.IO_AUDF3_POT4;
-  var IO_AUDC3_POT5 = hwApi.IO_AUDC3_POT5;
-  var IO_AUDF4_POT6 = hwApi.IO_AUDF4_POT6;
-  var IO_AUDC4_POT7 = hwApi.IO_AUDC4_POT7;
-  var IO_AUDCTL_ALLPOT = hwApi.IO_AUDCTL_ALLPOT;
-  var IO_STIMER_KBCODE = hwApi.IO_STIMER_KBCODE;
-  var IO_SKREST_RANDOM = hwApi.IO_SKREST_RANDOM;
-  var IO_POTGO = hwApi.IO_POTGO;
-  var IO_SEROUT_SERIN = hwApi.IO_SEROUT_SERIN;
-  var IO_IRQEN_IRQST = hwApi.IO_IRQEN_IRQST;
-  var IO_SKCTL_SKSTAT = hwApi.IO_SKCTL_SKSTAT;
-  var IRQ_TIMER_1 = hwApi.IRQ_TIMER_1;
-  var IRQ_TIMER_2 = hwApi.IRQ_TIMER_2;
-  var IRQ_TIMER_4 = hwApi.IRQ_TIMER_4;
-  var IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE =
+  const SERIAL_INPUT_DATA_READY_CYCLES = hwApi.SERIAL_INPUT_DATA_READY_CYCLES;
+  const SIO_TURBO_EMU_MULTIPLIER = hwApi.SIO_TURBO_EMU_MULTIPLIER;
+  const POKEY_AUDIO_MAX_CATCHUP_CYCLES = hwApi.POKEY_AUDIO_MAX_CATCHUP_CYCLES;
+  const NMI_DLI = hwApi.NMI_DLI;
+  const NMI_VBI = hwApi.NMI_VBI;
+  const NMI_RESET = hwApi.NMI_RESET;
+  const IO_PORTA = hwApi.IO_PORTA;
+  const IO_PORTB = hwApi.IO_PORTB;
+  const IO_PACTL = hwApi.IO_PACTL;
+  const IO_PBCTL = hwApi.IO_PBCTL;
+  const IO_HPOSP0_M0PF = hwApi.IO_HPOSP0_M0PF;
+  const IO_HPOSP1_M1PF = hwApi.IO_HPOSP1_M1PF;
+  const IO_HPOSP2_M2PF = hwApi.IO_HPOSP2_M2PF;
+  const IO_HPOSP3_M3PF = hwApi.IO_HPOSP3_M3PF;
+  const IO_HPOSM0_P0PF = hwApi.IO_HPOSM0_P0PF;
+  const IO_HPOSM1_P1PF = hwApi.IO_HPOSM1_P1PF;
+  const IO_HPOSM2_P2PF = hwApi.IO_HPOSM2_P2PF;
+  const IO_HPOSM3_P3PF = hwApi.IO_HPOSM3_P3PF;
+  const IO_SIZEP0_M0PL = hwApi.IO_SIZEP0_M0PL;
+  const IO_SIZEP1_M1PL = hwApi.IO_SIZEP1_M1PL;
+  const IO_SIZEP2_M2PL = hwApi.IO_SIZEP2_M2PL;
+  const IO_SIZEP3_M3PL = hwApi.IO_SIZEP3_M3PL;
+  const IO_SIZEM_P0PL = hwApi.IO_SIZEM_P0PL;
+  const IO_GRAFP0_P1PL = hwApi.IO_GRAFP0_P1PL;
+  const IO_GRAFP1_P2PL = hwApi.IO_GRAFP1_P2PL;
+  const IO_GRAFP2_P3PL = hwApi.IO_GRAFP2_P3PL;
+  const IO_GRAFP3_TRIG0 = hwApi.IO_GRAFP3_TRIG0;
+  const IO_GRAFM_TRIG1 = hwApi.IO_GRAFM_TRIG1;
+  const IO_COLPM0_TRIG2 = hwApi.IO_COLPM0_TRIG2;
+  const IO_COLPM1_TRIG3 = hwApi.IO_COLPM1_TRIG3;
+  const IO_COLPM2_PAL = hwApi.IO_COLPM2_PAL;
+  const IO_COLPM3 = hwApi.IO_COLPM3;
+  const IO_COLPF0 = hwApi.IO_COLPF0;
+  const IO_COLPF1 = hwApi.IO_COLPF1;
+  const IO_COLPF2 = hwApi.IO_COLPF2;
+  const IO_COLPF3 = hwApi.IO_COLPF3;
+  const IO_COLBK = hwApi.IO_COLBK;
+  const IO_PRIOR = hwApi.IO_PRIOR;
+  const IO_VDELAY = hwApi.IO_VDELAY;
+  const IO_GRACTL = hwApi.IO_GRACTL;
+  const IO_HITCLR = hwApi.IO_HITCLR;
+  const IO_CONSOL = hwApi.IO_CONSOL;
+  const IO_AUDF1_POT0 = hwApi.IO_AUDF1_POT0;
+  const IO_AUDC1_POT1 = hwApi.IO_AUDC1_POT1;
+  const IO_AUDF2_POT2 = hwApi.IO_AUDF2_POT2;
+  const IO_AUDC2_POT3 = hwApi.IO_AUDC2_POT3;
+  const IO_AUDF3_POT4 = hwApi.IO_AUDF3_POT4;
+  const IO_AUDC3_POT5 = hwApi.IO_AUDC3_POT5;
+  const IO_AUDF4_POT6 = hwApi.IO_AUDF4_POT6;
+  const IO_AUDC4_POT7 = hwApi.IO_AUDC4_POT7;
+  const IO_AUDCTL_ALLPOT = hwApi.IO_AUDCTL_ALLPOT;
+  const IO_STIMER_KBCODE = hwApi.IO_STIMER_KBCODE;
+  const IO_SKREST_RANDOM = hwApi.IO_SKREST_RANDOM;
+  const IO_POTGO = hwApi.IO_POTGO;
+  const IO_SEROUT_SERIN = hwApi.IO_SEROUT_SERIN;
+  const IO_IRQEN_IRQST = hwApi.IO_IRQEN_IRQST;
+  const IO_SKCTL_SKSTAT = hwApi.IO_SKCTL_SKSTAT;
+  const IRQ_TIMER_1 = hwApi.IRQ_TIMER_1;
+  const IRQ_TIMER_2 = hwApi.IRQ_TIMER_2;
+  const IRQ_TIMER_4 = hwApi.IRQ_TIMER_4;
+  const IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE =
     hwApi.IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
-  var IRQ_SERIAL_OUTPUT_DATA_NEEDED = hwApi.IRQ_SERIAL_OUTPUT_DATA_NEEDED;
-  var IRQ_SERIAL_INPUT_DATA_READY = hwApi.IRQ_SERIAL_INPUT_DATA_READY;
-  var IRQ_OTHER_KEY_PRESSED = hwApi.IRQ_OTHER_KEY_PRESSED;
-  var IRQ_BREAK_KEY_PRESSED = hwApi.IRQ_BREAK_KEY_PRESSED;
-  var IO_DMACTL = hwApi.IO_DMACTL;
-  var IO_CHACTL = hwApi.IO_CHACTL;
-  var IO_DLISTL = hwApi.IO_DLISTL;
-  var IO_DLISTH = hwApi.IO_DLISTH;
-  var IO_HSCROL = hwApi.IO_HSCROL;
-  var IO_VSCROL = hwApi.IO_VSCROL;
-  var IO_PMBASE = hwApi.IO_PMBASE;
-  var IO_CHBASE = hwApi.IO_CHBASE;
-  var IO_WSYNC = hwApi.IO_WSYNC;
-  var IO_VCOUNT = hwApi.IO_VCOUNT;
-  var IO_PENH = hwApi.IO_PENH;
-  var IO_PENV = hwApi.IO_PENV;
-  var IO_NMIEN = hwApi.IO_NMIEN;
-  var IO_NMIRES_NMIST = hwApi.IO_NMIRES_NMIST;
-  var VIEW_W = hwApi.VIEW_W;
-  var VIEW_H = hwApi.VIEW_H;
-  var VIEW_X = hwApi.VIEW_X;
-  var VIEW_Y = hwApi.VIEW_Y;
-  var PRIO_BKG = hwApi.PRIO_BKG;
-  var PRIO_PF0 = hwApi.PRIO_PF0;
-  var PRIO_PF1 = hwApi.PRIO_PF1;
-  var PRIO_PF2 = hwApi.PRIO_PF2;
-  var PRIO_PF3 = hwApi.PRIO_PF3;
-  var PRIO_PM0 = hwApi.PRIO_PM0;
-  var PRIO_PM1 = hwApi.PRIO_PM1;
-  var PRIO_PM2 = hwApi.PRIO_PM2;
-  var PRIO_PM3 = hwApi.PRIO_PM3;
-  var PRIORITY_TABLE_BKG_PF012 = hwApi.PRIORITY_TABLE_BKG_PF012;
-  var PRIORITY_TABLE_BKG_PF013 = hwApi.PRIORITY_TABLE_BKG_PF013;
-  var PRIORITY_TABLE_PF0123 = hwApi.PRIORITY_TABLE_PF0123;
-  var SCRATCH_GTIA_COLOR_TABLE = hwApi.SCRATCH_GTIA_COLOR_TABLE;
-  var SCRATCH_COLOR_TABLE_A = hwApi.SCRATCH_COLOR_TABLE_A;
-  var SCRATCH_COLOR_TABLE_B = hwApi.SCRATCH_COLOR_TABLE_B;
-  var SCRATCH_BACKGROUND_TABLE = hwApi.SCRATCH_BACKGROUND_TABLE;
-  var ANTIC_MODE_INFO = hwApi.ANTIC_MODE_INFO;
-  var IO_INIT_VALUES = hwApi.IO_INIT_VALUES;
+  const IRQ_SERIAL_OUTPUT_DATA_NEEDED = hwApi.IRQ_SERIAL_OUTPUT_DATA_NEEDED;
+  const IRQ_SERIAL_INPUT_DATA_READY = hwApi.IRQ_SERIAL_INPUT_DATA_READY;
+  const IRQ_OTHER_KEY_PRESSED = hwApi.IRQ_OTHER_KEY_PRESSED;
+  const IRQ_BREAK_KEY_PRESSED = hwApi.IRQ_BREAK_KEY_PRESSED;
+  const IO_DMACTL = hwApi.IO_DMACTL;
+  const IO_CHACTL = hwApi.IO_CHACTL;
+  const IO_DLISTL = hwApi.IO_DLISTL;
+  const IO_DLISTH = hwApi.IO_DLISTH;
+  const IO_HSCROL = hwApi.IO_HSCROL;
+  const IO_VSCROL = hwApi.IO_VSCROL;
+  const IO_PMBASE = hwApi.IO_PMBASE;
+  const IO_CHBASE = hwApi.IO_CHBASE;
+  const IO_WSYNC = hwApi.IO_WSYNC;
+  const IO_VCOUNT = hwApi.IO_VCOUNT;
+  const IO_PENH = hwApi.IO_PENH;
+  const IO_PENV = hwApi.IO_PENV;
+  const IO_NMIEN = hwApi.IO_NMIEN;
+  const IO_NMIRES_NMIST = hwApi.IO_NMIRES_NMIST;
+  const VIEW_W = hwApi.VIEW_W;
+  const VIEW_H = hwApi.VIEW_H;
+  const VIEW_X = hwApi.VIEW_X;
+  const VIEW_Y = hwApi.VIEW_Y;
+  const PRIO_BKG = hwApi.PRIO_BKG;
+  const PRIO_PF0 = hwApi.PRIO_PF0;
+  const PRIO_PF1 = hwApi.PRIO_PF1;
+  const PRIO_PF2 = hwApi.PRIO_PF2;
+  const PRIO_PF3 = hwApi.PRIO_PF3;
+  const PRIO_PM0 = hwApi.PRIO_PM0;
+  const PRIO_PM1 = hwApi.PRIO_PM1;
+  const PRIO_PM2 = hwApi.PRIO_PM2;
+  const PRIO_PM3 = hwApi.PRIO_PM3;
+  const PRIORITY_TABLE_BKG_PF012 = hwApi.PRIORITY_TABLE_BKG_PF012;
+  const PRIORITY_TABLE_BKG_PF013 = hwApi.PRIORITY_TABLE_BKG_PF013;
+  const PRIORITY_TABLE_PF0123 = hwApi.PRIORITY_TABLE_PF0123;
+  const SCRATCH_GTIA_COLOR_TABLE = hwApi.SCRATCH_GTIA_COLOR_TABLE;
+  const SCRATCH_COLOR_TABLE_A = hwApi.SCRATCH_COLOR_TABLE_A;
+  const SCRATCH_COLOR_TABLE_B = hwApi.SCRATCH_COLOR_TABLE_B;
+  const SCRATCH_BACKGROUND_TABLE = hwApi.SCRATCH_BACKGROUND_TABLE;
+  const ANTIC_MODE_INFO = hwApi.ANTIC_MODE_INFO;
+  const IO_INIT_VALUES = hwApi.IO_INIT_VALUES;
 
   function fillGtiaColorTable(sram, out) {
     out[0] = sram[IO_COLPM0_TRIG2] & 0xff;
@@ -158,7 +158,7 @@
     return chactl & 0x02 ? ch | 0x100 : ch;
   }
 
-  var softwareApi =
+  const softwareApi =
     window.A8ESoftware && window.A8ESoftware.createApi
       ? window.A8ESoftware.createApi({
           Palette: Palette,
@@ -171,18 +171,18 @@
         })
       : null;
   if (!softwareApi) throw new Error("A8ESoftware is not loaded");
-  var makeVideo = softwareApi.makeVideo;
-  var blitViewportToImageData = softwareApi.blitViewportToImageData;
-  var fillLine = softwareApi.fillLine;
+  const makeVideo = softwareApi.makeVideo;
+  const blitViewportToImageData = softwareApi.blitViewportToImageData;
+  const fillLine = softwareApi.fillLine;
 
-  var keysApi =
+  const keysApi =
     window.A8EKeys && window.A8EKeys.createApi
       ? window.A8EKeys.createApi()
       : null;
   if (!keysApi) throw new Error("A8EKeys is not loaded");
-  var KEY_CODE_TABLE = keysApi.KEY_CODE_TABLE;
-  var browserKeyToSdlSym = keysApi.browserKeyToSdlSym;
-  var inputApi =
+  const KEY_CODE_TABLE = keysApi.KEY_CODE_TABLE;
+  const browserKeyToSdlSym = keysApi.browserKeyToSdlSym;
+  const inputApi =
     window.A8EInput && window.A8EInput.createApi
       ? window.A8EInput.createApi({
           CPU: CPU,
@@ -202,7 +202,7 @@
         })
       : null;
   if (!inputApi) throw new Error("A8EInput is not loaded");
-  var stateApi =
+  const stateApi =
     window.A8EState && window.A8EState.createApi
       ? window.A8EState.createApi({
           CPU: CPU,
@@ -212,11 +212,11 @@
         })
       : null;
   if (!stateApi) throw new Error("A8EState is not loaded");
-  var makeIoData = stateApi.makeIoData;
-  var cycleTimedEventUpdate = stateApi.cycleTimedEventUpdate;
-  var initHardwareDefaults = stateApi.initHardwareDefaults;
-  var installIoHandlers = stateApi.installIoHandlers;
-  var memoryApi =
+  const makeIoData = stateApi.makeIoData;
+  const cycleTimedEventUpdate = stateApi.cycleTimedEventUpdate;
+  const initHardwareDefaults = stateApi.initHardwareDefaults;
+  const installIoHandlers = stateApi.installIoHandlers;
+  const memoryApi =
     window.A8EMemory && window.A8EMemory.createApi
       ? window.A8EMemory.createApi({
           CPU: CPU,
@@ -224,7 +224,7 @@
         })
       : null;
   if (!memoryApi) throw new Error("A8EMemory is not loaded");
-  var audioRuntimeApi =
+  const audioRuntimeApi =
     window.A8EAudioRuntime && window.A8EAudioRuntime.createApi
       ? window.A8EAudioRuntime.createApi({
           CYCLE_NEVER: CYCLE_NEVER,
@@ -243,7 +243,7 @@
   if (!audioRuntimeApi) throw new Error("A8EAudioRuntime is not loaded");
 
   // --- POKEY audio (split into core/pokey.js) ---
-  var pokeyAudioApi =
+  const pokeyAudioApi =
     window.A8EPokeyAudio && window.A8EPokeyAudio.createApi
       ? window.A8EPokeyAudio.createApi({
           ATARI_CPU_HZ_PAL: ATARI_CPU_HZ_PAL,
@@ -273,24 +273,24 @@
       : null;
   if (!pokeyAudioApi) throw new Error("A8EPokeyAudio is not loaded");
 
-  var pokeyAudioCreateState = pokeyAudioApi.createState;
-  var pokeyAudioSetTargetBufferSamples = pokeyAudioApi.setTargetBufferSamples;
-  var pokeyAudioSetTurbo = pokeyAudioApi.setTurbo;
-  var pokeyAudioDrain = pokeyAudioApi.drain;
-  var pokeyAudioClear = pokeyAudioApi.clear;
-  var pokeyAudioResetState = pokeyAudioApi.resetState;
-  var pokeyAudioOnRegisterWrite = pokeyAudioApi.onRegisterWrite;
-  var pokeyAudioSync = pokeyAudioApi.sync;
-  var pokeyAudioConsume = pokeyAudioApi.consume;
-  var pokeySyncLfsr17 = pokeyAudioApi.syncLfsr17;
-  var pokeyPotStartScan = pokeyAudioApi.potStartScan;
-  var pokeyPotUpdate = pokeyAudioApi.potUpdate;
-  var pokeyTimerPeriodCpuCycles = pokeyAudioApi.timerPeriodCpuCycles;
-  var pokeyRestartTimers = pokeyAudioApi.restartTimers;
-  var pokeySeroutWrite = pokeyAudioApi.seroutWrite;
-  var pokeySerinRead = pokeyAudioApi.serinRead;
+  const pokeyAudioCreateState = pokeyAudioApi.createState;
+  const pokeyAudioSetTargetBufferSamples = pokeyAudioApi.setTargetBufferSamples;
+  const pokeyAudioSetTurbo = pokeyAudioApi.setTurbo;
+  const pokeyAudioDrain = pokeyAudioApi.drain;
+  const pokeyAudioClear = pokeyAudioApi.clear;
+  const pokeyAudioResetState = pokeyAudioApi.resetState;
+  const pokeyAudioOnRegisterWrite = pokeyAudioApi.onRegisterWrite;
+  const pokeyAudioSync = pokeyAudioApi.sync;
+  const pokeyAudioConsume = pokeyAudioApi.consume;
+  const pokeySyncLfsr17 = pokeyAudioApi.syncLfsr17;
+  const pokeyPotStartScan = pokeyAudioApi.potStartScan;
+  const pokeyPotUpdate = pokeyAudioApi.potUpdate;
+  const pokeyTimerPeriodCpuCycles = pokeyAudioApi.timerPeriodCpuCycles;
+  const pokeyRestartTimers = pokeyAudioApi.restartTimers;
+  const pokeySeroutWrite = pokeyAudioApi.seroutWrite;
+  const pokeySerinRead = pokeyAudioApi.serinRead;
 
-  var ioApi =
+  const ioApi =
     window.A8EIo && window.A8EIo.createApi
       ? window.A8EIo.createApi({
           CPU: CPU,
@@ -374,8 +374,8 @@
         })
       : null;
   if (!ioApi) throw new Error("A8EIo is not loaded");
-  var ioAccess = ioApi.ioAccess;
-  var gtiaApi =
+  const ioAccess = ioApi.ioAccess;
+  const gtiaApi =
     window.A8EGtia && window.A8EGtia.createApi
       ? window.A8EGtia.createApi({
           PIXELS_PER_LINE: PIXELS_PER_LINE,
@@ -418,9 +418,9 @@
         })
       : null;
   if (!gtiaApi) throw new Error("A8EGtia is not loaded");
-  var drawPlayerMissiles = gtiaApi.drawPlayerMissiles;
+  const drawPlayerMissiles = gtiaApi.drawPlayerMissiles;
 
-  var anticApi =
+  const anticApi =
     window.A8EAntic && window.A8EAntic.createApi
       ? window.A8EAntic.createApi({
           CPU: CPU,
@@ -479,23 +479,23 @@
       : null;
   if (!anticApi) throw new Error("A8EAntic is not loaded");
 
-  var ioCycleTimedEvent = anticApi.ioCycleTimedEvent;
+  const ioCycleTimedEvent = anticApi.ioCycleTimedEvent;
 
   // --- UI-facing App ---
   function createApp(opts) {
-    var canvas = opts.canvas;
-    var ctx2d = opts.ctx2d;
-    var gl = opts.gl;
-    var debugEl = opts.debugEl;
+    const canvas = opts.canvas;
+    const ctx2d = opts.ctx2d;
+    const gl = opts.gl;
+    const debugEl = opts.debugEl;
 
-    var audioEnabled = !!opts.audioEnabled;
-    var turbo = !!opts.turbo;
-    var sioTurbo = opts.sioTurbo !== false;
-    var optionOnStart = !!opts.optionOnStart;
+    const audioEnabled = !!opts.audioEnabled;
+    const turbo = !!opts.turbo;
+    const sioTurbo = opts.sioTurbo !== false;
+    const optionOnStart = !!opts.optionOnStart;
 
-    var video = makeVideo();
-    var renderer = null;
-    var imageData = null;
+    const video = makeVideo();
+    const renderer = null;
+    const imageData = null;
     if (gl && window.A8EGlRenderer && window.A8EGlRenderer.create) {
       renderer = window.A8EGlRenderer.create({
         gl: gl,
@@ -523,7 +523,7 @@
       };
     }
 
-    var machine = {
+    const machine = {
       ctx: CPU.makeContext(),
       video: video,
       osRomLoaded: false,
@@ -547,7 +547,7 @@
       audioMode: "none", // "none" | "worklet" | "script" | "loading"
     };
 
-    var memoryRuntime = memoryApi.createRuntime({
+    const memoryRuntime = memoryApi.createRuntime({
       machine: machine,
       video: video,
       ioCycleTimedEvent: ioCycleTimedEvent,
@@ -568,12 +568,12 @@
       pokeyAudioResetState: pokeyAudioResetState,
       pokeyAudioSetTurbo: pokeyAudioSetTurbo,
     });
-    var setupMemoryMap = memoryRuntime.setupMemoryMap;
-    var hardReset = memoryRuntime.hardReset;
-    var loadOsRom = memoryRuntime.loadOsRom;
-    var loadBasicRom = memoryRuntime.loadBasicRom;
-    var loadDisk1 = memoryRuntime.loadDisk1;
-    var audioRuntime = audioRuntimeApi.createRuntime({
+    const setupMemoryMap = memoryRuntime.setupMemoryMap;
+    const hardReset = memoryRuntime.hardReset;
+    const loadOsRom = memoryRuntime.loadOsRom;
+    const loadBasicRom = memoryRuntime.loadBasicRom;
+    const loadDisk1 = memoryRuntime.loadDisk1;
+    const audioRuntime = audioRuntimeApi.createRuntime({
       machine: machine,
       getAudioEnabled: function () {
         return audioEnabled;
@@ -589,10 +589,10 @@
       pokeyAudioSync: pokeyAudioSync,
       pokeyAudioConsume: pokeyAudioConsume,
     });
-    var ensureAudio = audioRuntime.ensureAudio;
-    var stopAudio = audioRuntime.stopAudio;
-    var isSioActive = audioRuntime.isSioActive;
-    var syncAudioTurboMode = audioRuntime.syncAudioTurboMode;
+    const ensureAudio = audioRuntime.ensureAudio;
+    const stopAudio = audioRuntime.stopAudio;
+    const isSioActive = audioRuntime.isSioActive;
+    const syncAudioTurboMode = audioRuntime.syncAudioTurboMode;
 
     machine.ctx.ioData = makeIoData(video);
     machine.ctx.ioData.optionOnStart = optionOnStart;
@@ -613,7 +613,7 @@
 
     function updateDebug() {
       if (!debugEl) return;
-      var c = machine.ctx.cpu;
+      const c = machine.ctx.cpu;
       debugEl.textContent =
         "PC=$" +
         Util.toHex4(c.pc) +
@@ -633,19 +633,19 @@
       if (!machine.running) return;
 
       if (!machine.lastTs) machine.lastTs = ts;
-      var dtMs = ts - machine.lastTs;
+      const dtMs = ts - machine.lastTs;
       machine.lastTs = ts;
 
       // Clamp big pauses (tab background etc).
       if (dtMs > 100) dtMs = 100;
 
-      var sioFast = !turbo && sioTurbo && isSioActive(machine.ctx.ioData);
-      var emuTurbo = turbo || sioFast;
+      const sioFast = !turbo && sioTurbo && isSioActive(machine.ctx.ioData);
+      const emuTurbo = turbo || sioFast;
       syncAudioTurboMode(emuTurbo);
 
-      var mult = turbo ? 4.0 : 1.0;
+      const mult = turbo ? 4.0 : 1.0;
       if (!turbo && sioFast) mult = SIO_TURBO_EMU_MULTIPLIER;
-      var cyclesToRun = ((dtMs / 1000) * ATARI_CPU_HZ_PAL * mult) | 0;
+      const cyclesToRun = ((dtMs / 1000) * ATARI_CPU_HZ_PAL * mult) | 0;
       if (cyclesToRun < 1) cyclesToRun = 1;
 
       CPU.run(machine.ctx, machine.ctx.cycleCounter + cyclesToRun);
@@ -662,7 +662,7 @@
           machine.audioNode.port
         ) {
           while (true) {
-            var chunk = pokeyAudioDrain(machine.audioState, 4096);
+            const chunk = pokeyAudioDrain(machine.audioState, 4096);
             if (!chunk) break;
             try {
               machine.audioNode.port.postMessage(
@@ -721,7 +721,7 @@
     }
 
     function setTurbo(v) {
-      var next = !!v;
+      const next = !!v;
       if (next === turbo) return;
       turbo = next;
       syncAudioTurboMode(
@@ -770,13 +770,13 @@
     function hasDisk1() {
       return !!machine.ctx.ioData.disk1;
     }
-    var inputRuntime = inputApi.createRuntime({
+    const inputRuntime = inputApi.createRuntime({
       machine: machine,
       isReady: isReady,
     });
-    var onKeyDown = inputRuntime.onKeyDown;
-    var onKeyUp = inputRuntime.onKeyUp;
-    var releaseAllKeys = inputRuntime.releaseAll;
+    const onKeyDown = inputRuntime.onKeyDown;
+    const onKeyUp = inputRuntime.onKeyUp;
+    const releaseAllKeys = inputRuntime.releaseAll;
 
     // Initial paint (black).
     paint();

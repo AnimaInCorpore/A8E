@@ -2,11 +2,11 @@
   "use strict";
 
   function compileShader(gl, type, source) {
-    var sh = gl.createShader(type);
+    const sh = gl.createShader(type);
     gl.shaderSource(sh, source);
     gl.compileShader(sh);
     if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-      var msg = gl.getShaderInfoLog(sh) || "shader compile failed";
+      const msg = gl.getShaderInfoLog(sh) || "shader compile failed";
       try {
         gl.deleteShader(sh);
       } catch (e) {
@@ -18,9 +18,9 @@
   }
 
   function linkProgram(gl, vsSource, fsSource) {
-    var vs = compileShader(gl, gl.VERTEX_SHADER, vsSource);
-    var fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
-    var prog = gl.createProgram();
+    const vs = compileShader(gl, gl.VERTEX_SHADER, vsSource);
+    const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
+    const prog = gl.createProgram();
     gl.attachShader(prog, vs);
     gl.attachShader(prog, fs);
     gl.linkProgram(prog);
@@ -31,7 +31,7 @@
       // ignore
     }
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      var msg2 = gl.getProgramInfoLog(prog) || "program link failed";
+      const msg2 = gl.getProgramInfoLog(prog) || "program link failed";
       try {
         gl.deleteProgram(prog);
       } catch (e2) {
@@ -43,10 +43,10 @@
   }
 
   function buildPaletteRgba(paletteRgb) {
-    var out = new Uint8Array(256 * 4);
-    for (var i = 0; i < 256; i++) {
-      var si = i * 3;
-      var di = i * 4;
+    const out = new Uint8Array(256 * 4);
+    for (const i = 0; i < 256; i++) {
+      const si = i * 3;
+      const di = i * 4;
       out[di + 0] = paletteRgb[si + 0] & 0xff;
       out[di + 1] = paletteRgb[si + 1] & 0xff;
       out[di + 2] = paletteRgb[si + 2] & 0xff;
@@ -63,7 +63,7 @@
   }
 
   function createTexture(gl, unit, minFilter, magFilter, wrapS, wrapT) {
-    var tex = gl.createTexture();
+    const tex = gl.createTexture();
     gl.activeTexture(unit);
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
@@ -74,7 +74,7 @@
   }
 
   function setupQuad(gl, buffer, posLoc, uvLoc) {
-    var stride = 4 * 4;
+    const stride = 4 * 4;
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     if (posLoc >= 0) {
       gl.enableVertexAttribArray(posLoc);
@@ -86,7 +86,7 @@
     }
   }
 
-  var SHADER_PATHS = {
+  const SHADER_PATHS = {
     webgl2: {
       vs: "js/render/shaders/webgl2.vert.glsl",
       decodeFs: "js/render/shaders/webgl2.decode.frag.glsl",
@@ -99,8 +99,8 @@
     },
   };
 
-  var shaderSourceCache = null;
-  var shaderSourcePromise = null;
+  const shaderSourceCache = null;
+  const shaderSourcePromise = null;
 
   function fetchShaderText(url) {
     return fetch(url).then(function (resp) {
@@ -120,7 +120,7 @@
     if (shaderSourceCache) return Promise.resolve(shaderSourceCache);
     if (shaderSourcePromise) return shaderSourcePromise;
 
-    var tasks = [];
+    const tasks = [];
     function enqueue(profile, key, url) {
       tasks.push(
         fetchShaderText(url).then(function (text) {
@@ -138,12 +138,12 @@
 
     shaderSourcePromise = Promise.all(tasks)
       .then(function (items) {
-        var out = {
+        const out = {
           webgl2: { vs: "", decodeFs: "", crtFs: "" },
           webgl1: { vs: "", decodeFs: "", crtFs: "" },
         };
-        for (var i = 0; i < items.length; i++) {
-          var it = items[i];
+        for (const i = 0; i < items.length; i++) {
+          const it = items[i];
           out[it.profile][it.key] = it.text;
         }
         shaderSourceCache = out;
@@ -167,57 +167,57 @@
   }
 
   function create(opts) {
-    var gl = opts.gl;
-    var canvas = opts.canvas;
-    var texW = opts.textureW | 0;
-    var texH = opts.textureH | 0;
-    var viewX = opts.viewX | 0;
-    var viewY = opts.viewY | 0;
-    var viewW = opts.viewW | 0;
-    var viewH = opts.viewH | 0;
-    var paletteRgb = opts.paletteRgb;
+    const gl = opts.gl;
+    const canvas = opts.canvas;
+    const texW = opts.textureW | 0;
+    const texH = opts.textureH | 0;
+    const viewX = opts.viewX | 0;
+    const viewY = opts.viewY | 0;
+    const viewW = opts.viewW | 0;
+    const viewH = opts.viewH | 0;
+    const paletteRgb = opts.paletteRgb;
 
     if (!gl) throw new Error("A8EGlRenderer: missing WebGL context");
     if (!canvas) throw new Error("A8EGlRenderer: missing canvas");
     if (!paletteRgb || paletteRgb.length < 256 * 3)
       throw new Error("A8EGlRenderer: missing palette");
     // Keep CRT internal scene resolution fixed to 2x horizontal, 1x vertical.
-    var sceneScaleX = 2;
-    var sceneScaleY = 1;
+    const sceneScaleX = 2;
+    const sceneScaleY = 1;
     if (texW <= 0 || texH <= 0)
       throw new Error("A8EGlRenderer: invalid texture size");
     if (viewW <= 0 || viewH <= 0)
       throw new Error("A8EGlRenderer: invalid viewport size");
 
-    var sceneW = viewW * sceneScaleX;
-    var sceneH = viewH * sceneScaleY;
+    const sceneW = viewW * sceneScaleX;
+    const sceneH = viewH * sceneScaleY;
 
-    var gl2 = isWebGL2(gl);
+    const gl2 = isWebGL2(gl);
 
-    var shaderSources = getShaderSources(gl2);
-    var vsSource = shaderSources.vs;
-    var decodeFsSource = shaderSources.decodeFs;
-    var crtFsSource = shaderSources.crtFs;
+    const shaderSources = getShaderSources(gl2);
+    const vsSource = shaderSources.vs;
+    const decodeFsSource = shaderSources.decodeFs;
+    const crtFsSource = shaderSources.crtFs;
 
-    var decodeProgram = null;
-    var crtProgram = null;
-    var indexTex = null;
-    var paletteTex = null;
-    var sceneTex = null;
-    var sceneFbo = null;
-    var decodeBuf = null;
-    var crtBuf = null;
-    var decodePosLoc = -1;
-    var decodeUvLoc = -1;
-    var decodeIndexLoc = null;
-    var decodePaletteLoc = null;
-    var crtPosLoc = -1;
-    var crtUvLoc = -1;
-    var crtSceneLoc = null;
-    var crtSourceSizeLoc = null;
-    var crtScanlineSizeLoc = null;
-    var crtOutputSizeLoc = null;
-    var disposed = false;
+    const decodeProgram = null;
+    const crtProgram = null;
+    const indexTex = null;
+    const paletteTex = null;
+    const sceneTex = null;
+    const sceneFbo = null;
+    const decodeBuf = null;
+    const crtBuf = null;
+    const decodePosLoc = -1;
+    const decodeUvLoc = -1;
+    const decodeIndexLoc = null;
+    const decodePaletteLoc = null;
+    const crtPosLoc = -1;
+    const crtUvLoc = -1;
+    const crtSceneLoc = null;
+    const crtSourceSizeLoc = null;
+    const crtScanlineSizeLoc = null;
+    const crtOutputSizeLoc = null;
+    const disposed = false;
 
     function dispose() {
       if (disposed) return;
@@ -408,11 +408,11 @@
 
       // Quad for decode pass (full canvas quad, uv remaps to Atari viewport region).
       // Use texel edges so the viewport spans the full source width/height when scaling.
-      var u0 = viewX / texW;
-      var u1 = (viewX + viewW) / texW;
-      var v0 = viewY / texH;
-      var v1 = (viewY + viewH) / texH;
-      var decodeQuad = new Float32Array([
+      const u0 = viewX / texW;
+      const u1 = (viewX + viewW) / texW;
+      const v0 = viewY / texH;
+      const v1 = (viewY + viewH) / texH;
+      const decodeQuad = new Float32Array([
         -1.0,
         -1.0,
         u0,
@@ -436,7 +436,7 @@
       gl.bufferData(gl.ARRAY_BUFFER, decodeQuad, gl.STATIC_DRAW);
 
       // Quad for final CRT post-process pass.
-      var crtQuad = new Float32Array([
+      const crtQuad = new Float32Array([
         -1.0, -1.0, 0.0, 0.0, -1.0, 1.0, 0.0, 1.0, 1.0, -1.0, 1.0, 0.0, 1.0,
         1.0, 1.0, 1.0,
       ]);

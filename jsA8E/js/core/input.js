@@ -2,25 +2,25 @@
   "use strict";
 
   function createApi(cfg) {
-    var CPU = cfg.CPU;
-    var IO_PORTA = cfg.IO_PORTA;
-    var IO_GRAFP3_TRIG0 = cfg.IO_GRAFP3_TRIG0;
-    var IO_GRAFM_TRIG1 = cfg.IO_GRAFM_TRIG1;
-    var IO_COLPM0_TRIG2 = cfg.IO_COLPM0_TRIG2;
-    var IO_COLPM1_TRIG3 = cfg.IO_COLPM1_TRIG3;
-    var IO_CONSOL = cfg.IO_CONSOL;
-    var IO_IRQEN_IRQST = cfg.IO_IRQEN_IRQST;
-    var IO_SKCTL_SKSTAT = cfg.IO_SKCTL_SKSTAT;
-    var IO_STIMER_KBCODE = cfg.IO_STIMER_KBCODE;
-    var IRQ_OTHER_KEY_PRESSED = cfg.IRQ_OTHER_KEY_PRESSED;
-    var IRQ_BREAK_KEY_PRESSED = cfg.IRQ_BREAK_KEY_PRESSED;
-    var KEY_CODE_TABLE = cfg.KEY_CODE_TABLE;
-    var browserKeyToSdlSym = cfg.browserKeyToSdlSym;
+    const CPU = cfg.CPU;
+    const IO_PORTA = cfg.IO_PORTA;
+    const IO_GRAFP3_TRIG0 = cfg.IO_GRAFP3_TRIG0;
+    const IO_GRAFM_TRIG1 = cfg.IO_GRAFM_TRIG1;
+    const IO_COLPM0_TRIG2 = cfg.IO_COLPM0_TRIG2;
+    const IO_COLPM1_TRIG3 = cfg.IO_COLPM1_TRIG3;
+    const IO_CONSOL = cfg.IO_CONSOL;
+    const IO_IRQEN_IRQST = cfg.IO_IRQEN_IRQST;
+    const IO_SKCTL_SKSTAT = cfg.IO_SKCTL_SKSTAT;
+    const IO_STIMER_KBCODE = cfg.IO_STIMER_KBCODE;
+    const IRQ_OTHER_KEY_PRESSED = cfg.IRQ_OTHER_KEY_PRESSED;
+    const IRQ_BREAK_KEY_PRESSED = cfg.IRQ_BREAK_KEY_PRESSED;
+    const KEY_CODE_TABLE = cfg.KEY_CODE_TABLE;
+    const browserKeyToSdlSym = cfg.browserKeyToSdlSym;
 
     function createRuntime(opts) {
-      var machine = opts.machine;
-      var isReady = opts.isReady;
-      var pressedKeys = {};
+      const machine = opts.machine;
+      const isReady = opts.isReady;
+      const pressedKeys = {};
 
       function normalizeSourceToken(e) {
         if (!e || e.sourceToken === undefined || e.sourceToken === null)
@@ -29,7 +29,7 @@
       }
 
       function getPressedState(sym, createIfMissing) {
-        var st = pressedKeys[sym];
+        const st = pressedKeys[sym];
         if (!st && createIfMissing) {
           st = {
             anonymousCount: 0,
@@ -45,9 +45,9 @@
       }
 
       function pressSym(sym, e) {
-        var st = getPressedState(sym, true);
-        var wasDown = isSymDown(st);
-        var source = normalizeSourceToken(e);
+        const st = getPressedState(sym, true);
+        const wasDown = isSymDown(st);
+        const source = normalizeSourceToken(e);
         if (source !== null) {
           if (st.sources.has(source))
             return { handled: true, newlyPressed: false };
@@ -61,9 +61,9 @@
       }
 
       function releaseSym(sym, e) {
-        var st = getPressedState(sym, false);
+        const st = getPressedState(sym, false);
         if (!st) return { handled: false, newlyReleased: false };
-        var source = normalizeSourceToken(e);
+        const source = normalizeSourceToken(e);
         if (source !== null) {
           if (!st.sources.has(source))
             return { handled: false, newlyReleased: false };
@@ -73,16 +73,16 @@
             return { handled: false, newlyReleased: false };
           st.anonymousCount--;
         }
-        var stillDown = isSymDown(st);
+        const stillDown = isSymDown(st);
         if (!stillDown) delete pressedKeys[sym];
         return { handled: true, newlyReleased: !stillDown };
       }
 
       function onKeyDown(e) {
         if (!isReady()) return false;
-        var sym = browserKeyToSdlSym(e);
+        const sym = browserKeyToSdlSym(e);
         if (sym === null) return false;
-        var down = pressSym(sym, e);
+        const down = pressSym(sym, e);
         if (!down.handled) return false;
         if (!down.newlyPressed) return true;
 
@@ -149,7 +149,7 @@
           return true;
         }
 
-        var kc = KEY_CODE_TABLE[sym] !== undefined ? KEY_CODE_TABLE[sym] : 255;
+        const kc = KEY_CODE_TABLE[sym] !== undefined ? KEY_CODE_TABLE[sym] : 255;
         if (kc === 255) {
           releaseSym(sym, e);
           return false;
@@ -171,9 +171,9 @@
 
       function onKeyUp(e) {
         if (!isReady()) return false;
-        var sym = browserKeyToSdlSym(e);
+        const sym = browserKeyToSdlSym(e);
         if (sym === null) return false;
-        var up = releaseSym(sym, e);
+        const up = releaseSym(sym, e);
         if (!up.handled) return false;
         if (!up.newlyReleased) return true;
 
@@ -226,7 +226,7 @@
           return true;
         }
 
-        var kc = KEY_CODE_TABLE[sym] !== undefined ? KEY_CODE_TABLE[sym] : 255;
+        const kc = KEY_CODE_TABLE[sym] !== undefined ? KEY_CODE_TABLE[sym] : 255;
         if (kc === 255) return false;
 
         if (machine.ctx.ioData.keyPressCounter > 0)
