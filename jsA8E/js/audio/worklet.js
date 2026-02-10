@@ -3,9 +3,9 @@
 
   function countQueuedSamples(queue, queueIndex) {
     if (!queue.length) return 0;
-    const total = ((queue[0].length | 0) - (queueIndex | 0)) | 0;
+    let total = ((queue[0].length | 0) - (queueIndex | 0)) | 0;
     if (total < 0) total = 0;
-    for (const i = 1; i < queue.length; i++) total += queue[i].length | 0;
+    for (let i = 1; i < queue.length; i++) total += queue[i].length | 0;
     return total | 0;
   }
 
@@ -13,15 +13,15 @@
     if (!queue.length) return queueIndex | 0;
     if (!maxSamples) return queueIndex | 0;
 
-    const total = countQueuedSamples(queue, queueIndex);
+    let total = countQueuedSamples(queue, queueIndex);
     if (total <= maxSamples) return queueIndex | 0;
 
     // Drop oldest samples, partially trimming the head buffer when possible.
-    const toDrop = (total - maxSamples) | 0;
+    let toDrop = (total - maxSamples) | 0;
     while (queue.length && toDrop > 0) {
-      const head = queue[0];
-      const start = queueIndex | 0;
-      const avail = ((head.length | 0) - start) | 0;
+      let head = queue[0];
+      let start = queueIndex | 0;
+      let avail = ((head.length | 0) - start) | 0;
       if (avail <= 0) {
         queue.shift();
         queueIndex = 0;
@@ -52,12 +52,12 @@
       this.maxQueuedSamples = (sampleRate / 20) | 0; // ~50ms cap for lower latency
       if (this.maxQueuedSamples < 256) this.maxQueuedSamples = 256;
 
-      const self = this;
+      let self = this;
       this.port.onmessage = function (e) {
-        const msg = e && e.data ? e.data : null;
+        let msg = e && e.data ? e.data : null;
         if (!msg || !msg.type) return;
         if (msg.type === "samples" && msg.samples && msg.samples.length) {
-          const samples = msg.samples;
+          let samples = msg.samples;
           if (!(samples instanceof Float32Array)) {
             if (ArrayBuffer.isView(samples) && samples.buffer) {
               samples = new Float32Array(
@@ -80,7 +80,7 @@
           return;
         }
         if (msg.type === "config") {
-          const maxQueued = msg.maxQueuedSamples | 0;
+          let maxQueued = msg.maxQueuedSamples | 0;
           if (maxQueued > 0) {
             if (maxQueued < 256) maxQueued = 256;
             self.maxQueuedSamples = maxQueued;
@@ -102,37 +102,37 @@
     }
 
     process(inputs, outputs, parameters) {
-      const out = outputs[0] && outputs[0][0];
+      let out = outputs[0] && outputs[0][0];
       if (!out) return true;
 
-      const i = 0;
+      let i = 0;
       while (i < out.length) {
         if (!this.queue.length) {
           out[i++] = this.lastSample;
           continue;
         }
 
-        const buf = this.queue[0];
+        let buf = this.queue[0];
         if (!buf || typeof buf.length !== "number") {
           this.queue.shift();
           this.queueIndex = 0;
           continue;
         }
-        const avail = (buf.length | 0) - (this.queueIndex | 0);
+        let avail = (buf.length | 0) - (this.queueIndex | 0);
         if (avail <= 0) {
           this.queue.shift();
           this.queueIndex = 0;
           continue;
         }
 
-        const toCopy = out.length - i;
+        let toCopy = out.length - i;
         if (toCopy > avail) toCopy = avail;
-        const start = this.queueIndex | 0;
-        const end = (this.queueIndex + toCopy) | 0;
+        let start = this.queueIndex | 0;
+        let end = (this.queueIndex + toCopy) | 0;
         if (buf.subarray) {
           out.set(buf.subarray(start, end), i);
         } else {
-          for (const j = 0; j < toCopy; j++) out[i + j] = buf[start + j] || 0.0;
+          for (let j = 0; j < toCopy; j++) out[i + j] = buf[start + j] || 0.0;
         }
         i += toCopy;
         this.queueIndex = (this.queueIndex + toCopy) | 0;

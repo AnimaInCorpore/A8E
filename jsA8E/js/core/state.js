@@ -2,14 +2,14 @@
   "use strict";
 
   function createApi(cfg) {
-    const CPU = cfg.CPU;
-    const CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
-    const CYCLE_NEVER = cfg.CYCLE_NEVER;
-    const IO_INIT_VALUES = cfg.IO_INIT_VALUES;
+    let CPU = cfg.CPU;
+    let CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
+    let CYCLE_NEVER = cfg.CYCLE_NEVER;
+    let IO_INIT_VALUES = cfg.IO_INIT_VALUES;
 
     function makeIoData(video) {
-      const potValues = new Uint8Array(8);
-      for (const p = 0; p < 8; p++) potValues[p] = 228;
+      let potValues = new Uint8Array(8);
+      for (let p = 0; p < 8; p++) potValues[p] = 228;
       return {
         video: {
           verticalScrollOffset: 0,
@@ -73,8 +73,8 @@
     }
 
     function cycleTimedEventUpdate(ctx) {
-      const io = ctx.ioData;
-      const next = CYCLE_NEVER;
+      let io = ctx.ioData;
+      let next = CYCLE_NEVER;
       if (io.drawLineCycle < next) next = io.drawLineCycle;
       if (io.displayListFetchCycle < next) next = io.displayListFetchCycle;
       if (io.dliCycle < next) next = io.dliCycle;
@@ -91,8 +91,8 @@
     }
 
     function initHardwareDefaults(ctx) {
-      for (const i = 0; i < IO_INIT_VALUES.length; i++) {
-        const e = IO_INIT_VALUES[i];
+      for (let i = 0; i < IO_INIT_VALUES.length; i++) {
+        let e = IO_INIT_VALUES[i];
         ctx.sram[e.addr] = e.write & 0xff;
         ctx.ram[e.addr] = e.read & 0xff;
       }
@@ -100,7 +100,7 @@
 
     function installIoHandlers(ctx, ioAccess) {
       if (!ioAccess) throw new Error("A8EState: missing ioAccess");
-      for (const i = 0; i < IO_INIT_VALUES.length; i++) {
+      for (let i = 0; i < IO_INIT_VALUES.length; i++) {
         CPU.setIo(ctx, IO_INIT_VALUES[i].addr, ioAccess);
       }
     }

@@ -18,8 +18,8 @@
     const CONTRAST = 1.0;
     const BRIGHTNESS = 0.9;
 
-    for (const lum = 0; lum < 16; lum++) {
-      for (const hue = 0; hue < 16; hue++) {
+    for (let lum = 0; lum < 16; lum++) {
+      for (let hue = 0; hue < 16; hue++) {
         let dS, dY;
         if (hue === 0) {
           dS = 0.0;

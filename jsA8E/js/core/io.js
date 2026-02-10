@@ -2,91 +2,91 @@
   "use strict";
 
   function createApi(cfg) {
-    const CPU = cfg.CPU;
-    const CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
-    const NMI_DLI = cfg.NMI_DLI;
-    const NMI_VBI = cfg.NMI_VBI;
-    const NMI_RESET = cfg.NMI_RESET;
-    const IO_AUDC1_POT1 = cfg.IO_AUDC1_POT1;
-    const IO_AUDC2_POT3 = cfg.IO_AUDC2_POT3;
-    const IO_AUDC3_POT5 = cfg.IO_AUDC3_POT5;
-    const IO_AUDC4_POT7 = cfg.IO_AUDC4_POT7;
-    const IO_AUDCTL_ALLPOT = cfg.IO_AUDCTL_ALLPOT;
-    const IO_AUDF1_POT0 = cfg.IO_AUDF1_POT0;
-    const IO_AUDF2_POT2 = cfg.IO_AUDF2_POT2;
-    const IO_AUDF3_POT4 = cfg.IO_AUDF3_POT4;
-    const IO_AUDF4_POT6 = cfg.IO_AUDF4_POT6;
-    const IO_CHACTL = cfg.IO_CHACTL;
-    const IO_CHBASE = cfg.IO_CHBASE;
-    const IO_COLBK = cfg.IO_COLBK;
-    const IO_COLPF0 = cfg.IO_COLPF0;
-    const IO_COLPF1 = cfg.IO_COLPF1;
-    const IO_COLPF2 = cfg.IO_COLPF2;
-    const IO_COLPF3 = cfg.IO_COLPF3;
-    const IO_COLPM0_TRIG2 = cfg.IO_COLPM0_TRIG2;
-    const IO_COLPM1_TRIG3 = cfg.IO_COLPM1_TRIG3;
-    const IO_COLPM2_PAL = cfg.IO_COLPM2_PAL;
-    const IO_COLPM3 = cfg.IO_COLPM3;
-    const IO_CONSOL = cfg.IO_CONSOL;
-    const IO_DLISTH = cfg.IO_DLISTH;
-    const IO_DLISTL = cfg.IO_DLISTL;
-    const IO_DMACTL = cfg.IO_DMACTL;
-    const IO_GRACTL = cfg.IO_GRACTL;
-    const IO_GRAFM_TRIG1 = cfg.IO_GRAFM_TRIG1;
-    const IO_GRAFP0_P1PL = cfg.IO_GRAFP0_P1PL;
-    const IO_GRAFP1_P2PL = cfg.IO_GRAFP1_P2PL;
-    const IO_GRAFP2_P3PL = cfg.IO_GRAFP2_P3PL;
-    const IO_GRAFP3_TRIG0 = cfg.IO_GRAFP3_TRIG0;
-    const IO_HITCLR = cfg.IO_HITCLR;
-    const IO_HPOSM0_P0PF = cfg.IO_HPOSM0_P0PF;
-    const IO_HPOSM1_P1PF = cfg.IO_HPOSM1_P1PF;
-    const IO_HPOSM2_P2PF = cfg.IO_HPOSM2_P2PF;
-    const IO_HPOSM3_P3PF = cfg.IO_HPOSM3_P3PF;
-    const IO_HPOSP0_M0PF = cfg.IO_HPOSP0_M0PF;
-    const IO_HPOSP1_M1PF = cfg.IO_HPOSP1_M1PF;
-    const IO_HPOSP2_M2PF = cfg.IO_HPOSP2_M2PF;
-    const IO_HPOSP3_M3PF = cfg.IO_HPOSP3_M3PF;
-    const IO_HSCROL = cfg.IO_HSCROL;
-    const IO_IRQEN_IRQST = cfg.IO_IRQEN_IRQST;
-    const IO_NMIEN = cfg.IO_NMIEN;
-    const IO_NMIRES_NMIST = cfg.IO_NMIRES_NMIST;
-    const IO_PACTL = cfg.IO_PACTL;
-    const IO_PBCTL = cfg.IO_PBCTL;
-    const IO_PENH = cfg.IO_PENH;
-    const IO_PENV = cfg.IO_PENV;
-    const IO_PMBASE = cfg.IO_PMBASE;
-    const IO_PORTA = cfg.IO_PORTA;
-    const IO_PORTB = cfg.IO_PORTB;
-    const IO_POTGO = cfg.IO_POTGO;
-    const IO_PRIOR = cfg.IO_PRIOR;
-    const IO_SEROUT_SERIN = cfg.IO_SEROUT_SERIN;
-    const IO_SIZEM_P0PL = cfg.IO_SIZEM_P0PL;
-    const IO_SIZEP0_M0PL = cfg.IO_SIZEP0_M0PL;
-    const IO_SIZEP1_M1PL = cfg.IO_SIZEP1_M1PL;
-    const IO_SIZEP2_M2PL = cfg.IO_SIZEP2_M2PL;
-    const IO_SIZEP3_M3PL = cfg.IO_SIZEP3_M3PL;
-    const IO_SKCTL_SKSTAT = cfg.IO_SKCTL_SKSTAT;
-    const IO_SKREST_RANDOM = cfg.IO_SKREST_RANDOM;
-    const IO_STIMER_KBCODE = cfg.IO_STIMER_KBCODE;
-    const IO_VCOUNT = cfg.IO_VCOUNT;
-    const IO_VDELAY = cfg.IO_VDELAY;
-    const IO_VSCROL = cfg.IO_VSCROL;
-    const IO_WSYNC = cfg.IO_WSYNC;
-    const pokeyAudioSync = cfg.pokeyAudioSync;
-    const pokeyAudioOnRegisterWrite = cfg.pokeyAudioOnRegisterWrite;
-    const pokeyPotStartScan = cfg.pokeyPotStartScan;
-    const pokeyRestartTimers = cfg.pokeyRestartTimers;
-    const pokeySyncLfsr17 = cfg.pokeySyncLfsr17;
-    const pokeySeroutWrite = cfg.pokeySeroutWrite;
-    const pokeySerinRead = cfg.pokeySerinRead;
-    const pokeyPotUpdate = cfg.pokeyPotUpdate;
+    let CPU = cfg.CPU;
+    let CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
+    let NMI_DLI = cfg.NMI_DLI;
+    let NMI_VBI = cfg.NMI_VBI;
+    let NMI_RESET = cfg.NMI_RESET;
+    let IO_AUDC1_POT1 = cfg.IO_AUDC1_POT1;
+    let IO_AUDC2_POT3 = cfg.IO_AUDC2_POT3;
+    let IO_AUDC3_POT5 = cfg.IO_AUDC3_POT5;
+    let IO_AUDC4_POT7 = cfg.IO_AUDC4_POT7;
+    let IO_AUDCTL_ALLPOT = cfg.IO_AUDCTL_ALLPOT;
+    let IO_AUDF1_POT0 = cfg.IO_AUDF1_POT0;
+    let IO_AUDF2_POT2 = cfg.IO_AUDF2_POT2;
+    let IO_AUDF3_POT4 = cfg.IO_AUDF3_POT4;
+    let IO_AUDF4_POT6 = cfg.IO_AUDF4_POT6;
+    let IO_CHACTL = cfg.IO_CHACTL;
+    let IO_CHBASE = cfg.IO_CHBASE;
+    let IO_COLBK = cfg.IO_COLBK;
+    let IO_COLPF0 = cfg.IO_COLPF0;
+    let IO_COLPF1 = cfg.IO_COLPF1;
+    let IO_COLPF2 = cfg.IO_COLPF2;
+    let IO_COLPF3 = cfg.IO_COLPF3;
+    let IO_COLPM0_TRIG2 = cfg.IO_COLPM0_TRIG2;
+    let IO_COLPM1_TRIG3 = cfg.IO_COLPM1_TRIG3;
+    let IO_COLPM2_PAL = cfg.IO_COLPM2_PAL;
+    let IO_COLPM3 = cfg.IO_COLPM3;
+    let IO_CONSOL = cfg.IO_CONSOL;
+    let IO_DLISTH = cfg.IO_DLISTH;
+    let IO_DLISTL = cfg.IO_DLISTL;
+    let IO_DMACTL = cfg.IO_DMACTL;
+    let IO_GRACTL = cfg.IO_GRACTL;
+    let IO_GRAFM_TRIG1 = cfg.IO_GRAFM_TRIG1;
+    let IO_GRAFP0_P1PL = cfg.IO_GRAFP0_P1PL;
+    let IO_GRAFP1_P2PL = cfg.IO_GRAFP1_P2PL;
+    let IO_GRAFP2_P3PL = cfg.IO_GRAFP2_P3PL;
+    let IO_GRAFP3_TRIG0 = cfg.IO_GRAFP3_TRIG0;
+    let IO_HITCLR = cfg.IO_HITCLR;
+    let IO_HPOSM0_P0PF = cfg.IO_HPOSM0_P0PF;
+    let IO_HPOSM1_P1PF = cfg.IO_HPOSM1_P1PF;
+    let IO_HPOSM2_P2PF = cfg.IO_HPOSM2_P2PF;
+    let IO_HPOSM3_P3PF = cfg.IO_HPOSM3_P3PF;
+    let IO_HPOSP0_M0PF = cfg.IO_HPOSP0_M0PF;
+    let IO_HPOSP1_M1PF = cfg.IO_HPOSP1_M1PF;
+    let IO_HPOSP2_M2PF = cfg.IO_HPOSP2_M2PF;
+    let IO_HPOSP3_M3PF = cfg.IO_HPOSP3_M3PF;
+    let IO_HSCROL = cfg.IO_HSCROL;
+    let IO_IRQEN_IRQST = cfg.IO_IRQEN_IRQST;
+    let IO_NMIEN = cfg.IO_NMIEN;
+    let IO_NMIRES_NMIST = cfg.IO_NMIRES_NMIST;
+    let IO_PACTL = cfg.IO_PACTL;
+    let IO_PBCTL = cfg.IO_PBCTL;
+    let IO_PENH = cfg.IO_PENH;
+    let IO_PENV = cfg.IO_PENV;
+    let IO_PMBASE = cfg.IO_PMBASE;
+    let IO_PORTA = cfg.IO_PORTA;
+    let IO_PORTB = cfg.IO_PORTB;
+    let IO_POTGO = cfg.IO_POTGO;
+    let IO_PRIOR = cfg.IO_PRIOR;
+    let IO_SEROUT_SERIN = cfg.IO_SEROUT_SERIN;
+    let IO_SIZEM_P0PL = cfg.IO_SIZEM_P0PL;
+    let IO_SIZEP0_M0PL = cfg.IO_SIZEP0_M0PL;
+    let IO_SIZEP1_M1PL = cfg.IO_SIZEP1_M1PL;
+    let IO_SIZEP2_M2PL = cfg.IO_SIZEP2_M2PL;
+    let IO_SIZEP3_M3PL = cfg.IO_SIZEP3_M3PL;
+    let IO_SKCTL_SKSTAT = cfg.IO_SKCTL_SKSTAT;
+    let IO_SKREST_RANDOM = cfg.IO_SKREST_RANDOM;
+    let IO_STIMER_KBCODE = cfg.IO_STIMER_KBCODE;
+    let IO_VCOUNT = cfg.IO_VCOUNT;
+    let IO_VDELAY = cfg.IO_VDELAY;
+    let IO_VSCROL = cfg.IO_VSCROL;
+    let IO_WSYNC = cfg.IO_WSYNC;
+    let pokeyAudioSync = cfg.pokeyAudioSync;
+    let pokeyAudioOnRegisterWrite = cfg.pokeyAudioOnRegisterWrite;
+    let pokeyPotStartScan = cfg.pokeyPotStartScan;
+    let pokeyRestartTimers = cfg.pokeyRestartTimers;
+    let pokeySyncLfsr17 = cfg.pokeySyncLfsr17;
+    let pokeySeroutWrite = cfg.pokeySeroutWrite;
+    let pokeySerinRead = cfg.pokeySerinRead;
+    let pokeyPotUpdate = cfg.pokeyPotUpdate;
 
     function piaPortBWrite(ctx, value) {
-      const io = ctx.ioData;
-      const ram = ctx.ram;
-      const sram = ctx.sram;
-      const oldV = sram[IO_PORTB] & 0xff;
-      const v = ((value & 0x83) | 0x7c) & 0xff;
+      let io = ctx.ioData;
+      let ram = ctx.ram;
+      let sram = ctx.sram;
+      let oldV = sram[IO_PORTB] & 0xff;
+      let v = ((value & 0x83) | 0x7c) & 0xff;
 
       // Bit 0: OS ROM enable (1=ROM, 0=RAM)
       if ((oldV & 0x01) !== (v & 0x01)) {
@@ -138,13 +138,13 @@
     }
 
     function ioAccess(ctx, value) {
-      const addr = ctx.accessAddress & 0xffff;
-      const ram = ctx.ram;
-      const sram = ctx.sram;
-      const io = ctx.ioData;
+      let addr = ctx.accessAddress & 0xffff;
+      let ram = ctx.ram;
+      let sram = ctx.sram;
+      let io = ctx.ioData;
 
       if (value !== null && value !== undefined) {
-        const v = value & 0xff;
+        let v = value & 0xff;
 
         switch (addr) {
           // --- GTIA ---
@@ -319,7 +319,7 @@
 
           case IO_WSYNC: {
             // Stall until next scanline boundary (closest display list fetch cycle).
-            const nextLine = io.displayListFetchCycle;
+            let nextLine = io.displayListFetchCycle;
             if (nextLine <= ctx.cycleCounter) {
               nextLine =
                 (((ctx.cycleCounter / CYCLES_PER_LINE) | 0) + 1) *

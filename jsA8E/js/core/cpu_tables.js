@@ -237,10 +237,10 @@
 
   function buildCodeTable() {
     const table = new Array(256);
-    for (const i = 0; i < 256; i++) {
+    for (let i = 0; i < 256; i++) {
       table[i] = { opcodeId: 56, addressType: 4, cycles: 2 };
     }
-    for (const j = 0; j < CODE_LIST.length; j++) {
+    for (let j = 0; j < CODE_LIST.length; j++) {
       const e = CODE_LIST[j];
       table[e[0]] = { opcodeId: e[1], addressType: e[3], cycles: e[2] };
     }
