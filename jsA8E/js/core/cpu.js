@@ -280,10 +280,10 @@
 
   // Helpers for operations
   function readAccess(ctx) {
-    return ctx.accessfunction (ctx, null) & 0xff;
+    return ctx.accessFunction(ctx, null) & 0xff;
   }
   function writeAccess(ctx, value) {
-    return ctx.accessfunction (ctx, value & 0xff) & 0xff;
+    return ctx.accessFunction(ctx, value & 0xff) & 0xff;
   }
   function setZN(ctx, value) {
     const ps = ctx.cpu.ps;
@@ -773,7 +773,7 @@
         ctx.ioCycleTimedEventFunction &&
         ctx.cycleCounter >= ctx.ioCycleTimedEventCycle
       ) {
-        ctx.ioCycleTimedEventfunction (ctx);
+        ctx.ioCycleTimedEventFunction(ctx);
       }
 
       if (ctx.cycleCounter >= ctx.stallCycleCounter) {

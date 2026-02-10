@@ -193,6 +193,7 @@
 
       // Player 3
       let data;
+      let mask;
       if (pmDmaPlayers) {
         data =
           dmactl & 0x10
@@ -205,7 +206,6 @@
       let hpos = sram[IO_HPOSP3_M3PF] & 0xff;
       if (data && hpos) {
         let start = y * PIXELS_PER_LINE + hpos * 2;
-        let mask;
         if (prior & 0x01) mask = PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
         else if (prior & 0x02)
           mask =
