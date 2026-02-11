@@ -8,6 +8,7 @@
     const IO_GRAFM_TRIG1 = cfg.IO_GRAFM_TRIG1;
     const IO_COLPM0_TRIG2 = cfg.IO_COLPM0_TRIG2;
     const IO_COLPM1_TRIG3 = cfg.IO_COLPM1_TRIG3;
+    const IO_GRACTL = cfg.IO_GRACTL;
     const IO_CONSOL = cfg.IO_CONSOL;
     const IO_IRQEN_IRQST = cfg.IO_IRQEN_IRQST;
     const IO_SKCTL_SKSTAT = cfg.IO_SKCTL_SKSTAT;
@@ -78,6 +79,36 @@
         return { handled: true, newlyReleased: !stillDown };
       }
 
+      function triggerRegister(index) {
+        if (index === 0) return IO_GRAFP3_TRIG0;
+        if (index === 1) return IO_GRAFM_TRIG1;
+        if (index === 2) return IO_COLPM0_TRIG2;
+        return IO_COLPM1_TRIG3;
+      }
+
+      function setTriggerPressed(index, pressed) {
+        const ctx = machine.ctx;
+        const io = ctx.ioData;
+        const reg = triggerRegister(index);
+        const physical = pressed ? 0 : 1;
+
+        if (!io.trigPhysical || !io.trigLatched) {
+          ctx.ram[reg] = physical;
+          return;
+        }
+
+        io.trigPhysical[index] = physical;
+
+        if (ctx.sram[IO_GRACTL] & 0x04) {
+          if (physical === 0) io.trigLatched[index] = 0;
+          ctx.ram[reg] = io.trigLatched[index] & 0x01;
+          return;
+        }
+
+        io.trigLatched[index] = physical;
+        ctx.ram[reg] = physical;
+      }
+
       function onKeyDown(e) {
         if (!isReady()) return false;
         const sym = browserKeyToSdlSym(e);
@@ -105,7 +136,7 @@
         }
 
         if (sym === 308) {
-          machine.ctx.ram[IO_GRAFP3_TRIG0] = 0;
+          setTriggerPressed(0, true);
           return true;
         }
         if (sym === 306) {
@@ -113,11 +144,11 @@
           return true;
         }
         if (sym === 307) {
-          machine.ctx.ram[IO_COLPM0_TRIG2] = 0;
+          setTriggerPressed(2, true);
           return true;
         }
         if (sym === 309 || sym === 310) {
-          machine.ctx.ram[IO_COLPM1_TRIG3] = 0;
+          setTriggerPressed(3, true);
           return true;
         }
 
@@ -194,7 +225,7 @@
           return true;
         }
         if (sym === 308) {
-          machine.ctx.ram[IO_GRAFP3_TRIG0] = 1;
+          setTriggerPressed(0, false);
           return true;
         }
         if (sym === 306) {
@@ -202,11 +233,11 @@
           return true;
         }
         if (sym === 307) {
-          machine.ctx.ram[IO_COLPM0_TRIG2] = 1;
+          setTriggerPressed(2, false);
           return true;
         }
         if (sym === 309 || sym === 310) {
-          machine.ctx.ram[IO_COLPM1_TRIG3] = 1;
+          setTriggerPressed(3, false);
           return true;
         }
         if (sym === 283) {
@@ -240,9 +271,10 @@
         pressedKeys = {};
         machine.ctx.ioData.keyPressCounter = 0;
         machine.ctx.ram[IO_PORTA] |= 0x0f;
-        machine.ctx.ram[IO_GRAFP3_TRIG0] = 1;
-        machine.ctx.ram[IO_COLPM0_TRIG2] = 1;
-        machine.ctx.ram[IO_COLPM1_TRIG3] = 1;
+        setTriggerPressed(0, false);
+        setTriggerPressed(1, false);
+        setTriggerPressed(2, false);
+        setTriggerPressed(3, false);
         machine.ctx.ram[IO_CONSOL] |= 0x07;
         machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x0c;
       }

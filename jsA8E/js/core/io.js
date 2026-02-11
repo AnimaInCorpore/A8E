@@ -80,6 +80,12 @@
     let pokeySeroutWrite = cfg.pokeySeroutWrite;
     let pokeySerinRead = cfg.pokeySerinRead;
     let pokeyPotUpdate = cfg.pokeyPotUpdate;
+    const TRIG_REGS = [
+      IO_GRAFP3_TRIG0,
+      IO_GRAFM_TRIG1,
+      IO_COLPM0_TRIG2,
+      IO_COLPM1_TRIG3,
+    ];
 
     function piaPortBWrite(ctx, value) {
       let io = ctx.ioData;
@@ -137,6 +143,22 @@
       sram[IO_PORTB] = v;
     }
 
+    function syncTriggerReadback(ctx, initializeLatch) {
+      let io = ctx.ioData;
+      let ram = ctx.ram;
+      let sram = ctx.sram;
+      if (!io.trigPhysical || !io.trigLatched) return;
+
+      let latchEnabled = (sram[IO_GRACTL] & 0x04) !== 0;
+      for (let i = 0; i < TRIG_REGS.length; i++) {
+        let physical = io.trigPhysical[i] & 0x01;
+        if (!latchEnabled || initializeLatch) io.trigLatched[i] = physical;
+        ram[TRIG_REGS[i]] = latchEnabled
+          ? io.trigLatched[i] & 0x01
+          : physical;
+      }
+    }
+
     function ioAccess(ctx, value) {
       let addr = ctx.accessAddress & 0xffff;
       let ram = ctx.ram;
@@ -168,9 +190,19 @@
           case IO_GRAFM_TRIG1:
           case IO_PRIOR:
           case IO_VDELAY:
-          case IO_GRACTL:
             sram[addr] = v;
             break;
+
+          case IO_GRACTL: {
+            let oldV = sram[addr] & 0xff;
+            let newV = v & 0x07;
+            sram[addr] = newV;
+            let oldLatch = (oldV & 0x04) !== 0;
+            let newLatch = (newV & 0x04) !== 0;
+            if (!newLatch || (newLatch && !oldLatch))
+              syncTriggerReadback(ctx, true);
+            break;
+          }
 
           case IO_COLPM0_TRIG2:
           case IO_COLPM1_TRIG3:
@@ -320,10 +352,14 @@
           case IO_WSYNC: {
             // Stall until next scanline boundary (closest display list fetch cycle).
             let nextLine = io.displayListFetchCycle;
+            let fallback =
+              (((ctx.cycleCounter / CYCLES_PER_LINE) | 0) + 1) *
+              CYCLES_PER_LINE;
             if (nextLine <= ctx.cycleCounter) {
-              nextLine =
-                (((ctx.cycleCounter / CYCLES_PER_LINE) | 0) + 1) *
-                CYCLES_PER_LINE;
+              nextLine = fallback;
+            } else if (nextLine - ctx.cycleCounter > CYCLES_PER_LINE) {
+              // WSYNC is line-local on hardware: never sleep multiple lines.
+              nextLine = fallback;
             }
             ctx.stallCycleCounter = Math.max(ctx.stallCycleCounter, nextLine);
             break;

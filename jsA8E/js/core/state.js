@@ -46,6 +46,9 @@
         pokeyPotAllPot: 0xff,
         pokeyPotScanStartCycle: 0,
         pokeyPotScanActive: false,
+        // Raw trigger inputs (1=released, 0=pressed) and GTIA-latched view.
+        trigPhysical: new Uint8Array([1, 1, 1, 1]),
+        trigLatched: new Uint8Array([1, 1, 1, 1]),
         currentDisplayListCommand: 0,
         nextDisplayListLine: 8,
         displayListAddress: 0,

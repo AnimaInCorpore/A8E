@@ -4,8 +4,6 @@
   // Port of the repo's 6502.c core. Focuses on correctness vs cycle accuracy;
   // the original code table does not model page-cross penalties either.
 
-  const Util = window.A8EUtil;
-
   const FLAG_N = 0x80;
   const FLAG_V = 0x40;
   const FLAG_B = 0x10;
@@ -654,17 +652,9 @@
     setPs(ctx, ctx.ram[0x100 + cpu.sp] & 0xff);
   }
   function opXXX(ctx) {
-    const cpu = ctx.cpu;
-    throw new Error(
-      "Illegal/unhandled opcode at PC=$" +
-        Util.toHex4((cpu.pc - 1) & 0xffff) +
-        " A=$" +
-        Util.toHex2(cpu.a) +
-        " X=$" +
-        Util.toHex2(cpu.x) +
-        " Y=$" +
-        Util.toHex2(cpu.y),
-    );
+    // Compatibility fallback: treat unknown opcodes as NOP.
+    // This avoids hard crashes on software that executes rare/unstable opcodes.
+    return;
   }
   function opLAX(ctx) {
     const v = readAccess(ctx);
@@ -738,6 +728,23 @@
     ctx.cpu.ps.n = ((ctx.cpu.a - v) & 0x80) !== 0 ? 0x80 : 0;
     ctx.cpu.ps.c = (ctx.cpu.a & 0xff) >= v ? 1 : 0;
   }
+  function opRRA(ctx) {
+    const oldCarry = ctx.cpu.ps.c ? 1 : 0;
+    let v = readAccess(ctx);
+    ctx.cpu.ps.c = v & 0x01;
+    v = (v >> 1) & 0xff;
+    if (oldCarry) v |= 0x80;
+    v = writeAccess(ctx, v);
+    adcValue(ctx, v);
+  }
+  function opSBX(ctx) {
+    const base = (ctx.cpu.a & ctx.cpu.x) & 0xff;
+    const imm = readAccess(ctx) & 0xff;
+    const diff = base - imm;
+    ctx.cpu.ps.c = diff >= 0 ? 1 : 0;
+    ctx.cpu.x = diff & 0xff;
+    setZN(ctx, ctx.cpu.x);
+  }
 
   const OPCODE_FUNCS = [
     opLDA,
@@ -810,6 +817,8 @@
     opAAC,
     opXAA,
     opDCP,
+    opRRA,
+    opSBX,
   ];
   const CODE_TABLE = CpuTables.buildCodeTable();
 

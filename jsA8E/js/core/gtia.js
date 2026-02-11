@@ -180,8 +180,9 @@
 
       let pmbaseHi = (sram[IO_PMBASE] & 0xff) << 8;
 
-      function pmAddrHiRes(offset) {
-        return ((pmbaseHi & 0xf800) + offset + y) & 0xffff;
+      function pmAddrHiRes(offset, vdelayMask) {
+        let lineIndex = y - (sram[IO_VDELAY] & vdelayMask ? 1 : 0);
+        return ((pmbaseHi & 0xf800) + offset + (lineIndex & 0xffff)) & 0xffff;
       }
 
       function pmAddrLoRes(offset, vdelayMask) {
@@ -197,8 +198,10 @@
       if (pmDmaPlayers) {
         data =
           dmactl & 0x10
-            ? ram[pmAddrHiRes(1792)] & 0xff
+            ? ram[pmAddrHiRes(1792, 0x80)] & 0xff
             : ram[pmAddrLoRes(896, 0x80)] & 0xff;
+        // With player DMA on, keep GRAFPn shadowed from PM memory.
+        sram[IO_GRAFP3_TRIG0] = data;
       } else {
         data = sram[IO_GRAFP3_TRIG0] & 0xff;
       }
@@ -249,8 +252,9 @@
       if (pmDmaPlayers) {
         data =
           dmactl & 0x10
-            ? ram[pmAddrHiRes(1536)] & 0xff
+            ? ram[pmAddrHiRes(1536, 0x40)] & 0xff
             : ram[pmAddrLoRes(768, 0x40)] & 0xff;
+        sram[IO_GRAFP2_P3PL] = data;
       } else {
         data = sram[IO_GRAFP2_P3PL] & 0xff;
       }
@@ -290,8 +294,9 @@
       if (pmDmaPlayers) {
         data =
           dmactl & 0x10
-            ? ram[pmAddrHiRes(1280)] & 0xff
+            ? ram[pmAddrHiRes(1280, 0x20)] & 0xff
             : ram[pmAddrLoRes(640, 0x20)] & 0xff;
+        sram[IO_GRAFP1_P2PL] = data;
       } else {
         data = sram[IO_GRAFP1_P2PL] & 0xff;
       }
@@ -329,8 +334,9 @@
       if (pmDmaPlayers) {
         data =
           dmactl & 0x10
-            ? ram[pmAddrHiRes(1024)] & 0xff
+            ? ram[pmAddrHiRes(1024, 0x10)] & 0xff
             : ram[pmAddrLoRes(512, 0x10)] & 0xff;
+        sram[IO_GRAFP0_P1PL] = data;
       } else {
         data = sram[IO_GRAFP0_P1PL] & 0xff;
       }
@@ -368,8 +374,10 @@
       if (pmDmaMissiles) {
         data =
           dmactl & 0x10
-            ? ram[pmAddrHiRes(768)] & 0xff
+            ? ram[pmAddrHiRes(768, 0x08)] & 0xff
             : ram[pmAddrLoRes(384, 0x08)] & 0xff;
+        // With missile DMA on, keep GRAFM shadowed from PM memory.
+        sram[IO_GRAFM_TRIG1] = data;
       } else {
         data = sram[IO_GRAFM_TRIG1] & 0xff;
       }
