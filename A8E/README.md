@@ -1,146 +1,80 @@
 # A8E (Native C/SDL Emulator)
 
-Small C-based Atari 800 XL emulator using SDL (SDL 1.2 style headers).
+Native Atari 800 XL emulator written in C with SDL 1.2 style headers (`<SDL/SDL.h>`).
 
-## Runtime Files
+## Runtime Requirements
 
-The emulator expects these ROM files in the current working directory when you run it:
+The executable requires these ROM files in its current working directory:
 
-- `ATARIBAS.ROM`
-- `ATARIXL.ROM`
+- `ATARIXL.ROM` (16 KB)
+- `ATARIBAS.ROM` (8 KB)
 
-By default it tries to boot the disk image `d1.atr` (you can pass a different `.atr` path as the first non-flag argument).
+Disk handling:
 
-## Windows (MSYS2 MinGW-w64)
+- Startup default disk path is `d1.atr` (lowercase) if no disk argument is passed.
+- You can pass a different ATR file as the first non-flag argument.
+- Pressing `F11` attempts to reload `D1.ATR` (uppercase) from the current working directory.
+  - On Linux/macOS, filename case matters.
 
-### Prerequisites
+## Command Line
 
-- C compiler (GCC/Clang)
-- CMake (3.16+)
-- SDL with **SDL 1.2 style headers** (`<SDL/SDL.h>`)
-  - SDL 1.2 *or*
-  - `sdl12-compat` (provides the SDL 1.2 headers on top of SDL2)
-
-MSYS2 is expected at `C:\msys64`.
-
-Install prerequisites (in the **MSYS2 MinGW64** shell):
-
-```sh
-pacman -S --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-SDL
+```text
+A8E [options] [disk.atr]
 ```
 
-### Build
+Options currently implemented:
 
-Configure + build (in the **MSYS2 MinGW64** shell):
+- `-f` / `-F`: fullscreen
+- `-b` / `-B`: alternate legacy mode (`lMode=1`, affects internal CONSOL hack state)
+
+## Keyboard / Joystick Mapping
+
+- Arrow keys: joystick direction
+- `Left Alt`: joystick trigger (TRIG0)
+- `F2`: OPTION
+- `F3`: SELECT
+- `F4`: START
+- `F5`: RESET
+- `F8`: BREAK
+- `F11`: hold turbo mode while pressed (also triggers `D1.ATR` reload on key-down)
+- `Esc`: quit
+
+## Build (Windows, MSYS2 MinGW-w64)
+
+Run inside `A8E/`:
 
 ```sh
 cmake -S . -B build/msys2-mingw64 -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
 cmake --build build/msys2-mingw64 -j
 ```
 
-The executable is written to:
+Output executable:
 
-- `build/msys2-mingw64/A8E.exe`
+- `A8E/build/msys2-mingw64/A8E.exe`
 
-If the EXE does not start due to missing DLLs, run it with `C:\msys64\mingw64\bin` on your `PATH` (or copy the required DLLs like `SDL.dll` next to `A8E.exe`).
+If needed, add `C:\msys64\mingw64\bin` to `PATH` (or copy required DLLs such as `SDL.dll` next to `A8E.exe`).
 
-### Run
+## Build (Linux / macOS)
 
-From the directory containing `ATARIBAS.ROM` and `ATARIXL.ROM`:
-
-```sh
-./A8E.exe
-```
-
-Common options:
-
-- `-f` / `-F`: fullscreen
-- `-b` / `-B`: alternate mode (see source)
-
-Example (boot a specific disk image):
-
-```sh
-./A8E.exe mydisk.atr
-```
-
-## Linux
-
-### Prerequisites
-
-- C compiler (GCC/Clang)
-- CMake (3.16+)
-- SDL with **SDL 1.2 style headers** (`<SDL/SDL.h>`)
-  - SDL 1.2 *or*
-  - `sdl12-compat` (provides the SDL 1.2 headers on top of SDL2)
-
-Install prerequisites using your distribution packages. Names vary; common options are:
-
-- SDL 1.2 development package (if available), e.g. `libsdl1.2-dev`
-- or `sdl12-compat` + SDL2 development package, e.g. `libsdl2-dev`
-
-### Build
+Run inside `A8E/`:
 
 ```sh
 cmake -S . -B build
 cmake --build build -j
 ```
 
-### Run
+Output executable:
 
-From the directory containing `ATARIBAS.ROM` and `ATARIXL.ROM`:
+- `A8E/build/A8E` (or `A8E/build/A8E.exe` on some toolchains)
 
-```sh
-./A8E
-```
+## Running After Build
 
-Common options:
+From repository root (where ROM files are typically stored):
 
-- `-f` / `-F`: fullscreen
-- `-b` / `-B`: alternate mode (see source)
+- Linux/macOS: `./A8E/build/A8E`
+- Windows: `.\A8E\build\msys2-mingw64\A8E.exe`
 
-Example (boot a specific disk image):
+Example with explicit disk:
 
-```sh
-./A8E mydisk.atr
-```
-
-## macOS
-
-### Prerequisites
-
-- C compiler (GCC/Clang)
-- CMake (3.16+)
-- SDL with **SDL 1.2 style headers** (`<SDL/SDL.h>`)
-  - `sdl12-compat` (provides the SDL 1.2 headers on top of SDL2)
-
-Using Homebrew:
-
-```sh
-brew install cmake sdl12-compat
-```
-
-### Build
-
-```sh
-cmake -S . -B build
-cmake --build build -j
-```
-
-### Run
-
-From the directory containing `ATARIBAS.ROM` and `ATARIXL.ROM`:
-
-```sh
-./A8E
-```
-
-Common options:
-
-- `-f` / `-F`: fullscreen
-- `-b` / `-B`: alternate mode (see source)
-
-Example (boot a specific disk image):
-
-```sh
-./A8E mydisk.atr
-```
+- Linux/macOS: `./A8E/build/A8E disks/dos.atr`
+- Windows: `.\A8E\build\msys2-mingw64\A8E.exe disks\dos.atr`

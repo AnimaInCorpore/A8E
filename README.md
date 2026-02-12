@@ -1,37 +1,51 @@
 # A8E (Atari 800 XL Emulator)
 
-Atari 800 XL emulator available as both a native desktop application and a browser-based version. Original codebase by Sascha Springer (2004).
+Atari 800 XL emulator with two implementations in this repository:
 
-## Subprojects
+- `A8E/`: native C/SDL emulator
+- `jsA8E/`: browser JavaScript port (WebGL with CRT post-process, plus 2D canvas fallback)
+
+The original codebase is by Sascha Springer (2004). Each subproject has its own README with detailed usage/build notes.
+
+## Repository Layout
 
 | Directory | Description |
 |-----------|-------------|
-| `A8E/`    | Native C/SDL emulator for Windows, Linux and macOS |
-| `jsA8E/`  | Browser-based JavaScript port (WebGL / Canvas) |
+| `A8E/` | Native C/SDL code and CMake project |
+| `jsA8E/` | Browser app (`index.html` + JavaScript modules + shaders) |
+| `disks/` | Optional ATR disk images for testing |
 
-Each subfolder contains its own README with build and usage instructions.
+## ROM Requirements
 
-## Getting the Source Code
+Both implementations require the following ROM dumps (not included):
 
-```sh
-git clone https://bitbucket.org/AnimaInCorpore/a8e.git
-cd a8e
-```
+- `ATARIXL.ROM` (16 KB)
+- `ATARIBAS.ROM` (8 KB)
 
-## ROM Files
+Recommended placement is the repository root:
 
-Both versions of the emulator require these Atari ROM dumps (not included):
+- Native app loads ROM files from its current working directory.
+- Browser app can load ROMs via UI file inputs, and also attempts `../ATARIXL.ROM` + `../ATARIBAS.ROM` when served from repo root.
 
-- `ATARIBAS.ROM`
-- `ATARIXL.ROM`
+## Quick Start (Browser)
 
-Place them in the repository root. The native build expects them in the working directory; the browser version can load them via the UI or auto-load them from the repo root when served over HTTP.
-
-## Quick Start (Browser Version)
-
-Serve the repo root with any static HTTP server and open `jsA8E/`:
+Serve the repository root with a static HTTP server, then open `jsA8E/`.
 
 ```sh
-npx http-server -p 8000
-# then open http://localhost:8000/jsA8E/
+python -m http.server 8000
+# open http://localhost:8000/jsA8E/
 ```
+
+(`file://` is not sufficient because shader and ROM auto-load paths use `fetch()`.)
+
+## Quick Start (Native)
+
+Build from repo root:
+
+```sh
+cmake -S . -B build
+cmake --build build --target A8E -j
+```
+
+Then run the produced `A8E` executable with ROM files in the current working directory.
+Typical path after this top-level build is `build/A8E/A8E` (or `build/A8E/A8E.exe` on Windows).

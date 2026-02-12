@@ -1,25 +1,63 @@
-# jsA8E (JavaScript-only A8E)
+# jsA8E (Browser Port)
 
-Browser-based Atari 800 XL emulator port of the C/SDL A8E project.
+Browser-based Atari 800 XL emulator port of the native C/SDL `A8E` implementation.
 
-Rendering uses WebGL when available (indexed framebuffer + palette lookup, then a `crt-lottes-fast` style post-process tuned for early-1980s TV metrics), with a 2D-canvas fallback.
+## Runtime Overview
+
+- No build step required (plain HTML + JS modules).
+- WebGL2/WebGL path uses shader-based decode + CRT post-process.
+- If WebGL is unavailable (or shader/program init fails), rendering falls back to 2D canvas.
+- Audio uses `AudioWorklet` when available, with `ScriptProcessorNode` fallback.
 
 ## Run
 
-Because most browsers block `fetch()` from `file://` URLs, run it via a local static server from the repo root:
+Serve from HTTP (not `file://`) because shader and optional ROM auto-load use `fetch()`:
 
-- `python3 -m http.server 8000`
-- then open `http://localhost:8000/jsA8E/`
+```sh
+python -m http.server 8000
+# open http://localhost:8000/jsA8E/
+```
 
-## Input
+## ROM and Boot Requirements
 
-- Joystick 1: Arrow keys
-- Triggers: Left Alt = TRIG0, Right Alt = TRIG2, Meta = TRIG3
-- Keyboard modifiers: Ctrl, Shift
+Required ROM files:
 
-## ROMs
+- `ATARIXL.ROM` (16 KB)
+- `ATARIBAS.ROM` (8 KB)
 
-For legal reasons, this folder does not embed ROMs by default.
+Behavior:
 
-- Load `ATARIXL.ROM` (16KB) and `ATARIBAS.ROM` (8KB) via the UI.
-- If you serve the whole repo root, the app also tries to auto-load `../ATARIXL.ROM` and `../ATARIBAS.ROM`.
+- The emulator only becomes start-ready after both ROMs are loaded.
+- Load ROMs via the top bar file inputs, or
+- Serve from repo root and let auto-load try `../ATARIXL.ROM` and `../ATARIBAS.ROM`.
+- ATR disk image (`Load ATR`) is optional but typically needed to boot software.
+
+## Controls
+
+Physical keyboard:
+
+- Type normally for Atari keyboard input
+- `F2`: OPTION
+- `F3`: SELECT
+- `F4`: START
+- `F5`: RESET
+- `F8`: BREAK
+
+Joystick mapping:
+
+- Arrow keys: direction
+- `Left Alt`: TRIG0
+- `Right Alt`: TRIG2
+- `Win/Cmd (Meta)`: TRIG3
+
+## UI Toggles / Features
+
+- Start/Pause, Reset, Fullscreen
+- CPU Turbo (`~4x` speed multiplier)
+- SIO Turbo (accelerates SIO transfer timing only)
+- Audio On/Off
+- On-screen joystick panel toggle
+- On-screen Atari keyboard toggle
+- Option-on-Start toggle (hold OPTION during boot, BASIC-off style boot behavior)
+
+On smaller/mobile layouts, the virtual keyboard starts hidden by default.
