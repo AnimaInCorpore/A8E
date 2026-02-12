@@ -44,6 +44,14 @@
     function browserKeyToSdlSym(e) {
       if (e && typeof e.sdlSym === "number" && isFinite(e.sdlSym))
         return e.sdlSym | 0;
+      // Prefer code/location for side-specific modifiers first.
+      if (e.code === "ShiftRight") return 303;
+      if (e.code === "ShiftLeft") return 304;
+      if (e.code === "AltRight") return 307;
+      if (e.code === "AltLeft") return 308;
+      if (e.code === "MetaRight") return 309;
+      if (e.code === "MetaLeft") return 310;
+
       // SDL 1.2 keysyms mostly follow ASCII for printable keys.
       const k = e.key;
       if (k && k.length === 1) return k.toLowerCase().charCodeAt(0) & 0x1ff;
@@ -89,7 +97,7 @@
         case "CapsLock":
           return 301;
         case "Shift":
-          // Prefer location-aware below; fall back to LSHIFT.
+          // Side-specific Shift is handled above via e.code.
           return 304;
         case "Alt":
           return 308;
@@ -100,14 +108,6 @@
         default:
           break;
       }
-
-      // Handle by code/location for modifiers.
-      if (e.code === "ShiftRight") return 303;
-      if (e.code === "ShiftLeft") return 304;
-      if (e.code === "AltRight") return 307;
-      if (e.code === "AltLeft") return 308;
-      if (e.code === "MetaRight") return 309;
-      if (e.code === "MetaLeft") return 310;
 
       return null;
     }
