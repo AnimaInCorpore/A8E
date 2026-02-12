@@ -578,6 +578,8 @@ button:hover:not(:disabled) {
   --deck-pad-bottom: clamp(6px, 2vw, 24px);
   --main-pad-bottom: clamp(2px, 0.8vw, 8px);
   --side-pad-x: clamp(3px, 1.1vw, 14px);
+  --key-font: clamp(6px, 1.3vw, 15px);
+  --key-font-wide: clamp(5px, 1.05vw, 12px);
   --mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
@@ -654,6 +656,10 @@ button:hover:not(:disabled) {
   place-items: center;
   outline: none;
   text-transform: uppercase;
+  font-size: var(--key-font);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .atariKeyboard .key::after {
@@ -702,6 +708,11 @@ button:hover:not(:disabled) {
 
 .atariKeyboard .key.wide .mainlbl {
   letter-spacing: 0.04em;
+}
+
+.atariKeyboard .key.wide {
+  font-size: var(--key-font-wide);
+  letter-spacing: 0.03em;
 }
 
 .atariKeyboard .key.space {
@@ -861,6 +872,13 @@ button:hover:not(:disabled) {
   }
   .atariKeyboard .key .mainlbl {
     font-size: clamp(6px, 2vw, 15px);
+  }
+  .atariKeyboard .key {
+    font-size: clamp(6px, 2vw, 11px);
+  }
+  .atariKeyboard .key.wide {
+    font-size: clamp(5px, 1.7vw, 10px);
+    letter-spacing: 0.02em;
   }
   .atariKeyboard .key.small .mainlbl {
     font-size: clamp(5px, 1.8vw, 13px);
