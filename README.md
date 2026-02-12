@@ -1,5 +1,7 @@
 # A8E (Atari 800 XL Emulator)
 
+<img src="jsA8E/a8e.webp" alt="A8E Logo" width="800">
+
 Atari 800 XL emulator with two implementations in this repository:
 
 - `A8E/`: native C/SDL emulator
@@ -37,6 +39,8 @@ python -m http.server 8000
 ```
 
 (`file://` is not sufficient because shader and ROM auto-load paths use `fetch()`.)
+
+For an online demo of the jsA8E version, visit https://jsa8e.anides.de/
 
 ## Quick Start (Native)
 
