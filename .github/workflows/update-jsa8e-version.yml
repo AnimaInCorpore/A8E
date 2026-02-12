@@ -1,0 +1,35 @@
+name: Update jsA8E Build Version
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-version-file:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Update jsA8E/version.json from release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          printf '{\n  "version": "%s"\n}\n' "$RELEASE_TAG" > jsA8E/version.json
+
+      - name: Commit and push if changed
+        run: |
+          if git diff --quiet -- jsA8E/version.json; then
+            echo "No version change required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add jsA8E/version.json
+          git commit -m "chore(jsA8E): set build version to ${{ github.event.release.tag_name }}"
+          git push origin HEAD:main
