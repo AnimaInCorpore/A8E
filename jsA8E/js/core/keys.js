@@ -41,6 +41,90 @@
       255, 255, 255, 255, 255, 255, 255,
     ];
 
+    // SDL keysyms for printable keys are based on the physical key identity
+    // (unshifted symbol), not the shifted character produced by layout.
+    const CODE_TO_SDL_SYM = {
+      Digit0: 48,
+      Digit1: 49,
+      Digit2: 50,
+      Digit3: 51,
+      Digit4: 52,
+      Digit5: 53,
+      Digit6: 54,
+      Digit7: 55,
+      Digit8: 56,
+      Digit9: 57,
+      KeyA: 97,
+      KeyB: 98,
+      KeyC: 99,
+      KeyD: 100,
+      KeyE: 101,
+      KeyF: 102,
+      KeyG: 103,
+      KeyH: 104,
+      KeyI: 105,
+      KeyJ: 106,
+      KeyK: 107,
+      KeyL: 108,
+      KeyM: 109,
+      KeyN: 110,
+      KeyO: 111,
+      KeyP: 112,
+      KeyQ: 113,
+      KeyR: 114,
+      KeyS: 115,
+      KeyT: 116,
+      KeyU: 117,
+      KeyV: 118,
+      KeyW: 119,
+      KeyX: 120,
+      KeyY: 121,
+      KeyZ: 122,
+      Backquote: 96,
+      Minus: 45,
+      Equal: 61,
+      BracketLeft: 91,
+      BracketRight: 93,
+      Backslash: 92,
+      Semicolon: 59,
+      Quote: 39,
+      Comma: 44,
+      Period: 46,
+      Slash: 47,
+    };
+
+    const SHIFTED_PRINTABLE_TO_BASE = {
+      "!": "1",
+      '"': "2",
+      "#": "3",
+      $: "4",
+      "%": "5",
+      "&": "6",
+      "'": "7",
+      "@": "8",
+      "(": "9",
+      ")": "0",
+      "<": ",",
+      ">": ".",
+      "?": "/",
+      ":": ";",
+      "+": "=",
+      "*": "\\",
+      "^": "-",
+    };
+
+    function printableKeyToSdlSym(key, shiftKey) {
+      if (!key || key.length !== 1) return null;
+      const mapped =
+        shiftKey && SHIFTED_PRINTABLE_TO_BASE[key]
+          ? SHIFTED_PRINTABLE_TO_BASE[key]
+          : key.toLowerCase();
+      const sym = mapped.charCodeAt(0) & 0x1ff;
+      if (KEY_CODE_TABLE[sym] === undefined || KEY_CODE_TABLE[sym] === 255)
+        return null;
+      return sym;
+    }
+
     function browserKeyToSdlSym(e) {
       if (e && typeof e.sdlSym === "number" && isFinite(e.sdlSym))
         return e.sdlSym | 0;
@@ -52,9 +136,14 @@
       if (e.code === "MetaRight") return 309;
       if (e.code === "MetaLeft") return 310;
 
+      const printableSym = printableKeyToSdlSym(e && e.key, !!(e && e.shiftKey));
+      if (printableSym !== null) return printableSym;
+
+      if (e && e.code && CODE_TO_SDL_SYM[e.code] !== undefined)
+        return CODE_TO_SDL_SYM[e.code];
+
       // SDL 1.2 keysyms mostly follow ASCII for printable keys.
       const k = e.key;
-      if (k && k.length === 1) return k.toLowerCase().charCodeAt(0) & 0x1ff;
       switch (k) {
         case "Enter":
           return 13;

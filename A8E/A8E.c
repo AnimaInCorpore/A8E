@@ -169,10 +169,13 @@ int main(int argc, char *argv[])
             }
 
     		if(tEvent.type == SDL_KEYUP)
+    		{
     			if(tEvent.key.keysym.sym == SDLK_F11)
     				cTurboFlag = 0;
+    		}
 
-   			AtariIoKeyboardEvent(pAtariContext, &tEvent.key);
+			if(tEvent.type == SDL_KEYDOWN || tEvent.type == SDL_KEYUP)
+   				AtariIoKeyboardEvent(pAtariContext, &tEvent.key);
 		}
 
 		if(!cTurboFlag)
