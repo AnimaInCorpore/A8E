@@ -37,7 +37,6 @@ Options currently implemented:
 - `F5`: RESET
 - `F8`: BREAK
 - `F11`: hold turbo mode while pressed (also triggers `D1.ATR` reload on key-down)
-- `Esc`: quit
 
 ## Build (Windows, MSYS2 MinGW-w64)
 

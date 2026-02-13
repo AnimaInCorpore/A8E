@@ -159,9 +159,6 @@ int main(int argc, char *argv[])
             {
     			if(tEvent.key.keysym.sym == SDLK_F11)
     				cTurboFlag = 1;
-
-                if(tEvent.key.keysym.sym == SDLK_ESCAPE)
-                    goto Exit;
 #ifdef ENABLE_VERBOSE_DEBUGGING
 				if(tEvent.key.keysym.sym == SDLK_F12)
 					cDisassembleFlag = 1;
