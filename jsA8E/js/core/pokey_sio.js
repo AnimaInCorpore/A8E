@@ -82,12 +82,59 @@
       queueSerinResponse(ctx, now, dataSize + 3);
     }
 
-    function disk1Device() {
+    function getMountedDiskForDevice(io, devId) {
+      let slot = (devId & 0xff) - 0x31;
+      if (slot < 0 || slot > 7) return null;
+
+      let slots = io.deviceSlots;
+      let images = io.diskImages;
+      let imageIndex = -1;
+
+      if (slots && typeof slots.length === "number" && slot < slots.length) {
+        imageIndex = slots[slot] | 0;
+      } else if (slot === 0) {
+        // Backward-compatible fallback while slot wiring is rolling out.
+        if (io.disk1) {
+          return {
+            bytes: io.disk1,
+            size: io.disk1Size | 0 || io.disk1.length | 0,
+          };
+        }
+        return null;
+      }
+
+      if (
+        imageIndex >= 0 &&
+        images &&
+        typeof images.length === "number" &&
+        imageIndex < images.length
+      ) {
+        let img = images[imageIndex];
+        if (img && img.bytes) {
+          return {
+            bytes: img.bytes,
+            size: img.size | 0 || img.bytes.length | 0,
+          };
+        }
+      }
+
+      if (slot === 0 && io.disk1) {
+        return {
+          bytes: io.disk1,
+          size: io.disk1Size | 0 || io.disk1.length | 0,
+        };
+      }
+
+      return null;
+    }
+
+    function diskDevice(devId) {
       function onCommandFrame(ctx, now, cmd, aux1, aux2) {
         let io = ctx.ioData;
         let buf = io.sioBuffer;
-        let disk = io.disk1;
-        let diskSize = io.disk1Size | 0 || (disk ? disk.length : 0);
+        let mounted = getMountedDiskForDevice(io, devId);
+        let disk = mounted ? mounted.bytes : null;
+        let diskSize = mounted ? mounted.size | 0 : 0;
         let sectorSize = diskSectorSize(disk);
 
         if (cmd === 0x52) {
@@ -149,7 +196,7 @@
 
           io.sioOutPhase = 1;
           io.sioDataIndex = 0;
-          io.sioPendingDevice = 0x31;
+          io.sioPendingDevice = devId & 0xff;
           io.sioPendingCmd = cmd & 0xff;
           io.sioPendingSector = sectorIndex2 & 0xffff;
           io.sioPendingBytes = si2.bytes | 0;
@@ -184,8 +231,9 @@
         let io = ctx.ioData;
         let buf = io.sioBuffer;
         let cmd = io.sioPendingCmd & 0xff;
-        let disk = io.disk1;
-        let diskSize = io.disk1Size | 0 || (disk ? disk.length : 0);
+        let mounted = getMountedDiskForDevice(io, devId);
+        let disk = mounted ? mounted.bytes : null;
+        let diskSize = mounted ? mounted.size | 0 : 0;
         let sectorSize = diskSectorSize(disk);
         let si = sectorBytesAndOffset(io.sioPendingSector | 0, sectorSize);
         let calculated = sioChecksum(
@@ -235,7 +283,9 @@
     }
 
     let sioDeviceHandlers = Object.create(null);
-    sioDeviceHandlers[0x31] = disk1Device();
+    for (let devId = 0x31; devId <= 0x38; devId++) {
+      sioDeviceHandlers[devId] = diskDevice(devId);
+    }
 
     function seroutWrite(ctx, value) {
       let io = ctx.ioData;
