@@ -32,6 +32,7 @@
         sioOutIndex: 0,
         sioOutPhase: 0, // 0=command frame, 1=data frame (write/put/verify)
         sioDataIndex: 0,
+        sioPendingDevice: 0,
         sioPendingCmd: 0,
         sioPendingSector: 0,
         sioPendingBytes: 0,

@@ -52,6 +52,191 @@
       return { bytes: bytes | 0, offset: offset | 0 };
     }
 
+    function queueSingleByteResponse(ctx, now, value) {
+      let io = ctx.ioData;
+      io.sioBuffer[0] = value & 0xff;
+      queueSerinResponse(ctx, now, 1);
+    }
+
+    function queueDeviceNack(ctx, now) {
+      queueSingleByteResponse(ctx, now, "N".charCodeAt(0));
+    }
+
+    function queueAckComplete(ctx, now) {
+      let io = ctx.ioData;
+      let buf = io.sioBuffer;
+      buf[0] = "A".charCodeAt(0);
+      buf[1] = "C".charCodeAt(0);
+      queueSerinResponse(ctx, now, 2);
+    }
+
+    function queueAckData(ctx, now, dataStartIndex, dataSize) {
+      let io = ctx.ioData;
+      let buf = io.sioBuffer;
+      buf[0] = "A".charCodeAt(0);
+      buf[1] = "C".charCodeAt(0);
+      buf[dataSize + 2] = sioChecksum(
+        buf.subarray(dataStartIndex, dataStartIndex + dataSize),
+        dataSize,
+      );
+      queueSerinResponse(ctx, now, dataSize + 3);
+    }
+
+    function disk1Device() {
+      function onCommandFrame(ctx, now, cmd, aux1, aux2) {
+        let io = ctx.ioData;
+        let buf = io.sioBuffer;
+        let disk = io.disk1;
+        let diskSize = io.disk1Size | 0 || (disk ? disk.length : 0);
+        let sectorSize = diskSectorSize(disk);
+
+        if (cmd === 0x52) {
+          // READ SECTOR
+          let sectorIndex = (aux1 | (aux2 << 8)) & 0xffff;
+          let si = sectorBytesAndOffset(sectorIndex, sectorSize);
+          if (
+            !disk ||
+            !si ||
+            si.offset < 16 ||
+            si.offset + si.bytes > diskSize
+          ) {
+            queueDeviceNack(ctx, now);
+            return;
+          }
+          buf.set(disk.subarray(si.offset, si.offset + si.bytes), 2);
+          queueAckData(ctx, now, 2, si.bytes);
+          return;
+        }
+
+        if (cmd === 0x53) {
+          // STATUS
+          if (!disk || !disk.length || disk[0] === 0) {
+            queueDeviceNack(ctx, now);
+            return;
+          }
+          buf[0] = "A".charCodeAt(0);
+          buf[1] = "C".charCodeAt(0);
+          if (sectorSize === 128) {
+            buf[2] = 0x10;
+            buf[3] = 0x00;
+            buf[4] = 0x01;
+            buf[5] = 0x00;
+            buf[6] = 0x11;
+          } else {
+            buf[2] = 0x30;
+            buf[3] = 0x00;
+            buf[4] = 0x01;
+            buf[5] = 0x00;
+            buf[6] = 0x31;
+          }
+          queueSerinResponse(ctx, now, 7);
+          return;
+        }
+
+        if (cmd === 0x57 || cmd === 0x50 || cmd === 0x56) {
+          // WRITE / PUT / VERIFY SECTOR (expects a data frame).
+          let sectorIndex2 = (aux1 | (aux2 << 8)) & 0xffff;
+          let si2 = sectorBytesAndOffset(sectorIndex2, sectorSize);
+          if (
+            !disk ||
+            !si2 ||
+            si2.offset < 16 ||
+            si2.offset + si2.bytes > diskSize
+          ) {
+            queueDeviceNack(ctx, now);
+            return;
+          }
+
+          io.sioOutPhase = 1;
+          io.sioDataIndex = 0;
+          io.sioPendingDevice = 0x31;
+          io.sioPendingCmd = cmd & 0xff;
+          io.sioPendingSector = sectorIndex2 & 0xffff;
+          io.sioPendingBytes = si2.bytes | 0;
+
+          // ACK command frame; host will then send the data frame.
+          queueSingleByteResponse(ctx, now, "A".charCodeAt(0));
+          return;
+        }
+
+        if (cmd === 0x21) {
+          // FORMAT: clear data area (very minimal).
+          if (!disk || !diskSize || diskSize <= 16) {
+            queueDeviceNack(ctx, now);
+            return;
+          }
+          disk.fill(0, 16);
+          queueAckComplete(ctx, now);
+          return;
+        }
+
+        if (cmd === 0x55) {
+          // MOTOR ON: no-op, but ACK.
+          queueAckComplete(ctx, now);
+          return;
+        }
+
+        // Unsupported command.
+        queueDeviceNack(ctx, now);
+      }
+
+      function onDataFrame(ctx, now, payloadOffset, payloadBytes, providedCrc) {
+        let io = ctx.ioData;
+        let buf = io.sioBuffer;
+        let cmd = io.sioPendingCmd & 0xff;
+        let disk = io.disk1;
+        let diskSize = io.disk1Size | 0 || (disk ? disk.length : 0);
+        let sectorSize = diskSectorSize(disk);
+        let si = sectorBytesAndOffset(io.sioPendingSector | 0, sectorSize);
+        let calculated = sioChecksum(
+          buf.subarray(payloadOffset, payloadOffset + payloadBytes),
+          payloadBytes,
+        );
+
+        if (
+          calculated !== providedCrc ||
+          !disk ||
+          !si ||
+          si.offset < 16 ||
+          si.offset + si.bytes > diskSize ||
+          si.bytes !== payloadBytes
+        ) {
+          queueDeviceNack(ctx, now);
+          return;
+        }
+
+        if (cmd === 0x56) {
+          // VERIFY SECTOR: compare payload to current disk content.
+          let ok = true;
+          for (let vi = 0; vi < si.bytes; vi++) {
+            if (
+              (disk[si.offset + vi] & 0xff) !==
+              (buf[payloadOffset + vi] & 0xff)
+            ) {
+              ok = false;
+              break;
+            }
+          }
+          buf[0] = "A".charCodeAt(0);
+          buf[1] = ok ? "C".charCodeAt(0) : "E".charCodeAt(0);
+          queueSerinResponse(ctx, now, 2);
+          return;
+        }
+
+        // WRITE / PUT: write sector payload.
+        disk.set(buf.subarray(payloadOffset, payloadOffset + si.bytes), si.offset);
+        queueAckComplete(ctx, now);
+      }
+
+      return {
+        onCommandFrame: onCommandFrame,
+        onDataFrame: onDataFrame,
+      };
+    }
+
+    let sioDeviceHandlers = Object.create(null);
+    sioDeviceHandlers[0x31] = disk1Device();
+
     function seroutWrite(ctx, value) {
       let io = ctx.ioData;
       let now = ctx.cycleCounter;
@@ -77,56 +262,18 @@
 
         let dataBytes = io.sioPendingBytes | 0;
         let provided = buf[SIO_DATA_OFFSET + dataBytes] & 0xff;
-        let calculated = sioChecksum(
-          buf.subarray(SIO_DATA_OFFSET, SIO_DATA_OFFSET + dataBytes),
-          dataBytes,
-        );
-
-        let disk = io.disk1;
-        let diskSize = io.disk1Size | 0 || (disk ? disk.length : 0);
-        let sectorSize = diskSectorSize(disk);
-        let si = sectorBytesAndOffset(io.sioPendingSector | 0, sectorSize);
-        let cmd = io.sioPendingCmd & 0xff;
-
-        if (
-          calculated !== provided ||
-          !disk ||
-          !si ||
-          si.offset < 16 ||
-          si.offset + si.bytes > diskSize ||
-          si.bytes !== dataBytes
-        ) {
-          buf[0] = "N".charCodeAt(0);
-          queueSerinResponse(ctx, now, 1);
-        } else if (cmd === 0x56) {
-          // VERIFY SECTOR: compare payload to current disk content.
-          let ok = true;
-          for (let vi = 0; vi < si.bytes; vi++) {
-            if (
-              (disk[si.offset + vi] & 0xff) !==
-              (buf[SIO_DATA_OFFSET + vi] & 0xff)
-            ) {
-              ok = false;
-              break;
-            }
-          }
-          buf[0] = "A".charCodeAt(0);
-          buf[1] = ok ? "C".charCodeAt(0) : "E".charCodeAt(0);
-          queueSerinResponse(ctx, now, 2);
+        let pendingDev = io.sioPendingDevice & 0xff;
+        let handler = sioDeviceHandlers[pendingDev];
+        if (handler && handler.onDataFrame) {
+          handler.onDataFrame(ctx, now, SIO_DATA_OFFSET, dataBytes, provided);
         } else {
-          // WRITE / PUT: write sector payload.
-          disk.set(
-            buf.subarray(SIO_DATA_OFFSET, SIO_DATA_OFFSET + si.bytes),
-            si.offset,
-          );
-          buf[0] = "A".charCodeAt(0);
-          buf[1] = "C".charCodeAt(0);
-          queueSerinResponse(ctx, now, 2);
+          queueDeviceNack(ctx, now);
         }
 
         // Reset state.
         io.sioOutPhase = 0;
         io.sioDataIndex = 0;
+        io.sioPendingDevice = 0;
         io.sioPendingCmd = 0;
         io.sioPendingSector = 0;
         io.sioPendingBytes = 0;
@@ -154,8 +301,7 @@
       io.sioOutIndex = 0;
 
       if (sioChecksum(buf, 4) !== (buf[4] & 0xff)) {
-        buf[0] = "N".charCodeAt(0);
-        queueSerinResponse(ctx, now, 1);
+        queueDeviceNack(ctx, now);
         return;
       }
 
@@ -167,121 +313,12 @@
       let cmd2 = buf[1] & 0xff;
       let aux1 = buf[2] & 0xff;
       let aux2 = buf[3] & 0xff;
-
-      // Only D1: for now.
-      if (dev !== 0x31) {
-        buf[0] = "N".charCodeAt(0);
-        queueSerinResponse(ctx, now, 1);
-        return;
+      let handler2 = sioDeviceHandlers[dev];
+      if (handler2 && handler2.onCommandFrame) {
+        handler2.onCommandFrame(ctx, now, cmd2, aux1, aux2);
+      } else {
+        queueDeviceNack(ctx, now);
       }
-
-      let disk2 = io.disk1;
-      let diskSize2 = io.disk1Size | 0 || (disk2 ? disk2.length : 0);
-      let sectorSize2 = diskSectorSize(disk2);
-
-      if (cmd2 === 0x52) {
-        // READ SECTOR
-        let sectorIndex = (aux1 | (aux2 << 8)) & 0xffff;
-        let si2 = sectorBytesAndOffset(sectorIndex, sectorSize2);
-        if (
-          !disk2 ||
-          !si2 ||
-          si2.offset < 16 ||
-          si2.offset + si2.bytes > diskSize2
-        ) {
-          buf[0] = "N".charCodeAt(0);
-          queueSerinResponse(ctx, now, 1);
-          return;
-        }
-        buf[0] = "A".charCodeAt(0);
-        buf[1] = "C".charCodeAt(0);
-        buf.set(disk2.subarray(si2.offset, si2.offset + si2.bytes), 2);
-        buf[si2.bytes + 2] = sioChecksum(
-          buf.subarray(2, 2 + si2.bytes),
-          si2.bytes,
-        );
-        queueSerinResponse(ctx, now, si2.bytes + 3);
-        return;
-      }
-
-      if (cmd2 === 0x53) {
-        // STATUS
-        if (!disk2 || !disk2.length || disk2[0] === 0) {
-          buf[0] = "N".charCodeAt(0);
-          queueSerinResponse(ctx, now, 1);
-          return;
-        }
-        buf[0] = "A".charCodeAt(0);
-        buf[1] = "C".charCodeAt(0);
-        if (sectorSize2 === 128) {
-          buf[2] = 0x10;
-          buf[3] = 0x00;
-          buf[4] = 0x01;
-          buf[5] = 0x00;
-          buf[6] = 0x11;
-        } else {
-          buf[2] = 0x30;
-          buf[3] = 0x00;
-          buf[4] = 0x01;
-          buf[5] = 0x00;
-          buf[6] = 0x31;
-        }
-        queueSerinResponse(ctx, now, 7);
-        return;
-      }
-
-      if (cmd2 === 0x57 || cmd2 === 0x50 || cmd2 === 0x56) {
-        // WRITE / PUT / VERIFY SECTOR (expects a data frame).
-        let sectorIndex2 = (aux1 | (aux2 << 8)) & 0xffff;
-        let si3 = sectorBytesAndOffset(sectorIndex2, sectorSize2);
-        if (
-          !disk2 ||
-          !si3 ||
-          si3.offset < 16 ||
-          si3.offset + si3.bytes > diskSize2
-        ) {
-          buf[0] = "N".charCodeAt(0);
-          queueSerinResponse(ctx, now, 1);
-          return;
-        }
-
-        io.sioOutPhase = 1;
-        io.sioDataIndex = 0;
-        io.sioPendingCmd = cmd2 & 0xff;
-        io.sioPendingSector = sectorIndex2 & 0xffff;
-        io.sioPendingBytes = si3.bytes | 0;
-
-        // ACK command frame; host will then send the data frame.
-        buf[0] = "A".charCodeAt(0);
-        queueSerinResponse(ctx, now, 1);
-        return;
-      }
-
-      if (cmd2 === 0x21) {
-        // FORMAT: clear data area (very minimal).
-        if (!disk2 || !diskSize2 || diskSize2 <= 16) {
-          buf[0] = "N".charCodeAt(0);
-          queueSerinResponse(ctx, now, 1);
-          return;
-        }
-        disk2.fill(0, 16);
-        buf[0] = "A".charCodeAt(0);
-        buf[1] = "C".charCodeAt(0);
-        queueSerinResponse(ctx, now, 2);
-        return;
-      }
-
-      if (cmd2 === 0x55) {
-        // MOTOR ON: no-op, but ACK.
-        buf[0] = "A".charCodeAt(0);
-        buf[1] = "C".charCodeAt(0);
-        queueSerinResponse(ctx, now, 2);
-        return;
-      }
-
-      // Unsupported command.
-      buf[0] = "N".charCodeAt(0);
-      queueSerinResponse(ctx, now, 1);
     }
 
     function serinRead(ctx) {
