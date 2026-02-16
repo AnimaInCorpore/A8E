@@ -4,6 +4,8 @@
   function createApi(cfg) {
     const CPU = cfg.CPU;
     const IO_PORTB = cfg.IO_PORTB;
+    const HOST_SLOT_COUNT = 8;
+    const DEVICE_SLOT_COUNT = 8;
 
     function createRuntime(opts) {
       const machine = opts.machine;
@@ -19,6 +21,65 @@
       const getTurbo = opts.getTurbo;
       const pokeyAudioResetState = opts.pokeyAudioResetState;
       const pokeyAudioSetTurbo = opts.pokeyAudioSetTurbo;
+
+      function makeDefaultDeviceSlots() {
+        const slots = new Int16Array(DEVICE_SLOT_COUNT);
+        for (let i = 0; i < DEVICE_SLOT_COUNT; i++) slots[i] = i;
+        return slots;
+      }
+
+      function ensureMediaLayout() {
+        if (!machine.media) machine.media = {};
+        if (!Array.isArray(machine.media.hostSlots))
+          machine.media.hostSlots = new Array(HOST_SLOT_COUNT).fill(null);
+        if (!(machine.media.deviceSlots instanceof Int16Array))
+          machine.media.deviceSlots = makeDefaultDeviceSlots();
+        if (!Array.isArray(machine.media.diskImages)) machine.media.diskImages = [];
+      }
+
+      function syncLegacyDisk1MirrorFromSlots() {
+        ensureMediaLayout();
+        const d1Index = machine.media.deviceSlots[0] | 0;
+        const image =
+          d1Index >= 0 && d1Index < machine.media.diskImages.length
+            ? machine.media.diskImages[d1Index]
+            : null;
+        if (!image || !image.bytes) {
+          machine.media.disk1 = null;
+          machine.media.disk1Size = 0;
+          machine.media.disk1Name = null;
+          return;
+        }
+        machine.media.disk1 = image.bytes;
+        machine.media.disk1Size = image.size | 0;
+        machine.media.disk1Name = image.name || "disk.atr";
+      }
+
+      function copyMediaToIoData() {
+        const io = machine.ctx.ioData;
+        ensureMediaLayout();
+        syncLegacyDisk1MirrorFromSlots();
+        io.hostSlots = machine.media.hostSlots;
+        io.deviceSlots = machine.media.deviceSlots;
+        io.diskImages = machine.media.diskImages;
+        io.disk1 = machine.media.disk1;
+        io.disk1Size = machine.media.disk1Size | 0;
+        io.disk1Name = machine.media.disk1Name;
+        io.basicRom = machine.media.basicRom;
+        io.osRom = machine.media.osRom;
+        io.selfTestRom = machine.media.selfTestRom;
+        io.floatingPointRom = machine.media.floatingPointRom;
+      }
+
+      function createDiskImage(bytes, name) {
+        return {
+          id: Date.now() + ":" + Math.random().toString(16).slice(2),
+          name: name || "disk.atr",
+          bytes: bytes,
+          size: bytes.length | 0,
+          writable: true,
+        };
+      }
 
       function setupMemoryMap() {
         const ctx = machine.ctx;
@@ -66,19 +127,15 @@
       }
 
       function hardReset() {
+        ensureMediaLayout();
+        syncLegacyDisk1MirrorFromSlots();
         machine.ctx.cycleCounter = 0;
         machine.ctx.stallCycleCounter = 0;
         machine.ctx.irqPending = 0;
         machine.ctx.ioData = makeIoData(video);
         machine.ctx.ioData.optionOnStart = !!getOptionOnStart();
         machine.ctx.ioData.sioTurbo = !!getSioTurbo();
-        machine.ctx.ioData.disk1 = machine.media.disk1;
-        machine.ctx.ioData.disk1Size = machine.media.disk1Size | 0;
-        machine.ctx.ioData.disk1Name = machine.media.disk1Name;
-        machine.ctx.ioData.basicRom = machine.media.basicRom;
-        machine.ctx.ioData.osRom = machine.media.osRom;
-        machine.ctx.ioData.selfTestRom = machine.media.selfTestRom;
-        machine.ctx.ioData.floatingPointRom = machine.media.floatingPointRom;
+        copyMediaToIoData();
         machine.ctx.ioData.pokeyAudio = machine.audioState;
         machine.ctx.ioCycleTimedEventFunction = ioCycleTimedEvent;
         cycleTimedEventUpdate(machine.ctx);
@@ -144,13 +201,43 @@
       }
 
       function loadDisk1(arrayBuffer, name) {
+        ensureMediaLayout();
         const bytes = new Uint8Array(arrayBuffer);
-        machine.media.disk1 = bytes;
-        machine.media.disk1Size = bytes.length | 0;
-        machine.media.disk1Name = name || "disk.atr";
-        machine.ctx.ioData.disk1 = machine.media.disk1;
-        machine.ctx.ioData.disk1Size = machine.media.disk1Size | 0;
-        machine.ctx.ioData.disk1Name = machine.media.disk1Name;
+        machine.media.diskImages[0] = createDiskImage(bytes, name || "disk.atr");
+        machine.media.hostSlots[0] = 0;
+        machine.media.deviceSlots[0] = 0;
+        copyMediaToIoData();
+      }
+
+      function loadDiskToHostSlot(arrayBuffer, name, hostSlotIndex) {
+        ensureMediaLayout();
+        const slot = hostSlotIndex | 0;
+        if (slot < 0 || slot >= HOST_SLOT_COUNT) {
+          throw new Error("Host slot out of range: " + slot);
+        }
+        const bytes = new Uint8Array(arrayBuffer);
+        const image = createDiskImage(bytes, name || "disk.atr");
+        const imageIndex = machine.media.diskImages.length | 0;
+        machine.media.diskImages.push(image);
+        machine.media.hostSlots[slot] = imageIndex;
+        copyMediaToIoData();
+        return imageIndex;
+      }
+
+      function mountHostSlotToDeviceSlot(hostSlotIndex, deviceSlotIndex) {
+        ensureMediaLayout();
+        const hostSlot = hostSlotIndex | 0;
+        const deviceSlot = deviceSlotIndex | 0;
+        if (hostSlot < 0 || hostSlot >= HOST_SLOT_COUNT) {
+          throw new Error("Host slot out of range: " + hostSlot);
+        }
+        if (deviceSlot < 0 || deviceSlot >= DEVICE_SLOT_COUNT) {
+          throw new Error("Device slot out of range: " + deviceSlot);
+        }
+        const imageIndex = machine.media.hostSlots[hostSlot];
+        machine.media.deviceSlots[deviceSlot] =
+          imageIndex === null || imageIndex === undefined ? -1 : imageIndex | 0;
+        copyMediaToIoData();
       }
 
       return {
@@ -159,6 +246,8 @@
         loadOsRom: loadOsRom,
         loadBasicRom: loadBasicRom,
         loadDisk1: loadDisk1,
+        loadDiskToHostSlot: loadDiskToHostSlot,
+        mountHostSlotToDeviceSlot: mountHostSlotToDeviceSlot,
       };
     }
 

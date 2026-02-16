@@ -531,6 +531,9 @@
       osRomLoaded: false,
       basicRomLoaded: false,
       media: {
+        hostSlots: new Array(8).fill(null),
+        deviceSlots: new Int16Array([0, 1, 2, 3, 4, 5, 6, 7]),
+        diskImages: [],
         disk1: null,
         disk1Size: 0,
         disk1Name: null,
@@ -575,6 +578,8 @@
     let loadOsRom = memoryRuntime.loadOsRom;
     let loadBasicRom = memoryRuntime.loadBasicRom;
     let loadDisk1 = memoryRuntime.loadDisk1;
+    let loadDiskToHostSlot = memoryRuntime.loadDiskToHostSlot;
+    let mountHostSlotToDeviceSlot = memoryRuntime.mountHostSlotToDeviceSlot;
     let audioRuntime = audioRuntimeApi.createRuntime({
       machine: machine,
       getAudioEnabled: function () {
@@ -796,6 +801,8 @@
       loadOsRom: loadOsRom,
       loadBasicRom: loadBasicRom,
       loadDisk1: loadDisk1,
+      loadDiskToHostSlot: loadDiskToHostSlot,
+      mountHostSlotToDeviceSlot: mountHostSlotToDeviceSlot,
       hasOsRom: hasOsRom,
       hasBasicRom: hasBasicRom,
       hasDisk1: hasDisk1,
