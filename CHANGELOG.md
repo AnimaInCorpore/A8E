@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Changed
+- Native `A8E` build caption/version is now injected at compile time from `jsA8E/version.json` (with `dev` fallback when unavailable).
+- Browser `jsA8E` frame timing now accumulates CPU cycles and runs whole-frame steps with capped catch-up to reduce visible speed jitter.
+- Browser rendering now requests `desynchronized` WebGL contexts and hints `canvas` transforms for smoother presentation.
+
+### Fixed
+- Hardened `jsA8E` SIO disk sector access checks across read/write/verify paths to reject invalid offsets consistently.
+
+## v1.1.1 - 2026-02-17
+
+### Changed
+- XEX boot-loader handling in native `A8E` and browser `jsA8E` now chooses a non-overlapping temporary sector buffer and patches loader buffer addresses dynamically.
+
+### Fixed
+- XEX-to-ATR conversion now rejects images whose segments overlap reserved boot-loader memory, preventing invalid boot media generation.
+
 ## v1.1.0 - 2026-02-17
 
 ### Added
