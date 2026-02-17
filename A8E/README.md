@@ -27,16 +27,15 @@ Options currently implemented:
 - `-f` / `-F`: fullscreen
 - `-b` / `-B`: alternate legacy mode (`lMode=1`, affects internal CONSOL hack state)
 
-## Keyboard / Joystick Mapping
+## Controls
 
-- Arrow keys: joystick direction
-- `Left Alt`: joystick trigger (TRIG0)
-- `F2`: OPTION
-- `F3`: SELECT
-- `F4`: START
-- `F5`: RESET
-- `F8`: BREAK
-- `F11`: hold turbo mode while pressed (also triggers `D1.ATR` reload on key-down)
+See the [root README](../README.md#controls) for the shared keyboard, joystick, and console key mappings.
+
+Additional native-only key:
+
+| Key | Function |
+|-----|----------|
+| F11 | Turbo mode (hold) + reload `D1.ATR` |
 
 ## Build (Windows, MSYS2 MinGW-w64)
 

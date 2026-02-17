@@ -106,10 +106,11 @@ typedef struct
 	u8 cValuePortA;
 	u8 cValuePortB;
 
-    VideoData_t tVideoData;
-    DrawLineData_t tDrawLineData;
+	VideoData_t tVideoData;
+	DrawLineData_t tDrawLineData;
 
 	u32 lKeyPressCounter;
+	u8 cJoystickArrowMask;
 
 	/* POKEY pot scan state */
 	u8 cPotScanActive;

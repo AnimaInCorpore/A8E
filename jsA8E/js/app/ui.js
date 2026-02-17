@@ -956,7 +956,8 @@
       }
 
       // Update disk status icon
-      if (app.hasDisk1()) {
+      let d1Mounted = app.hasMountedDiskForDeviceSlot(0);
+      if (d1Mounted) {
         diskStatus.classList.remove("fa-circle-xmark");
         diskStatus.classList.add("fa-circle-check");
       } else {
@@ -1217,7 +1218,7 @@
     });
 
     attachFileInput(disk1, function (buf, name) {
-      app.loadDisk1(buf, name);
+      app.loadDiskToDeviceSlot(buf, name, 0);
     });
 
     // Keyboard input forwarded to emulator.

@@ -42,21 +42,14 @@ Behavior:
 
 ## Controls
 
-Physical keyboard:
+See the [root README](../README.md#controls) for the shared keyboard, joystick, and console key mappings.
 
-- Type normally for Atari keyboard input
-- `F2`: OPTION
-- `F3`: SELECT
-- `F4`: START
-- `F5`: RESET
-- `F8`: BREAK
+Additional browser-only triggers:
 
-Joystick mapping:
-
-- Arrow keys: direction
-- `Left Alt`: TRIG0
-- `Right Alt`: TRIG2
-- `Win/Cmd (Meta)`: TRIG3
+| Key | Function |
+|-----|----------|
+| Right Alt | TRIG2 |
+| Win / Cmd | TRIG3 |
 
 ## UI Toggles / Features
 

@@ -532,11 +532,8 @@
       basicRomLoaded: false,
       media: {
         hostSlots: new Array(8).fill(null),
-        deviceSlots: new Int16Array([0, 1, 2, 3, 4, 5, 6, 7]),
+        deviceSlots: new Int16Array([-1, -1, -1, -1, -1, -1, -1, -1]),
         diskImages: [],
-        disk1: null,
-        disk1Size: 0,
-        disk1Name: null,
         basicRom: null,
         osRom: null,
         selfTestRom: null,
@@ -577,9 +574,13 @@
     let hardReset = memoryRuntime.hardReset;
     let loadOsRom = memoryRuntime.loadOsRom;
     let loadBasicRom = memoryRuntime.loadBasicRom;
-    let loadDisk1 = memoryRuntime.loadDisk1;
     let loadDiskToHostSlot = memoryRuntime.loadDiskToHostSlot;
+    let loadDiskToDeviceSlot = memoryRuntime.loadDiskToDeviceSlot;
     let mountHostSlotToDeviceSlot = memoryRuntime.mountHostSlotToDeviceSlot;
+    let mountImageToDeviceSlot = memoryRuntime.mountImageToDeviceSlot;
+    let unmountDeviceSlot = memoryRuntime.unmountDeviceSlot;
+    let getMountedDiskForDeviceSlot = memoryRuntime.getMountedDiskForDeviceSlot;
+    let hasMountedDiskForDeviceSlot = memoryRuntime.hasMountedDiskForDeviceSlot;
     let audioRuntime = audioRuntimeApi.createRuntime({
       machine: machine,
       getAudioEnabled: function () {
@@ -615,6 +616,14 @@
       return machine.osRomLoaded && machine.basicRomLoaded;
     }
 
+    let inputRuntime = inputApi.createRuntime({
+      machine: machine,
+      isReady: isReady,
+    });
+    let onKeyDown = inputRuntime.onKeyDown;
+    let onKeyUp = inputRuntime.onKeyUp;
+    let releaseAllKeys = inputRuntime.releaseAll;
+
     function paint() {
       renderer.paint(video);
     }
@@ -635,6 +644,11 @@
         Util.toHex2(c.sp) +
         "  P=$" +
         Util.toHex2(CPU.getPs(machine.ctx));
+    }
+
+    function hardResetWithInputRelease() {
+      if (releaseAllKeys) releaseAllKeys();
+      hardReset();
     }
 
     function frame(ts) {
@@ -697,7 +711,7 @@
       if (machine.audioCtx && machine.audioCtx.state === "suspended") {
         machine.audioCtx.resume().catch(function () {});
       }
-      if (!machine.ctx.cpu.pc) hardReset();
+      if (!machine.ctx.cpu.pc) hardResetWithInputRelease();
       machine.running = true;
       machine.lastTs = 0;
       machine.rafId = requestAnimationFrame(frame);
@@ -723,7 +737,7 @@
 
     function reset() {
       if (!isReady()) return;
-      hardReset();
+      hardResetWithInputRelease();
       paint();
       updateDebug();
     }
@@ -775,17 +789,6 @@
     function hasBasicRom() {
       return machine.basicRomLoaded;
     }
-    function hasDisk1() {
-      return !!machine.ctx.ioData.disk1;
-    }
-    let inputRuntime = inputApi.createRuntime({
-      machine: machine,
-      isReady: isReady,
-    });
-    let onKeyDown = inputRuntime.onKeyDown;
-    let onKeyUp = inputRuntime.onKeyUp;
-    let releaseAllKeys = inputRuntime.releaseAll;
-
     // Initial paint (black).
     paint();
     updateDebug();
@@ -800,12 +803,15 @@
       setOptionOnStart: setOptionOnStart,
       loadOsRom: loadOsRom,
       loadBasicRom: loadBasicRom,
-      loadDisk1: loadDisk1,
+      loadDiskToDeviceSlot: loadDiskToDeviceSlot,
       loadDiskToHostSlot: loadDiskToHostSlot,
       mountHostSlotToDeviceSlot: mountHostSlotToDeviceSlot,
+      mountImageToDeviceSlot: mountImageToDeviceSlot,
+      unmountDeviceSlot: unmountDeviceSlot,
+      getMountedDiskForDeviceSlot: getMountedDiskForDeviceSlot,
+      hasMountedDiskForDeviceSlot: hasMountedDiskForDeviceSlot,
       hasOsRom: hasOsRom,
       hasBasicRom: hasBasicRom,
-      hasDisk1: hasDisk1,
       isReady: isReady,
       isRunning: function () {
         return machine.running;

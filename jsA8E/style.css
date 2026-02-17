@@ -103,6 +103,59 @@ body {
   opacity: 0.85;
 }
 
+.brandTooltip .tt-section {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.brandTooltip .tt-heading {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+}
+
+.brandTooltip .tt-row {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.brandTooltip .tt-key {
+  flex-shrink: 0;
+  min-width: 100px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.brandTooltip .tt-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.brandTooltip .tt-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (max-width: 600px) {
+  .brandTooltip {
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 16px;
+    max-width: 92vw;
+  }
+  .brandTooltip .tt-key {
+    min-width: 90px;
+  }
+}
+
 .brandHelp:focus-visible .brandTooltip,
 .brandHelp:hover .brandTooltip {
   opacity: 1;

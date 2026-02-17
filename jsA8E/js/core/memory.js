@@ -6,6 +6,7 @@
     const IO_PORTB = cfg.IO_PORTB;
     const HOST_SLOT_COUNT = 8;
     const DEVICE_SLOT_COUNT = 8;
+    const NO_IMAGE_MOUNTED = -1;
 
     function createRuntime(opts) {
       const machine = opts.machine;
@@ -24,47 +25,115 @@
 
       function makeDefaultDeviceSlots() {
         const slots = new Int16Array(DEVICE_SLOT_COUNT);
-        for (let i = 0; i < DEVICE_SLOT_COUNT; i++) slots[i] = i;
+        for (let i = 0; i < DEVICE_SLOT_COUNT; i++) slots[i] = NO_IMAGE_MOUNTED;
         return slots;
+      }
+
+      function normalizeHostSlotIndex(hostSlotIndex) {
+        const hostSlot = hostSlotIndex | 0;
+        if (hostSlot < 0 || hostSlot >= HOST_SLOT_COUNT) {
+          throw new Error("Host slot out of range: " + hostSlot);
+        }
+        return hostSlot;
+      }
+
+      function normalizeDeviceSlotIndex(deviceSlotIndex) {
+        const deviceSlot = deviceSlotIndex | 0;
+        if (deviceSlot < 0 || deviceSlot >= DEVICE_SLOT_COUNT) {
+          throw new Error("Device slot out of range: " + deviceSlot);
+        }
+        return deviceSlot;
+      }
+
+      function clearLegacyDisk1Fields(target) {
+        if (!target) return;
+        delete target.disk1;
+        delete target.disk1Size;
+        delete target.disk1Name;
+      }
+
+      function migrateLegacyDisk1(source) {
+        if (!source || !source.disk1 || !source.disk1.length) return false;
+        if (machine.media.diskImages.length > 0) return false;
+        const legacyBytes = source.disk1;
+        const image = createDiskImage(legacyBytes, source.disk1Name || "disk.atr");
+        const legacySize = source.disk1Size | 0;
+        if (legacySize > 0 && legacySize <= legacyBytes.length)
+          image.size = legacySize;
+        const imageIndex = machine.media.diskImages.length | 0;
+        machine.media.diskImages.push(image);
+        if (
+          machine.media.hostSlots[0] === null ||
+          machine.media.hostSlots[0] === undefined
+        ) {
+          machine.media.hostSlots[0] = imageIndex;
+        }
+        if ((machine.media.deviceSlots[0] | 0) === NO_IMAGE_MOUNTED) {
+          machine.media.deviceSlots[0] = imageIndex;
+        }
+        return true;
       }
 
       function ensureMediaLayout() {
         if (!machine.media) machine.media = {};
         if (!Array.isArray(machine.media.hostSlots))
           machine.media.hostSlots = new Array(HOST_SLOT_COUNT).fill(null);
-        if (!(machine.media.deviceSlots instanceof Int16Array))
+        else if (machine.media.hostSlots.length !== HOST_SLOT_COUNT)
+          machine.media.hostSlots = new Array(HOST_SLOT_COUNT).fill(null);
+        if (
+          !(machine.media.deviceSlots instanceof Int16Array) ||
+          machine.media.deviceSlots.length !== DEVICE_SLOT_COUNT
+        )
           machine.media.deviceSlots = makeDefaultDeviceSlots();
         if (!Array.isArray(machine.media.diskImages)) machine.media.diskImages = [];
+
+        // One-time compatibility migration from legacy disk1 fields.
+        let migrated = migrateLegacyDisk1(machine.media);
+        if (
+          !migrated &&
+          machine.ctx &&
+          machine.ctx.ioData &&
+          machine.ctx.ioData !== machine.media
+        ) {
+          migrated = migrateLegacyDisk1(machine.ctx.ioData);
+        }
+        // Always drop legacy fields after optional migration to avoid stale state.
+        clearLegacyDisk1Fields(machine.media);
+        if (machine.ctx && machine.ctx.ioData)
+          clearLegacyDisk1Fields(machine.ctx.ioData);
       }
 
-      function syncLegacyDisk1MirrorFromSlots() {
-        ensureMediaLayout();
-        const d1Index = machine.media.deviceSlots[0] | 0;
-        const image =
-          d1Index >= 0 && d1Index < machine.media.diskImages.length
-            ? machine.media.diskImages[d1Index]
-            : null;
-        if (!image || !image.bytes) {
-          machine.media.disk1 = null;
-          machine.media.disk1Size = 0;
-          machine.media.disk1Name = null;
-          return;
+      function getDiskImageByIndex(imageIndex) {
+        const idx = imageIndex | 0;
+        if (idx < 0 || idx >= machine.media.diskImages.length) return null;
+        const image = machine.media.diskImages[idx];
+        if (!image || !image.bytes) return null;
+        return image;
+      }
+
+      function isValidImageIndex(imageIndex) {
+        if (imageIndex === null || imageIndex === undefined) return false;
+        return !!getDiskImageByIndex(imageIndex);
+      }
+
+      function storeDiskImage(bytes, name, preferredIndex) {
+        const image = createDiskImage(bytes, name || "disk.atr");
+        if (isValidImageIndex(preferredIndex)) {
+          const preferred = preferredIndex | 0;
+          machine.media.diskImages[preferred] = image;
+          return preferred;
         }
-        machine.media.disk1 = image.bytes;
-        machine.media.disk1Size = image.size | 0;
-        machine.media.disk1Name = image.name || "disk.atr";
+        const imageIndex = machine.media.diskImages.length | 0;
+        machine.media.diskImages.push(image);
+        return imageIndex;
       }
 
       function copyMediaToIoData() {
         const io = machine.ctx.ioData;
         ensureMediaLayout();
-        syncLegacyDisk1MirrorFromSlots();
         io.hostSlots = machine.media.hostSlots;
         io.deviceSlots = machine.media.deviceSlots;
         io.diskImages = machine.media.diskImages;
-        io.disk1 = machine.media.disk1;
-        io.disk1Size = machine.media.disk1Size | 0;
-        io.disk1Name = machine.media.disk1Name;
         io.basicRom = machine.media.basicRom;
         io.osRom = machine.media.osRom;
         io.selfTestRom = machine.media.selfTestRom;
@@ -128,7 +197,6 @@
 
       function hardReset() {
         ensureMediaLayout();
-        syncLegacyDisk1MirrorFromSlots();
         machine.ctx.cycleCounter = 0;
         machine.ctx.stallCycleCounter = 0;
         machine.ctx.irqPending = 0;
@@ -200,44 +268,101 @@
         setupMemoryMap();
       }
 
-      function loadDisk1(arrayBuffer, name) {
-        ensureMediaLayout();
-        const bytes = new Uint8Array(arrayBuffer);
-        machine.media.diskImages[0] = createDiskImage(bytes, name || "disk.atr");
-        machine.media.hostSlots[0] = 0;
-        machine.media.deviceSlots[0] = 0;
-        copyMediaToIoData();
-      }
-
       function loadDiskToHostSlot(arrayBuffer, name, hostSlotIndex) {
         ensureMediaLayout();
-        const slot = hostSlotIndex | 0;
-        if (slot < 0 || slot >= HOST_SLOT_COUNT) {
-          throw new Error("Host slot out of range: " + slot);
-        }
+        const hostSlot = normalizeHostSlotIndex(hostSlotIndex);
         const bytes = new Uint8Array(arrayBuffer);
-        const image = createDiskImage(bytes, name || "disk.atr");
-        const imageIndex = machine.media.diskImages.length | 0;
-        machine.media.diskImages.push(image);
-        machine.media.hostSlots[slot] = imageIndex;
+        const hostImageIndex = machine.media.hostSlots[hostSlot];
+        const imageIndex = storeDiskImage(bytes, name, hostImageIndex);
+        machine.media.hostSlots[hostSlot] = imageIndex;
         copyMediaToIoData();
         return imageIndex;
       }
 
+      function mountImageToDeviceSlot(imageIndex, deviceSlotIndex) {
+        ensureMediaLayout();
+        const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
+        const idx = imageIndex | 0;
+        if (idx === NO_IMAGE_MOUNTED) {
+          machine.media.deviceSlots[deviceSlot] = NO_IMAGE_MOUNTED;
+          copyMediaToIoData();
+          return;
+        }
+        const image = getDiskImageByIndex(idx);
+        if (!image) throw new Error("Disk image index out of range: " + idx);
+        machine.media.deviceSlots[deviceSlot] = idx;
+        copyMediaToIoData();
+      }
+
       function mountHostSlotToDeviceSlot(hostSlotIndex, deviceSlotIndex) {
         ensureMediaLayout();
-        const hostSlot = hostSlotIndex | 0;
-        const deviceSlot = deviceSlotIndex | 0;
-        if (hostSlot < 0 || hostSlot >= HOST_SLOT_COUNT) {
-          throw new Error("Host slot out of range: " + hostSlot);
-        }
-        if (deviceSlot < 0 || deviceSlot >= DEVICE_SLOT_COUNT) {
-          throw new Error("Device slot out of range: " + deviceSlot);
-        }
+        const hostSlot = normalizeHostSlotIndex(hostSlotIndex);
+        const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
         const imageIndex = machine.media.hostSlots[hostSlot];
         machine.media.deviceSlots[deviceSlot] =
-          imageIndex === null || imageIndex === undefined ? -1 : imageIndex | 0;
+          imageIndex === null || imageIndex === undefined
+            ? NO_IMAGE_MOUNTED
+            : imageIndex | 0;
         copyMediaToIoData();
+      }
+
+      function loadDiskToDeviceSlot(
+        arrayBuffer,
+        name,
+        deviceSlotIndex,
+        hostSlotIndex,
+      ) {
+        ensureMediaLayout();
+        const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
+        // hostSlotIndex is optional. When omitted, this call only mounts to the
+        // target device slot and leaves host slot bindings unchanged.
+        const hasHostSlot =
+          hostSlotIndex !== undefined && hostSlotIndex !== null;
+        const hostSlot = hasHostSlot ? normalizeHostSlotIndex(hostSlotIndex) : -1;
+        const hostImageIndex = hasHostSlot
+          ? machine.media.hostSlots[hostSlot]
+          : NO_IMAGE_MOUNTED;
+        const deviceImageIndex = machine.media.deviceSlots[deviceSlot] | 0;
+        const preferredImageIndex = isValidImageIndex(hostImageIndex)
+          ? hostImageIndex
+          : isValidImageIndex(deviceImageIndex)
+            ? deviceImageIndex
+            : NO_IMAGE_MOUNTED;
+        const bytes = new Uint8Array(arrayBuffer);
+        const imageIndex = storeDiskImage(bytes, name, preferredImageIndex);
+        if (hasHostSlot) {
+          machine.media.hostSlots[hostSlot] = imageIndex;
+        }
+        machine.media.deviceSlots[deviceSlot] = imageIndex;
+        copyMediaToIoData();
+        return imageIndex;
+      }
+
+      function unmountDeviceSlot(deviceSlotIndex) {
+        ensureMediaLayout();
+        const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
+        machine.media.deviceSlots[deviceSlot] = NO_IMAGE_MOUNTED;
+        copyMediaToIoData();
+      }
+
+      function getMountedDiskForDeviceSlot(deviceSlotIndex) {
+        ensureMediaLayout();
+        const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
+        const imageIndex = machine.media.deviceSlots[deviceSlot] | 0;
+        if (imageIndex === NO_IMAGE_MOUNTED) return null;
+        const image = getDiskImageByIndex(imageIndex);
+        if (!image) return null;
+        return {
+          deviceSlot: deviceSlot,
+          imageIndex: imageIndex,
+          name: image.name || "disk.atr",
+          size: image.size | 0 || image.bytes.length | 0,
+          writable: image.writable !== false,
+        };
+      }
+
+      function hasMountedDiskForDeviceSlot(deviceSlotIndex) {
+        return !!getMountedDiskForDeviceSlot(deviceSlotIndex);
       }
 
       return {
@@ -245,9 +370,13 @@
         hardReset: hardReset,
         loadOsRom: loadOsRom,
         loadBasicRom: loadBasicRom,
-        loadDisk1: loadDisk1,
         loadDiskToHostSlot: loadDiskToHostSlot,
+        loadDiskToDeviceSlot: loadDiskToDeviceSlot,
         mountHostSlotToDeviceSlot: mountHostSlotToDeviceSlot,
+        mountImageToDeviceSlot: mountImageToDeviceSlot,
+        unmountDeviceSlot: unmountDeviceSlot,
+        getMountedDiskForDeviceSlot: getMountedDiskForDeviceSlot,
+        hasMountedDiskForDeviceSlot: hasMountedDiskForDeviceSlot,
       };
     }
 

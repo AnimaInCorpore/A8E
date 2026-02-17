@@ -17,11 +17,21 @@
     const IRQ_BREAK_KEY_PRESSED = cfg.IRQ_BREAK_KEY_PRESSED;
     const KEY_CODE_TABLE = cfg.KEY_CODE_TABLE;
     const browserKeyToSdlSym = cfg.browserKeyToSdlSym;
+    const SDLK_UP = 273;
+    const SDLK_DOWN = 274;
+    const SDLK_LEFT = 276;
+    const SDLK_RIGHT = 275;
+    // These masks must stay aligned with IO_PORTA joystick direction bits.
+    const JOYSTICK_UP_MASK = 0x01;
+    const JOYSTICK_DOWN_MASK = 0x02;
+    const JOYSTICK_LEFT_MASK = 0x04;
+    const JOYSTICK_RIGHT_MASK = 0x08;
 
     function createRuntime(opts) {
       const machine = opts.machine;
       const isReady = opts.isReady;
       let pressedKeys = {};
+      let joystickArrowMask = 0;
 
       function normalizeSourceToken(e) {
         if (!e || e.sourceToken === undefined || e.sourceToken === null)
@@ -109,6 +119,45 @@
         ctx.ram[reg] = physical;
       }
 
+      function queueKeyCode(kc) {
+        machine.ctx.ram[IO_STIMER_KBCODE] = kc & 0xff;
+        machine.ctx.ram[IO_IRQEN_IRQST] &= ~IRQ_OTHER_KEY_PRESSED;
+        if (machine.ctx.sram[IO_IRQEN_IRQST] & IRQ_OTHER_KEY_PRESSED)
+          CPU.irq(machine.ctx);
+        machine.ctx.ioData.keyPressCounter++;
+        machine.ctx.ram[IO_SKCTL_SKSTAT] &= ~0x04;
+      }
+
+      function joystickMaskForArrowSym(sym) {
+        if (sym === SDLK_UP) return JOYSTICK_UP_MASK;
+        if (sym === SDLK_DOWN) return JOYSTICK_DOWN_MASK;
+        if (sym === SDLK_LEFT) return JOYSTICK_LEFT_MASK;
+        if (sym === SDLK_RIGHT) return JOYSTICK_RIGHT_MASK;
+        return 0;
+      }
+
+      function cursorKeyCodeForArrowSym(sym) {
+        if (sym === SDLK_UP) return 54 | 0x80; // Ctrl + '-'
+        if (sym === SDLK_DOWN) return 55 | 0x80; // Ctrl + '='
+        if (sym === SDLK_LEFT) return 6 | 0x80; // Ctrl + '+'
+        if (sym === SDLK_RIGHT) return 7 | 0x80; // Ctrl + '*'
+        return null;
+      }
+
+      function engageJoystickArrow(mask) {
+        if (!mask) return false;
+        const wasEngaged = (joystickArrowMask & mask) !== 0;
+        joystickArrowMask |= mask;
+        return !wasEngaged;
+      }
+
+      function releaseJoystickArrow(mask) {
+        if (!mask) return false;
+        const wasEngaged = (joystickArrowMask & mask) !== 0;
+        joystickArrowMask &= ~mask;
+        return wasEngaged;
+      }
+
       function onKeyDown(e) {
         if (!isReady()) return false;
         const sym = browserKeyToSdlSym(e);
@@ -118,20 +167,16 @@
         if (!down.newlyPressed) return true;
 
         // Joystick / console / reset/break follow C behavior.
-        if (sym === 273) {
-          machine.ctx.ram[IO_PORTA] &= ~0x01;
-          return true;
-        }
-        if (sym === 274) {
-          machine.ctx.ram[IO_PORTA] &= ~0x02;
-          return true;
-        }
-        if (sym === 276) {
-          machine.ctx.ram[IO_PORTA] &= ~0x04;
-          return true;
-        }
-        if (sym === 275) {
-          machine.ctx.ram[IO_PORTA] &= ~0x08;
+        const arrowMask = joystickMaskForArrowSym(sym);
+        if (arrowMask) {
+          if (e.shiftKey) {
+            const cursorKeyCode = cursorKeyCodeForArrowSym(sym);
+            if (cursorKeyCode !== null) queueKeyCode(cursorKeyCode);
+            return true;
+          }
+          if (engageJoystickArrow(arrowMask)) {
+            machine.ctx.ram[IO_PORTA] &= ~arrowMask;
+          }
           return true;
         }
 
@@ -165,6 +210,8 @@
           return true;
         }
         if (sym === 286) {
+          joystickArrowMask = 0;
+          machine.ctx.ram[IO_PORTA] |= 0x0f;
           CPU.reset(machine.ctx);
           return true;
         }
@@ -189,14 +236,7 @@
         if (e.ctrlKey) kc |= 0x80;
         if (e.shiftKey) kc |= 0x40;
 
-        machine.ctx.ram[IO_STIMER_KBCODE] = kc & 0xff;
-
-        machine.ctx.ram[IO_IRQEN_IRQST] &= ~IRQ_OTHER_KEY_PRESSED;
-        if (machine.ctx.sram[IO_IRQEN_IRQST] & IRQ_OTHER_KEY_PRESSED)
-          CPU.irq(machine.ctx);
-
-        machine.ctx.ioData.keyPressCounter++;
-        machine.ctx.ram[IO_SKCTL_SKSTAT] &= ~0x04;
+        queueKeyCode(kc);
         return true;
       }
 
@@ -208,20 +248,11 @@
         if (!up.handled) return false;
         if (!up.newlyReleased) return true;
 
-        if (sym === 273) {
-          machine.ctx.ram[IO_PORTA] |= 0x01;
-          return true;
-        }
-        if (sym === 274) {
-          machine.ctx.ram[IO_PORTA] |= 0x02;
-          return true;
-        }
-        if (sym === 276) {
-          machine.ctx.ram[IO_PORTA] |= 0x04;
-          return true;
-        }
-        if (sym === 275) {
-          machine.ctx.ram[IO_PORTA] |= 0x08;
+        const arrowMask = joystickMaskForArrowSym(sym);
+        if (arrowMask) {
+          if (releaseJoystickArrow(arrowMask)) {
+            machine.ctx.ram[IO_PORTA] |= arrowMask;
+          }
           return true;
         }
         if (sym === 308) {
@@ -269,6 +300,7 @@
 
       function releaseAll() {
         pressedKeys = {};
+        joystickArrowMask = 0;
         machine.ctx.ioData.keyPressCounter = 0;
         machine.ctx.ram[IO_PORTA] |= 0x0f;
         setTriggerPressed(0, false);

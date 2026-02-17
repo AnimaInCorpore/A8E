@@ -20,25 +20,53 @@
               <img src="a8e.webp" alt="A8E Logo" style="max-width: 100%; height: auto;"><br />
               <em>Emulator by Sascha Springer • CRT Shader by Timothy Lottes</em><br />
               <em id="buildVersionLine" style="font-size: 11px; opacity: 0.8;">Build version: loading...</em><br />
-              <em style="font-size: 11px; opacity: 0.7;">JavaScript port developed with AI assistance</em><br />
-              <br />
-              <strong>Keyboard Controls:</strong><br />
-              Type normally on the Atari keyboard. Use Ctrl and Shift as modifiers.<br />
-              <br />
-              <strong>Joystick Controls:</strong><br />
-              • <strong>Arrow Keys</strong> - Joystick direction (Up/Down/Left/Right)<br />
-              • <strong>Left Alt</strong> - Fire button (Trigger 0)<br />
-              • <strong>Right Alt</strong> - Trigger 2<br />
-              • <strong>Win/Cmd</strong> - Trigger 3<br />
-              <br />
-              <strong>Console Keys:</strong><br />
-              <strong>F2</strong> OPTION • <strong>F3</strong> SELECT • <strong>F4</strong> START • <strong>F5</strong> RESET • <strong>F8</strong> BREAK<br />
-              <br />
-              <strong>Status Icons:</strong> <i class="fa-solid fa-circle-xmark"></i> not loaded • <i class="fa-solid fa-circle-check"></i> loaded<br />
-              <strong>Menu Icons:</strong><br />
-              <i class="fa-solid fa-play"></i> run/pause • <i class="fa-solid fa-rotate-right"></i> reset • <i class="fa-solid fa-expand"></i> fullscreen<br />
-              <i class="fa-solid fa-microchip"></i> CPU turbo • <i class="fa-solid fa-floppy-disk"></i> SIO turbo • <i class="fa-solid fa-volume-high"></i> audio<br />
-              <i class="fa-solid fa-gamepad"></i> joystick panel • <i class="fa-solid fa-keyboard"></i> keyboard panel • <i class="fa-solid fa-hand-point-down"></i> OPTION on boot (BASIC off)<br />
+              <em style="font-size: 11px; opacity: 0.7;">JavaScript port developed with AI assistance</em>
+
+              <div class="tt-section">
+                <span class="tt-heading">Keyboard</span>
+                Type normally on the Atari keyboard. Use Ctrl and Shift as modifiers.
+              </div>
+
+              <div class="tt-section">
+                <span class="tt-heading">Joystick</span>
+                <div class="tt-row"><span class="tt-key">Arrow Keys</span> Direction</div>
+                <div class="tt-row"><span class="tt-key">Shift + Arrows</span> Atari cursor keys</div>
+                <div class="tt-row"><span class="tt-key">Left Alt</span> Fire button</div>
+                <div class="tt-row"><span class="tt-key">Right Alt</span> Trigger 2</div>
+                <div class="tt-row"><span class="tt-key">Win / Cmd</span> Trigger 3</div>
+              </div>
+
+              <div class="tt-section">
+                <span class="tt-heading">Console Keys</span>
+                <div class="tt-row"><span class="tt-key">F2</span> OPTION</div>
+                <div class="tt-row"><span class="tt-key">F3</span> SELECT</div>
+                <div class="tt-row"><span class="tt-key">F4</span> START</div>
+                <div class="tt-row"><span class="tt-key">F5</span> RESET</div>
+                <div class="tt-row"><span class="tt-key">F8</span> BREAK</div>
+              </div>
+
+              <div class="tt-section">
+                <span class="tt-heading">Status Icons</span>
+                <div class="tt-icons">
+                  <span class="tt-icon"><i class="fa-solid fa-circle-xmark"></i> not loaded</span>
+                  <span class="tt-icon"><i class="fa-solid fa-circle-check"></i> loaded</span>
+                </div>
+              </div>
+
+              <div class="tt-section">
+                <span class="tt-heading">Menu Icons</span>
+                <div class="tt-icons">
+                  <span class="tt-icon"><i class="fa-solid fa-play"></i> run/pause</span>
+                  <span class="tt-icon"><i class="fa-solid fa-rotate-right"></i> reset</span>
+                  <span class="tt-icon"><i class="fa-solid fa-expand"></i> fullscreen</span>
+                  <span class="tt-icon"><i class="fa-solid fa-microchip"></i> CPU turbo</span>
+                  <span class="tt-icon"><i class="fa-solid fa-floppy-disk"></i> SIO turbo</span>
+                  <span class="tt-icon"><i class="fa-solid fa-volume-high"></i> audio</span>
+                  <span class="tt-icon"><i class="fa-solid fa-gamepad"></i> joystick</span>
+                  <span class="tt-icon"><i class="fa-solid fa-keyboard"></i> keyboard</span>
+                  <span class="tt-icon"><i class="fa-solid fa-hand-point-down"></i> BASIC off</span>
+                </div>
+              </div>
             </span>
           </span>
         </div>
@@ -185,8 +213,8 @@
                     <button type="button" class="kbKey key" data-key="k" data-code="KeyK">K</button>
                     <button type="button" class="kbKey key" data-key="l" data-code="KeyL">L</button>
                     <button type="button" class="kbKey key small" data-key=";" data-code="Semicolon"><span class="leg"><span class="top">:</span><span class="mainlbl">;</span><span class="sublbl"></span></span></button>
-                    <button type="button" class="kbKey key small" data-key="'" data-code="Quote"><span class="leg"><span class="top">\</span><span class="mainlbl">+</span><span class="sublbl"></span></span></button>
-                    <button type="button" class="kbKey key small" data-key="\\" data-code="Backslash" data-sdl="92"><span class="leg"><span class="top">^</span><span class="mainlbl">*</span><span class="sublbl"></span></span></button>
+                    <button type="button" class="kbKey key small" data-key="'" data-code="Quote"><span class="leg"><span class="top">&#x2190;</span><span class="mainlbl">+</span><span class="sublbl">\</span></span></button>
+                    <button type="button" class="kbKey key small" data-key="\\" data-code="Backslash" data-sdl="92"><span class="leg"><span class="top">&#x2192;</span><span class="mainlbl">*</span><span class="sublbl">^</span></span></button>
                     <button type="button" class="kbKey key wide small" style="--w: 1.55;" data-key="CapsLock" data-code="CapsLock" data-sdl="301">CAPS</button>
                   </div>
                   <div class="row">

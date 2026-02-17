@@ -53,11 +53,32 @@
 
 #define FIXED_ADD(address, bits, value) ((address) = ((address) & ~(bits)) | (((address) + (value)) & (bits)))
 
+#define JOYSTICK_ARROW_UP_MASK 0x01
+#define JOYSTICK_ARROW_DOWN_MASK 0x02
+#define JOYSTICK_ARROW_LEFT_MASK 0x04
+#define JOYSTICK_ARROW_RIGHT_MASK 0x08
+
 static void AtariIo_FatalMissingRom(const char *pRomFileName)
 {
 	fprintf(stderr, "A8E: ROM file not found: %s (%s)\n", pRomFileName, strerror(errno));
 	fprintf(stderr, "A8E needs the ROM files ATARIBAS.ROM and ATARIXL.ROM in the current working directory.\n");
 	exit(1);
+}
+
+static void AtariIoQueueKeyCode(_6502_Context_t *pContext, IoData_t *pIoData, u8 cKeyCode)
+{
+	RAM[IO_STIMER_KBCODE] = cKeyCode;
+	RAM[IO_IRQEN_IRQST] &= ~IRQ_OTHER_KEY_PRESSED;
+	if(SRAM[IO_IRQEN_IRQST] & IRQ_OTHER_KEY_PRESSED)
+		_6502_Irq(pContext);
+	pIoData->lKeyPressCounter++;
+	RAM[IO_SKCTL_SKSTAT] &= ~0x04;
+}
+
+static void AtariIoResetJoystickArrowState(_6502_Context_t *pContext, IoData_t *pIoData)
+{
+	pIoData->cJoystickArrowMask = 0;
+	RAM[IO_PORTA] |= 0x0f;
 }
 
 typedef struct
@@ -2841,23 +2862,47 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
 	{
 		switch(pKeyboardEvent->keysym.sym)
   		{
-    	case SDLK_UP: // Joystick up
-    		RAM[IO_PORTA] &= ~0x01;
-    		
-			break;	
-    	
-    	case SDLK_DOWN: // Joystick down
-    		RAM[IO_PORTA] &= ~0x02;
-    		
-			break;	
+    	case SDLK_UP: // Joystick up  /  Shift: Atari cursor up (Ctrl+'-')
+    		if(pKeyboardEvent->keysym.mod & KMOD_SHIFT)
+    			AtariIoQueueKeyCode(pContext, pIoData, 54 | 0x80);
+    		else
+			{
+    			RAM[IO_PORTA] &= ~0x01;
+    			pIoData->cJoystickArrowMask |= JOYSTICK_ARROW_UP_MASK;
+			}
 
-    	case SDLK_LEFT: // Joystick left
-    		RAM[IO_PORTA] &= ~0x04;
+			break;
 
-			break;	
+    	case SDLK_DOWN: // Joystick down  /  Shift: Atari cursor down (Ctrl+'=')
+    		if(pKeyboardEvent->keysym.mod & KMOD_SHIFT)
+    			AtariIoQueueKeyCode(pContext, pIoData, 55 | 0x80);
+    		else
+			{
+    			RAM[IO_PORTA] &= ~0x02;
+    			pIoData->cJoystickArrowMask |= JOYSTICK_ARROW_DOWN_MASK;
+			}
 
-    	case SDLK_RIGHT: // Joystick right
-    		RAM[IO_PORTA] &= ~0x08;
+			break;
+
+    	case SDLK_LEFT: // Joystick left  /  Shift: Atari cursor left (Ctrl+'+')
+    		if(pKeyboardEvent->keysym.mod & KMOD_SHIFT)
+    			AtariIoQueueKeyCode(pContext, pIoData, 6 | 0x80);
+    		else
+			{
+    			RAM[IO_PORTA] &= ~0x04;
+    			pIoData->cJoystickArrowMask |= JOYSTICK_ARROW_LEFT_MASK;
+			}
+
+			break;
+
+    	case SDLK_RIGHT: // Joystick right  /  Shift: Atari cursor right (Ctrl+'*')
+    		if(pKeyboardEvent->keysym.mod & KMOD_SHIFT)
+    			AtariIoQueueKeyCode(pContext, pIoData, 7 | 0x80);
+    		else
+			{
+    			RAM[IO_PORTA] &= ~0x08;
+    			pIoData->cJoystickArrowMask |= JOYSTICK_ARROW_RIGHT_MASK;
+			}
 
 			break;	
 
@@ -2882,6 +2927,7 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
     		break;
 
     	case SDLK_F5: // RESET
+			AtariIoResetJoystickArrowState(pContext, pIoData);
 			_6502_Reset(pContext);
     		
     		break;
@@ -2929,14 +2975,7 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
     				if(pKeyboardEvent->keysym.mod & KMOD_SHIFT)
     					cKeyCode |= 0x40;
 
-    				RAM[IO_STIMER_KBCODE] = cKeyCode;
-
-    				RAM[IO_IRQEN_IRQST] &= ~IRQ_OTHER_KEY_PRESSED;
-    				if(SRAM[IO_IRQEN_IRQST] & IRQ_OTHER_KEY_PRESSED)
-    					_6502_Irq(pContext);
-
-    				pIoData->lKeyPressCounter++;
-    				RAM[IO_SKCTL_SKSTAT] &= ~0x04;
+				AtariIoQueueKeyCode(pContext, pIoData, cKeyCode);
                 }
             }
             
@@ -2948,22 +2987,30 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
 		switch(pKeyboardEvent->keysym.sym)
   		{
     	case SDLK_UP: // Joystick up
-    		RAM[IO_PORTA] |= 0x01;
+    		if(pIoData->cJoystickArrowMask & JOYSTICK_ARROW_UP_MASK)
+    			RAM[IO_PORTA] |= 0x01;
+    		pIoData->cJoystickArrowMask &= ~JOYSTICK_ARROW_UP_MASK;
     		
 			break;	
     	
     	case SDLK_DOWN: // Joystick down
-    		RAM[IO_PORTA] |= 0x02;
+    		if(pIoData->cJoystickArrowMask & JOYSTICK_ARROW_DOWN_MASK)
+    			RAM[IO_PORTA] |= 0x02;
+    		pIoData->cJoystickArrowMask &= ~JOYSTICK_ARROW_DOWN_MASK;
     		
 			break;	
 
     	case SDLK_LEFT: // Joystick left
-    		RAM[IO_PORTA] |= 0x04;
+    		if(pIoData->cJoystickArrowMask & JOYSTICK_ARROW_LEFT_MASK)
+    			RAM[IO_PORTA] |= 0x04;
+    		pIoData->cJoystickArrowMask &= ~JOYSTICK_ARROW_LEFT_MASK;
 
 			break;	
 
     	case SDLK_RIGHT: // Joystick right
-    		RAM[IO_PORTA] |= 0x08;
+    		if(pIoData->cJoystickArrowMask & JOYSTICK_ARROW_RIGHT_MASK)
+    			RAM[IO_PORTA] |= 0x08;
+    		pIoData->cJoystickArrowMask &= ~JOYSTICK_ARROW_RIGHT_MASK;
 
 			break;	
 

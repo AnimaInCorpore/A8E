@@ -53,3 +53,31 @@ cmake --build build --target A8E -j
 
 Then run the produced `A8E` executable with ROM files in the current working directory.
 Typical path after this top-level build is `build/A8E/A8E` (or `build/A8E/A8E.exe` on Windows).
+
+## Controls
+
+Both implementations share the same key mappings.
+
+### Keyboard
+
+Type normally on the emulated Atari keyboard. **Ctrl** and **Shift** work as modifiers, matching the original Atari 800 XL layout.
+
+### Joystick
+
+| Key | Function |
+|-----|----------|
+| Arrow Keys | Joystick direction |
+| **Shift** + Arrow Keys | Atari cursor keys (↑ ↓ ← →) |
+| Left Alt | Fire button |
+
+Shift + Arrow is a convenience shortcut — it sends the same key codes as **Ctrl + − / = / + / \*** on the Atari keyboard (the original cursor controls).
+
+### Console Keys
+
+| Key | Function |
+|-----|----------|
+| F2 | OPTION |
+| F3 | SELECT |
+| F4 | START |
+| F5 | RESET |
+| F8 | BREAK |

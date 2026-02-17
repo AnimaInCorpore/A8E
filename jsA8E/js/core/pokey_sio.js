@@ -14,6 +14,8 @@
     let cycleTimedEventUpdate = cfg.cycleTimedEventUpdate;
 
     let SIO_DATA_OFFSET = 32;
+    let DISK_DEVICE_ID_BASE = 0x31;
+    let DISK_DEVICE_COUNT = 8;
 
     function sioChecksum(buf, size) {
       let checksum = 0;
@@ -82,26 +84,21 @@
       queueSerinResponse(ctx, now, dataSize + 3);
     }
 
+    function deviceSlotIndexFromDeviceId(devId) {
+      let slot = (devId & 0xff) - DISK_DEVICE_ID_BASE;
+      if (slot < 0 || slot >= DISK_DEVICE_COUNT) return -1;
+      return slot;
+    }
+
     function getMountedDiskForDevice(io, devId) {
-      let slot = (devId & 0xff) - 0x31;
-      if (slot < 0 || slot > 7) return null;
+      let slot = deviceSlotIndexFromDeviceId(devId);
+      if (slot < 0) return null;
 
       let slots = io.deviceSlots;
       let images = io.diskImages;
-      let imageIndex = -1;
-
-      if (slots && typeof slots.length === "number" && slot < slots.length) {
-        imageIndex = slots[slot] | 0;
-      } else if (slot === 0) {
-        // Backward-compatible fallback while slot wiring is rolling out.
-        if (io.disk1) {
-          return {
-            bytes: io.disk1,
-            size: io.disk1Size | 0 || io.disk1.length | 0,
-          };
-        }
+      if (!slots || typeof slots.length !== "number" || slot >= slots.length)
         return null;
-      }
+      let imageIndex = slots[slot] | 0;
 
       if (
         imageIndex >= 0 &&
@@ -116,13 +113,6 @@
             size: img.size | 0 || img.bytes.length | 0,
           };
         }
-      }
-
-      if (slot === 0 && io.disk1) {
-        return {
-          bytes: io.disk1,
-          size: io.disk1Size | 0 || io.disk1.length | 0,
-        };
       }
 
       return null;
@@ -283,7 +273,11 @@
     }
 
     let sioDeviceHandlers = Object.create(null);
-    for (let devId = 0x31; devId <= 0x38; devId++) {
+    for (
+      let devId = DISK_DEVICE_ID_BASE;
+      devId < DISK_DEVICE_ID_BASE + DISK_DEVICE_COUNT;
+      devId++
+    ) {
       sioDeviceHandlers[devId] = diskDevice(devId);
     }
 
