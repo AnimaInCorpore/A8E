@@ -13,8 +13,8 @@ The original codebase is by Sascha Springer (2004). Each subproject has its own 
 
 | Directory | Description |
 |-----------|-------------|
-| `A8E/` | Native C/SDL code and CMake project |
-| `jsA8E/` | Browser app (`index.html` + JavaScript modules + shaders) |
+| `A8E/` | [Native C/SDL code and CMake project](A8E/README.md) |
+| `jsA8E/` | [Browser app (`index.html` + JavaScript modules + shaders)](jsA8E/README.md) |
 | `disks/` | Optional ATR disk images and XEX executables for testing |
 
 ## ROM Requirements
