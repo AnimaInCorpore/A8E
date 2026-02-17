@@ -12,14 +12,16 @@ The executable requires these ROM files in its current working directory:
 Disk handling:
 
 - Startup default disk path is `d1.atr` (lowercase) if no disk argument is passed.
-- You can pass a different ATR file as the first non-flag argument.
+- You can pass either an ATR image (`.atr`) or an Atari executable (`.xex`) as the first non-flag argument.
+- `.xex` files are converted to a temporary ATR layout at load time, using the built-in XEX boot loader.
+  - Conversion normalizes XEX segments and supports multi-segment files with `INITAD`/`RUNAD` behavior.
 - Pressing `F11` attempts to reload `D1.ATR` (uppercase) from the current working directory.
   - On Linux/macOS, filename case matters.
 
 ## Command Line
 
 ```text
-A8E [options] [disk.atr]
+A8E [options] [disk.atr|program.xex]
 ```
 
 Options currently implemented:
@@ -76,3 +78,5 @@ Example with explicit disk:
 
 - Linux/macOS: `./A8E/build/A8E disks/dos.atr`
 - Windows: `.\A8E\build\msys2-mingw64\A8E.exe disks\dos.atr`
+- Linux/macOS (XEX): `./A8E/build/A8E disks/game.xex`
+- Windows (XEX): `.\A8E\build\msys2-mingw64\A8E.exe disks\game.xex`

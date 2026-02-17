@@ -531,7 +531,6 @@
       osRomLoaded: false,
       basicRomLoaded: false,
       media: {
-        hostSlots: new Array(8).fill(null),
         deviceSlots: new Int16Array([-1, -1, -1, -1, -1, -1, -1, -1]),
         diskImages: [],
         basicRom: null,
@@ -574,9 +573,7 @@
     let hardReset = memoryRuntime.hardReset;
     let loadOsRom = memoryRuntime.loadOsRom;
     let loadBasicRom = memoryRuntime.loadBasicRom;
-    let loadDiskToHostSlot = memoryRuntime.loadDiskToHostSlot;
     let loadDiskToDeviceSlot = memoryRuntime.loadDiskToDeviceSlot;
-    let mountHostSlotToDeviceSlot = memoryRuntime.mountHostSlotToDeviceSlot;
     let mountImageToDeviceSlot = memoryRuntime.mountImageToDeviceSlot;
     let unmountDeviceSlot = memoryRuntime.unmountDeviceSlot;
     let getMountedDiskForDeviceSlot = memoryRuntime.getMountedDiskForDeviceSlot;
@@ -804,8 +801,6 @@
       loadOsRom: loadOsRom,
       loadBasicRom: loadBasicRom,
       loadDiskToDeviceSlot: loadDiskToDeviceSlot,
-      loadDiskToHostSlot: loadDiskToHostSlot,
-      mountHostSlotToDeviceSlot: mountHostSlotToDeviceSlot,
       mountImageToDeviceSlot: mountImageToDeviceSlot,
       unmountDeviceSlot: unmountDeviceSlot,
       getMountedDiskForDeviceSlot: getMountedDiskForDeviceSlot,

@@ -1,10 +1,176 @@
 (function () {
   "use strict";
 
+  /* XEX boot loader - same 6502 code as the C implementation.
+     See A8E/AtariIo.c for the fully commented assembly listing. */
+  var XEX_BOOT_LOADER = [
+    /* boot header */
+    0x00, 0x03, 0x00, 0x07, 0x07, 0x07, 0x60,
+    /* entry: clear RUNAD/INITAD, init state */
+    0xA9, 0x00, 0x8D, 0xE0, 0x02, 0x8D, 0xE1, 0x02,
+    0x8D, 0xE2, 0x02, 0x8D, 0xE3, 0x02, 0x85, 0x48,
+    0xA9, 0x04, 0x85, 0x49, 0xA9, 0x00, 0x85, 0x4A,
+    /* parse_header */
+    0x20, 0x7E, 0x07, 0xC9, 0xFF, 0xD0, 0x4F,
+    0x20, 0x7E, 0x07, 0xC9, 0xFF, 0xD0, 0x48,
+    0x20, 0x7E, 0x07, 0x85, 0x43,
+    0x20, 0x7E, 0x07, 0x85, 0x44,
+    0x20, 0x7E, 0x07, 0x85, 0x45,
+    0x20, 0x7E, 0x07, 0x85, 0x46,
+    /* copy_loop */
+    0x20, 0x7E, 0x07, 0xA0, 0x00, 0x91, 0x43,
+    0xE6, 0x43, 0xD0, 0x02, 0xE6, 0x44,
+    /* check_end */
+    0xA5, 0x44, 0xC5, 0x46, 0x90, 0xED, 0xD0, 0x06,
+    0xA5, 0x45, 0xC5, 0x43, 0xB0, 0xE5,
+    /* check_init: call INITAD if set */
+    0xAD, 0xE3, 0x02, 0xF0, 0xBE,
+    0xA9, 0x07, 0x48, 0xA9, 0x69, 0x48, 0x6C, 0xE2, 0x02,
+    /* return from INIT: clear INITAD, loop */
+    0xA9, 0x00, 0x8D, 0xE2, 0x02, 0x8D, 0xE3, 0x02,
+    0x4C, 0x1F, 0x07,
+    /* run_addr */
+    0xAD, 0xE1, 0x02, 0xF0, 0x03, 0x6C, 0xE0, 0x02,
+    /* done */
+    0x60,
+    /* get_byte */
+    0xA5, 0x48, 0xD0, 0x03, 0x20, 0x8F, 0x07,
+    0xA6, 0x47, 0xBD, 0x00, 0x06, 0xE6, 0x47, 0xC6, 0x48, 0x60,
+    /* read_sector */
+    0xA9, 0x31, 0x8D, 0x00, 0x03,
+    0xA9, 0x01, 0x8D, 0x01, 0x03,
+    0xA9, 0x52, 0x8D, 0x02, 0x03,
+    0xA9, 0x40, 0x8D, 0x03, 0x03,
+    0xA9, 0x00, 0x8D, 0x04, 0x03,
+    0xA9, 0x06, 0x8D, 0x05, 0x03,
+    0xA9, 0x07, 0x8D, 0x06, 0x03,
+    0xA9, 0x80, 0x8D, 0x08, 0x03,
+    0xA9, 0x00, 0x8D, 0x09, 0x03,
+    0xA5, 0x49, 0x8D, 0x0A, 0x03,
+    0xA5, 0x4A, 0x8D, 0x0B, 0x03,
+    0x20, 0x59, 0xE4,
+    0xE6, 0x49, 0xD0, 0x02, 0xE6, 0x4A,
+    0xA9, 0x00, 0x85, 0x47,
+    0xA9, 0x80, 0x85, 0x48,
+    0x60
+  ];
+
+  function isXexFile(name) {
+    if (!name) return false;
+    var dot = name.lastIndexOf(".");
+    if (dot < 0) return false;
+    var ext = name.substring(dot).toLowerCase();
+    return ext === ".xex";
+  }
+
+  function normalizeXex(xexBytes) {
+    var i = 0;
+    var total = 0;
+    var foundSegment = false;
+
+    while (i < xexBytes.length) {
+      while (
+        i + 1 < xexBytes.length &&
+        xexBytes[i] === 0xff &&
+        xexBytes[i + 1] === 0xff
+      ) {
+        i += 2;
+      }
+
+      if (i >= xexBytes.length) break;
+      if (i + 3 >= xexBytes.length) break;
+
+      var start = (xexBytes[i] & 0xff) | ((xexBytes[i + 1] & 0xff) << 8);
+      var end = (xexBytes[i + 2] & 0xff) | ((xexBytes[i + 3] & 0xff) << 8);
+      if (end < start) return null;
+
+      var segmentSize = end - start + 1;
+      i += 4;
+      if (i + segmentSize > xexBytes.length) return null;
+
+      total += 6 + segmentSize;
+      i += segmentSize;
+      foundSegment = true;
+    }
+
+    if (!foundSegment) return null;
+
+    var normalized = new Uint8Array(total);
+    var out = 0;
+    i = 0;
+
+    while (i < xexBytes.length) {
+      while (
+        i + 1 < xexBytes.length &&
+        xexBytes[i] === 0xff &&
+        xexBytes[i + 1] === 0xff
+      ) {
+        i += 2;
+      }
+
+      if (i >= xexBytes.length) break;
+      if (i + 3 >= xexBytes.length) break;
+
+      var startLo = xexBytes[i] & 0xff;
+      var startHi = xexBytes[i + 1] & 0xff;
+      var endLo = xexBytes[i + 2] & 0xff;
+      var endHi = xexBytes[i + 3] & 0xff;
+      var start2 = startLo | (startHi << 8);
+      var end2 = endLo | (endHi << 8);
+      if (end2 < start2) return null;
+
+      var segmentSize2 = end2 - start2 + 1;
+      i += 4;
+      if (i + segmentSize2 > xexBytes.length) return null;
+
+      normalized[out++] = 0xff;
+      normalized[out++] = 0xff;
+      normalized[out++] = startLo;
+      normalized[out++] = startHi;
+      normalized[out++] = endLo;
+      normalized[out++] = endHi;
+      normalized.set(xexBytes.subarray(i, i + segmentSize2), out);
+      out += segmentSize2;
+      i += segmentSize2;
+    }
+
+    return out === normalized.length ? normalized : null;
+  }
+
+  function xexToAtr(xexBytes) {
+    var normalizedXex = normalizeXex(xexBytes);
+    if (!normalizedXex) return null;
+
+    var normalizedSize = normalizedXex.length;
+    var dataSectors = ((normalizedSize + 127) / 128) | 0;
+    var totalSize = 16 + 384 + dataSectors * 128;
+    var paragraphs = ((totalSize - 16) / 16) | 0;
+    var atr = new Uint8Array(totalSize);
+
+    // ATR header
+    atr[0] = 0x96;
+    atr[1] = 0x02;
+    atr[2] = paragraphs & 0xFF;
+    atr[3] = (paragraphs >> 8) & 0xFF;
+    atr[4] = 0x80; // sector size 128
+    atr[5] = 0x00;
+    atr[6] = (paragraphs >> 16) & 0xFF;
+    atr[7] = (paragraphs >> 24) & 0xFF;
+
+    // Boot loader into sectors 1-3 (offset 16, 384 bytes)
+    for (var i = 0; i < XEX_BOOT_LOADER.length; i++) {
+      atr[16 + i] = XEX_BOOT_LOADER[i];
+    }
+
+    // XEX data into sectors 4+ (offset 16 + 384 = 400)
+    atr.set(normalizedXex, 400);
+
+    return atr;
+  }
+
   function createApi(cfg) {
     const CPU = cfg.CPU;
     const IO_PORTB = cfg.IO_PORTB;
-    const HOST_SLOT_COUNT = 8;
     const DEVICE_SLOT_COUNT = 8;
     const NO_IMAGE_MOUNTED = -1;
 
@@ -27,14 +193,6 @@
         const slots = new Int16Array(DEVICE_SLOT_COUNT);
         for (let i = 0; i < DEVICE_SLOT_COUNT; i++) slots[i] = NO_IMAGE_MOUNTED;
         return slots;
-      }
-
-      function normalizeHostSlotIndex(hostSlotIndex) {
-        const hostSlot = hostSlotIndex | 0;
-        if (hostSlot < 0 || hostSlot >= HOST_SLOT_COUNT) {
-          throw new Error("Host slot out of range: " + hostSlot);
-        }
-        return hostSlot;
       }
 
       function normalizeDeviceSlotIndex(deviceSlotIndex) {
@@ -62,12 +220,6 @@
           image.size = legacySize;
         const imageIndex = machine.media.diskImages.length | 0;
         machine.media.diskImages.push(image);
-        if (
-          machine.media.hostSlots[0] === null ||
-          machine.media.hostSlots[0] === undefined
-        ) {
-          machine.media.hostSlots[0] = imageIndex;
-        }
         if ((machine.media.deviceSlots[0] | 0) === NO_IMAGE_MOUNTED) {
           machine.media.deviceSlots[0] = imageIndex;
         }
@@ -76,10 +228,6 @@
 
       function ensureMediaLayout() {
         if (!machine.media) machine.media = {};
-        if (!Array.isArray(machine.media.hostSlots))
-          machine.media.hostSlots = new Array(HOST_SLOT_COUNT).fill(null);
-        else if (machine.media.hostSlots.length !== HOST_SLOT_COUNT)
-          machine.media.hostSlots = new Array(HOST_SLOT_COUNT).fill(null);
         if (
           !(machine.media.deviceSlots instanceof Int16Array) ||
           machine.media.deviceSlots.length !== DEVICE_SLOT_COUNT
@@ -131,7 +279,6 @@
       function copyMediaToIoData() {
         const io = machine.ctx.ioData;
         ensureMediaLayout();
-        io.hostSlots = machine.media.hostSlots;
         io.deviceSlots = machine.media.deviceSlots;
         io.diskImages = machine.media.diskImages;
         io.basicRom = machine.media.basicRom;
@@ -268,13 +415,23 @@
         setupMemoryMap();
       }
 
-      function loadDiskToHostSlot(arrayBuffer, name, hostSlotIndex) {
+      function loadDiskToDeviceSlot(arrayBuffer, name, deviceSlotIndex) {
         ensureMediaLayout();
-        const hostSlot = normalizeHostSlotIndex(hostSlotIndex);
-        const bytes = new Uint8Array(arrayBuffer);
-        const hostImageIndex = machine.media.hostSlots[hostSlot];
-        const imageIndex = storeDiskImage(bytes, name, hostImageIndex);
-        machine.media.hostSlots[hostSlot] = imageIndex;
+        const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
+        const deviceImageIndex = machine.media.deviceSlots[deviceSlot] | 0;
+        const preferredImageIndex = isValidImageIndex(deviceImageIndex)
+          ? deviceImageIndex
+          : NO_IMAGE_MOUNTED;
+        let bytes = new Uint8Array(arrayBuffer);
+        if (isXexFile(name)) {
+          const converted = xexToAtr(bytes);
+          if (!converted) {
+            throw new Error("Invalid or unsupported XEX file: " + (name || ""));
+          }
+          bytes = converted;
+        }
+        const imageIndex = storeDiskImage(bytes, name, preferredImageIndex);
+        machine.media.deviceSlots[deviceSlot] = imageIndex;
         copyMediaToIoData();
         return imageIndex;
       }
@@ -292,50 +449,6 @@
         if (!image) throw new Error("Disk image index out of range: " + idx);
         machine.media.deviceSlots[deviceSlot] = idx;
         copyMediaToIoData();
-      }
-
-      function mountHostSlotToDeviceSlot(hostSlotIndex, deviceSlotIndex) {
-        ensureMediaLayout();
-        const hostSlot = normalizeHostSlotIndex(hostSlotIndex);
-        const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
-        const imageIndex = machine.media.hostSlots[hostSlot];
-        machine.media.deviceSlots[deviceSlot] =
-          imageIndex === null || imageIndex === undefined
-            ? NO_IMAGE_MOUNTED
-            : imageIndex | 0;
-        copyMediaToIoData();
-      }
-
-      function loadDiskToDeviceSlot(
-        arrayBuffer,
-        name,
-        deviceSlotIndex,
-        hostSlotIndex,
-      ) {
-        ensureMediaLayout();
-        const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
-        // hostSlotIndex is optional. When omitted, this call only mounts to the
-        // target device slot and leaves host slot bindings unchanged.
-        const hasHostSlot =
-          hostSlotIndex !== undefined && hostSlotIndex !== null;
-        const hostSlot = hasHostSlot ? normalizeHostSlotIndex(hostSlotIndex) : -1;
-        const hostImageIndex = hasHostSlot
-          ? machine.media.hostSlots[hostSlot]
-          : NO_IMAGE_MOUNTED;
-        const deviceImageIndex = machine.media.deviceSlots[deviceSlot] | 0;
-        const preferredImageIndex = isValidImageIndex(hostImageIndex)
-          ? hostImageIndex
-          : isValidImageIndex(deviceImageIndex)
-            ? deviceImageIndex
-            : NO_IMAGE_MOUNTED;
-        const bytes = new Uint8Array(arrayBuffer);
-        const imageIndex = storeDiskImage(bytes, name, preferredImageIndex);
-        if (hasHostSlot) {
-          machine.media.hostSlots[hostSlot] = imageIndex;
-        }
-        machine.media.deviceSlots[deviceSlot] = imageIndex;
-        copyMediaToIoData();
-        return imageIndex;
       }
 
       function unmountDeviceSlot(deviceSlotIndex) {
@@ -370,9 +483,7 @@
         hardReset: hardReset,
         loadOsRom: loadOsRom,
         loadBasicRom: loadBasicRom,
-        loadDiskToHostSlot: loadDiskToHostSlot,
         loadDiskToDeviceSlot: loadDiskToDeviceSlot,
-        mountHostSlotToDeviceSlot: mountHostSlotToDeviceSlot,
         mountImageToDeviceSlot: mountImageToDeviceSlot,
         unmountDeviceSlot: unmountDeviceSlot,
         getMountedDiskForDeviceSlot: getMountedDiskForDeviceSlot,

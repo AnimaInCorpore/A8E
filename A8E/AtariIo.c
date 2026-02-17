@@ -15,6 +15,9 @@
 ********************************************************************/
 
 #include <string.h>
+#ifndef _MSC_VER
+#include <strings.h>
+#endif
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
@@ -37,6 +40,334 @@
 ********************************************************************/
 
 #define CLIP(a) MAX(0, MIN(255, a))
+
+/********************************************************************
+*
+* XEX boot loader - 6502 code loaded into $0700 by Atari OS boot.
+*
+* Reads XEX data from sequential sectors (starting at sector 4)
+* via SIO SIOV ($E459), parses segment headers ($FF $FF start end),
+* copies data to target addresses, calls INITAD ($02E2) after each
+* segment if set, and jumps through RUNAD ($02E0) when the stream ends.
+*
+* Zero page: $43/$44=dest ptr, $45/$46=end addr, $47=buf index,
+*            $48=bytes left, $49/$4A=sector number.
+* Sector buffer at $0600.
+*
+********************************************************************/
+
+static const u8 aXexBootLoader[] =
+{
+	/* $0700: Boot header (6 bytes consumed by Atari OS) */
+	0x00,                   /* flags */
+	0x03,                   /* 3 boot sectors */
+	0x00, 0x07,             /* load address $0700 */
+	0x07, 0x07,             /* init address $0707 */
+	0x60,                   /* $0706: RTS (safety) */
+
+	/* $0707: Entry - clear RUNAD/INITAD and init state */
+	0xA9, 0x00,             /* LDA #$00 */
+	0x8D, 0xE0, 0x02,       /* STA $02E0 ; clear RUNAD */
+	0x8D, 0xE1, 0x02,       /* STA $02E1 */
+	0x8D, 0xE2, 0x02,       /* STA $02E2 ; clear INITAD */
+	0x8D, 0xE3, 0x02,       /* STA $02E3 */
+	0x85, 0x48,             /* STA $48   ; bytes_left = 0 */
+	0xA9, 0x04,             /* LDA #$04 */
+	0x85, 0x49,             /* STA $49   ; sector = 4 */
+	0xA9, 0x00,             /* LDA #$00 */
+	0x85, 0x4A,             /* STA $4A */
+
+	/* $071F: parse_header */
+	0x20, 0x7E, 0x07,       /* JSR get_byte ($077E) */
+	0xC9, 0xFF,             /* CMP #$FF */
+	0xD0, 0x4F,             /* BNE run_addr ($0775) */
+	0x20, 0x7E, 0x07,       /* JSR get_byte */
+	0xC9, 0xFF,             /* CMP #$FF */
+	0xD0, 0x48,             /* BNE run_addr ($0775) */
+	0x20, 0x7E, 0x07,       /* JSR get_byte ; start_lo */
+	0x85, 0x43,             /* STA $43 */
+	0x20, 0x7E, 0x07,       /* JSR get_byte ; start_hi */
+	0x85, 0x44,             /* STA $44 */
+	0x20, 0x7E, 0x07,       /* JSR get_byte ; end_lo */
+	0x85, 0x45,             /* STA $45 */
+	0x20, 0x7E, 0x07,       /* JSR get_byte ; end_hi */
+	0x85, 0x46,             /* STA $46 */
+
+	/* $0741: copy_loop */
+	0x20, 0x7E, 0x07,       /* JSR get_byte ($077E) */
+	0xA0, 0x00,             /* LDY #$00 */
+	0x91, 0x43,             /* STA ($43),Y */
+	0xE6, 0x43,             /* INC $43 */
+	0xD0, 0x02,             /* BNE +2 */
+	0xE6, 0x44,             /* INC $44 */
+
+	/* $074E: check_end (dest > end means segment done; end is inclusive) */
+	0xA5, 0x44,             /* LDA $44 */
+	0xC5, 0x46,             /* CMP $46 */
+	0x90, 0xED,             /* BCC copy_loop ($0741) */
+	0xD0, 0x06,             /* BNE check_init ($075C) */
+	0xA5, 0x45,             /* LDA $45 */
+	0xC5, 0x43,             /* CMP $43 */
+	0xB0, 0xE5,             /* BCS copy_loop ($0741) */
+	/* fall through: dest_lo > end_lo -> segment done */
+
+	/* $075C: check_init - call INITAD if set, then parse next segment */
+	0xAD, 0xE3, 0x02,       /* LDA $02E3 ; INITAD hi */
+	0xF0, 0xBE,             /* BEQ parse_header ($071F) ; no init */
+	/* "JSR ($02E2)" via push return addr and JMP indirect */
+	0xA9, 0x07,             /* LDA #$07  ; hi byte of ($076A-1) */
+	0x48,                   /* PHA */
+	0xA9, 0x69,             /* LDA #$69  ; lo byte of ($076A-1) */
+	0x48,                   /* PHA */
+	0x6C, 0xE2, 0x02,       /* JMP ($02E2) ; INIT routine RTSs to $076A */
+	/* $076A: return from INIT */
+	0xA9, 0x00,             /* LDA #$00 */
+	0x8D, 0xE2, 0x02,       /* STA $02E2 ; clear INITAD */
+	0x8D, 0xE3, 0x02,       /* STA $02E3 */
+	0x4C, 0x1F, 0x07,       /* JMP parse_header ($071F) */
+
+	/* $0775: run_addr */
+	0xAD, 0xE1, 0x02,       /* LDA $02E1 */
+	0xF0, 0x03,             /* BEQ done ($077D) */
+	0x6C, 0xE0, 0x02,       /* JMP ($02E0) */
+	/* $077D: done */
+	0x60,                   /* RTS */
+
+	/* $077E: get_byte */
+	0xA5, 0x48,             /* LDA $48 */
+	0xD0, 0x03,             /* BNE have_byte ($0785) */
+	0x20, 0x8F, 0x07,       /* JSR read_sector ($078F) */
+	/* $0785: have_byte */
+	0xA6, 0x47,             /* LDX $47 */
+	0xBD, 0x00, 0x06,       /* LDA $0600,X */
+	0xE6, 0x47,             /* INC $47 */
+	0xC6, 0x48,             /* DEC $48 */
+	0x60,                   /* RTS */
+
+	/* $078F: read_sector */
+	0xA9, 0x31,             /* LDA #$31 */
+	0x8D, 0x00, 0x03,       /* STA $0300  ; DDEVIC */
+	0xA9, 0x01,             /* LDA #$01 */
+	0x8D, 0x01, 0x03,       /* STA $0301  ; DUNIT */
+	0xA9, 0x52,             /* LDA #$52 */
+	0x8D, 0x02, 0x03,       /* STA $0302  ; DCOMND */
+	0xA9, 0x40,             /* LDA #$40 */
+	0x8D, 0x03, 0x03,       /* STA $0303  ; DSTATS */
+	0xA9, 0x00,             /* LDA #$00 */
+	0x8D, 0x04, 0x03,       /* STA $0304  ; DBUFLO */
+	0xA9, 0x06,             /* LDA #$06 */
+	0x8D, 0x05, 0x03,       /* STA $0305  ; DBUFHI */
+	0xA9, 0x07,             /* LDA #$07 */
+	0x8D, 0x06, 0x03,       /* STA $0306  ; DTIMLO */
+	0xA9, 0x80,             /* LDA #$80 */
+	0x8D, 0x08, 0x03,       /* STA $0308  ; DBYTLO */
+	0xA9, 0x00,             /* LDA #$00 */
+	0x8D, 0x09, 0x03,       /* STA $0309  ; DBYTHI */
+	0xA5, 0x49,             /* LDA $49 */
+	0x8D, 0x0A, 0x03,       /* STA $030A  ; DAUX1 */
+	0xA5, 0x4A,             /* LDA $4A */
+	0x8D, 0x0B, 0x03,       /* STA $030B  ; DAUX2 */
+	0x20, 0x59, 0xE4,       /* JSR $E459  ; SIOV */
+	0xE6, 0x49,             /* INC $49 */
+	0xD0, 0x02,             /* BNE +2 */
+	0xE6, 0x4A,             /* INC $4A */
+	0xA9, 0x00,             /* LDA #$00 */
+	0x85, 0x47,             /* STA $47    ; buf index = 0 */
+	0xA9, 0x80,             /* LDA #$80 */
+	0x85, 0x48,             /* STA $48    ; bytes_left = 128 */
+	0x60,                   /* RTS */
+};
+
+static int IsXexFile(const char *pFileName)
+{
+	const char *pExt;
+
+	if(!pFileName)
+		return 0;
+
+	pExt = strrchr(pFileName, '.');
+
+	if(!pExt)
+		return 0;
+
+#ifdef _MSC_VER
+	return (_stricmp(pExt, ".xex") == 0);
+#else
+	return (strcasecmp(pExt, ".xex") == 0);
+#endif
+}
+
+typedef struct
+{
+	u16 sMagic;
+	u16 sNumberOfParagraphs;
+	u16 sSectorSize;
+	u16 sNumberOfParagraphsHigh;
+	u8 aUnused[8];
+} XexAtrHeader_t;
+
+#define MAX_DISK_SIZE (64 * 1024 * 256)
+
+static int XexGetNormalizedSize(const u8 *pXexData, u32 lXexSize, u32 *pNormalizedSize)
+{
+	u32 lIndex = 0;
+	u32 lSize = 0;
+	int lFoundSegment = 0;
+
+	while(lIndex < lXexSize)
+	{
+		while(lIndex + 1 < lXexSize &&
+			pXexData[lIndex] == 0xFF &&
+			pXexData[lIndex + 1] == 0xFF)
+		{
+			lIndex += 2;
+		}
+
+		if(lIndex >= lXexSize)
+			break;
+
+		if(lIndex + 3 >= lXexSize)
+			break;
+
+		{
+			u16 sStart = (u16)(pXexData[lIndex] + (pXexData[lIndex + 1] << 8));
+			u16 sEnd = (u16)(pXexData[lIndex + 2] + (pXexData[lIndex + 3] << 8));
+			u32 lSegmentSize;
+
+			if(sEnd < sStart)
+				return 0;
+
+			lSegmentSize = (u32)(sEnd - sStart) + 1;
+			lIndex += 4;
+
+			if(lIndex + lSegmentSize > lXexSize)
+				return 0;
+
+			if(lSize > MAX_DISK_SIZE - 6 - lSegmentSize)
+				return 0;
+
+			lSize += 6 + lSegmentSize;
+			lIndex += lSegmentSize;
+			lFoundSegment = 1;
+		}
+	}
+
+	if(!lFoundSegment)
+		return 0;
+
+	*pNormalizedSize = lSize;
+	return 1;
+}
+
+static int XexNormalize(const u8 *pXexData, u32 lXexSize, u8 *pNormalizedData, u32 lNormalizedSize)
+{
+	u32 lIndex = 0;
+	u32 lOutIndex = 0;
+	int lFoundSegment = 0;
+
+	while(lIndex < lXexSize)
+	{
+		while(lIndex + 1 < lXexSize &&
+			pXexData[lIndex] == 0xFF &&
+			pXexData[lIndex + 1] == 0xFF)
+		{
+			lIndex += 2;
+		}
+
+		if(lIndex >= lXexSize)
+			break;
+
+		if(lIndex + 3 >= lXexSize)
+			break;
+
+		{
+			u8 cStartLo = pXexData[lIndex];
+			u8 cStartHi = pXexData[lIndex + 1];
+			u8 cEndLo = pXexData[lIndex + 2];
+			u8 cEndHi = pXexData[lIndex + 3];
+			u16 sStart = (u16)(cStartLo + (cStartHi << 8));
+			u16 sEnd = (u16)(cEndLo + (cEndHi << 8));
+			u32 lSegmentSize;
+
+			if(sEnd < sStart)
+				return 0;
+
+			lSegmentSize = (u32)(sEnd - sStart) + 1;
+			lIndex += 4;
+
+			if(lIndex + lSegmentSize > lXexSize)
+				return 0;
+
+			if(lOutIndex + 6 + lSegmentSize > lNormalizedSize)
+				return 0;
+
+			pNormalizedData[lOutIndex++] = 0xFF;
+			pNormalizedData[lOutIndex++] = 0xFF;
+			pNormalizedData[lOutIndex++] = cStartLo;
+			pNormalizedData[lOutIndex++] = cStartHi;
+			pNormalizedData[lOutIndex++] = cEndLo;
+			pNormalizedData[lOutIndex++] = cEndHi;
+
+			memcpy(pNormalizedData + lOutIndex, pXexData + lIndex, lSegmentSize);
+			lOutIndex += lSegmentSize;
+			lIndex += lSegmentSize;
+			lFoundSegment = 1;
+		}
+	}
+
+	return lFoundSegment && lOutIndex == lNormalizedSize;
+}
+
+static int XexToAtr(u8 *pDisk, u32 *pDiskSize, u8 *pXexData, u32 lXexSize)
+{
+	u32 lNormalizedSize;
+	u8 *pNormalizedData;
+	u32 lDataSectors;
+	u32 lTotalDataBytes;
+	u32 lParagraphs;
+	XexAtrHeader_t *pHeader;
+
+	if(!XexGetNormalizedSize(pXexData, lXexSize, &lNormalizedSize))
+		return 0;
+
+	lDataSectors = (lNormalizedSize + 127) / 128;
+	lTotalDataBytes = 16 + 384 + lDataSectors * 128;
+
+	if(lTotalDataBytes > MAX_DISK_SIZE)
+		return 0;
+
+	pNormalizedData = (u8 *)malloc(lNormalizedSize);
+
+	if(!pNormalizedData)
+		return 0;
+
+	if(!XexNormalize(pXexData, lXexSize, pNormalizedData, lNormalizedSize))
+	{
+		free(pNormalizedData);
+		return 0;
+	}
+
+	lParagraphs = (lTotalDataBytes - 16) / 16;
+
+	memset(pDisk, 0, lTotalDataBytes);
+
+	/* ATR header */
+	pHeader = (XexAtrHeader_t *)pDisk;
+	pHeader->sMagic = 0x0296;
+	pHeader->sNumberOfParagraphs = (u16)(lParagraphs & 0xFFFF);
+	pHeader->sSectorSize = 128;
+	pHeader->sNumberOfParagraphsHigh = (u16)(lParagraphs >> 16);
+
+	/* Boot sectors 1-3 at offset 16 (384 bytes) */
+	memcpy(pDisk + 16, aXexBootLoader, sizeof(aXexBootLoader));
+
+	/* XEX data starting at sector 4 = offset 16 + 384 */
+	memcpy(pDisk + 16 + 384, pNormalizedData, lNormalizedSize);
+
+	*pDiskSize = lTotalDataBytes;
+	free(pNormalizedData);
+	return 1;
+}
 
 #define FIRST_VISIBLE_LINE 8
 #define LAST_VISIBLE_LINE 247
@@ -2735,8 +3066,8 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 		pIoInitValue++;
 	}
 
-	pIoData->pDisk1 = (u8 *)malloc(64 * 1024 * 256);
-	memset(pIoData->pDisk1, 0, 64 * 1024 * 256);
+	pIoData->pDisk1 = (u8 *)malloc(MAX_DISK_SIZE);
+	memset(pIoData->pDisk1, 0, MAX_DISK_SIZE);
 	
 	if(pDiskFileName)
 	{
@@ -2744,8 +3075,32 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 
 		if(pFile)
 		{
-			pIoData->lDiskSize = fread(pIoData->pDisk1, 1, 64 * 1024 * 256, pFile);
+			pIoData->lDiskSize = fread(pIoData->pDisk1, 1, MAX_DISK_SIZE, pFile);
 			fclose(pFile);
+
+			if(IsXexFile(pDiskFileName))
+			{
+				u8 *pXexCopy = (u8 *)malloc(pIoData->lDiskSize);
+
+				if(pXexCopy)
+				{
+					memcpy(pXexCopy, pIoData->pDisk1, pIoData->lDiskSize);
+					if(!XexToAtr(pIoData->pDisk1, &pIoData->lDiskSize,
+						pXexCopy, pIoData->lDiskSize))
+					{
+						pIoData->lDiskSize = 0;
+						fprintf(stderr, "A8E: Failed to convert XEX to ATR: %s\n",
+							pDiskFileName);
+					}
+					free(pXexCopy);
+				}
+				else
+				{
+					pIoData->lDiskSize = 0;
+					fprintf(stderr, "A8E: Out of memory converting XEX: %s\n",
+						pDiskFileName);
+				}
+			}
 #ifdef VERBOSE_SIO
 			printf("Disk name: %s, size = %ld\n", pDiskFileName, pIoData->lDiskSize);
 #endif
@@ -2947,7 +3302,7 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
 
     			if(pFile)
     			{
-    				pIoData->lDiskSize = fread(pIoData->pDisk1, 1, 64 * 1024 * 256, pFile);
+    				pIoData->lDiskSize = fread(pIoData->pDisk1, 1, MAX_DISK_SIZE, pFile);
     				fclose(pFile);
 #ifdef VERBOSE_SIO
 					printf("Disk name: %s, size = %ld\n", "D1.ATR", pIoData->lDiskSize);

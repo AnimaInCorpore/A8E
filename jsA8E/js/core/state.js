@@ -64,7 +64,6 @@
         // (disables BASIC without requiring a key press timing window).
         optionOnStart: false,
         sioTurbo: true,
-        hostSlots: new Array(8).fill(null),
         deviceSlots: new Int16Array([-1, -1, -1, -1, -1, -1, -1, -1]),
         diskImages: [],
         basicRom: null,
