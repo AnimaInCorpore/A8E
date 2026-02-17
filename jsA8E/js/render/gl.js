@@ -9,7 +9,7 @@
       let msg = gl.getShaderInfoLog(sh) || "shader compile failed";
       try {
         gl.deleteShader(sh);
-      } catch (e) {
+      } catch {
         // ignore
       }
       throw new Error(msg);
@@ -27,14 +27,14 @@
     try {
       gl.deleteShader(vs);
       gl.deleteShader(fs);
-    } catch (e) {
+    } catch {
       // ignore
     }
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
       let msg2 = gl.getProgramInfoLog(prog) || "program link failed";
       try {
         gl.deleteProgram(prog);
-      } catch (e2) {
+      } catch {
         // ignore
       }
       throw new Error(msg2);
@@ -231,7 +231,7 @@
         if (sceneFbo) gl.deleteFramebuffer(sceneFbo);
         if (decodeProgram) gl.deleteProgram(decodeProgram);
         if (crtProgram) gl.deleteProgram(crtProgram);
-      } catch (e) {
+      } catch {
         // ignore
       }
       decodeBuf = null;

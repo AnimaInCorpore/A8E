@@ -1,0 +1,13 @@
+{
+  "name": "jsa8e",
+  "private": true,
+  "scripts": {
+    "lint": "eslint \"js/**/*.js\"",
+    "lint:fix": "eslint \"js/**/*.js\" --fix"
+  },
+  "devDependencies": {
+    "eslint": "^9.21.0",
+    "@eslint/js": "^9.21.0",
+    "globals": "^15.14.0"
+  }
+}

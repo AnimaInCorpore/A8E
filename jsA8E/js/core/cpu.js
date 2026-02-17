@@ -58,7 +58,7 @@
       pageCrossed: 0,
       cycleCounter: 0,
       stallCycleCounter: 0,
-      ioCycleTimedEventCycle: 0xffffffffffffffff,
+      ioCycleTimedEventCycle: Infinity,
       ioCycleTimedEventFunction: null,
       irqPending: 0,
       // Set by outside modules (Atari IO).
@@ -589,6 +589,7 @@
     cpu.pc = ctx.accessAddress & 0xffff;
   }
   function opNOP(ctx) {
+    void ctx;
     // no-op
     return;
   }
@@ -652,6 +653,7 @@
     setPs(ctx, ctx.ram[0x100 + cpu.sp] & 0xff);
   }
   function opXXX(ctx) {
+    void ctx;
     // Compatibility fallback: treat unknown opcodes as NOP.
     // This avoids hard crashes on software that executes rare/unstable opcodes.
     return;

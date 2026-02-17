@@ -451,7 +451,7 @@
         ) {
           try {
             machine.audioNode.port.postMessage({ type: "clear" });
-          } catch (e) {
+          } catch {
             // ignore
           }
         }

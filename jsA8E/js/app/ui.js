@@ -49,7 +49,7 @@
           preserveDrawingBuffer: false,
           desynchronized: true,
         });
-    } catch (e) {
+    } catch {
       gl = null;
     }
 
@@ -325,7 +325,7 @@
     if (gl && window.A8EGlRenderer && window.A8EGlRenderer.loadShaderSources) {
       try {
         await window.A8EGlRenderer.loadShaderSources();
-      } catch (e) {
+      } catch {
         // create() will fail and trigger the existing 2D fallback path below.
       }
     }
@@ -410,7 +410,7 @@
       }
       try {
         canvas.focus({ preventScroll: true });
-      } catch (err) {
+      } catch {
         // Do not fallback to plain focus here; it would scroll the viewport.
       }
     }
@@ -1086,7 +1086,7 @@
       if (btn.setPointerCapture) {
         try {
           btn.setPointerCapture(e.pointerId);
-        } catch (err) {
+        } catch {
           // ignore capture errors
         }
       }
@@ -1160,7 +1160,7 @@
       if (joystickArea.setPointerCapture) {
         try {
           joystickArea.setPointerCapture(e.pointerId);
-        } catch (err) {
+        } catch {
           // ignore capture errors
         }
       }

@@ -122,7 +122,7 @@
                 machine.ctx.cycleCounter,
               );
               pokeyAudioConsume(machine.audioState, out);
-            } catch (err) {
+            } catch {
               out.fill(0.0);
             }
           };
@@ -178,7 +178,7 @@
                   type: "config",
                   maxQueuedSamples: maxQueuedSamples,
                 });
-              } catch (e) {
+              } catch {
                 // ignore
               }
               node.connect(machine.audioCtx.destination);
@@ -188,7 +188,7 @@
                 node.port.postMessage({ type: "clear" });
                 if (machine.audioState && pokeyAudioSetFillLevelHint)
                   pokeyAudioSetFillLevelHint(machine.audioState, 0);
-              } catch (e) {
+              } catch {
                 // ignore
               }
             })
@@ -210,7 +210,7 @@
           ) {
             try {
               machine.audioNode.port.postMessage({ type: "clear" });
-            } catch (e) {
+            } catch {
               // ignore
             }
           }
@@ -219,7 +219,7 @@
           if (machine.audioNode) machine.audioNode.disconnect();
           machine.audioNode = null;
           machine.audioCtx.close();
-        } catch (e) {
+        } catch {
           // ignore
         }
         machine.audioMode = "none";

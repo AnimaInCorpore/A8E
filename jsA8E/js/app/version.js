@@ -15,7 +15,7 @@
           : "";
       if (!version) throw new Error("Missing version field");
       line.textContent = "Build version: jsA8E " + version;
-    } catch (_err) {
+    } catch {
       line.textContent = "Build version: unavailable";
     }
   }

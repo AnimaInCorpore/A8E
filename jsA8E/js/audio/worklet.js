@@ -106,7 +106,7 @@
       };
     }
 
-    process(inputs, outputs, parameters) {
+    process(inputs, outputs) {
       let out = outputs[0] && outputs[0][0];
       if (!out) return true;
 
@@ -160,7 +160,7 @@
             queuedSamples: countQueuedSamples(this.queue, this.queueIndex),
             underrunBlocks: this.underrunBlocks | 0,
           });
-        } catch (e) {
+        } catch {
           // ignore
         }
       }

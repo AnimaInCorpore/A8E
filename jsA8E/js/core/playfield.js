@@ -837,7 +837,6 @@
 
     function drawLine(ctx) {
       let io = ctx.ioData;
-      let ram = ctx.ram;
       let sram = ctx.sram;
       let video = io.videoOut;
 

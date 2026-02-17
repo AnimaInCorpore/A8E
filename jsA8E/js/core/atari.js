@@ -570,7 +570,6 @@
       pokeyAudioResetState: pokeyAudioResetState,
       pokeyAudioSetTurbo: pokeyAudioSetTurbo,
     });
-    let setupMemoryMap = memoryRuntime.setupMemoryMap;
     let hardReset = memoryRuntime.hardReset;
     let loadOsRom = memoryRuntime.loadOsRom;
     let loadBasicRom = memoryRuntime.loadBasicRom;
@@ -707,7 +706,7 @@
                 { type: "samples", samples: chunk },
                 [chunk.buffer],
               );
-            } catch (e) {
+            } catch {
               break;
             }
           }
@@ -748,7 +747,7 @@
       ) {
         try {
           machine.audioNode.port.postMessage({ type: "clear" });
-        } catch (e) {
+        } catch {
           // ignore
         }
       }
