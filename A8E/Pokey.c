@@ -1077,7 +1077,7 @@ u8 *Pokey_AUDF1_POT0(_6502_Context_t *pContext, u8 *pValue)
 			}
 		}
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDF1: %02X\n", *pValue);
 #endif
 	}
@@ -1097,7 +1097,7 @@ u8 *Pokey_AUDC1_POT1(_6502_Context_t *pContext, u8 *pValue)
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_AUDC1_POT1] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDC1: %02X\n", *pValue);
 #endif
 	}
@@ -1131,7 +1131,7 @@ u8 *Pokey_AUDF2_POT2(_6502_Context_t *pContext, u8 *pValue)
 			}
 		}
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDF2: %02X\n", *pValue);
 #endif
 	}
@@ -1151,7 +1151,7 @@ u8 *Pokey_AUDC2_POT3(_6502_Context_t *pContext, u8 *pValue)
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_AUDC2_POT3] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDC2: %02X\n", *pValue);
 #endif
 	}
@@ -1185,7 +1185,7 @@ u8 *Pokey_AUDF3_POT4(_6502_Context_t *pContext, u8 *pValue)
 			}
 		}
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDF3: %02X\n", *pValue);
 #endif
 	}
@@ -1205,7 +1205,7 @@ u8 *Pokey_AUDC3_POT5(_6502_Context_t *pContext, u8 *pValue)
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_AUDC3_POT5] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDC3: %02X\n", *pValue);
 #endif
 	}
@@ -1239,7 +1239,7 @@ u8 *Pokey_AUDF4_POT6(_6502_Context_t *pContext, u8 *pValue)
 			}
 		}
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDF4: %02X\n", *pValue);
 #endif
 	}
@@ -1259,7 +1259,7 @@ u8 *Pokey_AUDC4_POT7(_6502_Context_t *pContext, u8 *pValue)
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_AUDC4_POT7] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDC4: %02X\n", *pValue);
 #endif
 	}
@@ -1311,7 +1311,7 @@ u8 *Pokey_AUDCTL_ALLPOT(_6502_Context_t *pContext, u8 *pValue)
 			}
 		}
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDCTL: %02X\n", *pValue);
 #endif
 	}
@@ -1334,7 +1334,7 @@ u8 *Pokey_STIMER_KBCODE(_6502_Context_t *pContext, u8 *pValue)
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_STIMER_KBCODE] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" STIMER: %02X\n", *pValue);
 #endif
 
@@ -1378,7 +1378,7 @@ u8 *Pokey_SKREST_RANDOM(_6502_Context_t *pContext, u8 *pValue)
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_SKREST_RANDOM] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" SKREST: %02X\n", *pValue);
 #endif
 	}
@@ -1404,7 +1404,7 @@ u8 *Pokey_POTGO(_6502_Context_t *pContext, u8 *pValue)
 		SRAM[IO_POTGO] = *pValue;
 		Pokey_PotStartScan(pContext);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" POTGO: %02X\n", *pValue);
 #endif
 	}
@@ -1474,7 +1474,7 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 	if(pValue)
 	{
 #ifdef VERBOSE_SIO
-		printf("             [%16lld] SEROUT ", pContext->llCycleCounter);
+		printf("             [%16llu] SEROUT ", pContext->llCycleCounter);
 		printf("(%02X)!\n", *pValue);
 #endif
 		pIoData->llSerialOutputNeedDataCycle =
@@ -1610,7 +1610,7 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 								aSioBuffer[0] = 'N';
 								sSioInSize = 1;
 #ifdef VERBOSE_SIO
-								printf("Not accepted (sector %d, offset = %u, disk size = %u!\n",
+								printf("Not accepted (sector %d, offset = %lu, disk size = %lu!\n",
 									sSectorIndex, lOffset, pIoData->lDiskSize);
 #endif
 							}
@@ -1781,7 +1781,7 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 		RAM[IO_SEROUT_SERIN] = aSioBuffer[sSioInIndex++];
 		sSioInSize--;
 #ifdef VERBOSE_SIO
-		printf("             [%16lld] SERIN ", pContext->llCycleCounter);
+		printf("             [%16llu] SERIN ", pContext->llCycleCounter);
 		printf("(%02X, %d bytes left)!\n", RAM[IO_SEROUT_SERIN], sSioInSize);
 #endif
 		if(sSioInSize > 0)
@@ -1807,7 +1807,7 @@ u8 *Pokey_IRQEN_IRQST(_6502_Context_t *pContext, u8 *pValue)
 	{
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 #ifdef VERBOSE_IRQ
-		printf("$%04X: IRQEN [%16lld] ", pContext->tCpu.pc, pContext->llCycleCounter);
+		printf("$%04X: IRQEN [%16llu] ", pContext->tCpu.pc, pContext->llCycleCounter);
 	
 		if((SRAM[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE) != 
 			(*pValue & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE))
@@ -1859,7 +1859,7 @@ u8 *Pokey_IRQEN_IRQST(_6502_Context_t *pContext, u8 *pValue)
 		SRAM[IO_IRQEN_IRQST] = *pValue;
 		RAM[IO_IRQEN_IRQST] |= ~SRAM[IO_IRQEN_IRQST];
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" IRQEN: %02X\n", *pValue);
 #endif
 	}
@@ -1875,7 +1875,7 @@ u8 *Pokey_SKCTL_SKSTAT(_6502_Context_t *pContext, u8 *pValue)
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_SKCTL_SKSTAT] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" SKCTL: %02X\n", *pValue);
 #endif
 	}

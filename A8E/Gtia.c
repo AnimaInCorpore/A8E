@@ -48,7 +48,7 @@ u8 *Gtia_HPOSP0_M0PF(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_HPOSP0_M0PF] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" HPOSP0: %02X\n", *pValue);
 #endif
 	}
@@ -63,7 +63,7 @@ u8 *Gtia_HPOSP1_M1PF(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_HPOSP1_M1PF] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" HPOSP1: %02X\n", *pValue);
 #endif
 	}
@@ -78,7 +78,7 @@ u8 *Gtia_HPOSP2_M2PF(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_HPOSP2_M2PF] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" HPOSP2: %02X\n", *pValue);
 #endif
 	}
@@ -93,7 +93,7 @@ u8 *Gtia_HPOSP3_M3PF(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_HPOSP3_M3PF] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" HPOSP3: %02X\n", *pValue);
 #endif
 	}
@@ -108,7 +108,7 @@ u8 *Gtia_HPOSM0_P0PF(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_HPOSM0_P0PF] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" HPOSM0: %02X\n", *pValue);
 #endif
 	}
@@ -123,7 +123,7 @@ u8 *Gtia_HPOSM1_P1PF(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_HPOSM1_P1PF] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" HPOSM1: %02X\n", *pValue);
 #endif
 	}
@@ -138,7 +138,7 @@ u8 *Gtia_HPOSM2_P2PF(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_HPOSM2_P2PF] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" HPOSM2: %02X\n", *pValue);
 #endif
 	}
@@ -153,7 +153,7 @@ u8 *Gtia_HPOSM3_P3PF(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_HPOSM3_P3PF] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" HPOSM3: %02X\n", *pValue);
 #endif
 	}
@@ -168,7 +168,7 @@ u8 *Gtia_SIZEP0_M0PL(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_SIZEP0_M0PL] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" SIZEP0: %02X\n", *pValue);
 #endif
 	}
@@ -183,7 +183,7 @@ u8 *Gtia_SIZEP1_M1PL(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_SIZEP1_M1PL] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" SIZEP1: %02X\n", *pValue);
 #endif
 	}
@@ -198,7 +198,7 @@ u8 *Gtia_SIZEP2_M2PL(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_SIZEP2_M2PL] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" SIZEP2: %02X\n", *pValue);
 #endif
 	}
@@ -213,7 +213,7 @@ u8 *Gtia_SIZEP3_M3PL(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_SIZEP3_M3PL] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" SIZEP3: %02X\n", *pValue);
 #endif
 	}
@@ -228,7 +228,7 @@ u8 *Gtia_SIZEM_P0PL(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_SIZEM_P0PL] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" SIZEM: %02X\n", *pValue);
 #endif
 	}
@@ -243,7 +243,7 @@ u8 *Gtia_GRAFP0_P1PL(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_GRAFP0_P1PL] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" GRAFP0: %02X\n", *pValue);
 #endif
 	}
@@ -258,7 +258,7 @@ u8 *Gtia_GRAFP1_P2PL(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_GRAFP1_P2PL] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" GRAFP1: %02X\n", *pValue);
 #endif
 	}
@@ -273,7 +273,7 @@ u8 *Gtia_GRAFP2_P3PL(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_GRAFP2_P3PL] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" GRAFP2: %02X\n", *pValue);
 #endif
 	}
@@ -288,7 +288,7 @@ u8 *Gtia_GRAFP3_TRIG0(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_GRAFP3_TRIG0] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" GRAFP3: %02X\n", *pValue);
 #endif
 	}
@@ -303,7 +303,7 @@ u8 *Gtia_GRAFM_TRIG1(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_GRAFM_TRIG1] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" GRAFM: %02X\n", *pValue);
 #endif
 	}
@@ -318,7 +318,7 @@ u8 *Gtia_COLPM0_TRIG2(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_COLPM0_TRIG2] = (*pValue & 0xfe);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" COLPM0: %02X\n", *pValue);
 #endif
 	}
@@ -333,7 +333,7 @@ u8 *Gtia_COLPM1_TRIG3(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_COLPM1_TRIG3] = (*pValue & 0xfe);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" COLPM1: %02X\n", *pValue);
 #endif
 	}
@@ -348,7 +348,7 @@ u8 *Gtia_COLPM2_PAL(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_COLPM2_PAL] = (*pValue & 0xfe);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" COLPM2: %02X\n", *pValue);
 #endif
 	}
@@ -363,7 +363,7 @@ u8 *Gtia_COLPM3(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_COLPM3] = (*pValue & 0xfe);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" COLPM3: %02X\n", *pValue);
 #endif
 	}
@@ -378,7 +378,7 @@ u8 *Gtia_COLPF0(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_COLPF0] = (*pValue & 0xfe);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" COLPF0: %02X\n", *pValue);
 #endif
 	}
@@ -393,7 +393,7 @@ u8 *Gtia_COLPF1(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_COLPF1] = (*pValue & 0xfe);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" COLPF1: %02X\n", *pValue);
 #endif
 	}
@@ -408,7 +408,7 @@ u8 *Gtia_COLPF2(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_COLPF2] = (*pValue & 0xfe);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" COLPF2: %02X\n", *pValue);
 #endif
 	}
@@ -423,7 +423,7 @@ u8 *Gtia_COLPF3(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_COLPF3] = (*pValue & 0xfe);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" COLPF3: %02X\n", *pValue);
 #endif
 	}
@@ -438,7 +438,7 @@ u8 *Gtia_COLBK(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_COLBK] = (*pValue & 0xfe);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" COLBK: %02X\n", *pValue);
 #endif
 	}
@@ -453,7 +453,7 @@ u8 *Gtia_PRIOR(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_PRIOR] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" PRIOR: %02X\n", *pValue);
 #endif
 	}
@@ -468,7 +468,7 @@ u8 *Gtia_VDELAY(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_VDELAY] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" VDELAY: %02X\n", *pValue);
 #endif
 	}
@@ -483,7 +483,7 @@ u8 *Gtia_GRACTL(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_GRACTL] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" GRACTL: %02X\n", *pValue);
 #endif
 	}
@@ -515,7 +515,7 @@ u8 *Gtia_HITCLR(_6502_Context_t *pContext, u8 *pValue)
 
 		SRAM[IO_HITCLR] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" HITCLR: %02X\n", *pValue);
 #endif
     }
@@ -535,7 +535,7 @@ u8 *Gtia_CONSOL(_6502_Context_t *pContext, u8 *pValue)
 		/* Only bit 3 (speaker) is writable; key bits are read-only. */
 		SRAM[IO_CONSOL] = *pValue & 0x08;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" CONSOL: %02X\n", *pValue);
 #endif
 	}

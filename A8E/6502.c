@@ -587,6 +587,7 @@ static u8 *_6502_RamAccess(_6502_Context_t *pContext, u8 *pValue)
 
 static u8 *_6502_RomAccess(_6502_Context_t *pContext, u8 *pValue)
 {
+	(void)pValue;
 	return &RAM[pContext->sAccessAddress];
 }
 
@@ -645,7 +646,8 @@ _6502_Context_t *_6502_Open()
 
 	memset(SRAM, 0, _6502_MEMORY_SIZE);
 
-	pContext->pAccessFunctionList = malloc(_6502_MEMORY_SIZE * sizeof(u8 *(*)(struct _6502_Context *, u8 *)));
+	pContext->pAccessFunctionList = (u8 *(**)(struct _6502_Context *, u8 *))
+		malloc(_6502_MEMORY_SIZE * sizeof(u8 *(*)(struct _6502_Context *, u8 *)));
 
 	if(pContext->pAccessFunctionList == NULL)
 	{
@@ -667,7 +669,7 @@ void _6502_Close(_6502_Context_t *pContext)
 	if(pContext->pIoData)
 		free(pContext->pIoData);
 
-	free(pContext->pAccessFunctionList);
+	free((void *)pContext->pAccessFunctionList);
 	free(SRAM);
 	free(RAM);
 	free(pContext);
@@ -1476,6 +1478,7 @@ void _6502_JSR(_6502_Context_t *pContext)
 
 void _6502_NOP(_6502_Context_t *pContext) 
 {
+	(void)pContext;
 	/* Nothing yet */
 }
 

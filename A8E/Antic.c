@@ -70,7 +70,7 @@ u8 *Antic_DMACTL(_6502_Context_t *pContext, u8 *pValue)
 		/* Bits 7-6 are unused on real hardware. */
 		SRAM[IO_DMACTL] = (*pValue & 0x3f);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" DMACTL: %02X\n", *pValue);
 #endif
 	}
@@ -85,7 +85,7 @@ u8 *Antic_CHACTL(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_CHACTL] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" CHACTL: %02X\n", *pValue);
 #endif
 	}
@@ -103,7 +103,7 @@ u8 *Antic_DLISTL(_6502_Context_t *pContext, u8 *pValue)
 		SRAM[IO_DLISTL] = *pValue;
 		pIoData->sDisplayListAddress = (pIoData->sDisplayListAddress & 0xff00) | *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" DLISTL: %02X\n", *pValue);
 #endif
 	}
@@ -121,7 +121,7 @@ u8 *Antic_DLISTH(_6502_Context_t *pContext, u8 *pValue)
 		SRAM[IO_DLISTH] = *pValue;
 		pIoData->sDisplayListAddress = (pIoData->sDisplayListAddress & 0x00ff) | (*pValue << 8);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" DLISTH: %02X\n", *pValue);
 #endif
 	}
@@ -136,7 +136,7 @@ u8 *Antic_HSCROL(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_HSCROL] = (*pValue & 0x0f);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" HSCROL: %02X\n", *pValue);
 #endif
 	}
@@ -151,7 +151,7 @@ u8 *Antic_VSCROL(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_VSCROL] = (*pValue & 0x0f);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" VSCROL: %02X\n", *pValue);
 #endif
 	}
@@ -166,7 +166,7 @@ u8 *Antic_PMBASE(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_PMBASE] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" PMBASE: %02X\n", *pValue);
 #endif
 	}
@@ -181,7 +181,7 @@ u8 *Antic_CHBASE(_6502_Context_t *pContext, u8 *pValue)
 	{
 		SRAM[IO_CHBASE] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" CHBASE: %02X\n", *pValue);
 #endif
 	}
@@ -207,7 +207,7 @@ u8 *Antic_WSYNC(_6502_Context_t *pContext, u8 *pValue)
 		pContext->llStallCycleCounter =
 			MAX(llNextLineCycle, pContext->llStallCycleCounter);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" WSYNC: %02X\n", *pValue);
 #endif
 	}
@@ -218,18 +218,21 @@ u8 *Antic_WSYNC(_6502_Context_t *pContext, u8 *pValue)
 /* $D40B VCOUNT */
 u8 *Antic_VCOUNT(_6502_Context_t *pContext, u8 *pValue)
 {
+	(void)pValue;
 	return &RAM[IO_VCOUNT];
 }
 
 /* $D40C PENH */
 u8 *Antic_PENH(_6502_Context_t *pContext, u8 *pValue)
 {
+	(void)pValue;
 	return &RAM[IO_PENH];
 }
 
 /* $D40D PENV */
 u8 *Antic_PENV(_6502_Context_t *pContext, u8 *pValue)
 {
+	(void)pValue;
 	return &RAM[IO_PENV];
 }
 
@@ -270,7 +273,7 @@ u8 *Antic_NMIEN(_6502_Context_t *pContext, u8 *pValue)
 		/* Only bits 7-5 are used (DLI/VBI/RESET). */
 		SRAM[IO_NMIEN] = (*pValue & 0xe0);
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" NMIEN: %02X\n", *pValue);
 #endif
 	}
@@ -285,7 +288,7 @@ u8 *Antic_NMIRES_NMIST(_6502_Context_t *pContext, u8 *pValue)
 	{
 		RAM[IO_NMIRES_NMIST] = 0x00;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" NMIRES: %02X\n", *pValue);
 #endif
 	}

@@ -22,6 +22,7 @@
 #include <math.h>
 #include <time.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <errno.h>
 
 #include "6502.h"
@@ -312,44 +313,54 @@ typedef struct
 
 static int XexGetNormalizedSize(const u8 *pXexData, u32 lXexSize, u32 *pNormalizedSize)
 {
-	u32 lIndex = 0;
-	u32 lSize = 0;
+	size_t lSize = 0;
 	int lFoundSegment = 0;
+	const u8 *pCurrent;
+	const u8 *pEnd;
 
-	while(lIndex < lXexSize)
+	if(pXexData == NULL || pNormalizedSize == NULL)
+		return 0;
+	if(lXexSize > MAX_DISK_SIZE)
+		return 0;
+
+	pCurrent = pXexData;
+	pEnd = pXexData + lXexSize;
+
+	while(pCurrent < pEnd)
 	{
-		while(lIndex + 1 < lXexSize &&
-			pXexData[lIndex] == 0xFF &&
-			pXexData[lIndex + 1] == 0xFF)
+		while((size_t)(pEnd - pCurrent) >= 2u &&
+			pCurrent[0] == 0xFF &&
+			pCurrent[1] == 0xFF)
 		{
-			lIndex += 2;
+			pCurrent += 2;
 		}
 
-		if(lIndex >= lXexSize)
+		if(pCurrent >= pEnd)
 			break;
 
-		if(lIndex + 3 >= lXexSize)
+		if((size_t)(pEnd - pCurrent) < 4u)
 			break;
 
 		{
-			u16 sStart = (u16)(pXexData[lIndex] + (pXexData[lIndex + 1] << 8));
-			u16 sEnd = (u16)(pXexData[lIndex + 2] + (pXexData[lIndex + 3] << 8));
-			u32 lSegmentSize;
+			u16 sStart = (u16)(pCurrent[0] + (pCurrent[1] << 8));
+			u16 sEnd = (u16)(pCurrent[2] + (pCurrent[3] << 8));
+			size_t lSegmentSize;
 
 			if(sEnd < sStart)
 				return 0;
 
-			lSegmentSize = (u32)(sEnd - sStart) + 1;
-			lIndex += 4;
+			lSegmentSize = (size_t)(sEnd - sStart) + 1u;
+			pCurrent += 4;
 
-			if(lIndex + lSegmentSize > lXexSize)
+			if(lSegmentSize > (size_t)(pEnd - pCurrent))
 				return 0;
 
-			if(lSize > MAX_DISK_SIZE - 6 - lSegmentSize)
+			if(lSize > (size_t)MAX_DISK_SIZE - 6u ||
+				lSegmentSize > (size_t)MAX_DISK_SIZE - 6u - lSize)
 				return 0;
 
-			lSize += 6 + lSegmentSize;
-			lIndex += lSegmentSize;
+			lSize += 6u + lSegmentSize;
+			pCurrent += lSegmentSize;
 			lFoundSegment = 1;
 		}
 	}
@@ -357,67 +368,86 @@ static int XexGetNormalizedSize(const u8 *pXexData, u32 lXexSize, u32 *pNormaliz
 	if(!lFoundSegment)
 		return 0;
 
-	*pNormalizedSize = lSize;
+	*pNormalizedSize = (u32)lSize;
 	return 1;
 }
 
 static int XexNormalize(const u8 *pXexData, u32 lXexSize, u8 *pNormalizedData, u32 lNormalizedSize)
 {
-	u32 lIndex = 0;
-	u32 lOutIndex = 0;
 	int lFoundSegment = 0;
+	const u8 *pCurrent;
+	const u8 *pEnd;
+	size_t lOutIndex = 0;
 
-	while(lIndex < lXexSize)
+	if(pXexData == NULL || pNormalizedData == NULL)
+		return 0;
+	if(lXexSize > MAX_DISK_SIZE || lNormalizedSize > MAX_DISK_SIZE)
+		return 0;
+
+	pCurrent = pXexData;
+	pEnd = pXexData + lXexSize;
+
+	while(pCurrent < pEnd)
 	{
-		while(lIndex + 1 < lXexSize &&
-			pXexData[lIndex] == 0xFF &&
-			pXexData[lIndex + 1] == 0xFF)
+		while((size_t)(pEnd - pCurrent) >= 2u &&
+			pCurrent[0] == 0xFF &&
+			pCurrent[1] == 0xFF)
 		{
-			lIndex += 2;
+			pCurrent += 2;
 		}
 
-		if(lIndex >= lXexSize)
+		if(pCurrent >= pEnd)
 			break;
 
-		if(lIndex + 3 >= lXexSize)
+		if((size_t)(pEnd - pCurrent) < 4u)
 			break;
 
 		{
-			u8 cStartLo = pXexData[lIndex];
-			u8 cStartHi = pXexData[lIndex + 1];
-			u8 cEndLo = pXexData[lIndex + 2];
-			u8 cEndHi = pXexData[lIndex + 3];
+			u8 aSegmentHeader[6];
+			u8 cStartLo = pCurrent[0];
+			u8 cStartHi = pCurrent[1];
+			u8 cEndLo = pCurrent[2];
+			u8 cEndHi = pCurrent[3];
 			u16 sStart = (u16)(cStartLo + (cStartHi << 8));
 			u16 sEnd = (u16)(cEndLo + (cEndHi << 8));
-			u32 lSegmentSize;
+			size_t lSegmentSize;
 
 			if(sEnd < sStart)
 				return 0;
 
-			lSegmentSize = (u32)(sEnd - sStart) + 1;
-			lIndex += 4;
+			lSegmentSize = (size_t)(sEnd - sStart) + 1u;
+			pCurrent += 4;
 
-			if(lIndex + lSegmentSize > lXexSize)
+			if(lSegmentSize > (size_t)(pEnd - pCurrent))
 				return 0;
 
-			if(lOutIndex + 6 + lSegmentSize > lNormalizedSize)
+			if(lOutIndex > (size_t)lNormalizedSize)
+				return 0;
+			if(((size_t)lNormalizedSize - lOutIndex) < 6u)
+				return 0;
+			if((lOutIndex + 5u) >= (size_t)lNormalizedSize)
 				return 0;
 
-			pNormalizedData[lOutIndex++] = 0xFF;
-			pNormalizedData[lOutIndex++] = 0xFF;
-			pNormalizedData[lOutIndex++] = cStartLo;
-			pNormalizedData[lOutIndex++] = cStartHi;
-			pNormalizedData[lOutIndex++] = cEndLo;
-			pNormalizedData[lOutIndex++] = cEndHi;
+			aSegmentHeader[0] = 0xFF;
+			aSegmentHeader[1] = 0xFF;
+			aSegmentHeader[2] = cStartLo;
+			aSegmentHeader[3] = cStartHi;
+			aSegmentHeader[4] = cEndLo;
+			aSegmentHeader[5] = cEndHi;
+			memcpy(pNormalizedData + lOutIndex, aSegmentHeader, sizeof(aSegmentHeader));
+			lOutIndex += 6;
 
-			memcpy(pNormalizedData + lOutIndex, pXexData + lIndex, lSegmentSize);
+			if(lSegmentSize > ((size_t)lNormalizedSize - lOutIndex))
+				return 0;
+
+			memcpy(pNormalizedData + lOutIndex, pCurrent, lSegmentSize);
 			lOutIndex += lSegmentSize;
-			lIndex += lSegmentSize;
+			pCurrent += lSegmentSize;
 			lFoundSegment = 1;
 		}
 	}
 
-	return lFoundSegment && lOutIndex == lNormalizedSize;
+	return lFoundSegment && lOutIndex == (size_t)lNormalizedSize;
 }
 
 static int XexToAtr(u8 *pDisk, u32 *pDiskSize, u8 *pXexData, u32 lXexSize)
@@ -513,11 +543,65 @@ static int XexToAtr(u8 *pDisk, u32 *pDiskSize, u8 *pXexData, u32 lXexSize)
 #define JOYSTICK_ARROW_LEFT_MASK 0x04
 #define JOYSTICK_ARROW_RIGHT_MASK 0x08
 
+static void AtariIo_LogError(const char *pFormat, ...)
+{
+	va_list tArgs;
+
+	va_start(tArgs, pFormat);
+	if(vfprintf(stderr, pFormat, tArgs) < 0)
+	{
+	}
+	va_end(tArgs);
+}
+
+static void AtariIo_CloseFileOrWarn(FILE *pFile, const char *pFileName)
+{
+	if(fclose(pFile) != 0)
+		AtariIo_LogError("A8E: Failed to close file %s: %s\n", pFileName, strerror(errno));
+}
+
+static void AtariIo_CloseFileOrDie(FILE *pFile, const char *pFileName)
+{
+	if(fclose(pFile) != 0)
+	{
+		AtariIo_LogError("A8E: Failed to close file %s: %s\n", pFileName, strerror(errno));
+		exit(1);
+	}
+}
+
+static unsigned int AtariIo_GetRandomSeed(void)
+{
+	unsigned int lSeed = 0xA8E1u;
+	FILE *pRandomFile = fopen("/dev/urandom", "rb");
+
+	if(pRandomFile != NULL)
+	{
+		if(fread(&lSeed, sizeof(lSeed), 1, pRandomFile) != 1)
+			lSeed = 0xA8E1u;
+		AtariIo_CloseFileOrWarn(pRandomFile, "/dev/urandom");
+	}
+
+	return lSeed;
+}
+
 static void AtariIo_FatalMissingRom(const char *pRomFileName)
 {
-	fprintf(stderr, "A8E: ROM file not found: %s (%s)\n", pRomFileName, strerror(errno));
-	fprintf(stderr, "A8E needs the ROM files ATARIBAS.ROM and ATARIXL.ROM in the current working directory.\n");
+	AtariIo_LogError("A8E: ROM file not found: %s (%s)\n", pRomFileName, strerror(errno));
+	AtariIo_LogError("A8E needs the ROM files ATARIBAS.ROM and ATARIXL.ROM in the current working directory.\n");
 	exit(1);
+}
+
+static void AtariIo_ReadRomOrDie(FILE *pFile, const char *pRomFileName, void *pBuffer, size_t lSize)
+{
+	size_t lBytesRead = fread(pBuffer, 1, lSize, pFile);
+	if(lBytesRead != lSize)
+	{
+		if(ferror(pFile))
+			AtariIo_LogError("A8E: Failed to read ROM file %s: %s\n", pRomFileName, strerror(errno));
+		else
+			AtariIo_LogError("A8E: ROM file too small: %s\n", pRomFileName);
+		exit(1);
+	}
 }
 
 static void AtariIoQueueKeyCode(_6502_Context_t *pContext, IoData_t *pIoData, u8 cKeyCode)
@@ -916,19 +1000,8 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 		while(pIoData->tDrawLineData.lBytesPerLine--)
 		{
 			cCharacter = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
-    		FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-
-			if(cCharacter & 0x80)
-			{
-				cCharacter &= 0x7f;
-				cColor0 = (SRAM[IO_COLPF2] & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
-				cColor1 = SRAM[IO_COLPF2];
-			}
-			else
-			{
-				cColor0 = SRAM[IO_COLPF2];
-				cColor1 = (SRAM[IO_COLPF2] & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
-			}
+	    		FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
+			cCharacter &= 0x7f;
 		
 			cData = RAM[((SRAM[IO_CHBASE] << 8) & 0xfc00) + cCharacter * 8 + lVerticalScrollOffset];
 		
@@ -953,19 +1026,8 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 		while(pIoData->tDrawLineData.lBytesPerLine--)
 		{
 			cCharacter = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
-    		FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-
-			if(cCharacter & 0x80)
-			{
-				cCharacter &= 0x7f;
-				cColor0 = (SRAM[IO_COLPF2] & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
-				cColor1 = SRAM[IO_COLPF2];
-			}
-			else
-			{
-				cColor0 = SRAM[IO_COLPF2];
-				cColor1 = (SRAM[IO_COLPF2] & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
-			}
+	    		FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
+			cCharacter &= 0x7f;
 		
 			cData = RAM[((SRAM[IO_CHBASE] << 8) & 0xfc00) + cCharacter * 8 + lVerticalScrollOffset];
 
@@ -990,19 +1052,8 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 		while(pIoData->tDrawLineData.lBytesPerLine--)
 		{
 			cCharacter = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
-    		FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-
-			if(cCharacter & 0x80)
-			{
-				cCharacter &= 0x7f;
-				cColor0 = (SRAM[IO_COLPF2] & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
-				cColor1 = SRAM[IO_COLPF2];
-			}
-			else
-			{
-				cColor0 = SRAM[IO_COLPF2];
-				cColor1 = (SRAM[IO_COLPF2] & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
-			}
+	    		FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
+			cCharacter &= 0x7f;
 		
 			cData = RAM[((SRAM[IO_CHBASE] << 8) & 0xfc00) + cCharacter * 8 + lVerticalScrollOffset];
 		
@@ -1022,8 +1073,10 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 		}
 
 		break;
+	default:
+		break;
+		}
 	}
-}
 
 // Todo: GTIA modes 9, 10 and 11, vertical scrolling
 static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
@@ -1722,6 +1775,8 @@ static void AtariIo_DrawLineModeF(_6502_Context_t *pContext)
 		}
 
 		break;
+	default:
+		break;
 	}
 }
 
@@ -1756,8 +1811,8 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			if(pIoData->tVideoData.lCurrentDisplayLine == 8)
 				printf("DL START\n");
 
-			printf("             [%16lld]", pContext->llCycleCounter);
-			printf(" DL: %3ld", pIoData->tVideoData.lCurrentDisplayLine);
+			printf("             [%16llu]", pContext->llCycleCounter);
+			printf(" DL: %3lu", pIoData->tVideoData.lCurrentDisplayLine);
 			printf(" $%04X:", pIoData->sDisplayListAddress);
 #endif
 			// Fetch new display list command   		
@@ -2419,11 +2474,7 @@ void AtariIoDrawPlayerMissiles(_6502_Context_t *pContext)
 			pIoData->tVideoData.pPriorityData + 
 			pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
         
-		if(SRAM[IO_PRIOR] & 0x01)
-		{
-			cPriorityMask = PRIO_PM0;
-		}
-		else if(SRAM[IO_PRIOR] & 0x02)
+		if(SRAM[IO_PRIOR] & (0x01 | 0x02))
 		{
 			cPriorityMask = PRIO_PM0;
 		}
@@ -2494,15 +2545,7 @@ void AtariIoDrawPlayerMissiles(_6502_Context_t *pContext)
 			pIoData->tVideoData.pPriorityData + 
 			pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
 
-		if(SRAM[IO_PRIOR] & 0x01)
-		{
-			cPriorityMask = 0x00;
-		}
-		else if(SRAM[IO_PRIOR] & 0x02)
-		{
-			cPriorityMask = 0x00;
-		}
-		else if(SRAM[IO_PRIOR] & 0x04)
+		if(SRAM[IO_PRIOR] & 0x04)
 		{
 			cPriorityMask = PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
 		}
@@ -2961,8 +3004,8 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 	if(pContext->llCycleCounter >= pIoData->llDliCycle)
 	{
 #ifdef VERBOSE_DL
-		printf("             [%16lld]", pContext->llCycleCounter);
-		printf(" DL: %3ld DLI\n", pIoData->tVideoData.lCurrentDisplayLine);
+		printf("             [%16llu]", pContext->llCycleCounter);
+		printf(" DL: %3lu DLI\n", pIoData->tVideoData.lCurrentDisplayLine);
 #endif
 		/* NMIST reflects pending NMIs even if disabled in NMIEN. */
 		/* DLI/VBI status bits are mutually exclusive. */
@@ -2989,7 +3032,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 	if(pContext->llCycleCounter >= pIoData->llSerialOutputTransmissionDoneCycle)
 	{
 #ifdef VERBOSE_SIO
-		printf("             [%16lld] SERIAL_OUTPUT_TRANSMISSION_DONE request!\n", pContext->llCycleCounter);
+		printf("             [%16llu] SERIAL_OUTPUT_TRANSMISSION_DONE request!\n", pContext->llCycleCounter);
 #endif
 		RAM[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
 		if(SRAM[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE)
@@ -3001,7 +3044,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 	if(pContext->llCycleCounter >= pIoData->llSerialOutputNeedDataCycle)
 	{
 #ifdef VERBOSE_SIO
-		printf("             [%16lld] SERIAL_OUTPUT_DATA_NEEDED request!\n", pContext->llCycleCounter);
+		printf("             [%16llu] SERIAL_OUTPUT_DATA_NEEDED request!\n", pContext->llCycleCounter);
 #endif
 		RAM[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_DATA_NEEDED;
 		if(SRAM[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_DATA_NEEDED)
@@ -3013,7 +3056,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 	if(pContext->llCycleCounter >= pIoData->llSerialInputDataReadyCycle)
 	{
 #ifdef VERBOSE_SIO
-		printf("             [%16lld] SERIAL_INPUT_DATA_READY request!\n", pContext->llCycleCounter);
+		printf("             [%16llu] SERIAL_INPUT_DATA_READY request!\n", pContext->llCycleCounter);
 #endif
 		RAM[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_INPUT_DATA_READY;
 		if(SRAM[IO_IRQEN_IRQST] & IRQ_SERIAL_INPUT_DATA_READY)
@@ -3026,7 +3069,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 	{
 		u64 period = Pokey_TimerPeriodCpuCycles(pContext, 1);
 #ifdef VERBOSE_SIO
-		printf("             [%16lld] TIMER_1 request!\n", pContext->llCycleCounter);
+		printf("             [%16llu] TIMER_1 request!\n", pContext->llCycleCounter);
 #endif
 		RAM[IO_IRQEN_IRQST] &= ~IRQ_TIMER_1;
 		if(SRAM[IO_IRQEN_IRQST] & IRQ_TIMER_1)
@@ -3047,7 +3090,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 	{
 		u64 period = Pokey_TimerPeriodCpuCycles(pContext, 2);
 #ifdef VERBOSE_SIO
-		printf("             [%16lld] TIMER_2 request!\n", pContext->llCycleCounter);
+		printf("             [%16llu] TIMER_2 request!\n", pContext->llCycleCounter);
 #endif
 		RAM[IO_IRQEN_IRQST] &= ~IRQ_TIMER_2;
 		if(SRAM[IO_IRQEN_IRQST] & IRQ_TIMER_2)
@@ -3068,7 +3111,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 	{
 		u64 period = Pokey_TimerPeriodCpuCycles(pContext, 4);
 #ifdef VERBOSE_SIO
-		printf("             [%16lld] TIMER_4 request!\n", pContext->llCycleCounter);
+		printf("             [%16llu] TIMER_4 request!\n", pContext->llCycleCounter);
 #endif
 		RAM[IO_IRQEN_IRQST] &= ~IRQ_TIMER_4;
 		if(SRAM[IO_IRQEN_IRQST] & IRQ_TIMER_4)
@@ -3088,18 +3131,6 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 	Pokey_Sync(pContext, pContext->llCycleCounter);
 
 	AtariIoCycleTimedEventUpdate(pContext);
-}
-
-static u8 *AtariIo_DefaultAccess(_6502_Context_t *pContext, u8 *pValue)
-{
-/*	printf("<$%04X: $%04X", pContext->tCpu.pc, pContext->sAccessAddress);
-
-	if(pValue)
-		printf(", $%02X", *pValue);
-
-	printf(">\n");
-*/
-	return &RAM[pContext->sAccessAddress];
 }
 
 void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
@@ -3134,30 +3165,42 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 	SDL_SetPalette(pSdlAtariSurface, SDL_LOGPAL | SDL_PHYSPAL, m_aAtariColors, 0, 256);
 
 	pIoData = malloc(sizeof(IoData_t));
+	if(pIoData == NULL)
+	{
+		AtariIo_LogError("A8E: Out of memory allocating IO state.\n");
+		SDL_FreeSurface(pSdlAtariSurface);
+		exit(1);
+	}
 	pContext->pIoData = pIoData;
 	memset(pIoData, 0, sizeof(IoData_t));
 
 	pIoData->pBasicRom = malloc(0x2000);
 	pIoData->pOsRom = malloc(0x1000);
-		pIoData->pSelfTestRom = malloc(0x0800);
-		pIoData->pFloatingPointRom = malloc(0x2800);
+	pIoData->pSelfTestRom = malloc(0x0800);
+	pIoData->pFloatingPointRom = malloc(0x2800);
+	if(pIoData->pBasicRom == NULL || pIoData->pOsRom == NULL ||
+		pIoData->pSelfTestRom == NULL || pIoData->pFloatingPointRom == NULL)
+	{
+		AtariIo_LogError("A8E: Out of memory allocating ROM buffers.\n");
+		exit(1);
+	}
 	
-		pFile = fopen("ATARIBAS.ROM", "rb");
-		if(!pFile)
-			AtariIo_FatalMissingRom("ATARIBAS.ROM");
-		fread(pIoData->pBasicRom, 0x2000, 1, pFile);
-		memcpy(&RAM[0xa000], pIoData->pBasicRom, 0x2000);
-		fclose(pFile);
-	
-		pFile = fopen("ATARIXL.ROM", "rb");
-		if(!pFile)
-			AtariIo_FatalMissingRom("ATARIXL.ROM");
-		fread(pIoData->pOsRom, 0x1000, 1, pFile);
-		memcpy(&RAM[0xc000], pIoData->pOsRom, 0x1000);
-		fread(pIoData->pSelfTestRom, 0x0800, 1, pFile);
-		fread(pIoData->pFloatingPointRom, 0x2800, 1, pFile);
+	pFile = fopen("ATARIBAS.ROM", "rb");
+	if(!pFile)
+		AtariIo_FatalMissingRom("ATARIBAS.ROM");
+	AtariIo_ReadRomOrDie(pFile, "ATARIBAS.ROM", pIoData->pBasicRom, 0x2000);
+	memcpy(&RAM[0xa000], pIoData->pBasicRom, 0x2000);
+	AtariIo_CloseFileOrDie(pFile, "ATARIBAS.ROM");
+
+	pFile = fopen("ATARIXL.ROM", "rb");
+	if(!pFile)
+		AtariIo_FatalMissingRom("ATARIXL.ROM");
+	AtariIo_ReadRomOrDie(pFile, "ATARIXL.ROM", pIoData->pOsRom, 0x1000);
+	memcpy(&RAM[0xc000], pIoData->pOsRom, 0x1000);
+	AtariIo_ReadRomOrDie(pFile, "ATARIXL.ROM", pIoData->pSelfTestRom, 0x0800);
+	AtariIo_ReadRomOrDie(pFile, "ATARIXL.ROM", pIoData->pFloatingPointRom, 0x2800);
 	memcpy(&RAM[0xd800], pIoData->pFloatingPointRom, 0x2800);
-	fclose(pFile);
+	AtariIo_CloseFileOrDie(pFile, "ATARIXL.ROM");
 	
 	_6502_SetRom(pContext, 0xa000, 0xbfff);
 	_6502_SetRom(pContext, 0xc000, 0xcfff);
@@ -3191,6 +3234,11 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 	}
 
 	pIoData->pDisk1 = (u8 *)malloc(MAX_DISK_SIZE);
+	if(pIoData->pDisk1 == NULL)
+	{
+		AtariIo_LogError("A8E: Out of memory allocating disk buffer.\n");
+		exit(1);
+	}
 	memset(pIoData->pDisk1, 0, MAX_DISK_SIZE);
 	
 	if(pDiskFileName)
@@ -3200,7 +3248,7 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 		if(pFile)
 		{
 			pIoData->lDiskSize = fread(pIoData->pDisk1, 1, MAX_DISK_SIZE, pFile);
-			fclose(pFile);
+			AtariIo_CloseFileOrWarn(pFile, pDiskFileName);
 
 			if(IsXexFile(pDiskFileName))
 			{
@@ -3213,7 +3261,7 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 						pXexCopy, pIoData->lDiskSize))
 					{
 						pIoData->lDiskSize = 0;
-						fprintf(stderr, "A8E: Failed to convert XEX to ATR: %s\n",
+						AtariIo_LogError("A8E: Failed to convert XEX to ATR: %s\n",
 							pDiskFileName);
 					}
 					free(pXexCopy);
@@ -3221,12 +3269,12 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 				else
 				{
 					pIoData->lDiskSize = 0;
-					fprintf(stderr, "A8E: Out of memory converting XEX: %s\n",
+					AtariIo_LogError("A8E: Out of memory converting XEX: %s\n",
 						pDiskFileName);
 				}
 			}
 #ifdef VERBOSE_SIO
-			printf("Disk name: %s, size = %ld\n", pDiskFileName, pIoData->lDiskSize);
+			printf("Disk name: %s, size = %lu\n", pDiskFileName, pIoData->lDiskSize);
 #endif
 		}
 	}
@@ -3234,13 +3282,16 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 	pIoData->tVideoData.pPriorityData = (u8 *)malloc(PIXELS_PER_LINE * LINES_PER_SCREEN_PAL);
 
 	if(pIoData->tVideoData.pPriorityData == NULL)
-		return;
+	{
+		AtariIo_LogError("A8E: Out of memory allocating priority buffer.\n");
+		exit(1);
+	}
 
 	memset(pIoData->tVideoData.pPriorityData, 0, PIXELS_PER_LINE * LINES_PER_SCREEN_PAL);
 
 	pContext->IoCycleTimedEventFunction = AtariIo_CycleTimedEvent;
 	
-	srand(time(0));
+	srand(AtariIo_GetRandomSeed());
 
 	Pokey_Init(pContext);
 }
@@ -3267,8 +3318,8 @@ void AtariIoStatus(_6502_Context_t *pContext)
 
 	printf("Atari IO status:\n\n");
 
-	printf("CPU cycles: %lld\n\n", pContext->llCycleCounter);
-	printf("Vertical line counter: %ld\n\n", pIoData->tVideoData.lCurrentDisplayLine);
+	printf("CPU cycles: %llu\n\n", pContext->llCycleCounter);
+	printf("Vertical line counter: %lu\n\n", pIoData->tVideoData.lCurrentDisplayLine);
 
 	printf("NMIs\n");
 
@@ -3426,10 +3477,10 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
 
     			if(pFile)
     			{
-    				pIoData->lDiskSize = fread(pIoData->pDisk1, 1, MAX_DISK_SIZE, pFile);
-    				fclose(pFile);
+					pIoData->lDiskSize = fread(pIoData->pDisk1, 1, MAX_DISK_SIZE, pFile);
+					AtariIo_CloseFileOrWarn(pFile, "D1.ATR");
 #ifdef VERBOSE_SIO
-					printf("Disk name: %s, size = %ld\n", "D1.ATR", pIoData->lDiskSize);
+					printf("Disk name: %s, size = %lu\n", "D1.ATR", pIoData->lDiskSize);
 #endif
     			}
 			}

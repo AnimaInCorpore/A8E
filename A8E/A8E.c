@@ -46,12 +46,14 @@ int main(int argc, char *argv[])
 	u32 lWindowWidth = 0;
 	u32 lWindowHeight = 0;
 	u32 lWindowScale = 2;
-	u32 lIndex;
+	int lIndex;
 	u32 lSdlFlags = 0;
 	
 	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0)
 	{
-		fprintf(stderr, "SDL_Init() failed: %s\n", SDL_GetError());
+		if(fprintf(stderr, "SDL_Init() failed: %s\n", SDL_GetError()) < 0)
+		{
+		}
 		return -1;
 	}
 
@@ -100,7 +102,6 @@ int main(int argc, char *argv[])
 	if(pScreenSurface == NULL && lWindowScale != 1)
 	{
 		/* Fallback: if the scaled mode isn't available, try native size. */
-		lWindowScale = 1;
 		lWindowWidth = lAtariScreenWidth;
 		lWindowHeight = lAtariScreenHeight;
 		pScreenSurface = SDL_SetVideoMode(lWindowWidth, lWindowHeight, 32, lSdlFlags);
@@ -108,7 +109,9 @@ int main(int argc, char *argv[])
 	
 	if(pScreenSurface == NULL)
 	{
-		fprintf(stderr, "SDL_SetVideoMode() failed: %s\n", SDL_GetError());
+		if(fprintf(stderr, "SDL_SetVideoMode() failed: %s\n", SDL_GetError()) < 0)
+		{
+		}
 		SDL_Quit();
 		return -1;
 	}

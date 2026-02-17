@@ -46,7 +46,7 @@ u8 *Pia_PORTA(_6502_Context_t *pContext, u8 *pValue)
     {
         SRAM[IO_PORTA] = *pValue;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" PORTA: %02X\n", *pValue);
 #endif
 	}
@@ -147,7 +147,7 @@ u8 *Pia_PORTB(_6502_Context_t *pContext, u8 *pValue)
 #endif		
 		RAM[IO_PORTB] = SRAM[IO_PORTB] = (*pValue & 0x83) | 0x7c;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" PORTB: %02X\n", *pValue);
 #endif
 	}
@@ -163,7 +163,7 @@ u8 *Pia_PACTL(_6502_Context_t *pContext, u8 *pValue)
 		SRAM[IO_PACTL] = *pValue;
 		RAM[IO_PACTL] = (*pValue & 0x0d) | 0x30;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" PACTL: %02X\n", *pValue);
 #endif
 	}
@@ -179,7 +179,7 @@ u8 *Pia_PBCTL(_6502_Context_t *pContext, u8 *pValue)
 		SRAM[IO_PBCTL] = *pValue;
 		RAM[IO_PBCTL] = (*pValue & 0x0d) | 0x30;
 #ifdef VERBOSE_REGISTER
-		printf("             [%16lld]", pContext->llCycleCounter);
+		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" PBCTL: %02X\n", *pValue);
 #endif
 	}
