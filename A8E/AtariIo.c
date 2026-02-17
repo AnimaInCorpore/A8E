@@ -52,7 +52,8 @@
 *
 * Zero page: $43/$44=dest ptr, $45/$46=end addr, $47=buf index,
 *            $48=bytes left, $49/$4A=sector number.
-* Sector buffer at $0600.
+* Sector buffer address is patched during XEX->ATR conversion so it
+* does not overlap any segment payload.
 *
 ********************************************************************/
 
@@ -177,6 +178,107 @@ static const u8 aXexBootLoader[] =
 	0x85, 0x48,             /* STA $48    ; bytes_left = 128 */
 	0x60,                   /* RTS */
 };
+
+#define XEX_BOOT_LOADER_BASE 0x0700u
+#define XEX_BOOT_PATCH_GETBYTE_BUFLO_INDEX (0x0788u - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_GETBYTE_BUFHI_INDEX (0x0789u - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_DBUFLO_INDEX (0x07A4u - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_DBUFHI_INDEX (0x07A9u - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_LOADER_RESERVED_START 0x0700u
+#define XEX_BOOT_LOADER_RESERVED_END 0x087Fu
+
+static int XexSegmentOverlapsRange(
+	const u8 *pNormalizedData,
+	u32 lNormalizedSize,
+	u16 sRangeStart,
+	u16 sRangeEnd)
+{
+	u32 lIndex = 0;
+
+	while(lIndex + 5 < lNormalizedSize)
+	{
+		u16 sSegmentStart;
+		u16 sSegmentEnd;
+		u32 lSegmentSize;
+
+		if(pNormalizedData[lIndex] != 0xFF || pNormalizedData[lIndex + 1] != 0xFF)
+			return 1;
+
+		sSegmentStart = (u16)(pNormalizedData[lIndex + 2] | (pNormalizedData[lIndex + 3] << 8));
+		sSegmentEnd = (u16)(pNormalizedData[lIndex + 4] | (pNormalizedData[lIndex + 5] << 8));
+		if(sSegmentEnd < sSegmentStart)
+			return 1;
+		lSegmentSize = (u32)(sSegmentEnd - sSegmentStart) + 1u;
+
+		if(sSegmentEnd < sRangeStart || sSegmentStart > sRangeEnd)
+		{
+			/* no overlap */
+		}
+		else
+		{
+			return 1;
+		}
+
+		if(lIndex + 6u + lSegmentSize > lNormalizedSize)
+			return 1;
+
+		lIndex += 6u + lSegmentSize;
+	}
+
+	return 0;
+}
+
+static int XexChooseBootSectorBuffer(
+	const u8 *pNormalizedData,
+	u32 lNormalizedSize,
+	u16 *pBufferAddress)
+{
+	u32 lCandidate;
+
+	if(!XexSegmentOverlapsRange(pNormalizedData, lNormalizedSize, 0x0600, 0x067F))
+	{
+		*pBufferAddress = 0x0600;
+		return 1;
+	}
+
+	for(lCandidate = 0x0880; lCandidate <= 0x4F80; lCandidate += 0x80)
+	{
+		u16 sCandidate = (u16)lCandidate;
+		if(!XexSegmentOverlapsRange(pNormalizedData, lNormalizedSize, sCandidate, (u16)(sCandidate + 0x7F)))
+		{
+			*pBufferAddress = sCandidate;
+			return 1;
+		}
+	}
+
+	for(lCandidate = 0x5800; lCandidate <= 0x9F80; lCandidate += 0x80)
+	{
+		u16 sCandidate = (u16)lCandidate;
+		if(!XexSegmentOverlapsRange(pNormalizedData, lNormalizedSize, sCandidate, (u16)(sCandidate + 0x7F)))
+		{
+			*pBufferAddress = sCandidate;
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+static int XexPatchBootLoaderBuffer(u8 *pLoader, u32 lLoaderSize, u16 sBufferAddress)
+{
+	if(!pLoader)
+		return 0;
+
+	if(lLoaderSize <= XEX_BOOT_PATCH_DBUFHI_INDEX)
+		return 0;
+
+	pLoader[XEX_BOOT_PATCH_GETBYTE_BUFLO_INDEX] = (u8)(sBufferAddress & 0xFF);
+	pLoader[XEX_BOOT_PATCH_GETBYTE_BUFHI_INDEX] = (u8)(sBufferAddress >> 8);
+	pLoader[XEX_BOOT_PATCH_DBUFLO_INDEX] = (u8)(sBufferAddress & 0xFF);
+	pLoader[XEX_BOOT_PATCH_DBUFHI_INDEX] = (u8)(sBufferAddress >> 8);
+
+	return 1;
+}
 
 static int IsXexFile(const char *pFileName)
 {
@@ -322,6 +424,7 @@ static int XexToAtr(u8 *pDisk, u32 *pDiskSize, u8 *pXexData, u32 lXexSize)
 {
 	u32 lNormalizedSize;
 	u8 *pNormalizedData;
+	u16 sBootBufferAddress;
 	u32 lDataSectors;
 	u32 lTotalDataBytes;
 	u32 lParagraphs;
@@ -347,6 +450,22 @@ static int XexToAtr(u8 *pDisk, u32 *pDiskSize, u8 *pXexData, u32 lXexSize)
 		return 0;
 	}
 
+	if(XexSegmentOverlapsRange(
+		pNormalizedData,
+		lNormalizedSize,
+		(u16)XEX_BOOT_LOADER_RESERVED_START,
+		(u16)XEX_BOOT_LOADER_RESERVED_END))
+	{
+		free(pNormalizedData);
+		return 0;
+	}
+
+	if(!XexChooseBootSectorBuffer(pNormalizedData, lNormalizedSize, &sBootBufferAddress))
+	{
+		free(pNormalizedData);
+		return 0;
+	}
+
 	lParagraphs = (lTotalDataBytes - 16) / 16;
 
 	memset(pDisk, 0, lTotalDataBytes);
@@ -360,6 +479,11 @@ static int XexToAtr(u8 *pDisk, u32 *pDiskSize, u8 *pXexData, u32 lXexSize)
 
 	/* Boot sectors 1-3 at offset 16 (384 bytes) */
 	memcpy(pDisk + 16, aXexBootLoader, sizeof(aXexBootLoader));
+	if(!XexPatchBootLoaderBuffer(pDisk + 16, sizeof(aXexBootLoader), sBootBufferAddress))
+	{
+		free(pNormalizedData);
+		return 0;
+	}
 
 	/* XEX data starting at sector 4 = offset 16 + 384 */
 	memcpy(pDisk + 16 + 384, pNormalizedData, lNormalizedSize);

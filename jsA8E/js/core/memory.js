@@ -54,6 +54,13 @@
     0xA9, 0x80, 0x85, 0x48,
     0x60
   ];
+  var XEX_BOOT_LOADER_BASE = 0x0700;
+  var XEX_BOOT_PATCH_GETBYTE_BUF_LO = 0x0788 - XEX_BOOT_LOADER_BASE;
+  var XEX_BOOT_PATCH_GETBYTE_BUF_HI = 0x0789 - XEX_BOOT_LOADER_BASE;
+  var XEX_BOOT_PATCH_DBUF_LO = 0x07a4 - XEX_BOOT_LOADER_BASE;
+  var XEX_BOOT_PATCH_DBUF_HI = 0x07a9 - XEX_BOOT_LOADER_BASE;
+  var XEX_BOOT_LOADER_RESERVED_START = 0x0700;
+  var XEX_BOOT_LOADER_RESERVED_END = 0x087f;
 
   function isXexFile(name) {
     if (!name) return false;
@@ -137,9 +144,72 @@
     return out === normalized.length ? normalized : null;
   }
 
+  function xexSegmentOverlapsRange(normalizedXex, rangeStart, rangeEnd) {
+    var i = 0;
+
+    while (i + 5 < normalizedXex.length) {
+      if (normalizedXex[i] !== 0xff || normalizedXex[i + 1] !== 0xff)
+        return true;
+
+      var start = (normalizedXex[i + 2] & 0xff) | ((normalizedXex[i + 3] & 0xff) << 8);
+      var end = (normalizedXex[i + 4] & 0xff) | ((normalizedXex[i + 5] & 0xff) << 8);
+      if (end < start) return true;
+      var segmentSize = end - start + 1;
+
+      if (!(end < rangeStart || start > rangeEnd)) return true;
+      if (i + 6 + segmentSize > normalizedXex.length) return true;
+
+      i += 6 + segmentSize;
+    }
+
+    return false;
+  }
+
+  function chooseXexBootBuffer(normalizedXex) {
+    var candidate;
+
+    if (!xexSegmentOverlapsRange(normalizedXex, 0x0600, 0x067f)) return 0x0600;
+
+    for (candidate = 0x0880; candidate <= 0x4f80; candidate += 0x80) {
+      if (!xexSegmentOverlapsRange(normalizedXex, candidate, candidate + 0x7f))
+        return candidate;
+    }
+
+    for (candidate = 0x5800; candidate <= 0x9f80; candidate += 0x80) {
+      if (!xexSegmentOverlapsRange(normalizedXex, candidate, candidate + 0x7f))
+        return candidate;
+    }
+
+    return -1;
+  }
+
+  function buildXexBootLoader(normalizedXex) {
+    if (
+      xexSegmentOverlapsRange(
+        normalizedXex,
+        XEX_BOOT_LOADER_RESERVED_START,
+        XEX_BOOT_LOADER_RESERVED_END
+      )
+    )
+      return null;
+
+    var bufferAddr = chooseXexBootBuffer(normalizedXex);
+    if (bufferAddr < 0) return null;
+
+    var loader = XEX_BOOT_LOADER.slice();
+    loader[XEX_BOOT_PATCH_GETBYTE_BUF_LO] = bufferAddr & 0xff;
+    loader[XEX_BOOT_PATCH_GETBYTE_BUF_HI] = (bufferAddr >> 8) & 0xff;
+    loader[XEX_BOOT_PATCH_DBUF_LO] = bufferAddr & 0xff;
+    loader[XEX_BOOT_PATCH_DBUF_HI] = (bufferAddr >> 8) & 0xff;
+    return loader;
+  }
+
   function xexToAtr(xexBytes) {
     var normalizedXex = normalizeXex(xexBytes);
+    var bootLoader;
     if (!normalizedXex) return null;
+    bootLoader = buildXexBootLoader(normalizedXex);
+    if (!bootLoader) return null;
 
     var normalizedSize = normalizedXex.length;
     var dataSectors = ((normalizedSize + 127) / 128) | 0;
@@ -158,8 +228,8 @@
     atr[7] = (paragraphs >> 24) & 0xFF;
 
     // Boot loader into sectors 1-3 (offset 16, 384 bytes)
-    for (var i = 0; i < XEX_BOOT_LOADER.length; i++) {
-      atr[16 + i] = XEX_BOOT_LOADER[i];
+    for (var i = 0; i < bootLoader.length; i++) {
+      atr[16 + i] = bootLoader[i];
     }
 
     // XEX data into sectors 4+ (offset 16 + 384 = 400)
