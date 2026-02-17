@@ -2,6 +2,7 @@ build/
 build-mingw/
 disks/
 docs/
+node_modules/
 .DS_Store
 ATARIBAS.ROM
 ATARIXL.ROM
