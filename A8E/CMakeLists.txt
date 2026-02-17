@@ -11,6 +11,25 @@ if(POLICY CMP0074)
   cmake_policy(SET CMP0074 NEW)
 endif()
 
+# --- Build Version (shared with jsA8E release tracking) ---
+set(A8E_BUILD_VERSION "dev")
+set(A8E_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../jsA8E/version.json")
+
+if(EXISTS "${A8E_VERSION_FILE}")
+  file(READ "${A8E_VERSION_FILE}" A8E_VERSION_JSON)
+  string(
+    REGEX MATCH
+    "\"version\"[ \t\r\n]*:[ \t\r\n]*\"([^\"]+)\""
+    A8E_VERSION_MATCH
+    "${A8E_VERSION_JSON}"
+  )
+  if(CMAKE_MATCH_1)
+    set(A8E_BUILD_VERSION "${CMAKE_MATCH_1}")
+  endif()
+endif()
+
+message(STATUS "A8E build version: ${A8E_BUILD_VERSION}")
+
 # --- Dependencies ---
 # Add common Homebrew prefixes before dependency discovery.
 if(APPLE)
@@ -37,6 +56,8 @@ add_executable(A8E
   Pia.c
   Pokey.c
 )
+
+target_compile_definitions(A8E PRIVATE A8E_BUILD_VERSION=\"${A8E_BUILD_VERSION}\")
 
 # --- Include Directories ---
 # Add emulator source directory to includes

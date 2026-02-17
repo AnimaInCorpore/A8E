@@ -956,6 +956,7 @@ canvas {
   border: 1px solid var(--border);
   background: #000;
   outline: none;
+  will-change: transform;
 }
 
 canvas.crtEnabled {

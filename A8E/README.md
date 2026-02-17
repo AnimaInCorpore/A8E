@@ -29,6 +29,12 @@ Options currently implemented:
 - `-f` / `-F`: fullscreen
 - `-b` / `-B`: alternate legacy mode (`lMode=1`, affects internal CONSOL hack state)
 
+## Build Version
+
+- The window caption version is injected at compile time.
+- `A8E/CMakeLists.txt` reads `../jsA8E/version.json` (shared with the jsA8E release workflow).
+- If that file is missing or invalid, the native build falls back to `dev`.
+
 ## Controls
 
 See the [root README](../README.md#controls) for the shared keyboard, joystick, and console key mappings.

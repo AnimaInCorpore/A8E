@@ -38,7 +38,11 @@
 
 /*******************************************************************/
 
-#define APPLICATION_CAPTION "A8E 0.1b (c) Sascha Springer"
+#ifndef A8E_BUILD_VERSION
+#define A8E_BUILD_VERSION "dev"
+#endif
+
+#define APPLICATION_CAPTION "A8E " A8E_BUILD_VERSION " (c) Sascha Springer"
 
 #define PIXELS_PER_LINE 456
 #define LINES_PER_SCREEN_PAL 312

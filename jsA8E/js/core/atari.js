@@ -546,6 +546,7 @@
       audioState: null,
       audioTurbo: false,
       audioMode: "none", // "none" | "worklet" | "script" | "loading"
+      cycleAccum: 0,
     };
 
     let memoryRuntime = memoryApi.createRuntime({
@@ -648,6 +649,8 @@
       hardReset();
     }
 
+    let CYCLES_PER_FRAME = LINES_PER_SCREEN_PAL * CYCLES_PER_LINE; // 35568
+
     function frame(ts) {
       if (!machine.running) return;
 
@@ -664,12 +667,28 @@
 
       let mult = turbo ? 4.0 : 1.0;
       if (!turbo && sioFast) mult = SIO_TURBO_EMU_MULTIPLIER;
-      let cyclesToRun = ((dtMs / 1000) * ATARI_CPU_HZ_PAL * mult) | 0;
-      if (cyclesToRun < 1) cyclesToRun = 1;
 
-      CPU.run(machine.ctx, machine.ctx.cycleCounter + cyclesToRun);
+      // Accumulate cycles from real elapsed time, then run in whole-frame
+      // steps.  This prevents rAF timing jitter (e.g. from compositor work
+      // during mouse movement) from translating into visible speed variation.
+      machine.cycleAccum += (dtMs / 1000) * ATARI_CPU_HZ_PAL * mult;
 
-      if (machine.audioState) {
+      let frameBudget = CYCLES_PER_FRAME;
+      // Cap catch-up work to avoid spiral-of-death after long pauses.
+      // Scale the cap with emulation multiplier so turbo can still reach target
+      // speed on lower display refresh rates (e.g. 30 Hz).
+      let maxCatchupFrames = Math.max(4, Math.ceil(mult * 4));
+      if (machine.cycleAccum > frameBudget * maxCatchupFrames)
+        machine.cycleAccum = frameBudget * maxCatchupFrames;
+
+      let ranFrames = 0;
+      while (machine.cycleAccum >= frameBudget) {
+        machine.cycleAccum -= frameBudget;
+        CPU.run(machine.ctx, machine.ctx.cycleCounter + frameBudget);
+        ranFrames++;
+      }
+
+      if (ranFrames > 0 && machine.audioState) {
         pokeyAudioSync(
           machine.ctx,
           machine.audioState,
@@ -695,8 +714,10 @@
         }
       }
 
-      paint();
-      updateDebug();
+      if (ranFrames > 0) {
+        paint();
+        updateDebug();
+      }
 
       machine.rafId = requestAnimationFrame(frame);
     }
@@ -711,6 +732,7 @@
       if (!machine.ctx.cpu.pc) hardResetWithInputRelease();
       machine.running = true;
       machine.lastTs = 0;
+      machine.cycleAccum = 0;
       machine.rafId = requestAnimationFrame(frame);
     }
 
