@@ -61,6 +61,25 @@
   var XEX_BOOT_PATCH_DBUF_HI = 0x07a9 - XEX_BOOT_LOADER_BASE;
   var XEX_BOOT_LOADER_RESERVED_START = 0x0700;
   var XEX_BOOT_LOADER_RESERVED_END = 0x087f;
+  var XEX_SEGMENT_MARKER = 0xff;
+
+  var ATR_HEADER_SIZE = 16;
+  var ATR_SECTOR_SIZE = 128;
+  var ATR_BOOT_SECTOR_COUNT = 3;
+  var ATR_BOOT_LOADER_SIZE = ATR_BOOT_SECTOR_COUNT * ATR_SECTOR_SIZE;
+  var ATR_DATA_OFFSET = ATR_HEADER_SIZE + ATR_BOOT_LOADER_SIZE;
+
+  function skipXexSegmentMarkers(bytes, startIndex) {
+    var i = startIndex | 0;
+    while (
+      i + 1 < bytes.length &&
+      bytes[i] === XEX_SEGMENT_MARKER &&
+      bytes[i + 1] === XEX_SEGMENT_MARKER
+    ) {
+      i += 2;
+    }
+    return i;
+  }
 
   function isXexFile(name) {
     if (!name) return false;
@@ -76,13 +95,7 @@
     var foundSegment = false;
 
     while (i < xexBytes.length) {
-      while (
-        i + 1 < xexBytes.length &&
-        xexBytes[i] === 0xff &&
-        xexBytes[i + 1] === 0xff
-      ) {
-        i += 2;
-      }
+      i = skipXexSegmentMarkers(xexBytes, i);
 
       if (i >= xexBytes.length) break;
       if (i + 3 >= xexBytes.length) break;
@@ -107,13 +120,7 @@
     i = 0;
 
     while (i < xexBytes.length) {
-      while (
-        i + 1 < xexBytes.length &&
-        xexBytes[i] === 0xff &&
-        xexBytes[i + 1] === 0xff
-      ) {
-        i += 2;
-      }
+      i = skipXexSegmentMarkers(xexBytes, i);
 
       if (i >= xexBytes.length) break;
       if (i + 3 >= xexBytes.length) break;
@@ -130,8 +137,8 @@
       i += 4;
       if (i + segmentSize2 > xexBytes.length) return null;
 
-      normalized[out++] = 0xff;
-      normalized[out++] = 0xff;
+      normalized[out++] = XEX_SEGMENT_MARKER;
+      normalized[out++] = XEX_SEGMENT_MARKER;
       normalized[out++] = startLo;
       normalized[out++] = startHi;
       normalized[out++] = endLo;
@@ -148,7 +155,10 @@
     var i = 0;
 
     while (i + 5 < normalizedXex.length) {
-      if (normalizedXex[i] !== 0xff || normalizedXex[i + 1] !== 0xff)
+      if (
+        normalizedXex[i] !== XEX_SEGMENT_MARKER ||
+        normalizedXex[i + 1] !== XEX_SEGMENT_MARKER
+      )
         return true;
 
       var start = (normalizedXex[i + 2] & 0xff) | ((normalizedXex[i + 3] & 0xff) << 8);
@@ -212,28 +222,28 @@
     if (!bootLoader) return null;
 
     var normalizedSize = normalizedXex.length;
-    var dataSectors = ((normalizedSize + 127) / 128) | 0;
-    var totalSize = 16 + 384 + dataSectors * 128;
-    var paragraphs = ((totalSize - 16) / 16) | 0;
+    var dataSectors = ((normalizedSize + (ATR_SECTOR_SIZE - 1)) / ATR_SECTOR_SIZE) | 0;
+    var totalSize = ATR_HEADER_SIZE + ATR_BOOT_LOADER_SIZE + dataSectors * ATR_SECTOR_SIZE;
+    var paragraphs = ((totalSize - ATR_HEADER_SIZE) / 16) | 0;
     var atr = new Uint8Array(totalSize);
 
     // ATR header
     atr[0] = 0x96;
     atr[1] = 0x02;
-    atr[2] = paragraphs & 0xFF;
-    atr[3] = (paragraphs >> 8) & 0xFF;
-    atr[4] = 0x80; // sector size 128
+    atr[2] = paragraphs & 0xff;
+    atr[3] = (paragraphs >> 8) & 0xff;
+    atr[4] = ATR_SECTOR_SIZE; // sector size 128
     atr[5] = 0x00;
-    atr[6] = (paragraphs >> 16) & 0xFF;
-    atr[7] = (paragraphs >> 24) & 0xFF;
+    atr[6] = (paragraphs >> 16) & 0xff;
+    atr[7] = (paragraphs >> 24) & 0xff;
 
-    // Boot loader into sectors 1-3 (offset 16, 384 bytes)
+    // Boot loader into sectors 1-3.
     for (var i = 0; i < bootLoader.length; i++) {
-      atr[16 + i] = bootLoader[i];
+      atr[ATR_HEADER_SIZE + i] = bootLoader[i];
     }
 
-    // XEX data into sectors 4+ (offset 16 + 384 = 400)
-    atr.set(normalizedXex, 400);
+    // XEX data into sectors 4+.
+    atr.set(normalizedXex, ATR_DATA_OFFSET);
 
     return atr;
   }

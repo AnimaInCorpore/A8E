@@ -2,20 +2,38 @@
   "use strict";
 
   function createApi(cfg) {
-    let IO_SEROUT_SERIN = cfg.IO_SEROUT_SERIN;
-
-    let SERIAL_OUTPUT_DATA_NEEDED_CYCLES = cfg.SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
-    let SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES =
+    const IO_SEROUT_SERIN = cfg.IO_SEROUT_SERIN;
+    const SERIAL_OUTPUT_DATA_NEEDED_CYCLES =
+      cfg.SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
+    const SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES =
       cfg.SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
-    let SERIAL_INPUT_FIRST_DATA_READY_CYCLES =
+    const SERIAL_INPUT_FIRST_DATA_READY_CYCLES =
       cfg.SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
-    let SERIAL_INPUT_DATA_READY_CYCLES = cfg.SERIAL_INPUT_DATA_READY_CYCLES;
+    const SERIAL_INPUT_DATA_READY_CYCLES = cfg.SERIAL_INPUT_DATA_READY_CYCLES;
 
-    let cycleTimedEventUpdate = cfg.cycleTimedEventUpdate;
+    const cycleTimedEventUpdate = cfg.cycleTimedEventUpdate;
 
-    let SIO_DATA_OFFSET = 32;
-    let DISK_DEVICE_ID_BASE = 0x31;
-    let DISK_DEVICE_COUNT = 8;
+    const SIO_DATA_OFFSET = 32;
+    const DISK_DEVICE_ID_BASE = 0x31;
+    const DISK_DEVICE_COUNT = 8;
+
+    const DISK_HEADER_SIZE = 16;
+    const DISK_SECTOR_SIZE_SINGLE = 128;
+    const DISK_SECTOR_SIZE_ENHANCED = 256;
+    const DISK_BOOT_SECTORS = 3;
+
+    const CHAR_ACK = "A".charCodeAt(0);
+    const CHAR_COMPLETE = "C".charCodeAt(0);
+    const CHAR_ERROR = "E".charCodeAt(0);
+    const CHAR_NACK = "N".charCodeAt(0);
+
+    const CMD_FORMAT = 0x21;
+    const CMD_READ_SECTOR = 0x52;
+    const CMD_STATUS = 0x53;
+    const CMD_MOTOR_ON = 0x55;
+    const CMD_VERIFY_SECTOR = 0x56;
+    const CMD_WRITE_SECTOR = 0x57;
+    const CMD_PUT_SECTOR = 0x50;
 
     function sioChecksum(buf, size) {
       let checksum = 0;
@@ -35,22 +53,26 @@
     }
 
     function diskSectorSize(disk) {
-      let s = 128;
+      let s = DISK_SECTOR_SIZE_SINGLE;
       if (disk && disk.length >= 6) {
         s = (disk[4] & 0xff) | ((disk[5] & 0xff) << 8);
-        if (s !== 128 && s !== 256) s = 128;
+        if (s !== DISK_SECTOR_SIZE_SINGLE && s !== DISK_SECTOR_SIZE_ENHANCED) {
+          s = DISK_SECTOR_SIZE_SINGLE;
+        }
       }
       return s;
     }
 
     function sectorBytesAndOffset(sectorIndex, sectorSize) {
       if (sectorIndex <= 0) return null;
-      let bytes = sectorIndex < 4 ? 128 : sectorSize;
+      let bytes =
+        sectorIndex <= DISK_BOOT_SECTORS ? DISK_SECTOR_SIZE_SINGLE : sectorSize;
       let index =
-        sectorIndex < 4
-          ? (sectorIndex - 1) * 128
-          : (sectorIndex - 4) * sectorSize + 128 * 3;
-      let offset = 16 + index;
+        sectorIndex <= DISK_BOOT_SECTORS
+          ? (sectorIndex - 1) * DISK_SECTOR_SIZE_SINGLE
+          : (sectorIndex - (DISK_BOOT_SECTORS + 1)) * sectorSize +
+            DISK_SECTOR_SIZE_SINGLE * DISK_BOOT_SECTORS;
+      let offset = DISK_HEADER_SIZE + index;
       return { bytes: bytes | 0, offset: offset | 0 };
     }
 
@@ -61,27 +83,43 @@
     }
 
     function queueDeviceNack(ctx, now) {
-      queueSingleByteResponse(ctx, now, "N".charCodeAt(0));
+      queueSingleByteResponse(ctx, now, CHAR_NACK);
+    }
+
+    function writeAckStatus(buf, statusChar) {
+      buf[0] = CHAR_ACK;
+      buf[1] = statusChar & 0xff;
+    }
+
+    function writeAckComplete(buf) {
+      writeAckStatus(buf, CHAR_COMPLETE);
     }
 
     function queueAckComplete(ctx, now) {
       let io = ctx.ioData;
       let buf = io.sioBuffer;
-      buf[0] = "A".charCodeAt(0);
-      buf[1] = "C".charCodeAt(0);
+      writeAckComplete(buf);
       queueSerinResponse(ctx, now, 2);
     }
 
     function queueAckData(ctx, now, dataStartIndex, dataSize) {
       let io = ctx.ioData;
       let buf = io.sioBuffer;
-      buf[0] = "A".charCodeAt(0);
-      buf[1] = "C".charCodeAt(0);
+      writeAckComplete(buf);
       buf[dataSize + 2] = sioChecksum(
         buf.subarray(dataStartIndex, dataStartIndex + dataSize),
         dataSize,
       );
       queueSerinResponse(ctx, now, dataSize + 3);
+    }
+
+    function canAccessSector(disk, diskSize, sectorInfo) {
+      return (
+        !!disk &&
+        !!sectorInfo &&
+        sectorInfo.offset >= DISK_HEADER_SIZE &&
+        sectorInfo.offset + sectorInfo.bytes <= diskSize
+      );
     }
 
     function deviceSlotIndexFromDeviceId(devId) {
@@ -127,16 +165,11 @@
         let diskSize = mounted ? mounted.size | 0 : 0;
         let sectorSize = diskSectorSize(disk);
 
-        if (cmd === 0x52) {
+        if (cmd === CMD_READ_SECTOR) {
           // READ SECTOR
           let sectorIndex = (aux1 | (aux2 << 8)) & 0xffff;
           let si = sectorBytesAndOffset(sectorIndex, sectorSize);
-          if (
-            !disk ||
-            !si ||
-            si.offset < 16 ||
-            si.offset + si.bytes > diskSize
-          ) {
+          if (!canAccessSector(disk, diskSize, si)) {
             queueDeviceNack(ctx, now);
             return;
           }
@@ -145,15 +178,14 @@
           return;
         }
 
-        if (cmd === 0x53) {
+        if (cmd === CMD_STATUS) {
           // STATUS
           if (!disk || !disk.length || disk[0] === 0) {
             queueDeviceNack(ctx, now);
             return;
           }
-          buf[0] = "A".charCodeAt(0);
-          buf[1] = "C".charCodeAt(0);
-          if (sectorSize === 128) {
+          writeAckComplete(buf);
+          if (sectorSize === DISK_SECTOR_SIZE_SINGLE) {
             buf[2] = 0x10;
             buf[3] = 0x00;
             buf[4] = 0x01;
@@ -170,16 +202,15 @@
           return;
         }
 
-        if (cmd === 0x57 || cmd === 0x50 || cmd === 0x56) {
+        if (
+          cmd === CMD_WRITE_SECTOR ||
+          cmd === CMD_PUT_SECTOR ||
+          cmd === CMD_VERIFY_SECTOR
+        ) {
           // WRITE / PUT / VERIFY SECTOR (expects a data frame).
           let sectorIndex2 = (aux1 | (aux2 << 8)) & 0xffff;
           let si2 = sectorBytesAndOffset(sectorIndex2, sectorSize);
-          if (
-            !disk ||
-            !si2 ||
-            si2.offset < 16 ||
-            si2.offset + si2.bytes > diskSize
-          ) {
+          if (!canAccessSector(disk, diskSize, si2)) {
             queueDeviceNack(ctx, now);
             return;
           }
@@ -192,22 +223,22 @@
           io.sioPendingBytes = si2.bytes | 0;
 
           // ACK command frame; host will then send the data frame.
-          queueSingleByteResponse(ctx, now, "A".charCodeAt(0));
+          queueSingleByteResponse(ctx, now, CHAR_ACK);
           return;
         }
 
-        if (cmd === 0x21) {
+        if (cmd === CMD_FORMAT) {
           // FORMAT: clear data area (very minimal).
-          if (!disk || !diskSize || diskSize <= 16) {
+          if (!disk || !diskSize || diskSize <= DISK_HEADER_SIZE) {
             queueDeviceNack(ctx, now);
             return;
           }
-          disk.fill(0, 16);
+          disk.fill(0, DISK_HEADER_SIZE);
           queueAckComplete(ctx, now);
           return;
         }
 
-        if (cmd === 0x55) {
+        if (cmd === CMD_MOTOR_ON) {
           // MOTOR ON: no-op, but ACK.
           queueAckComplete(ctx, now);
           return;
@@ -233,17 +264,14 @@
 
         if (
           calculated !== providedCrc ||
-          !disk ||
-          !si ||
-          si.offset < 16 ||
-          si.offset + si.bytes > diskSize ||
+          !canAccessSector(disk, diskSize, si) ||
           si.bytes !== payloadBytes
         ) {
           queueDeviceNack(ctx, now);
           return;
         }
 
-        if (cmd === 0x56) {
+        if (cmd === CMD_VERIFY_SECTOR) {
           // VERIFY SECTOR: compare payload to current disk content.
           let ok = true;
           for (let vi = 0; vi < si.bytes; vi++) {
@@ -255,8 +283,7 @@
               break;
             }
           }
-          buf[0] = "A".charCodeAt(0);
-          buf[1] = ok ? "C".charCodeAt(0) : "E".charCodeAt(0);
+          writeAckStatus(buf, ok ? CHAR_COMPLETE : CHAR_ERROR);
           queueSerinResponse(ctx, now, 2);
           return;
         }
