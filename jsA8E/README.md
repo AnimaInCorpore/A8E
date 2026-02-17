@@ -23,7 +23,7 @@ python -m http.server 8000
 - Tooltip version text is loaded from `jsA8E/version.json` at runtime.
 - The GitHub workflow `.github/workflows/update-jsa8e-version.yml` updates that file automatically when a release is published.
 - Local/manual update is just:
-  - set `jsA8E/version.json` to the new tag (for example `v1.0.1`)
+  - set `jsA8E/version.json` to the new tag (for example `v1.1.0`)
   - commit and push
 
 ## ROM and Boot Requirements
