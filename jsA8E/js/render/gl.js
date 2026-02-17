@@ -2,11 +2,11 @@
   "use strict";
 
   function compileShader(gl, type, source) {
-    let sh = gl.createShader(type);
+    const sh = gl.createShader(type);
     gl.shaderSource(sh, source);
     gl.compileShader(sh);
     if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-      let msg = gl.getShaderInfoLog(sh) || "shader compile failed";
+      const msg = gl.getShaderInfoLog(sh) || "shader compile failed";
       try {
         gl.deleteShader(sh);
       } catch {
@@ -18,9 +18,9 @@
   }
 
   function linkProgram(gl, vsSource, fsSource) {
-    let vs = compileShader(gl, gl.VERTEX_SHADER, vsSource);
-    let fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
-    let prog = gl.createProgram();
+    const vs = compileShader(gl, gl.VERTEX_SHADER, vsSource);
+    const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
+    const prog = gl.createProgram();
     gl.attachShader(prog, vs);
     gl.attachShader(prog, fs);
     gl.linkProgram(prog);
@@ -31,7 +31,7 @@
       // ignore
     }
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      let msg2 = gl.getProgramInfoLog(prog) || "program link failed";
+      const msg2 = gl.getProgramInfoLog(prog) || "program link failed";
       try {
         gl.deleteProgram(prog);
       } catch {
@@ -43,10 +43,10 @@
   }
 
   function buildPaletteRgba(paletteRgb) {
-    let out = new Uint8Array(256 * 4);
+    const out = new Uint8Array(256 * 4);
     for (let i = 0; i < 256; i++) {
-      let si = i * 3;
-      let di = i * 4;
+      const si = i * 3;
+      const di = i * 4;
       out[di + 0] = paletteRgb[si + 0] & 0xff;
       out[di + 1] = paletteRgb[si + 1] & 0xff;
       out[di + 2] = paletteRgb[si + 2] & 0xff;
@@ -63,7 +63,7 @@
   }
 
   function createTexture(gl, unit, minFilter, magFilter, wrapS, wrapT) {
-    let tex = gl.createTexture();
+    const tex = gl.createTexture();
     gl.activeTexture(unit);
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, minFilter);
@@ -74,7 +74,7 @@
   }
 
   function setupQuad(gl, buffer, posLoc, uvLoc) {
-    let stride = 4 * 4;
+    const stride = 4 * 4;
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     if (posLoc >= 0) {
       gl.enableVertexAttribArray(posLoc);
@@ -86,7 +86,7 @@
     }
   }
 
-  let SHADER_PATHS = {
+  const SHADER_PATHS = {
     webgl2: {
       vs: "js/render/shaders/webgl2.vert.glsl",
       decodeFs: "js/render/shaders/webgl2.decode.frag.glsl",
@@ -105,13 +105,13 @@
   function fetchShaderText(url) {
     return fetch(url).then(function (resp) {
       if (!resp.ok)
-        throw new Error(
+        {throw new Error(
           "A8EGlRenderer: failed to fetch shader: " +
             url +
             " (" +
             resp.status +
             ")",
-        );
+        );}
       return resp.text();
     });
   }
@@ -120,7 +120,7 @@
     if (shaderSourceCache) return Promise.resolve(shaderSourceCache);
     if (shaderSourcePromise) return shaderSourcePromise;
 
-    let tasks = [];
+    const tasks = [];
     function enqueue(profile, key, url) {
       tasks.push(
         fetchShaderText(url).then(function (text) {
@@ -138,12 +138,12 @@
 
     shaderSourcePromise = Promise.all(tasks)
       .then(function (items) {
-        let out = {
+        const out = {
           webgl2: { vs: "", decodeFs: "", crtFs: "" },
           webgl1: { vs: "", decodeFs: "", crtFs: "" },
         };
         for (let i = 0; i < items.length; i++) {
-          let it = items[i];
+          const it = items[i];
           out[it.profile][it.key] = it.text;
         }
         shaderSourceCache = out;
@@ -167,37 +167,37 @@
   }
 
   function create(opts) {
-    let gl = opts.gl;
-    let canvas = opts.canvas;
-    let texW = opts.textureW | 0;
-    let texH = opts.textureH | 0;
-    let viewX = opts.viewX | 0;
-    let viewY = opts.viewY | 0;
-    let viewW = opts.viewW | 0;
-    let viewH = opts.viewH | 0;
-    let paletteRgb = opts.paletteRgb;
+    const gl = opts.gl;
+    const canvas = opts.canvas;
+    const texW = opts.textureW | 0;
+    const texH = opts.textureH | 0;
+    const viewX = opts.viewX | 0;
+    const viewY = opts.viewY | 0;
+    const viewW = opts.viewW | 0;
+    const viewH = opts.viewH | 0;
+    const paletteRgb = opts.paletteRgb;
 
     if (!gl) throw new Error("A8EGlRenderer: missing WebGL context");
     if (!canvas) throw new Error("A8EGlRenderer: missing canvas");
     if (!paletteRgb || paletteRgb.length < 256 * 3)
-      throw new Error("A8EGlRenderer: missing palette");
+      {throw new Error("A8EGlRenderer: missing palette");}
     // Keep CRT internal scene resolution fixed to 2x horizontal, 1x vertical.
-    let sceneScaleX = 2;
-    let sceneScaleY = 1;
+    const sceneScaleX = 2;
+    const sceneScaleY = 1;
     if (texW <= 0 || texH <= 0)
-      throw new Error("A8EGlRenderer: invalid texture size");
+      {throw new Error("A8EGlRenderer: invalid texture size");}
     if (viewW <= 0 || viewH <= 0)
-      throw new Error("A8EGlRenderer: invalid viewport size");
+      {throw new Error("A8EGlRenderer: invalid viewport size");}
 
-    let sceneW = viewW * sceneScaleX;
-    let sceneH = viewH * sceneScaleY;
+    const sceneW = viewW * sceneScaleX;
+    const sceneH = viewH * sceneScaleY;
 
-    let gl2 = isWebGL2(gl);
+    const gl2 = isWebGL2(gl);
 
-    let shaderSources = getShaderSources(gl2);
-    let vsSource = shaderSources.vs;
-    let decodeFsSource = shaderSources.decodeFs;
-    let crtFsSource = shaderSources.crtFs;
+    const shaderSources = getShaderSources(gl2);
+    const vsSource = shaderSources.vs;
+    const decodeFsSource = shaderSources.decodeFs;
+    const crtFsSource = shaderSources.crtFs;
 
     let decodeProgram = null;
     let crtProgram = null;
@@ -251,7 +251,7 @@
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, indexTex);
       if (gl2)
-        gl.texSubImage2D(
+        {gl.texSubImage2D(
           gl.TEXTURE_2D,
           0,
           0,
@@ -261,9 +261,9 @@
           gl.RED,
           gl.UNSIGNED_BYTE,
           video.pixels,
-        );
+        );}
       else
-        gl.texSubImage2D(
+        {gl.texSubImage2D(
           gl.TEXTURE_2D,
           0,
           0,
@@ -273,7 +273,7 @@
           gl.LUMINANCE,
           gl.UNSIGNED_BYTE,
           video.pixels,
-        );
+        );}
 
       // Pass 1: index + palette -> scene texture (at internal sceneScaleX/sceneScaleY resolution).
       gl.bindFramebuffer(gl.FRAMEBUFFER, sceneFbo);
@@ -294,7 +294,7 @@
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, sceneTex);
       if (crtOutputSizeLoc !== null)
-        gl.uniform2f(crtOutputSizeLoc, canvas.width | 0, canvas.height | 0);
+        {gl.uniform2f(crtOutputSizeLoc, canvas.width | 0, canvas.height | 0);}
       gl.viewport(0, 0, canvas.width | 0, canvas.height | 0);
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -408,11 +408,11 @@
 
       // Quad for decode pass (full canvas quad, uv remaps to Atari viewport region).
       // Use texel edges so the viewport spans the full source width/height when scaling.
-      let u0 = viewX / texW;
-      let u1 = (viewX + viewW) / texW;
-      let v0 = viewY / texH;
-      let v1 = (viewY + viewH) / texH;
-      let decodeQuad = new Float32Array([
+      const u0 = viewX / texW;
+      const u1 = (viewX + viewW) / texW;
+      const v0 = viewY / texH;
+      const v1 = (viewY + viewH) / texH;
+      const decodeQuad = new Float32Array([
         -1.0,
         -1.0,
         u0,
@@ -436,7 +436,7 @@
       gl.bufferData(gl.ARRAY_BUFFER, decodeQuad, gl.STATIC_DRAW);
 
       // Quad for final CRT post-process pass.
-      let crtQuad = new Float32Array([
+      const crtQuad = new Float32Array([
         -1.0, -1.0, 0.0, 0.0, -1.0, 1.0, 0.0, 1.0, 1.0, -1.0, 1.0, 0.0, 1.0,
         1.0, 1.0, 1.0,
       ]);
@@ -464,9 +464,9 @@
       gl.useProgram(crtProgram);
       if (crtSceneLoc !== null) gl.uniform1i(crtSceneLoc, 2);
       if (crtSourceSizeLoc !== null)
-        gl.uniform2f(crtSourceSizeLoc, sceneW, sceneH);
+        {gl.uniform2f(crtSourceSizeLoc, sceneW, sceneH);}
       if (crtScanlineSizeLoc !== null)
-        gl.uniform2f(crtScanlineSizeLoc, viewW, viewH);
+        {gl.uniform2f(crtScanlineSizeLoc, viewW, viewH);}
 
       return {
         paint: paint,

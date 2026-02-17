@@ -13,15 +13,15 @@
     if (!queue.length) return queueIndex | 0;
     if (!maxSamples) return queueIndex | 0;
 
-    let total = countQueuedSamples(queue, queueIndex);
+    const total = countQueuedSamples(queue, queueIndex);
     if (total <= maxSamples) return queueIndex | 0;
 
     // Drop oldest samples, partially trimming the head buffer when possible.
     let toDrop = (total - maxSamples) | 0;
     while (queue.length && toDrop > 0) {
-      let head = queue[0];
-      let start = queueIndex | 0;
-      let avail = ((head.length | 0) - start) | 0;
+      const head = queue[0];
+      const start = queueIndex | 0;
+      const avail = ((head.length | 0) - start) | 0;
       if (avail <= 0) {
         queue.shift();
         queueIndex = 0;
@@ -55,9 +55,9 @@
       this.statusBlockCounter = 0;
       this.underrunBlocks = 0;
 
-      let self = this;
+      const self = this;
       this.port.onmessage = function (e) {
-        let msg = e && e.data ? e.data : null;
+        const msg = e && e.data ? e.data : null;
         if (!msg || !msg.type) return;
         if (msg.type === "samples" && msg.samples && msg.samples.length) {
           let samples = msg.samples;
@@ -107,7 +107,7 @@
     }
 
     process(inputs, outputs) {
-      let out = outputs[0] && outputs[0][0];
+      const out = outputs[0] && outputs[0][0];
       if (!out) return true;
 
       let i = 0;
@@ -119,13 +119,13 @@
           continue;
         }
 
-        let buf = this.queue[0];
+        const buf = this.queue[0];
         if (!buf || typeof buf.length !== "number") {
           this.queue.shift();
           this.queueIndex = 0;
           continue;
         }
-        let avail = (buf.length | 0) - (this.queueIndex | 0);
+        const avail = (buf.length | 0) - (this.queueIndex | 0);
         if (avail <= 0) {
           this.queue.shift();
           this.queueIndex = 0;
@@ -134,8 +134,8 @@
 
         let toCopy = out.length - i;
         if (toCopy > avail) toCopy = avail;
-        let start = this.queueIndex | 0;
-        let end = (this.queueIndex + toCopy) | 0;
+        const start = this.queueIndex | 0;
+        const end = (this.queueIndex + toCopy) | 0;
         if (buf.subarray) {
           out.set(buf.subarray(start, end), i);
         } else {

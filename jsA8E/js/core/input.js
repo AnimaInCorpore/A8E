@@ -35,7 +35,7 @@
 
       function normalizeSourceToken(e) {
         if (!e || e.sourceToken === undefined || e.sourceToken === null)
-          return null;
+          {return null;}
         return String(e.sourceToken);
       }
 
@@ -61,7 +61,7 @@
         const source = normalizeSourceToken(e);
         if (source !== null) {
           if (st.sources.has(source))
-            return { handled: true, newlyPressed: false };
+            {return { handled: true, newlyPressed: false };}
           st.sources.add(source);
           return { handled: true, newlyPressed: !wasDown };
         }
@@ -77,11 +77,11 @@
         const source = normalizeSourceToken(e);
         if (source !== null) {
           if (!st.sources.has(source))
-            return { handled: false, newlyReleased: false };
+            {return { handled: false, newlyReleased: false };}
           st.sources.delete(source);
         } else {
           if (st.anonymousCount <= 0)
-            return { handled: false, newlyReleased: false };
+            {return { handled: false, newlyReleased: false };}
           st.anonymousCount--;
         }
         const stillDown = isSymDown(st);
@@ -123,7 +123,7 @@
         machine.ctx.ram[IO_STIMER_KBCODE] = kc & 0xff;
         machine.ctx.ram[IO_IRQEN_IRQST] &= ~IRQ_OTHER_KEY_PRESSED;
         if (machine.ctx.sram[IO_IRQEN_IRQST] & IRQ_OTHER_KEY_PRESSED)
-          CPU.irq(machine.ctx);
+          {CPU.irq(machine.ctx);}
         machine.ctx.ioData.keyPressCounter++;
         machine.ctx.ram[IO_SKCTL_SKSTAT] &= ~0x04;
       }
@@ -218,7 +218,7 @@
         if (sym === 289) {
           machine.ctx.ram[IO_IRQEN_IRQST] &= ~IRQ_BREAK_KEY_PRESSED;
           if (machine.ctx.sram[IO_IRQEN_IRQST] & IRQ_BREAK_KEY_PRESSED)
-            CPU.irq(machine.ctx);
+            {CPU.irq(machine.ctx);}
           return true;
         }
 
@@ -292,9 +292,9 @@
         if (kc === 255) return false;
 
         if (machine.ctx.ioData.keyPressCounter > 0)
-          machine.ctx.ioData.keyPressCounter--;
+          {machine.ctx.ioData.keyPressCounter--;}
         if (machine.ctx.ioData.keyPressCounter === 0)
-          machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x04;
+          {machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x04;}
         return true;
       }
 

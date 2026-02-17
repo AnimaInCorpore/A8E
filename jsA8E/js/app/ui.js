@@ -1,21 +1,21 @@
 (function () {
   "use strict";
 
-  let Util = window.A8EUtil;
+  const Util = window.A8EUtil;
 
   async function boot() {
     let canvas = document.getElementById("screen");
-    let debugEl = document.getElementById("debug");
+    const debugEl = document.getElementById("debug");
     canvas.tabIndex = 0;
-    let nativeScreenW = canvas.width | 0;
-    let nativeScreenH = canvas.height | 0;
+    const nativeScreenW = canvas.width | 0;
+    const nativeScreenH = canvas.height | 0;
     let screenViewport = canvas.parentElement;
     let layoutRoot =
       screenViewport && screenViewport.closest
         ? screenViewport.closest(".layout")
         : null;
-    let keyboardPanel = document.getElementById("keyboardPanel");
-    let joystickPanel = document.getElementById("joystickPanel");
+    const keyboardPanel = document.getElementById("keyboardPanel");
+    const joystickPanel = document.getElementById("joystickPanel");
     let app = null;
     let gl = null;
     try {
@@ -63,9 +63,9 @@
 
     function readFlexGapPx(el) {
       if (!el || !window.getComputedStyle) return 0;
-      let st = window.getComputedStyle(el);
-      let raw = st.rowGap && st.rowGap !== "normal" ? st.rowGap : st.gap;
-      let parsed = parseFloat(raw || "0");
+      const st = window.getComputedStyle(el);
+      const raw = st.rowGap && st.rowGap !== "normal" ? st.rowGap : st.gap;
+      const parsed = parseFloat(raw || "0");
       return isFinite(parsed) ? Math.max(0, parsed) : 0;
     }
 
@@ -75,7 +75,7 @@
 
     function reservedPanelHeight(el) {
       if (!isPanelVisible(el)) return 0;
-      let rect = el.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
       return Math.max(
         0,
         Math.ceil(rect.height + readFlexGapPx(el.parentElement)),
@@ -83,11 +83,11 @@
     }
 
     function resizeDisplayCanvas() {
-      let viewport = screenViewport || canvas.parentElement;
+      const viewport = screenViewport || canvas.parentElement;
       if (!viewport) return;
-      let rect = viewport.getBoundingClientRect();
-      let maxW = Math.max(1, Math.floor(rect.width || nativeScreenW));
-      let aspect = nativeScreenW / nativeScreenH;
+      const rect = viewport.getBoundingClientRect();
+      const maxW = Math.max(1, Math.floor(rect.width || nativeScreenW));
+      const aspect = nativeScreenW / nativeScreenH;
       let cssW = maxW;
       let cssH = Math.round(cssW / aspect);
 
@@ -95,10 +95,10 @@
       // reserving space only for joystick. Keyboard may be below visible area.
       // In fullscreen, fit only inside fullscreen viewport bounds.
       if (isViewportFullscreen()) {
-        let vv = window.visualViewport;
-        let visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
-        let availableH = Math.floor(visibleBottom - rect.top - 8);
-        let maxH = Math.max(
+        const vv = window.visualViewport;
+        const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+        const availableH = Math.floor(visibleBottom - rect.top - 8);
+        const maxH = Math.max(
           1,
           availableH || Math.floor(rect.height || nativeScreenH),
         );
@@ -109,20 +109,20 @@
       } else {
         let availableNormalH = 0;
         if (layoutRoot) {
-          let layoutRect = layoutRoot.getBoundingClientRect();
-          let topOffset = Math.max(0, rect.top - layoutRect.top);
+          const layoutRect = layoutRoot.getBoundingClientRect();
+          const topOffset = Math.max(0, rect.top - layoutRect.top);
           availableNormalH = Math.floor(
             layoutRoot.clientHeight - topOffset - 8,
           );
         } else {
-          let vvNormal = window.visualViewport;
-          let visibleBottomNormal = vvNormal
+          const vvNormal = window.visualViewport;
+          const visibleBottomNormal = vvNormal
             ? vvNormal.offsetTop + vvNormal.height
             : window.innerHeight;
           availableNormalH = Math.floor(visibleBottomNormal - rect.top - 8);
         }
         availableNormalH -= reservedPanelHeight(joystickPanel);
-        let normalMaxH = Math.max(
+        const normalMaxH = Math.max(
           1,
           availableNormalH || Math.floor(rect.height || nativeScreenH),
         );
@@ -132,8 +132,8 @@
         }
       }
 
-      let nextW = Math.max(1, cssW) + "px";
-      let nextH = Math.max(1, cssH) + "px";
+      const nextW = Math.max(1, cssW) + "px";
+      const nextH = Math.max(1, cssH) + "px";
       if (canvas.style.width !== nextW) canvas.style.width = nextW;
       if (canvas.style.height !== nextH) canvas.style.height = nextH;
     }
@@ -141,12 +141,12 @@
     function resizeCrtCanvas() {
       resizeDisplayCanvas();
       if (!gl) return;
-      let dpr = window.devicePixelRatio || 1;
-      let rect = canvas.getBoundingClientRect();
-      let cssW = Math.max(1, Math.round(rect.width || nativeScreenW));
-      let cssH = Math.max(1, Math.round(rect.height || nativeScreenH));
-      let targetW = Math.max(nativeScreenW, Math.round(cssW * dpr));
-      let targetH = Math.max(nativeScreenH, Math.round(cssH * dpr));
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const cssW = Math.max(1, Math.round(rect.width || nativeScreenW));
+      const cssH = Math.max(1, Math.round(rect.height || nativeScreenH));
+      const targetW = Math.max(nativeScreenW, Math.round(cssW * dpr));
+      const targetH = Math.max(nativeScreenH, Math.round(cssH * dpr));
       if (canvas.width !== targetW || canvas.height !== targetH) {
         canvas.width = targetW;
         canvas.height = targetH;
@@ -157,24 +157,24 @@
       if (!onLayoutResize) return;
       window.removeEventListener("resize", onLayoutResize);
       if (window.visualViewport)
-        window.visualViewport.removeEventListener("resize", onLayoutResize);
+        {window.visualViewport.removeEventListener("resize", onLayoutResize);}
       onLayoutResize = null;
     }
 
     function detachCrtHooks() {
       if (!crtCanvas) return;
       if (onCrtContextLost)
-        crtCanvas.removeEventListener(
+        {crtCanvas.removeEventListener(
           "webglcontextlost",
           onCrtContextLost,
           false,
-        );
+        );}
       if (onCrtContextRestored)
-        crtCanvas.removeEventListener(
+        {crtCanvas.removeEventListener(
           "webglcontextrestored",
           onCrtContextRestored,
           false,
-        );
+        );}
       crtCanvas = null;
       onCrtContextLost = null;
       onCrtContextRestored = null;
@@ -235,57 +235,57 @@
     onLayoutResize = resizeCrtCanvas;
     window.addEventListener("resize", onLayoutResize);
     if (window.visualViewport)
-      window.visualViewport.addEventListener("resize", onLayoutResize);
+      {window.visualViewport.addEventListener("resize", onLayoutResize);}
     requestAnimationFrame(onLayoutResize);
 
-    let btnStart = document.getElementById("btnStart");
-    let btnReset = document.getElementById("btnReset");
-    let btnFullscreen = document.getElementById("btnFullscreen");
-    let btnTurbo = document.getElementById("btnTurbo");
-    let btnSioTurbo = document.getElementById("btnSioTurbo");
-    let btnAudio = document.getElementById("btnAudio");
-    let btnJoystick = document.getElementById("btnJoystick");
-    let btnKeyboard = document.getElementById("btnKeyboard");
-    let btnOptionOnStart = document.getElementById("btnOptionOnStart");
+    const btnStart = document.getElementById("btnStart");
+    const btnReset = document.getElementById("btnReset");
+    const btnFullscreen = document.getElementById("btnFullscreen");
+    const btnTurbo = document.getElementById("btnTurbo");
+    const btnSioTurbo = document.getElementById("btnSioTurbo");
+    const btnAudio = document.getElementById("btnAudio");
+    const btnJoystick = document.getElementById("btnJoystick");
+    const btnKeyboard = document.getElementById("btnKeyboard");
+    const btnOptionOnStart = document.getElementById("btnOptionOnStart");
 
-    let romOs = document.getElementById("romOs");
-    let romBasic = document.getElementById("romBasic");
-    let disk1 = document.getElementById("disk1");
-    let romOsStatus = document.getElementById("romOsStatus");
-    let romBasicStatus = document.getElementById("romBasicStatus");
-    let diskStatus = document.getElementById("diskStatus");
-    let atariKeyboard = document.getElementById("atariKeyboard");
-    let joystickArea = document.getElementById("joystickArea");
-    let joystickStick = document.getElementById("joystickStick");
-    let fireButton = document.getElementById("fireButton");
-    let joystickGlows = {
+    const romOs = document.getElementById("romOs");
+    const romBasic = document.getElementById("romBasic");
+    const disk1 = document.getElementById("disk1");
+    const romOsStatus = document.getElementById("romOsStatus");
+    const romBasicStatus = document.getElementById("romBasicStatus");
+    const diskStatus = document.getElementById("diskStatus");
+    const atariKeyboard = document.getElementById("atariKeyboard");
+    const joystickArea = document.getElementById("joystickArea");
+    const joystickStick = document.getElementById("joystickStick");
+    const fireButton = document.getElementById("fireButton");
+    const joystickGlows = {
       up: document.getElementById("glowUp"),
       down: document.getElementById("glowDown"),
       left: document.getElementById("glowLeft"),
       right: document.getElementById("glowRight"),
     };
-    let virtualModifiers = {
+    const virtualModifiers = {
       ctrl: false,
       shift: false,
     };
-    let physicalModifierKeys = {
+    const physicalModifierKeys = {
       ctrl: new Set(),
       shift: new Set(),
     };
     let emulatedShiftDown = false;
-    let pressedVirtualKeysByPointer = new Map();
-    let pressedPhysicalKeysByToken = new Map();
-    let keyboardButtonsByCode = new Map();
-    let keyboardButtonsByKey = new Map();
-    let keyboardModifierButtons = {
+    const pressedVirtualKeysByPointer = new Map();
+    const pressedPhysicalKeysByToken = new Map();
+    const keyboardButtonsByCode = new Map();
+    const keyboardButtonsByKey = new Map();
+    const keyboardModifierButtons = {
       ctrl: [],
       shift: [],
     };
-    let pressedButtonRefCount = new WeakMap();
-    let pressedButtonsBySource = new Map();
+    const pressedButtonRefCount = new WeakMap();
+    const pressedButtonsBySource = new Map();
     let flashTokenCounter = 0;
     let virtualTapTokenCounter = 0;
-    let joystickState = {
+    const joystickState = {
       up: false,
       down: false,
       left: false,
@@ -295,27 +295,27 @@
     let stickPointerId = null;
     let firePointerId = null;
     let stickCenter = { x: 0, y: 0 };
-    let JOYSTICK_MAX_DEFLECT = 20;
-    let JOYSTICK_DEAD_ZONE = 5;
-    let JOYSTICK_DIRECTION_UP = {
+    const JOYSTICK_MAX_DEFLECT = 20;
+    const JOYSTICK_DEAD_ZONE = 5;
+    const JOYSTICK_DIRECTION_UP = {
       name: "up",
       key: "ArrowUp",
       code: "ArrowUp",
       sdlSym: 273,
     };
-    let JOYSTICK_DIRECTION_DOWN = {
+    const JOYSTICK_DIRECTION_DOWN = {
       name: "down",
       key: "ArrowDown",
       code: "ArrowDown",
       sdlSym: 274,
     };
-    let JOYSTICK_DIRECTION_LEFT = {
+    const JOYSTICK_DIRECTION_LEFT = {
       name: "left",
       key: "ArrowLeft",
       code: "ArrowLeft",
       sdlSym: 276,
     };
-    let JOYSTICK_DIRECTION_RIGHT = {
+    const JOYSTICK_DIRECTION_RIGHT = {
       name: "right",
       key: "ArrowRight",
       code: "ArrowRight",
@@ -345,9 +345,9 @@
       // If WebGL init succeeded but shader/program setup failed, fall back to 2D by replacing the canvas.
       if (gl && !ctx2d) {
         detachCrtHooks();
-        let parent = canvas.parentNode;
+        const parent = canvas.parentNode;
         if (parent) {
-          let nextCanvas = canvas.cloneNode(false);
+          const nextCanvas = canvas.cloneNode(false);
           nextCanvas.width = nativeScreenW;
           nextCanvas.height = nativeScreenH;
           nextCanvas.classList.remove("crtEnabled");
@@ -427,7 +427,7 @@
 
     function updateFullscreenButton() {
       if (!btnFullscreen) return;
-      let active = isViewportFullscreen();
+      const active = isViewportFullscreen();
       btnFullscreen.innerHTML = active
         ? '<i class="fa-solid fa-compress"></i>'
         : '<i class="fa-solid fa-expand"></i>';
@@ -454,7 +454,7 @@
 
     function normalizeKeyboardDataKey(key) {
       if (key === null || key === undefined) return "";
-      let v = String(key);
+      const v = String(key);
       if (v === "Spacebar" || v === "Space") return " ";
       if (v.length === 1) return v.toLowerCase();
       return v;
@@ -466,7 +466,7 @@
       keyboardModifierButtons.ctrl.length = 0;
       keyboardModifierButtons.shift.length = 0;
       if (!atariKeyboard) return;
-      let buttons = atariKeyboard.querySelectorAll("button.kbKey");
+      const buttons = atariKeyboard.querySelectorAll("button.kbKey");
       buttons.forEach(function (button) {
         addButtonLookupEntry(
           keyboardButtonsByCode,
@@ -478,7 +478,7 @@
           normalizeKeyboardDataKey(button.getAttribute("data-key")),
           button,
         );
-        let modifier = button.getAttribute("data-modifier");
+        const modifier = button.getAttribute("data-modifier");
         if (modifier === "shift" || modifier === "ctrl") {
           keyboardModifierButtons[modifier].push(button);
         }
@@ -487,7 +487,7 @@
 
     function setButtonPressed(button, sourceToken, isDown) {
       if (!button || !sourceToken) return;
-      let source = String(sourceToken);
+      const source = String(sourceToken);
       let sourceButtons = pressedButtonsBySource.get(source);
       if (isDown) {
         if (!sourceButtons) {
@@ -496,7 +496,7 @@
         }
         if (sourceButtons.has(button)) return;
         sourceButtons.add(button);
-        let nextCount = (pressedButtonRefCount.get(button) || 0) + 1;
+        const nextCount = (pressedButtonRefCount.get(button) || 0) + 1;
         pressedButtonRefCount.set(button, nextCount);
         if (nextCount === 1) button.classList.add("pressed");
         return;
@@ -504,7 +504,7 @@
       if (!sourceButtons || !sourceButtons.has(button)) return;
       sourceButtons.delete(button);
       if (sourceButtons.size === 0) pressedButtonsBySource.delete(source);
-      let next = (pressedButtonRefCount.get(button) || 0) - 1;
+      const next = (pressedButtonRefCount.get(button) || 0) - 1;
       if (next <= 0) {
         pressedButtonRefCount.delete(button);
         button.classList.remove("pressed");
@@ -522,8 +522,8 @@
 
     function clearButtonPressSource(sourceToken) {
       if (!sourceToken) return;
-      let source = String(sourceToken);
-      let sourceButtons = pressedButtonsBySource.get(source);
+      const source = String(sourceToken);
+      const sourceButtons = pressedButtonsBySource.get(source);
       if (!sourceButtons || sourceButtons.size === 0) {
         pressedButtonsBySource.delete(source);
         return;
@@ -535,44 +535,44 @@
 
     function physicalKeyToken(e) {
       if (e && e.code) return e.code;
-      let key = normalizeKeyboardDataKey((e && e.key) || "Unknown");
-      let location = e && typeof e.location === "number" ? e.location : 0;
+      const key = normalizeKeyboardDataKey((e && e.key) || "Unknown");
+      const location = e && typeof e.location === "number" ? e.location : 0;
       return key + ":" + location;
     }
 
     function findButtonsForPhysicalEvent(e) {
       if (!atariKeyboard) return [];
-      let modifier = modifierForPhysicalEvent(e);
+      const modifier = modifierForPhysicalEvent(e);
       if (modifier === "shift" || modifier === "ctrl") return [];
-      let code = (e && e.code) || "";
+      const code = (e && e.code) || "";
       if (code && keyboardButtonsByCode.has(code))
-        return keyboardButtonsByCode.get(code);
-      let key = normalizeKeyboardDataKey((e && e.key) || "");
+        {return keyboardButtonsByCode.get(code);}
+      const key = normalizeKeyboardDataKey((e && e.key) || "");
       if (key && keyboardButtonsByKey.has(key))
-        return keyboardButtonsByKey.get(key);
+        {return keyboardButtonsByKey.get(key);}
       return [];
     }
 
     function syncPhysicalKeyVisual(e, isDown) {
-      let token = physicalKeyToken(e);
-      let sourceToken = "physbtn:" + token;
+      const token = physicalKeyToken(e);
+      const sourceToken = "physbtn:" + token;
       if (isDown) {
         if (pressedPhysicalKeysByToken.has(token)) return;
-        let buttons = findButtonsForPhysicalEvent(e);
+        const buttons = findButtonsForPhysicalEvent(e);
         if (!buttons.length) return;
         pressedPhysicalKeysByToken.set(token, buttons);
         setButtonsPressed(buttons, sourceToken, true);
         return;
       }
       if (!pressedPhysicalKeysByToken.has(token)) return;
-      let prevButtons = pressedPhysicalKeysByToken.get(token) || [];
+      const prevButtons = pressedPhysicalKeysByToken.get(token) || [];
       pressedPhysicalKeysByToken.delete(token);
       setButtonsPressed(prevButtons, sourceToken, false);
     }
 
     function clearPhysicalKeyVisuals() {
       Array.from(pressedPhysicalKeysByToken.keys()).forEach(function (token) {
-        let buttons = pressedPhysicalKeysByToken.get(token) || [];
+        const buttons = pressedPhysicalKeysByToken.get(token) || [];
         pressedPhysicalKeysByToken.delete(token);
         setButtonsPressed(buttons, "physbtn:" + token, false);
       });
@@ -580,14 +580,14 @@
 
     function setModifierButtons(modifier, active) {
       if (!atariKeyboard) return;
-      let buttons = keyboardModifierButtons[modifier] || [];
+      const buttons = keyboardModifierButtons[modifier] || [];
       buttons.forEach(function (button) {
         button.classList.toggle("active", active);
       });
     }
 
     function isModifierActive(modifier) {
-      let heldPhysical =
+      const heldPhysical =
         physicalModifierKeys[modifier] &&
         physicalModifierKeys[modifier].size > 0;
       return !!virtualModifiers[modifier] || heldPhysical;
@@ -598,31 +598,31 @@
     }
 
     function modifierForPhysicalEvent(e) {
-      let key = (e && e.key) || "";
-      let code = (e && e.code) || "";
+      const key = (e && e.key) || "";
+      const code = (e && e.code) || "";
       if (key === "Shift" || code === "ShiftLeft" || code === "ShiftRight")
-        return "shift";
+        {return "shift";}
       if (
         key === "Control" ||
         code === "ControlLeft" ||
         code === "ControlRight"
       )
-        return "ctrl";
+        {return "ctrl";}
       return null;
     }
 
     function physicalModifierToken(e) {
       if (e && e.code) return e.code;
-      let key = (e && e.key) || "Modifier";
-      let location = e && typeof e.location === "number" ? e.location : 0;
+      const key = (e && e.key) || "Modifier";
+      const location = e && typeof e.location === "number" ? e.location : 0;
       return key + ":" + location;
     }
 
     function trackPhysicalModifier(e, isDown) {
-      let modifier = modifierForPhysicalEvent(e);
+      const modifier = modifierForPhysicalEvent(e);
       if (!modifier) return;
-      let keySet = physicalModifierKeys[modifier];
-      let token = physicalModifierToken(e);
+      const keySet = physicalModifierKeys[modifier];
+      const token = physicalModifierToken(e);
       if (isDown) keySet.add(token);
       else keySet.delete(token);
       refreshModifierButtons(modifier);
@@ -630,8 +630,8 @@
     }
 
     function clearPhysicalModifiers() {
-      let hadShift = physicalModifierKeys.shift.size > 0;
-      let hadCtrl = physicalModifierKeys.ctrl.size > 0;
+      const hadShift = physicalModifierKeys.shift.size > 0;
+      const hadCtrl = physicalModifierKeys.ctrl.size > 0;
       physicalModifierKeys.shift.clear();
       physicalModifierKeys.ctrl.clear();
       if (hadShift) refreshModifierButtons("shift");
@@ -652,15 +652,15 @@
     }
 
     function shouldTrackGlobalModifierEvent() {
-      let active = document.activeElement;
+      const active = document.activeElement;
       if (active === canvas) return true;
       if (atariKeyboard && active && atariKeyboard.contains(active))
-        return true;
+        {return true;}
       return false;
     }
 
     function setCtrlModifier(active) {
-      let next = !!active;
+      const next = !!active;
       if (virtualModifiers.ctrl === next) return;
       virtualModifiers.ctrl = next;
       refreshModifierButtons("ctrl");
@@ -673,7 +673,7 @@
       sdlSym,
       sourceToken,
     ) {
-      let ev = {
+      const ev = {
         key: key,
         code: code || "",
         ctrlKey: isModifierActive("ctrl"),
@@ -683,18 +683,18 @@
             : isModifierActive("shift"),
       };
       if (typeof sdlSym === "number" && isFinite(sdlSym))
-        ev.sdlSym = sdlSym | 0;
+        {ev.sdlSym = sdlSym | 0;}
       if (sourceToken !== undefined && sourceToken !== null)
-        ev.sourceToken = String(sourceToken);
+        {ev.sourceToken = String(sourceToken);}
       return ev;
     }
 
     function syncShiftStateToEmulator() {
       if (!app || !app.onKeyDown || !app.onKeyUp) return;
-      let next = isModifierActive("shift");
+      const next = isModifierActive("shift");
       if (next === emulatedShiftDown) return;
       emulatedShiftDown = next;
-      let ev = makeVirtualKeyEvent(
+      const ev = makeVirtualKeyEvent(
         "Shift",
         "ShiftLeft",
         next,
@@ -706,7 +706,7 @@
     }
 
     function setShiftModifier(active) {
-      let next = !!active;
+      const next = !!active;
       if (virtualModifiers.shift === next) return;
       virtualModifiers.shift = next;
       refreshModifierButtons("shift");
@@ -715,7 +715,7 @@
 
     function flashVirtualKey(btn, durationMs) {
       if (!btn) return;
-      let sourceToken = "flash:" + ++flashTokenCounter;
+      const sourceToken = "flash:" + ++flashTokenCounter;
       setButtonPressed(btn, sourceToken, true);
       window.setTimeout(function () {
         setButtonPressed(btn, sourceToken, false);
@@ -724,7 +724,7 @@
 
     function pressVirtualKey(key, code, sdlSym) {
       if (!app || !app.onKeyDown || !app.onKeyUp) return;
-      let ev = makeVirtualKeyEvent(
+      const ev = makeVirtualKeyEvent(
         key,
         code,
         undefined,
@@ -739,15 +739,15 @@
 
     function parseSdlSym(btn) {
       if (!btn) return null;
-      let sdl = btn.getAttribute("data-sdl");
+      const sdl = btn.getAttribute("data-sdl");
       if (!sdl) return null;
-      let parsed = parseInt(sdl, 10);
+      const parsed = parseInt(sdl, 10);
       return isFinite(parsed) ? parsed : null;
     }
 
     function releasePointerVirtualKey(pointerId) {
       if (!pressedVirtualKeysByPointer.has(pointerId)) return;
-      let st = pressedVirtualKeysByPointer.get(pointerId);
+      const st = pressedVirtualKeysByPointer.get(pointerId);
       pressedVirtualKeysByPointer.delete(pointerId);
       clearButtonPressSource(st.sourceToken);
       if (app && app.onKeyUp) {
@@ -779,10 +779,10 @@
     function setSingleJoystickDirection(def, nextPressed) {
       if (joystickState[def.name] === nextPressed) return;
       joystickState[def.name] = nextPressed;
-      let glow = joystickGlows[def.name];
+      const glow = joystickGlows[def.name];
       if (glow) glow.classList.toggle("active", nextPressed);
       if (!app || !app.onKeyDown || !app.onKeyUp) return;
-      let ev = makeJoystickEvent(
+      const ev = makeJoystickEvent(
         def.key,
         def.code,
         def.sdlSym,
@@ -800,20 +800,20 @@
     }
 
     function setJoystickFire(active) {
-      let next = !!active;
+      const next = !!active;
       if (joystickState.fire === next) return;
       joystickState.fire = next;
       if (fireButton) fireButton.classList.toggle("active", next);
       if (!app || !app.onKeyDown || !app.onKeyUp) return;
-      let ev = makeJoystickEvent("Alt", "AltLeft", 308, "joy:fire");
+      const ev = makeJoystickEvent("Alt", "AltLeft", 308, "joy:fire");
       if (next) app.onKeyDown(ev);
       else app.onKeyUp(ev);
     }
 
     function getJoystickStickCenter() {
       if (!joystickArea) return { x: 0, y: 0 };
-      let boot = joystickArea.querySelector(".cx40-boot");
-      let rect = boot
+      const boot = joystickArea.querySelector(".cx40-boot");
+      const rect = boot
         ? boot.getBoundingClientRect()
         : joystickArea.getBoundingClientRect();
       return {
@@ -824,7 +824,7 @@
 
     function updateJoystickStick(dx, dy) {
       if (!joystickStick) return;
-      let distance = Math.sqrt(dx * dx + dy * dy);
+      const distance = Math.sqrt(dx * dx + dy * dy);
       if (distance > JOYSTICK_MAX_DEFLECT) {
         dx = (dx / distance) * JOYSTICK_MAX_DEFLECT;
         dy = (dy / distance) * JOYSTICK_MAX_DEFLECT;
@@ -838,8 +838,8 @@
     }
 
     function processJoystickMove(clientX, clientY) {
-      let dx = clientX - stickCenter.x;
-      let dy = clientY - stickCenter.y;
+      const dx = clientX - stickCenter.x;
+      const dy = clientY - stickCenter.y;
       updateJoystickStick(dx, dy);
       setJoystickDirection(
         dy < -JOYSTICK_DEAD_ZONE,
@@ -881,11 +881,11 @@
 
     function setJoystickEnabled(active) {
       if (!btnJoystick || !joystickPanel) return;
-      let enabled = !!active;
+      const enabled = !!active;
       btnJoystick.classList.toggle("active", enabled);
       joystickPanel.hidden = !enabled;
 
-      let label = enabled
+      const label = enabled
         ? "Hide the on-screen joystick controls."
         : "Show the on-screen joystick controls.";
       btnJoystick.title = label;
@@ -910,11 +910,11 @@
 
     function setKeyboardEnabled(active) {
       if (!btnKeyboard || !keyboardPanel) return;
-      let enabled = !!active;
+      const enabled = !!active;
       btnKeyboard.classList.toggle("active", enabled);
       keyboardPanel.hidden = !enabled;
 
-      let label = enabled
+      const label = enabled
         ? "Hide the on-screen keyboard controls."
         : "Show the on-screen keyboard controls.";
       btnKeyboard.title = label;
@@ -959,7 +959,7 @@
       }
 
       // Update disk status icon
-      let d1Mounted = app.hasMountedDiskForDeviceSlot(0);
+      const d1Mounted = app.hasMountedDiskForDeviceSlot(0);
       if (d1Mounted) {
         diskStatus.classList.remove("fa-circle-xmark");
         diskStatus.classList.add("fa-circle-check");
@@ -974,7 +974,7 @@
     function bindToggleButton(btn, onToggle) {
       if (!btn) return;
       btn.addEventListener("click", function () {
-        let active = btn.classList.toggle("active");
+        const active = btn.classList.toggle("active");
         onToggle(active);
       });
     }
@@ -998,7 +998,7 @@
 
     if (btnFullscreen) {
       btnFullscreen.addEventListener("click", function () {
-        let op = isViewportFullscreen()
+        const op = isViewportFullscreen()
           ? exitFullscreen()
           : requestFullscreen(screenViewport);
         Promise.resolve(op)
@@ -1048,7 +1048,7 @@
 
     function getKeyboardButtonFromTarget(target) {
       if (!atariKeyboard || !target || !target.closest) return null;
-      let btn = target.closest("button.kbKey");
+      const btn = target.closest("button.kbKey");
       if (!btn || !atariKeyboard.contains(btn)) return null;
       return btn;
     }
@@ -1068,7 +1068,7 @@
     }
 
     function onKeyboardPointerDown(e) {
-      let btn = getKeyboardButtonFromTarget(e.target);
+      const btn = getKeyboardButtonFromTarget(e.target);
       if (!btn) return;
       if (keyboardPanel && keyboardPanel.hidden) return;
 
@@ -1077,10 +1077,10 @@
         return;
       }
 
-      let key = btn.getAttribute("data-key");
+      const key = btn.getAttribute("data-key");
       if (!key) return;
-      let code = btn.getAttribute("data-code") || "";
-      let sdlSym = parseSdlSym(btn);
+      const code = btn.getAttribute("data-code") || "";
+      const sdlSym = parseSdlSym(btn);
 
       e.preventDefault();
       if (btn.setPointerCapture) {
@@ -1092,7 +1092,7 @@
       }
 
       releasePointerVirtualKey(e.pointerId);
-      let sourceToken = "vkptr:" + e.pointerId;
+      const sourceToken = "vkptr:" + e.pointerId;
       setButtonPressed(btn, sourceToken, true);
       if (app && app.onKeyDown) {
         app.onKeyDown(
@@ -1117,13 +1117,13 @@
 
     function onKeyboardAccessibilityKeyDown(e) {
       if (e.key !== "Enter" && e.key !== " ") return;
-      let btn = getKeyboardButtonFromTarget(e.target);
+      const btn = getKeyboardButtonFromTarget(e.target);
       if (!btn) return;
       if (applyModifierButton(btn.getAttribute("data-modifier"), btn)) {
         e.preventDefault();
         return;
       }
-      let key = btn.getAttribute("data-key");
+      const key = btn.getAttribute("data-key");
       if (!key) return;
       pressVirtualKey(key, btn.getAttribute("data-code") || "", parseSdlSym(btn));
       flashVirtualKey(btn, 80);
@@ -1141,8 +1141,8 @@
     function onJoystickPointerDown(e) {
       if (joystickPanel && joystickPanel.hidden) return;
 
-      let target = e.target;
-      let isFire =
+      const target = e.target;
+      const isFire =
         target === fireButton ||
         (target.closest && target.closest(".cx40-fire-housing"));
       if (isFire) {
@@ -1199,7 +1199,7 @@
     function attachFileInput(inputEl, handler) {
       if (!inputEl) return;
       inputEl.addEventListener("change", function () {
-        let file = inputEl.files && inputEl.files[0];
+        const file = inputEl.files && inputEl.files[0];
         if (!file) return;
         Util.readFileAsArrayBuffer(file).then(function (buf) {
           try {
@@ -1227,7 +1227,7 @@
     // Keyboard input forwarded to emulator.
     function onCanvasKeyDown(e) {
       syncPhysicalKeyVisual(e, true);
-      let ev = normalizePhysicalKeyEvent(e, true);
+      const ev = normalizePhysicalKeyEvent(e, true);
       if (!ev) {
         e.preventDefault();
         return;
@@ -1237,7 +1237,7 @@
 
     function onCanvasKeyUp(e) {
       syncPhysicalKeyVisual(e, false);
-      let ev = normalizePhysicalKeyEvent(e, false);
+      const ev = normalizePhysicalKeyEvent(e, false);
       if (!ev) {
         e.preventDefault();
         return;
@@ -1289,7 +1289,7 @@
       setJoystickEnabled(btnJoystick.classList.contains("active"));
     }
     if (btnKeyboard && keyboardPanel) {
-      let keyboardActive = !isMobile();
+      const keyboardActive = !isMobile();
       btnKeyboard.classList.toggle("active", keyboardActive);
       setKeyboardEnabled(keyboardActive);
     }

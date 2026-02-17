@@ -38,7 +38,7 @@
         pokeyAudioResetState(machine.audioState);
         pokeyAudioSetTurbo(machine.audioState, !!getTurbo());
         if (pokeyAudioSetFillLevelHint)
-          pokeyAudioSetFillLevelHint(machine.audioState, -1);
+          {pokeyAudioSetFillLevelHint(machine.audioState, -1);}
         machine.audioTurbo = !!getTurbo();
         // Initialize audio regs from current POKEY write-shadow.
         {
@@ -107,7 +107,7 @@
               node.bufferSize | 0,
             );
             if (pokeyAudioSetFillLevelHint)
-              pokeyAudioSetFillLevelHint(machine.audioState, -1);
+              {pokeyAudioSetFillLevelHint(machine.audioState, -1);}
           }
           node.onaudioprocess = function (e) {
             const out = e.outputBuffer.getChannelData(0);
@@ -156,7 +156,7 @@
                   queueTarget,
                 );
                 if (pokeyAudioSetFillLevelHint)
-                  pokeyAudioSetFillLevelHint(machine.audioState, queueTarget);
+                  {pokeyAudioSetFillLevelHint(machine.audioState, queueTarget);}
               }
               node.port.onmessage = function (e) {
                 const msg = e && e.data ? e.data : null;
@@ -166,7 +166,7 @@
                   !machine.audioState ||
                   !pokeyAudioSetFillLevelHint
                 )
-                  return;
+                  {return;}
                 if (typeof msg.queuedSamples !== "number") return;
                 pokeyAudioSetFillLevelHint(
                   machine.audioState,
@@ -187,7 +187,7 @@
               try {
                 node.port.postMessage({ type: "clear" });
                 if (machine.audioState && pokeyAudioSetFillLevelHint)
-                  pokeyAudioSetFillLevelHint(machine.audioState, 0);
+                  {pokeyAudioSetFillLevelHint(machine.audioState, 0);}
               } catch {
                 // ignore
               }
@@ -215,7 +215,7 @@
             }
           }
           if (machine.audioState && pokeyAudioSetFillLevelHint)
-            pokeyAudioSetFillLevelHint(machine.audioState, -1);
+            {pokeyAudioSetFillLevelHint(machine.audioState, -1);}
           if (machine.audioNode) machine.audioNode.disconnect();
           machine.audioNode = null;
           machine.audioCtx.close();

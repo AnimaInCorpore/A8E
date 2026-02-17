@@ -3,7 +3,7 @@
 
   /* XEX boot loader - same 6502 code as the C implementation.
      See A8E/AtariIo.c for the fully commented assembly listing. */
-  var XEX_BOOT_LOADER = [
+  const XEX_BOOT_LOADER = [
     /* boot header */
     0x00, 0x03, 0x00, 0x07, 0x07, 0x07, 0x60,
     /* entry: clear RUNAD/INITAD, init state */
@@ -54,23 +54,23 @@
     0xA9, 0x80, 0x85, 0x48,
     0x60
   ];
-  var XEX_BOOT_LOADER_BASE = 0x0700;
-  var XEX_BOOT_PATCH_GETBYTE_BUF_LO = 0x0788 - XEX_BOOT_LOADER_BASE;
-  var XEX_BOOT_PATCH_GETBYTE_BUF_HI = 0x0789 - XEX_BOOT_LOADER_BASE;
-  var XEX_BOOT_PATCH_DBUF_LO = 0x07a4 - XEX_BOOT_LOADER_BASE;
-  var XEX_BOOT_PATCH_DBUF_HI = 0x07a9 - XEX_BOOT_LOADER_BASE;
-  var XEX_BOOT_LOADER_RESERVED_START = 0x0700;
-  var XEX_BOOT_LOADER_RESERVED_END = 0x087f;
-  var XEX_SEGMENT_MARKER = 0xff;
+  const XEX_BOOT_LOADER_BASE = 0x0700;
+  const XEX_BOOT_PATCH_GETBYTE_BUF_LO = 0x0788 - XEX_BOOT_LOADER_BASE;
+  const XEX_BOOT_PATCH_GETBYTE_BUF_HI = 0x0789 - XEX_BOOT_LOADER_BASE;
+  const XEX_BOOT_PATCH_DBUF_LO = 0x07a4 - XEX_BOOT_LOADER_BASE;
+  const XEX_BOOT_PATCH_DBUF_HI = 0x07a9 - XEX_BOOT_LOADER_BASE;
+  const XEX_BOOT_LOADER_RESERVED_START = 0x0700;
+  const XEX_BOOT_LOADER_RESERVED_END = 0x087f;
+  const XEX_SEGMENT_MARKER = 0xff;
 
-  var ATR_HEADER_SIZE = 16;
-  var ATR_SECTOR_SIZE = 128;
-  var ATR_BOOT_SECTOR_COUNT = 3;
-  var ATR_BOOT_LOADER_SIZE = ATR_BOOT_SECTOR_COUNT * ATR_SECTOR_SIZE;
-  var ATR_DATA_OFFSET = ATR_HEADER_SIZE + ATR_BOOT_LOADER_SIZE;
+  const ATR_HEADER_SIZE = 16;
+  const ATR_SECTOR_SIZE = 128;
+  const ATR_BOOT_SECTOR_COUNT = 3;
+  const ATR_BOOT_LOADER_SIZE = ATR_BOOT_SECTOR_COUNT * ATR_SECTOR_SIZE;
+  const ATR_DATA_OFFSET = ATR_HEADER_SIZE + ATR_BOOT_LOADER_SIZE;
 
   function skipXexSegmentMarkers(bytes, startIndex) {
-    var i = startIndex | 0;
+    let i = startIndex | 0;
     while (
       i + 1 < bytes.length &&
       bytes[i] === XEX_SEGMENT_MARKER &&
@@ -83,16 +83,16 @@
 
   function isXexFile(name) {
     if (!name) return false;
-    var dot = name.lastIndexOf(".");
+    const dot = name.lastIndexOf(".");
     if (dot < 0) return false;
-    var ext = name.substring(dot).toLowerCase();
+    const ext = name.substring(dot).toLowerCase();
     return ext === ".xex";
   }
 
   function normalizeXex(xexBytes) {
-    var i = 0;
-    var total = 0;
-    var foundSegment = false;
+    let i = 0;
+    let total = 0;
+    let foundSegment = false;
 
     while (i < xexBytes.length) {
       i = skipXexSegmentMarkers(xexBytes, i);
@@ -100,11 +100,11 @@
       if (i >= xexBytes.length) break;
       if (i + 3 >= xexBytes.length) break;
 
-      var start = (xexBytes[i] & 0xff) | ((xexBytes[i + 1] & 0xff) << 8);
-      var end = (xexBytes[i + 2] & 0xff) | ((xexBytes[i + 3] & 0xff) << 8);
+      const start = (xexBytes[i] & 0xff) | ((xexBytes[i + 1] & 0xff) << 8);
+      const end = (xexBytes[i + 2] & 0xff) | ((xexBytes[i + 3] & 0xff) << 8);
       if (end < start) return null;
 
-      var segmentSize = end - start + 1;
+      const segmentSize = end - start + 1;
       i += 4;
       if (i + segmentSize > xexBytes.length) return null;
 
@@ -115,8 +115,8 @@
 
     if (!foundSegment) return null;
 
-    var normalized = new Uint8Array(total);
-    var out = 0;
+    const normalized = new Uint8Array(total);
+    let out = 0;
     i = 0;
 
     while (i < xexBytes.length) {
@@ -125,15 +125,15 @@
       if (i >= xexBytes.length) break;
       if (i + 3 >= xexBytes.length) break;
 
-      var startLo = xexBytes[i] & 0xff;
-      var startHi = xexBytes[i + 1] & 0xff;
-      var endLo = xexBytes[i + 2] & 0xff;
-      var endHi = xexBytes[i + 3] & 0xff;
-      var start2 = startLo | (startHi << 8);
-      var end2 = endLo | (endHi << 8);
+      const startLo = xexBytes[i] & 0xff;
+      const startHi = xexBytes[i + 1] & 0xff;
+      const endLo = xexBytes[i + 2] & 0xff;
+      const endHi = xexBytes[i + 3] & 0xff;
+      const start2 = startLo | (startHi << 8);
+      const end2 = endLo | (endHi << 8);
       if (end2 < start2) return null;
 
-      var segmentSize2 = end2 - start2 + 1;
+      const segmentSize2 = end2 - start2 + 1;
       i += 4;
       if (i + segmentSize2 > xexBytes.length) return null;
 
@@ -152,19 +152,19 @@
   }
 
   function xexSegmentOverlapsRange(normalizedXex, rangeStart, rangeEnd) {
-    var i = 0;
+    let i = 0;
 
     while (i + 5 < normalizedXex.length) {
       if (
         normalizedXex[i] !== XEX_SEGMENT_MARKER ||
         normalizedXex[i + 1] !== XEX_SEGMENT_MARKER
       )
-        return true;
+        {return true;}
 
-      var start = (normalizedXex[i + 2] & 0xff) | ((normalizedXex[i + 3] & 0xff) << 8);
-      var end = (normalizedXex[i + 4] & 0xff) | ((normalizedXex[i + 5] & 0xff) << 8);
+      const start = (normalizedXex[i + 2] & 0xff) | ((normalizedXex[i + 3] & 0xff) << 8);
+      const end = (normalizedXex[i + 4] & 0xff) | ((normalizedXex[i + 5] & 0xff) << 8);
       if (end < start) return true;
-      var segmentSize = end - start + 1;
+      const segmentSize = end - start + 1;
 
       if (!(end < rangeStart || start > rangeEnd)) return true;
       if (i + 6 + segmentSize > normalizedXex.length) return true;
@@ -176,18 +176,18 @@
   }
 
   function chooseXexBootBuffer(normalizedXex) {
-    var candidate;
+    let candidate;
 
     if (!xexSegmentOverlapsRange(normalizedXex, 0x0600, 0x067f)) return 0x0600;
 
     for (candidate = 0x0880; candidate <= 0x4f80; candidate += 0x80) {
       if (!xexSegmentOverlapsRange(normalizedXex, candidate, candidate + 0x7f))
-        return candidate;
+        {return candidate;}
     }
 
     for (candidate = 0x5800; candidate <= 0x9f80; candidate += 0x80) {
       if (!xexSegmentOverlapsRange(normalizedXex, candidate, candidate + 0x7f))
-        return candidate;
+        {return candidate;}
     }
 
     return -1;
@@ -201,12 +201,12 @@
         XEX_BOOT_LOADER_RESERVED_END
       )
     )
-      return null;
+      {return null;}
 
-    var bufferAddr = chooseXexBootBuffer(normalizedXex);
+    const bufferAddr = chooseXexBootBuffer(normalizedXex);
     if (bufferAddr < 0) return null;
 
-    var loader = XEX_BOOT_LOADER.slice();
+    const loader = XEX_BOOT_LOADER.slice();
     loader[XEX_BOOT_PATCH_GETBYTE_BUF_LO] = bufferAddr & 0xff;
     loader[XEX_BOOT_PATCH_GETBYTE_BUF_HI] = (bufferAddr >> 8) & 0xff;
     loader[XEX_BOOT_PATCH_DBUF_LO] = bufferAddr & 0xff;
@@ -215,17 +215,16 @@
   }
 
   function xexToAtr(xexBytes) {
-    var normalizedXex = normalizeXex(xexBytes);
-    var bootLoader;
+    const normalizedXex = normalizeXex(xexBytes);
     if (!normalizedXex) return null;
-    bootLoader = buildXexBootLoader(normalizedXex);
+    const bootLoader = buildXexBootLoader(normalizedXex);
     if (!bootLoader) return null;
 
-    var normalizedSize = normalizedXex.length;
-    var dataSectors = ((normalizedSize + (ATR_SECTOR_SIZE - 1)) / ATR_SECTOR_SIZE) | 0;
-    var totalSize = ATR_HEADER_SIZE + ATR_BOOT_LOADER_SIZE + dataSectors * ATR_SECTOR_SIZE;
-    var paragraphs = ((totalSize - ATR_HEADER_SIZE) / 16) | 0;
-    var atr = new Uint8Array(totalSize);
+    const normalizedSize = normalizedXex.length;
+    const dataSectors = ((normalizedSize + (ATR_SECTOR_SIZE - 1)) / ATR_SECTOR_SIZE) | 0;
+    const totalSize = ATR_HEADER_SIZE + ATR_BOOT_LOADER_SIZE + dataSectors * ATR_SECTOR_SIZE;
+    const paragraphs = ((totalSize - ATR_HEADER_SIZE) / 16) | 0;
+    const atr = new Uint8Array(totalSize);
 
     // ATR header
     atr[0] = 0x96;
@@ -238,7 +237,7 @@
     atr[7] = (paragraphs >> 24) & 0xff;
 
     // Boot loader into sectors 1-3.
-    for (var i = 0; i < bootLoader.length; i++) {
+    for (let i = 0; i < bootLoader.length; i++) {
       atr[ATR_HEADER_SIZE + i] = bootLoader[i];
     }
 
@@ -297,7 +296,7 @@
         const image = createDiskImage(legacyBytes, source.disk1Name || "disk.atr");
         const legacySize = source.disk1Size | 0;
         if (legacySize > 0 && legacySize <= legacyBytes.length)
-          image.size = legacySize;
+          {image.size = legacySize;}
         const imageIndex = machine.media.diskImages.length | 0;
         machine.media.diskImages.push(image);
         if ((machine.media.deviceSlots[0] | 0) === NO_IMAGE_MOUNTED) {
@@ -312,7 +311,7 @@
           !(machine.media.deviceSlots instanceof Int16Array) ||
           machine.media.deviceSlots.length !== DEVICE_SLOT_COUNT
         )
-          machine.media.deviceSlots = makeDefaultDeviceSlots();
+          {machine.media.deviceSlots = makeDefaultDeviceSlots();}
         if (!Array.isArray(machine.media.diskImages)) machine.media.diskImages = [];
 
         // One-time compatibility migration from legacy disk1 fields.
@@ -328,7 +327,7 @@
         // Always drop legacy fields after optional migration to avoid stale state.
         clearLegacyDisk1Fields(machine.media);
         if (machine.ctx && machine.ctx.ioData)
-          clearLegacyDisk1Fields(machine.ctx.ioData);
+          {clearLegacyDisk1Fields(machine.ctx.ioData);}
       }
 
       function getDiskImageByIndex(imageIndex) {

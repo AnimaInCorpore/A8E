@@ -7,152 +7,152 @@
     if (api) return api;
 
     // --- Constants (from AtariIo.h / Antic.h / Gtia.h / Pokey.h / Pia.h) ---
-    let PIXELS_PER_LINE = 456;
-    let LINES_PER_SCREEN_PAL = 312;
-    let COLOR_CLOCKS_PER_LINE = PIXELS_PER_LINE / 2;
-    let CYCLES_PER_LINE = COLOR_CLOCKS_PER_LINE / 2; // 114
-    let ATARI_CPU_HZ_PAL = 1773447;
-    let CYCLE_NEVER = Infinity;
+    const PIXELS_PER_LINE = 456;
+    const LINES_PER_SCREEN_PAL = 312;
+    const COLOR_CLOCKS_PER_LINE = PIXELS_PER_LINE / 2;
+    const CYCLES_PER_LINE = COLOR_CLOCKS_PER_LINE / 2; // 114
+    const ATARI_CPU_HZ_PAL = 1773447;
+    const CYCLE_NEVER = Infinity;
 
-    let FIRST_VISIBLE_LINE = 8;
-    let LAST_VISIBLE_LINE = 247;
+    const FIRST_VISIBLE_LINE = 8;
+    const LAST_VISIBLE_LINE = 247;
 
-    let SERIAL_OUTPUT_DATA_NEEDED_CYCLES = 900;
-    let SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES = 1500;
-    let SERIAL_INPUT_FIRST_DATA_READY_CYCLES = 3000;
-    let SERIAL_INPUT_DATA_READY_CYCLES = 900;
-    let SIO_TURBO_EMU_MULTIPLIER = 4.0;
+    const SERIAL_OUTPUT_DATA_NEEDED_CYCLES = 900;
+    const SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES = 1500;
+    const SERIAL_INPUT_FIRST_DATA_READY_CYCLES = 3000;
+    const SERIAL_INPUT_DATA_READY_CYCLES = 900;
+    const SIO_TURBO_EMU_MULTIPLIER = 4.0;
     // Keep enough history to survive moderate frame delays without excessive latency.
-    let POKEY_AUDIO_MAX_CATCHUP_CYCLES = 100000;
+    const POKEY_AUDIO_MAX_CATCHUP_CYCLES = 100000;
 
-    let NMI_DLI = 0x80;
-    let NMI_VBI = 0x40;
-    let NMI_RESET = 0x20;
+    const NMI_DLI = 0x80;
+    const NMI_VBI = 0x40;
+    const NMI_RESET = 0x20;
 
     // PIA
-    let IO_PORTA = 0xd300;
-    let IO_PORTB = 0xd301;
-    let IO_PACTL = 0xd302;
-    let IO_PBCTL = 0xd303;
+    const IO_PORTA = 0xd300;
+    const IO_PORTB = 0xd301;
+    const IO_PACTL = 0xd302;
+    const IO_PBCTL = 0xd303;
 
     // GTIA
-    let IO_HPOSP0_M0PF = 0xd000;
-    let IO_HPOSP1_M1PF = 0xd001;
-    let IO_HPOSP2_M2PF = 0xd002;
-    let IO_HPOSP3_M3PF = 0xd003;
-    let IO_HPOSM0_P0PF = 0xd004;
-    let IO_HPOSM1_P1PF = 0xd005;
-    let IO_HPOSM2_P2PF = 0xd006;
-    let IO_HPOSM3_P3PF = 0xd007;
-    let IO_SIZEP0_M0PL = 0xd008;
-    let IO_SIZEP1_M1PL = 0xd009;
-    let IO_SIZEP2_M2PL = 0xd00a;
-    let IO_SIZEP3_M3PL = 0xd00b;
-    let IO_SIZEM_P0PL = 0xd00c;
-    let IO_GRAFP0_P1PL = 0xd00d;
-    let IO_GRAFP1_P2PL = 0xd00e;
-    let IO_GRAFP2_P3PL = 0xd00f;
-    let IO_GRAFP3_TRIG0 = 0xd010;
-    let IO_GRAFM_TRIG1 = 0xd011;
-    let IO_COLPM0_TRIG2 = 0xd012;
-    let IO_COLPM1_TRIG3 = 0xd013;
-    let IO_COLPM2_PAL = 0xd014;
-    let IO_COLPM3 = 0xd015;
-    let IO_COLPF0 = 0xd016;
-    let IO_COLPF1 = 0xd017;
-    let IO_COLPF2 = 0xd018;
-    let IO_COLPF3 = 0xd019;
-    let IO_COLBK = 0xd01a;
-    let IO_PRIOR = 0xd01b;
-    let IO_VDELAY = 0xd01c;
-    let IO_GRACTL = 0xd01d;
-    let IO_HITCLR = 0xd01e;
-    let IO_CONSOL = 0xd01f;
+    const IO_HPOSP0_M0PF = 0xd000;
+    const IO_HPOSP1_M1PF = 0xd001;
+    const IO_HPOSP2_M2PF = 0xd002;
+    const IO_HPOSP3_M3PF = 0xd003;
+    const IO_HPOSM0_P0PF = 0xd004;
+    const IO_HPOSM1_P1PF = 0xd005;
+    const IO_HPOSM2_P2PF = 0xd006;
+    const IO_HPOSM3_P3PF = 0xd007;
+    const IO_SIZEP0_M0PL = 0xd008;
+    const IO_SIZEP1_M1PL = 0xd009;
+    const IO_SIZEP2_M2PL = 0xd00a;
+    const IO_SIZEP3_M3PL = 0xd00b;
+    const IO_SIZEM_P0PL = 0xd00c;
+    const IO_GRAFP0_P1PL = 0xd00d;
+    const IO_GRAFP1_P2PL = 0xd00e;
+    const IO_GRAFP2_P3PL = 0xd00f;
+    const IO_GRAFP3_TRIG0 = 0xd010;
+    const IO_GRAFM_TRIG1 = 0xd011;
+    const IO_COLPM0_TRIG2 = 0xd012;
+    const IO_COLPM1_TRIG3 = 0xd013;
+    const IO_COLPM2_PAL = 0xd014;
+    const IO_COLPM3 = 0xd015;
+    const IO_COLPF0 = 0xd016;
+    const IO_COLPF1 = 0xd017;
+    const IO_COLPF2 = 0xd018;
+    const IO_COLPF3 = 0xd019;
+    const IO_COLBK = 0xd01a;
+    const IO_PRIOR = 0xd01b;
+    const IO_VDELAY = 0xd01c;
+    const IO_GRACTL = 0xd01d;
+    const IO_HITCLR = 0xd01e;
+    const IO_CONSOL = 0xd01f;
 
     // POKEY
-    let IO_AUDF1_POT0 = 0xd200;
-    let IO_AUDC1_POT1 = 0xd201;
-    let IO_AUDF2_POT2 = 0xd202;
-    let IO_AUDC2_POT3 = 0xd203;
-    let IO_AUDF3_POT4 = 0xd204;
-    let IO_AUDC3_POT5 = 0xd205;
-    let IO_AUDF4_POT6 = 0xd206;
-    let IO_AUDC4_POT7 = 0xd207;
-    let IO_AUDCTL_ALLPOT = 0xd208;
+    const IO_AUDF1_POT0 = 0xd200;
+    const IO_AUDC1_POT1 = 0xd201;
+    const IO_AUDF2_POT2 = 0xd202;
+    const IO_AUDC2_POT3 = 0xd203;
+    const IO_AUDF3_POT4 = 0xd204;
+    const IO_AUDC3_POT5 = 0xd205;
+    const IO_AUDF4_POT6 = 0xd206;
+    const IO_AUDC4_POT7 = 0xd207;
+    const IO_AUDCTL_ALLPOT = 0xd208;
     // combined read/write addresses:
-    let IO_STIMER_KBCODE = 0xd209; // write STIMER / read KBCODE
-    let IO_SKREST_RANDOM = 0xd20a; // write SKREST / read RANDOM
-    let IO_POTGO = 0xd20b;
-    let IO_SEROUT_SERIN = 0xd20d; // write SEROUT / read SERIN
-    let IO_IRQEN_IRQST = 0xd20e; // write IRQEN / read IRQST
-    let IO_SKCTL_SKSTAT = 0xd20f; // write SKCTL / read SKSTAT
+    const IO_STIMER_KBCODE = 0xd209; // write STIMER / read KBCODE
+    const IO_SKREST_RANDOM = 0xd20a; // write SKREST / read RANDOM
+    const IO_POTGO = 0xd20b;
+    const IO_SEROUT_SERIN = 0xd20d; // write SEROUT / read SERIN
+    const IO_IRQEN_IRQST = 0xd20e; // write IRQEN / read IRQST
+    const IO_SKCTL_SKSTAT = 0xd20f; // write SKCTL / read SKSTAT
 
-    let IRQ_TIMER_1 = 0x01;
-    let IRQ_TIMER_2 = 0x02;
-    let IRQ_TIMER_4 = 0x04;
-    let IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE = 0x08;
-    let IRQ_SERIAL_OUTPUT_DATA_NEEDED = 0x10;
-    let IRQ_SERIAL_INPUT_DATA_READY = 0x20;
-    let IRQ_OTHER_KEY_PRESSED = 0x40;
-    let IRQ_BREAK_KEY_PRESSED = 0x80;
+    const IRQ_TIMER_1 = 0x01;
+    const IRQ_TIMER_2 = 0x02;
+    const IRQ_TIMER_4 = 0x04;
+    const IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE = 0x08;
+    const IRQ_SERIAL_OUTPUT_DATA_NEEDED = 0x10;
+    const IRQ_SERIAL_INPUT_DATA_READY = 0x20;
+    const IRQ_OTHER_KEY_PRESSED = 0x40;
+    const IRQ_BREAK_KEY_PRESSED = 0x80;
 
     // ANTIC
-    let IO_DMACTL = 0xd400;
-    let IO_CHACTL = 0xd401;
-    let IO_DLISTL = 0xd402;
-    let IO_DLISTH = 0xd403;
-    let IO_HSCROL = 0xd404;
-    let IO_VSCROL = 0xd405;
-    let IO_PMBASE = 0xd407;
-    let IO_CHBASE = 0xd409;
-    let IO_WSYNC = 0xd40a;
-    let IO_VCOUNT = 0xd40b;
-    let IO_PENH = 0xd40c;
-    let IO_PENV = 0xd40d;
-    let IO_NMIEN = 0xd40e;
-    let IO_NMIRES_NMIST = 0xd40f;
+    const IO_DMACTL = 0xd400;
+    const IO_CHACTL = 0xd401;
+    const IO_DLISTL = 0xd402;
+    const IO_DLISTH = 0xd403;
+    const IO_HSCROL = 0xd404;
+    const IO_VSCROL = 0xd405;
+    const IO_PMBASE = 0xd407;
+    const IO_CHBASE = 0xd409;
+    const IO_WSYNC = 0xd40a;
+    const IO_VCOUNT = 0xd40b;
+    const IO_PENH = 0xd40c;
+    const IO_PENV = 0xd40d;
+    const IO_NMIEN = 0xd40e;
+    const IO_NMIRES_NMIST = 0xd40f;
 
     // Viewport from A8E.c
-    let VIEW_W = 336;
-    let VIEW_H = 240;
-    let VIEW_X = (16 + 12 + 6 + 10 + 4) * 2 + 160 - VIEW_W / 2; // 88
-    let VIEW_Y = 8;
+    const VIEW_W = 336;
+    const VIEW_H = 240;
+    const VIEW_X = (16 + 12 + 6 + 10 + 4) * 2 + 160 - VIEW_W / 2; // 88
+    const VIEW_Y = 8;
 
     // Priority bits (from Antic.c)
-    let PRIO_BKG = 0x00;
-    let PRIO_PF0 = 0x01;
-    let PRIO_PF1 = 0x02;
-    let PRIO_PF2 = 0x04;
-    let PRIO_PF3 = 0x08;
-    let PRIO_PM0 = 0x10;
-    let PRIO_PM1 = 0x20;
-    let PRIO_PM2 = 0x40;
-    let PRIO_PM3 = 0x80;
-    let PRIORITY_TABLE_BKG_PF012 = new Uint8Array([
+    const PRIO_BKG = 0x00;
+    const PRIO_PF0 = 0x01;
+    const PRIO_PF1 = 0x02;
+    const PRIO_PF2 = 0x04;
+    const PRIO_PF3 = 0x08;
+    const PRIO_PM0 = 0x10;
+    const PRIO_PM1 = 0x20;
+    const PRIO_PM2 = 0x40;
+    const PRIO_PM3 = 0x80;
+    const PRIORITY_TABLE_BKG_PF012 = new Uint8Array([
       PRIO_BKG,
       PRIO_PF0,
       PRIO_PF1,
       PRIO_PF2,
     ]);
-    let PRIORITY_TABLE_BKG_PF013 = new Uint8Array([
+    const PRIORITY_TABLE_BKG_PF013 = new Uint8Array([
       PRIO_BKG,
       PRIO_PF0,
       PRIO_PF1,
       PRIO_PF3,
     ]);
-    let PRIORITY_TABLE_PF0123 = new Uint8Array([
+    const PRIORITY_TABLE_PF0123 = new Uint8Array([
       PRIO_PF0,
       PRIO_PF1,
       PRIO_PF2,
       PRIO_PF3,
     ]);
-    let SCRATCH_GTIA_COLOR_TABLE = new Uint8Array(16);
-    let SCRATCH_COLOR_TABLE_A = new Uint8Array(4);
-    let SCRATCH_COLOR_TABLE_B = new Uint8Array(4);
-    let SCRATCH_BACKGROUND_TABLE = new Uint8Array(4);
+    const SCRATCH_GTIA_COLOR_TABLE = new Uint8Array(16);
+    const SCRATCH_COLOR_TABLE_A = new Uint8Array(4);
+    const SCRATCH_COLOR_TABLE_B = new Uint8Array(4);
+    const SCRATCH_BACKGROUND_TABLE = new Uint8Array(4);
 
     // --- Minimal ANTIC mode info (ported from AtariIo.c) ---
-    let ANTIC_MODE_INFO = [
+    const ANTIC_MODE_INFO = [
       { lines: 0, ppb: 0 }, // 0
       { lines: 0, ppb: 0 }, // 1 (JMP)
       { lines: 8, ppb: 8 }, // 2
@@ -172,7 +172,7 @@
     ];
 
     // IO register defaults (write-shadow vs read-side RAM) from AtariIo.c.
-    let IO_INIT_VALUES = [
+    const IO_INIT_VALUES = [
       // GTIA
       { addr: IO_HPOSP0_M0PF, write: 0x00, read: 0x00 },
       { addr: IO_HPOSP1_M1PF, write: 0x00, read: 0x00 },

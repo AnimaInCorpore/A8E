@@ -38,14 +38,14 @@
     function sioChecksum(buf, size) {
       let checksum = 0;
       for (let i = 0; i < size; i++) {
-        let b = buf[i] & 0xff;
+        const b = buf[i] & 0xff;
         checksum = (checksum + (((checksum + b) >> 8) & 0xff) + b) & 0xff;
       }
       return checksum & 0xff;
     }
 
     function queueSerinResponse(ctx, now, size) {
-      let io = ctx.ioData;
+      const io = ctx.ioData;
       io.sioInSize = size | 0;
       io.sioInIndex = 0;
       io.serialInputDataReadyCycle = now + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
@@ -65,19 +65,19 @@
 
     function sectorBytesAndOffset(sectorIndex, sectorSize) {
       if (sectorIndex <= 0) return null;
-      let bytes =
+      const bytes =
         sectorIndex <= DISK_BOOT_SECTORS ? DISK_SECTOR_SIZE_SINGLE : sectorSize;
-      let index =
+      const index =
         sectorIndex <= DISK_BOOT_SECTORS
           ? (sectorIndex - 1) * DISK_SECTOR_SIZE_SINGLE
           : (sectorIndex - (DISK_BOOT_SECTORS + 1)) * sectorSize +
             DISK_SECTOR_SIZE_SINGLE * DISK_BOOT_SECTORS;
-      let offset = DISK_HEADER_SIZE + index;
+      const offset = DISK_HEADER_SIZE + index;
       return { bytes: bytes | 0, offset: offset | 0 };
     }
 
     function queueSingleByteResponse(ctx, now, value) {
-      let io = ctx.ioData;
+      const io = ctx.ioData;
       io.sioBuffer[0] = value & 0xff;
       queueSerinResponse(ctx, now, 1);
     }
@@ -96,15 +96,15 @@
     }
 
     function queueAckComplete(ctx, now) {
-      let io = ctx.ioData;
-      let buf = io.sioBuffer;
+      const io = ctx.ioData;
+      const buf = io.sioBuffer;
       writeAckComplete(buf);
       queueSerinResponse(ctx, now, 2);
     }
 
     function queueAckData(ctx, now, dataStartIndex, dataSize) {
-      let io = ctx.ioData;
-      let buf = io.sioBuffer;
+      const io = ctx.ioData;
+      const buf = io.sioBuffer;
       writeAckComplete(buf);
       buf[dataSize + 2] = sioChecksum(
         buf.subarray(dataStartIndex, dataStartIndex + dataSize),
@@ -123,20 +123,20 @@
     }
 
     function deviceSlotIndexFromDeviceId(devId) {
-      let slot = (devId & 0xff) - DISK_DEVICE_ID_BASE;
+      const slot = (devId & 0xff) - DISK_DEVICE_ID_BASE;
       if (slot < 0 || slot >= DISK_DEVICE_COUNT) return -1;
       return slot;
     }
 
     function getMountedDiskForDevice(io, devId) {
-      let slot = deviceSlotIndexFromDeviceId(devId);
+      const slot = deviceSlotIndexFromDeviceId(devId);
       if (slot < 0) return null;
 
-      let slots = io.deviceSlots;
-      let images = io.diskImages;
+      const slots = io.deviceSlots;
+      const images = io.diskImages;
       if (!slots || typeof slots.length !== "number" || slot >= slots.length)
-        return null;
-      let imageIndex = slots[slot] | 0;
+        {return null;}
+      const imageIndex = slots[slot] | 0;
 
       if (
         imageIndex >= 0 &&
@@ -144,7 +144,7 @@
         typeof images.length === "number" &&
         imageIndex < images.length
       ) {
-        let img = images[imageIndex];
+        const img = images[imageIndex];
         if (img && img.bytes) {
           return {
             bytes: img.bytes,
@@ -158,17 +158,17 @@
 
     function diskDevice(devId) {
       function onCommandFrame(ctx, now, cmd, aux1, aux2) {
-        let io = ctx.ioData;
-        let buf = io.sioBuffer;
-        let mounted = getMountedDiskForDevice(io, devId);
-        let disk = mounted ? mounted.bytes : null;
-        let diskSize = mounted ? mounted.size | 0 : 0;
-        let sectorSize = diskSectorSize(disk);
+        const io = ctx.ioData;
+        const buf = io.sioBuffer;
+        const mounted = getMountedDiskForDevice(io, devId);
+        const disk = mounted ? mounted.bytes : null;
+        const diskSize = mounted ? mounted.size | 0 : 0;
+        const sectorSize = diskSectorSize(disk);
 
         if (cmd === CMD_READ_SECTOR) {
           // READ SECTOR
-          let sectorIndex = (aux1 | (aux2 << 8)) & 0xffff;
-          let si = sectorBytesAndOffset(sectorIndex, sectorSize);
+          const sectorIndex = (aux1 | (aux2 << 8)) & 0xffff;
+          const si = sectorBytesAndOffset(sectorIndex, sectorSize);
           if (!canAccessSector(disk, diskSize, si)) {
             queueDeviceNack(ctx, now);
             return;
@@ -208,8 +208,8 @@
           cmd === CMD_VERIFY_SECTOR
         ) {
           // WRITE / PUT / VERIFY SECTOR (expects a data frame).
-          let sectorIndex2 = (aux1 | (aux2 << 8)) & 0xffff;
-          let si2 = sectorBytesAndOffset(sectorIndex2, sectorSize);
+          const sectorIndex2 = (aux1 | (aux2 << 8)) & 0xffff;
+          const si2 = sectorBytesAndOffset(sectorIndex2, sectorSize);
           if (!canAccessSector(disk, diskSize, si2)) {
             queueDeviceNack(ctx, now);
             return;
@@ -249,15 +249,15 @@
       }
 
       function onDataFrame(ctx, now, payloadOffset, payloadBytes, providedCrc) {
-        let io = ctx.ioData;
-        let buf = io.sioBuffer;
-        let cmd = io.sioPendingCmd & 0xff;
-        let mounted = getMountedDiskForDevice(io, devId);
-        let disk = mounted ? mounted.bytes : null;
-        let diskSize = mounted ? mounted.size | 0 : 0;
-        let sectorSize = diskSectorSize(disk);
-        let si = sectorBytesAndOffset(io.sioPendingSector | 0, sectorSize);
-        let calculated = sioChecksum(
+        const io = ctx.ioData;
+        const buf = io.sioBuffer;
+        const cmd = io.sioPendingCmd & 0xff;
+        const mounted = getMountedDiskForDevice(io, devId);
+        const disk = mounted ? mounted.bytes : null;
+        const diskSize = mounted ? mounted.size | 0 : 0;
+        const sectorSize = diskSectorSize(disk);
+        const si = sectorBytesAndOffset(io.sioPendingSector | 0, sectorSize);
+        const calculated = sioChecksum(
           buf.subarray(payloadOffset, payloadOffset + payloadBytes),
           payloadBytes,
         );
@@ -299,7 +299,7 @@
       };
     }
 
-    let sioDeviceHandlers = Object.create(null);
+    const sioDeviceHandlers = Object.create(null);
     for (
       let devId = DISK_DEVICE_ID_BASE;
       devId < DISK_DEVICE_ID_BASE + DISK_DEVICE_COUNT;
@@ -309,13 +309,13 @@
     }
 
     function seroutWrite(ctx, value) {
-      let io = ctx.ioData;
-      let now = ctx.cycleCounter;
+      const io = ctx.ioData;
+      const now = ctx.cycleCounter;
 
       io.serialOutputNeedDataCycle = now + SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
       cycleTimedEventUpdate(ctx);
 
-      let buf = io.sioBuffer;
+      const buf = io.sioBuffer;
 
       // --- Data phase (write/put/verify) ---
       if ((io.sioOutPhase | 0) === 1) {
@@ -324,17 +324,17 @@
         dataIndex = (dataIndex + 1) | 0;
         io.sioDataIndex = dataIndex;
 
-        let expected = (io.sioPendingBytes | 0) + 1; // data + checksum
+        const expected = (io.sioPendingBytes | 0) + 1; // data + checksum
         if (dataIndex !== expected) return;
 
         io.serialOutputTransmissionDoneCycle =
           now + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
         cycleTimedEventUpdate(ctx);
 
-        let dataBytes = io.sioPendingBytes | 0;
-        let provided = buf[SIO_DATA_OFFSET + dataBytes] & 0xff;
-        let pendingDev = io.sioPendingDevice & 0xff;
-        let handler = sioDeviceHandlers[pendingDev];
+        const dataBytes = io.sioPendingBytes | 0;
+        const provided = buf[SIO_DATA_OFFSET + dataBytes] & 0xff;
+        const pendingDev = io.sioPendingDevice & 0xff;
+        const handler = sioDeviceHandlers[pendingDev];
         if (handler && handler.onDataFrame) {
           handler.onDataFrame(ctx, now, SIO_DATA_OFFSET, dataBytes, provided);
         } else {
@@ -380,11 +380,11 @@
         now + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
       cycleTimedEventUpdate(ctx);
 
-      let dev = buf[0] & 0xff;
-      let cmd2 = buf[1] & 0xff;
-      let aux1 = buf[2] & 0xff;
-      let aux2 = buf[3] & 0xff;
-      let handler2 = sioDeviceHandlers[dev];
+      const dev = buf[0] & 0xff;
+      const cmd2 = buf[1] & 0xff;
+      const aux1 = buf[2] & 0xff;
+      const aux2 = buf[3] & 0xff;
+      const handler2 = sioDeviceHandlers[dev];
       if (handler2 && handler2.onCommandFrame) {
         handler2.onCommandFrame(ctx, now, cmd2, aux1, aux2);
       } else {
@@ -393,9 +393,9 @@
     }
 
     function serinRead(ctx) {
-      let io = ctx.ioData;
+      const io = ctx.ioData;
       if ((io.sioInSize | 0) > 0) {
-        let b = io.sioBuffer[io.sioInIndex & 0xffff] & 0xff;
+        const b = io.sioBuffer[io.sioInIndex & 0xffff] & 0xff;
         io.sioInIndex = (io.sioInIndex + 1) & 0xffff;
         io.sioInSize = (io.sioInSize - 1) | 0;
         ctx.ram[IO_SEROUT_SERIN] = b;

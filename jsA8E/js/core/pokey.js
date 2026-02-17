@@ -125,7 +125,7 @@
 
     function pokeyAudioRecomputeCyclesPerSample(st) {
       if (!st) return;
-      let sr = st.sampleRate || 48000;
+      const sr = st.sampleRate || 48000;
       const hz = st.cpuHz || ATARI_CPU_HZ_PAL;
       let cps = Math.floor((hz * POKEY_FP_ONE) / sr);
       if (cps < 1) cps = 1;
@@ -144,7 +144,7 @@
     }
 
     function pokeyAudioApplyDcBlock(st, sample) {
-      let out = sample - st.dcBlockX1 + st.dcBlockR * st.dcBlockY1;
+      const out = sample - st.dcBlockX1 + st.dcBlockR * st.dcBlockY1;
       st.dcBlockX1 = sample;
       st.dcBlockY1 = out;
       return out;
@@ -346,9 +346,9 @@
 
       let reload = ((ch.audf & 0xff) + 1) | 0;
       if (ch === st.channels[0] && audctl & 0x40)
-        reload = ((ch.audf & 0xff) + 4) | 0;
+        {reload = ((ch.audf & 0xff) + 4) | 0;}
       if (ch === st.channels[2] && audctl & 0x20)
-        reload = ((ch.audf & 0xff) + 4) | 0;
+        {reload = ((ch.audf & 0xff) + 4) | 0;}
       if (!reload) reload = 1;
       ch.counter = reload;
 
@@ -364,9 +364,9 @@
 
       let reload = (period + 1) >>> 0;
       if (chLow === st.channels[0] && audctl & 0x40)
-        reload = (period + 7) >>> 0;
+        {reload = (period + 7) >>> 0;}
       if (chLow === st.channels[2] && audctl & 0x20)
-        reload = (period + 7) >>> 0;
+        {reload = (period + 7) >>> 0;}
       if (!reload) reload = 1;
       chHigh.counter = reload | 0;
 
@@ -599,7 +599,7 @@
 
     function pokeyAudioFastForwardNoPulse(st, cycles) {
       if (!cycles) return;
-      let n = cycles;
+      const n = cycles;
       if (n < 1) return;
 
       pokeyAudioPolyAdvance(st, n);
@@ -779,7 +779,7 @@
       if (!ctx || !st) return;
       if (!ctx.ioData) return;
 
-      let target = cycleCounter;
+      const target = cycleCounter;
 
       if (target <= st.lastCycle) return;
 
@@ -794,7 +794,7 @@
       if (targetFill <= 0) targetFill = 1;
       let fillLevel = st.ringCount | 0;
       if ((st.externalFillLevelSamples | 0) >= 0)
-        fillLevel = st.externalFillLevelSamples | 0;
+        {fillLevel = st.externalFillLevelSamples | 0;}
       let fillDelta = fillLevel - targetFill;
       if (fillDelta > targetFill) fillDelta = targetFill;
       else if (fillDelta < -targetFill) fillDelta = -targetFill;
@@ -979,7 +979,7 @@
       ctx.ram[IO_AUDCTL_ALLPOT] = io.pokeyPotAllPot;
 
       if (!anyPending || (io.pokeyPotAllPot & 0xff) === 0)
-        io.pokeyPotScanActive = false;
+        {io.pokeyPotScanActive = false;}
     }
 
     function pokeyTimerPeriodCpuCycles(ctx, timer) {

@@ -107,7 +107,7 @@
       CPU.stall(ctx, 9);
 
       if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 1)
-        io.nextDisplayListLine = 8;
+        {io.nextDisplayListLine = 8;}
 
       // VBI around scanline 248 (VCOUNT=124)
       if (io.video.currentDisplayLine === 248) {
@@ -228,7 +228,7 @@
       if (ctx.cycleCounter >= io.serialOutputTransmissionDoneCycle) {
         ram[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
         if (sram[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE)
-          CPU.irq(ctx);
+          {CPU.irq(ctx);}
         io.serialOutputTransmissionDoneCycle = CYCLE_NEVER;
       }
 

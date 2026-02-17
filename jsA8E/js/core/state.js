@@ -2,13 +2,13 @@
   "use strict";
 
   function createApi(cfg) {
-    let CPU = cfg.CPU;
-    let CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
-    let CYCLE_NEVER = cfg.CYCLE_NEVER;
-    let IO_INIT_VALUES = cfg.IO_INIT_VALUES;
+    const CPU = cfg.CPU;
+    const CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
+    const CYCLE_NEVER = cfg.CYCLE_NEVER;
+    const IO_INIT_VALUES = cfg.IO_INIT_VALUES;
 
     function makeIoData(video) {
-      let potValues = new Uint8Array(8);
+      const potValues = new Uint8Array(8);
       for (let p = 0; p < 8; p++) potValues[p] = 228;
       return {
         video: {
@@ -76,17 +76,17 @@
     }
 
     function cycleTimedEventUpdate(ctx) {
-      let io = ctx.ioData;
+      const io = ctx.ioData;
       let next = CYCLE_NEVER;
       if (io.drawLineCycle < next) next = io.drawLineCycle;
       if (io.displayListFetchCycle < next) next = io.displayListFetchCycle;
       if (io.dliCycle < next) next = io.dliCycle;
       if (io.serialOutputTransmissionDoneCycle < next)
-        next = io.serialOutputTransmissionDoneCycle;
+        {next = io.serialOutputTransmissionDoneCycle;}
       if (io.serialOutputNeedDataCycle < next)
-        next = io.serialOutputNeedDataCycle;
+        {next = io.serialOutputNeedDataCycle;}
       if (io.serialInputDataReadyCycle < next)
-        next = io.serialInputDataReadyCycle;
+        {next = io.serialInputDataReadyCycle;}
       if (io.timer1Cycle < next) next = io.timer1Cycle;
       if (io.timer2Cycle < next) next = io.timer2Cycle;
       if (io.timer4Cycle < next) next = io.timer4Cycle;
@@ -95,7 +95,7 @@
 
     function initHardwareDefaults(ctx) {
       for (let i = 0; i < IO_INIT_VALUES.length; i++) {
-        let e = IO_INIT_VALUES[i];
+        const e = IO_INIT_VALUES[i];
         ctx.sram[e.addr] = e.write & 0xff;
         ctx.ram[e.addr] = e.read & 0xff;
       }

@@ -139,12 +139,12 @@
 
   function setRom(ctx, start, end) {
     for (let a = start & 0xffff; a <= (end & 0xffff); a++)
-      ctx.accessFunctionList[a] = romAccess;
+      {ctx.accessFunctionList[a] = romAccess;}
   }
 
   function setRam(ctx, start, end) {
     for (let a = start & 0xffff; a <= (end & 0xffff); a++)
-      ctx.accessFunctionList[a] = ramAccess;
+      {ctx.accessFunctionList[a] = ramAccess;}
   }
 
   function setIo(ctx, address, fn) {
@@ -485,13 +485,13 @@
     setZN(ctx, v);
   }
   function opBIT(ctx) {
-    let v = readAccess(ctx);
+    const v = readAccess(ctx);
     ctx.cpu.ps.z = v & ctx.cpu.a ? 0 : 1;
     ctx.cpu.ps.v = v & 0x40;
     ctx.cpu.ps.n = v & 0x80;
   }
   function opCMP(ctx) {
-    let v = readAccess(ctx);
+    const v = readAccess(ctx);
     ctx.cpu.ps.z = (ctx.cpu.a & 0xff) === v ? 1 : 0;
     ctx.cpu.ps.n = ((ctx.cpu.a - v) & 0x80) !== 0 ? 0x80 : 0;
     ctx.cpu.ps.c = (ctx.cpu.a & 0xff) >= v ? 1 : 0;

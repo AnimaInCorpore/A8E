@@ -121,13 +121,13 @@
           : key.toLowerCase();
       const sym = mapped.charCodeAt(0) & 0x1ff;
       if (KEY_CODE_TABLE[sym] === undefined || KEY_CODE_TABLE[sym] === 255)
-        return null;
+        {return null;}
       return sym;
     }
 
     function browserKeyToSdlSym(e) {
       if (e && typeof e.sdlSym === "number" && isFinite(e.sdlSym))
-        return e.sdlSym | 0;
+        {return e.sdlSym | 0;}
       // Prefer code/location for side-specific modifiers first.
       if (e.code === "ShiftRight") return 303;
       if (e.code === "ShiftLeft") return 304;
@@ -140,7 +140,7 @@
       if (printableSym !== null) return printableSym;
 
       if (e && e.code && CODE_TO_SDL_SYM[e.code] !== undefined)
-        return CODE_TO_SDL_SYM[e.code];
+        {return CODE_TO_SDL_SYM[e.code];}
 
       // SDL 1.2 keysyms mostly follow ASCII for printable keys.
       const k = e.key;

@@ -1,128 +1,128 @@
 (function () {
   "use strict";
 
-  let Util = window.A8EUtil;
-  let CPU = window.A8E6502;
-  let Palette = window.A8EPalette;
+  const Util = window.A8EUtil;
+  const CPU = window.A8E6502;
+  const Palette = window.A8EPalette;
 
-  let hwApi =
+  const hwApi =
     window.A8EHw && window.A8EHw.createApi ? window.A8EHw.createApi() : null;
   if (!hwApi) throw new Error("A8EHw is not loaded");
 
-  let PIXELS_PER_LINE = hwApi.PIXELS_PER_LINE;
-  let LINES_PER_SCREEN_PAL = hwApi.LINES_PER_SCREEN_PAL;
-  let CYCLES_PER_LINE = hwApi.CYCLES_PER_LINE;
-  let ATARI_CPU_HZ_PAL = hwApi.ATARI_CPU_HZ_PAL;
-  let CYCLE_NEVER = hwApi.CYCLE_NEVER;
-  let FIRST_VISIBLE_LINE = hwApi.FIRST_VISIBLE_LINE;
-  let LAST_VISIBLE_LINE = hwApi.LAST_VISIBLE_LINE;
-  let SERIAL_OUTPUT_DATA_NEEDED_CYCLES = hwApi.SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
-  let SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES =
+  const PIXELS_PER_LINE = hwApi.PIXELS_PER_LINE;
+  const LINES_PER_SCREEN_PAL = hwApi.LINES_PER_SCREEN_PAL;
+  const CYCLES_PER_LINE = hwApi.CYCLES_PER_LINE;
+  const ATARI_CPU_HZ_PAL = hwApi.ATARI_CPU_HZ_PAL;
+  const CYCLE_NEVER = hwApi.CYCLE_NEVER;
+  const FIRST_VISIBLE_LINE = hwApi.FIRST_VISIBLE_LINE;
+  const LAST_VISIBLE_LINE = hwApi.LAST_VISIBLE_LINE;
+  const SERIAL_OUTPUT_DATA_NEEDED_CYCLES = hwApi.SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
+  const SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES =
     hwApi.SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
-  let SERIAL_INPUT_FIRST_DATA_READY_CYCLES =
+  const SERIAL_INPUT_FIRST_DATA_READY_CYCLES =
     hwApi.SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
-  let SERIAL_INPUT_DATA_READY_CYCLES = hwApi.SERIAL_INPUT_DATA_READY_CYCLES;
-  let SIO_TURBO_EMU_MULTIPLIER = hwApi.SIO_TURBO_EMU_MULTIPLIER;
-  let POKEY_AUDIO_MAX_CATCHUP_CYCLES = hwApi.POKEY_AUDIO_MAX_CATCHUP_CYCLES;
-  let NMI_DLI = hwApi.NMI_DLI;
-  let NMI_VBI = hwApi.NMI_VBI;
-  let NMI_RESET = hwApi.NMI_RESET;
-  let IO_PORTA = hwApi.IO_PORTA;
-  let IO_PORTB = hwApi.IO_PORTB;
-  let IO_PACTL = hwApi.IO_PACTL;
-  let IO_PBCTL = hwApi.IO_PBCTL;
-  let IO_HPOSP0_M0PF = hwApi.IO_HPOSP0_M0PF;
-  let IO_HPOSP1_M1PF = hwApi.IO_HPOSP1_M1PF;
-  let IO_HPOSP2_M2PF = hwApi.IO_HPOSP2_M2PF;
-  let IO_HPOSP3_M3PF = hwApi.IO_HPOSP3_M3PF;
-  let IO_HPOSM0_P0PF = hwApi.IO_HPOSM0_P0PF;
-  let IO_HPOSM1_P1PF = hwApi.IO_HPOSM1_P1PF;
-  let IO_HPOSM2_P2PF = hwApi.IO_HPOSM2_P2PF;
-  let IO_HPOSM3_P3PF = hwApi.IO_HPOSM3_P3PF;
-  let IO_SIZEP0_M0PL = hwApi.IO_SIZEP0_M0PL;
-  let IO_SIZEP1_M1PL = hwApi.IO_SIZEP1_M1PL;
-  let IO_SIZEP2_M2PL = hwApi.IO_SIZEP2_M2PL;
-  let IO_SIZEP3_M3PL = hwApi.IO_SIZEP3_M3PL;
-  let IO_SIZEM_P0PL = hwApi.IO_SIZEM_P0PL;
-  let IO_GRAFP0_P1PL = hwApi.IO_GRAFP0_P1PL;
-  let IO_GRAFP1_P2PL = hwApi.IO_GRAFP1_P2PL;
-  let IO_GRAFP2_P3PL = hwApi.IO_GRAFP2_P3PL;
-  let IO_GRAFP3_TRIG0 = hwApi.IO_GRAFP3_TRIG0;
-  let IO_GRAFM_TRIG1 = hwApi.IO_GRAFM_TRIG1;
-  let IO_COLPM0_TRIG2 = hwApi.IO_COLPM0_TRIG2;
-  let IO_COLPM1_TRIG3 = hwApi.IO_COLPM1_TRIG3;
-  let IO_COLPM2_PAL = hwApi.IO_COLPM2_PAL;
-  let IO_COLPM3 = hwApi.IO_COLPM3;
-  let IO_COLPF0 = hwApi.IO_COLPF0;
-  let IO_COLPF1 = hwApi.IO_COLPF1;
-  let IO_COLPF2 = hwApi.IO_COLPF2;
-  let IO_COLPF3 = hwApi.IO_COLPF3;
-  let IO_COLBK = hwApi.IO_COLBK;
-  let IO_PRIOR = hwApi.IO_PRIOR;
-  let IO_VDELAY = hwApi.IO_VDELAY;
-  let IO_GRACTL = hwApi.IO_GRACTL;
-  let IO_HITCLR = hwApi.IO_HITCLR;
-  let IO_CONSOL = hwApi.IO_CONSOL;
-  let IO_AUDF1_POT0 = hwApi.IO_AUDF1_POT0;
-  let IO_AUDC1_POT1 = hwApi.IO_AUDC1_POT1;
-  let IO_AUDF2_POT2 = hwApi.IO_AUDF2_POT2;
-  let IO_AUDC2_POT3 = hwApi.IO_AUDC2_POT3;
-  let IO_AUDF3_POT4 = hwApi.IO_AUDF3_POT4;
-  let IO_AUDC3_POT5 = hwApi.IO_AUDC3_POT5;
-  let IO_AUDF4_POT6 = hwApi.IO_AUDF4_POT6;
-  let IO_AUDC4_POT7 = hwApi.IO_AUDC4_POT7;
-  let IO_AUDCTL_ALLPOT = hwApi.IO_AUDCTL_ALLPOT;
-  let IO_STIMER_KBCODE = hwApi.IO_STIMER_KBCODE;
-  let IO_SKREST_RANDOM = hwApi.IO_SKREST_RANDOM;
-  let IO_POTGO = hwApi.IO_POTGO;
-  let IO_SEROUT_SERIN = hwApi.IO_SEROUT_SERIN;
-  let IO_IRQEN_IRQST = hwApi.IO_IRQEN_IRQST;
-  let IO_SKCTL_SKSTAT = hwApi.IO_SKCTL_SKSTAT;
-  let IRQ_TIMER_1 = hwApi.IRQ_TIMER_1;
-  let IRQ_TIMER_2 = hwApi.IRQ_TIMER_2;
-  let IRQ_TIMER_4 = hwApi.IRQ_TIMER_4;
-  let IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE =
+  const SERIAL_INPUT_DATA_READY_CYCLES = hwApi.SERIAL_INPUT_DATA_READY_CYCLES;
+  const SIO_TURBO_EMU_MULTIPLIER = hwApi.SIO_TURBO_EMU_MULTIPLIER;
+  const POKEY_AUDIO_MAX_CATCHUP_CYCLES = hwApi.POKEY_AUDIO_MAX_CATCHUP_CYCLES;
+  const NMI_DLI = hwApi.NMI_DLI;
+  const NMI_VBI = hwApi.NMI_VBI;
+  const NMI_RESET = hwApi.NMI_RESET;
+  const IO_PORTA = hwApi.IO_PORTA;
+  const IO_PORTB = hwApi.IO_PORTB;
+  const IO_PACTL = hwApi.IO_PACTL;
+  const IO_PBCTL = hwApi.IO_PBCTL;
+  const IO_HPOSP0_M0PF = hwApi.IO_HPOSP0_M0PF;
+  const IO_HPOSP1_M1PF = hwApi.IO_HPOSP1_M1PF;
+  const IO_HPOSP2_M2PF = hwApi.IO_HPOSP2_M2PF;
+  const IO_HPOSP3_M3PF = hwApi.IO_HPOSP3_M3PF;
+  const IO_HPOSM0_P0PF = hwApi.IO_HPOSM0_P0PF;
+  const IO_HPOSM1_P1PF = hwApi.IO_HPOSM1_P1PF;
+  const IO_HPOSM2_P2PF = hwApi.IO_HPOSM2_P2PF;
+  const IO_HPOSM3_P3PF = hwApi.IO_HPOSM3_P3PF;
+  const IO_SIZEP0_M0PL = hwApi.IO_SIZEP0_M0PL;
+  const IO_SIZEP1_M1PL = hwApi.IO_SIZEP1_M1PL;
+  const IO_SIZEP2_M2PL = hwApi.IO_SIZEP2_M2PL;
+  const IO_SIZEP3_M3PL = hwApi.IO_SIZEP3_M3PL;
+  const IO_SIZEM_P0PL = hwApi.IO_SIZEM_P0PL;
+  const IO_GRAFP0_P1PL = hwApi.IO_GRAFP0_P1PL;
+  const IO_GRAFP1_P2PL = hwApi.IO_GRAFP1_P2PL;
+  const IO_GRAFP2_P3PL = hwApi.IO_GRAFP2_P3PL;
+  const IO_GRAFP3_TRIG0 = hwApi.IO_GRAFP3_TRIG0;
+  const IO_GRAFM_TRIG1 = hwApi.IO_GRAFM_TRIG1;
+  const IO_COLPM0_TRIG2 = hwApi.IO_COLPM0_TRIG2;
+  const IO_COLPM1_TRIG3 = hwApi.IO_COLPM1_TRIG3;
+  const IO_COLPM2_PAL = hwApi.IO_COLPM2_PAL;
+  const IO_COLPM3 = hwApi.IO_COLPM3;
+  const IO_COLPF0 = hwApi.IO_COLPF0;
+  const IO_COLPF1 = hwApi.IO_COLPF1;
+  const IO_COLPF2 = hwApi.IO_COLPF2;
+  const IO_COLPF3 = hwApi.IO_COLPF3;
+  const IO_COLBK = hwApi.IO_COLBK;
+  const IO_PRIOR = hwApi.IO_PRIOR;
+  const IO_VDELAY = hwApi.IO_VDELAY;
+  const IO_GRACTL = hwApi.IO_GRACTL;
+  const IO_HITCLR = hwApi.IO_HITCLR;
+  const IO_CONSOL = hwApi.IO_CONSOL;
+  const IO_AUDF1_POT0 = hwApi.IO_AUDF1_POT0;
+  const IO_AUDC1_POT1 = hwApi.IO_AUDC1_POT1;
+  const IO_AUDF2_POT2 = hwApi.IO_AUDF2_POT2;
+  const IO_AUDC2_POT3 = hwApi.IO_AUDC2_POT3;
+  const IO_AUDF3_POT4 = hwApi.IO_AUDF3_POT4;
+  const IO_AUDC3_POT5 = hwApi.IO_AUDC3_POT5;
+  const IO_AUDF4_POT6 = hwApi.IO_AUDF4_POT6;
+  const IO_AUDC4_POT7 = hwApi.IO_AUDC4_POT7;
+  const IO_AUDCTL_ALLPOT = hwApi.IO_AUDCTL_ALLPOT;
+  const IO_STIMER_KBCODE = hwApi.IO_STIMER_KBCODE;
+  const IO_SKREST_RANDOM = hwApi.IO_SKREST_RANDOM;
+  const IO_POTGO = hwApi.IO_POTGO;
+  const IO_SEROUT_SERIN = hwApi.IO_SEROUT_SERIN;
+  const IO_IRQEN_IRQST = hwApi.IO_IRQEN_IRQST;
+  const IO_SKCTL_SKSTAT = hwApi.IO_SKCTL_SKSTAT;
+  const IRQ_TIMER_1 = hwApi.IRQ_TIMER_1;
+  const IRQ_TIMER_2 = hwApi.IRQ_TIMER_2;
+  const IRQ_TIMER_4 = hwApi.IRQ_TIMER_4;
+  const IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE =
     hwApi.IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
-  let IRQ_SERIAL_OUTPUT_DATA_NEEDED = hwApi.IRQ_SERIAL_OUTPUT_DATA_NEEDED;
-  let IRQ_SERIAL_INPUT_DATA_READY = hwApi.IRQ_SERIAL_INPUT_DATA_READY;
-  let IRQ_OTHER_KEY_PRESSED = hwApi.IRQ_OTHER_KEY_PRESSED;
-  let IRQ_BREAK_KEY_PRESSED = hwApi.IRQ_BREAK_KEY_PRESSED;
-  let IO_DMACTL = hwApi.IO_DMACTL;
-  let IO_CHACTL = hwApi.IO_CHACTL;
-  let IO_DLISTL = hwApi.IO_DLISTL;
-  let IO_DLISTH = hwApi.IO_DLISTH;
-  let IO_HSCROL = hwApi.IO_HSCROL;
-  let IO_VSCROL = hwApi.IO_VSCROL;
-  let IO_PMBASE = hwApi.IO_PMBASE;
-  let IO_CHBASE = hwApi.IO_CHBASE;
-  let IO_WSYNC = hwApi.IO_WSYNC;
-  let IO_VCOUNT = hwApi.IO_VCOUNT;
-  let IO_PENH = hwApi.IO_PENH;
-  let IO_PENV = hwApi.IO_PENV;
-  let IO_NMIEN = hwApi.IO_NMIEN;
-  let IO_NMIRES_NMIST = hwApi.IO_NMIRES_NMIST;
-  let VIEW_W = hwApi.VIEW_W;
-  let VIEW_H = hwApi.VIEW_H;
-  let VIEW_X = hwApi.VIEW_X;
-  let VIEW_Y = hwApi.VIEW_Y;
-  let PRIO_BKG = hwApi.PRIO_BKG;
-  let PRIO_PF0 = hwApi.PRIO_PF0;
-  let PRIO_PF1 = hwApi.PRIO_PF1;
-  let PRIO_PF2 = hwApi.PRIO_PF2;
-  let PRIO_PF3 = hwApi.PRIO_PF3;
-  let PRIO_PM0 = hwApi.PRIO_PM0;
-  let PRIO_PM1 = hwApi.PRIO_PM1;
-  let PRIO_PM2 = hwApi.PRIO_PM2;
-  let PRIO_PM3 = hwApi.PRIO_PM3;
-  let PRIORITY_TABLE_BKG_PF012 = hwApi.PRIORITY_TABLE_BKG_PF012;
-  let PRIORITY_TABLE_BKG_PF013 = hwApi.PRIORITY_TABLE_BKG_PF013;
-  let PRIORITY_TABLE_PF0123 = hwApi.PRIORITY_TABLE_PF0123;
-  let SCRATCH_GTIA_COLOR_TABLE = hwApi.SCRATCH_GTIA_COLOR_TABLE;
-  let SCRATCH_COLOR_TABLE_A = hwApi.SCRATCH_COLOR_TABLE_A;
-  let SCRATCH_COLOR_TABLE_B = hwApi.SCRATCH_COLOR_TABLE_B;
-  let SCRATCH_BACKGROUND_TABLE = hwApi.SCRATCH_BACKGROUND_TABLE;
-  let ANTIC_MODE_INFO = hwApi.ANTIC_MODE_INFO;
-  let IO_INIT_VALUES = hwApi.IO_INIT_VALUES;
+  const IRQ_SERIAL_OUTPUT_DATA_NEEDED = hwApi.IRQ_SERIAL_OUTPUT_DATA_NEEDED;
+  const IRQ_SERIAL_INPUT_DATA_READY = hwApi.IRQ_SERIAL_INPUT_DATA_READY;
+  const IRQ_OTHER_KEY_PRESSED = hwApi.IRQ_OTHER_KEY_PRESSED;
+  const IRQ_BREAK_KEY_PRESSED = hwApi.IRQ_BREAK_KEY_PRESSED;
+  const IO_DMACTL = hwApi.IO_DMACTL;
+  const IO_CHACTL = hwApi.IO_CHACTL;
+  const IO_DLISTL = hwApi.IO_DLISTL;
+  const IO_DLISTH = hwApi.IO_DLISTH;
+  const IO_HSCROL = hwApi.IO_HSCROL;
+  const IO_VSCROL = hwApi.IO_VSCROL;
+  const IO_PMBASE = hwApi.IO_PMBASE;
+  const IO_CHBASE = hwApi.IO_CHBASE;
+  const IO_WSYNC = hwApi.IO_WSYNC;
+  const IO_VCOUNT = hwApi.IO_VCOUNT;
+  const IO_PENH = hwApi.IO_PENH;
+  const IO_PENV = hwApi.IO_PENV;
+  const IO_NMIEN = hwApi.IO_NMIEN;
+  const IO_NMIRES_NMIST = hwApi.IO_NMIRES_NMIST;
+  const VIEW_W = hwApi.VIEW_W;
+  const VIEW_H = hwApi.VIEW_H;
+  const VIEW_X = hwApi.VIEW_X;
+  const VIEW_Y = hwApi.VIEW_Y;
+  const PRIO_BKG = hwApi.PRIO_BKG;
+  const PRIO_PF0 = hwApi.PRIO_PF0;
+  const PRIO_PF1 = hwApi.PRIO_PF1;
+  const PRIO_PF2 = hwApi.PRIO_PF2;
+  const PRIO_PF3 = hwApi.PRIO_PF3;
+  const PRIO_PM0 = hwApi.PRIO_PM0;
+  const PRIO_PM1 = hwApi.PRIO_PM1;
+  const PRIO_PM2 = hwApi.PRIO_PM2;
+  const PRIO_PM3 = hwApi.PRIO_PM3;
+  const PRIORITY_TABLE_BKG_PF012 = hwApi.PRIORITY_TABLE_BKG_PF012;
+  const PRIORITY_TABLE_BKG_PF013 = hwApi.PRIORITY_TABLE_BKG_PF013;
+  const PRIORITY_TABLE_PF0123 = hwApi.PRIORITY_TABLE_PF0123;
+  const SCRATCH_GTIA_COLOR_TABLE = hwApi.SCRATCH_GTIA_COLOR_TABLE;
+  const SCRATCH_COLOR_TABLE_A = hwApi.SCRATCH_COLOR_TABLE_A;
+  const SCRATCH_COLOR_TABLE_B = hwApi.SCRATCH_COLOR_TABLE_B;
+  const SCRATCH_BACKGROUND_TABLE = hwApi.SCRATCH_BACKGROUND_TABLE;
+  const ANTIC_MODE_INFO = hwApi.ANTIC_MODE_INFO;
+  const IO_INIT_VALUES = hwApi.IO_INIT_VALUES;
 
   function fillGtiaColorTable(sram, out) {
     out[0] = sram[IO_COLPM0_TRIG2] & 0xff;
@@ -158,7 +158,7 @@
     return chactl & 0x02 ? ch | 0x100 : ch;
   }
 
-  let softwareApi =
+  const softwareApi =
     window.A8ESoftware && window.A8ESoftware.createApi
       ? window.A8ESoftware.createApi({
           Palette: Palette,
@@ -171,18 +171,18 @@
         })
       : null;
   if (!softwareApi) throw new Error("A8ESoftware is not loaded");
-  let makeVideo = softwareApi.makeVideo;
-  let blitViewportToImageData = softwareApi.blitViewportToImageData;
-  let fillLine = softwareApi.fillLine;
+  const makeVideo = softwareApi.makeVideo;
+  const blitViewportToImageData = softwareApi.blitViewportToImageData;
+  const fillLine = softwareApi.fillLine;
 
-  let keysApi =
+  const keysApi =
     window.A8EKeys && window.A8EKeys.createApi
       ? window.A8EKeys.createApi()
       : null;
   if (!keysApi) throw new Error("A8EKeys is not loaded");
-  let KEY_CODE_TABLE = keysApi.KEY_CODE_TABLE;
-  let browserKeyToSdlSym = keysApi.browserKeyToSdlSym;
-  let inputApi =
+  const KEY_CODE_TABLE = keysApi.KEY_CODE_TABLE;
+  const browserKeyToSdlSym = keysApi.browserKeyToSdlSym;
+  const inputApi =
     window.A8EInput && window.A8EInput.createApi
       ? window.A8EInput.createApi({
           CPU: CPU,
@@ -203,7 +203,7 @@
         })
       : null;
   if (!inputApi) throw new Error("A8EInput is not loaded");
-  let stateApi =
+  const stateApi =
     window.A8EState && window.A8EState.createApi
       ? window.A8EState.createApi({
           CPU: CPU,
@@ -213,11 +213,11 @@
         })
       : null;
   if (!stateApi) throw new Error("A8EState is not loaded");
-  let makeIoData = stateApi.makeIoData;
-  let cycleTimedEventUpdate = stateApi.cycleTimedEventUpdate;
-  let initHardwareDefaults = stateApi.initHardwareDefaults;
-  let installIoHandlers = stateApi.installIoHandlers;
-  let memoryApi =
+  const makeIoData = stateApi.makeIoData;
+  const cycleTimedEventUpdate = stateApi.cycleTimedEventUpdate;
+  const initHardwareDefaults = stateApi.initHardwareDefaults;
+  const installIoHandlers = stateApi.installIoHandlers;
+  const memoryApi =
     window.A8EMemory && window.A8EMemory.createApi
       ? window.A8EMemory.createApi({
           CPU: CPU,
@@ -225,7 +225,7 @@
         })
       : null;
   if (!memoryApi) throw new Error("A8EMemory is not loaded");
-  let audioRuntimeApi =
+  const audioRuntimeApi =
     window.A8EAudioRuntime && window.A8EAudioRuntime.createApi
       ? window.A8EAudioRuntime.createApi({
           CYCLE_NEVER: CYCLE_NEVER,
@@ -244,7 +244,7 @@
   if (!audioRuntimeApi) throw new Error("A8EAudioRuntime is not loaded");
 
   // --- POKEY audio (split into core/pokey.js) ---
-  let pokeyAudioApi =
+  const pokeyAudioApi =
     window.A8EPokeyAudio && window.A8EPokeyAudio.createApi
       ? window.A8EPokeyAudio.createApi({
           ATARI_CPU_HZ_PAL: ATARI_CPU_HZ_PAL,
@@ -274,25 +274,25 @@
       : null;
   if (!pokeyAudioApi) throw new Error("A8EPokeyAudio is not loaded");
 
-  let pokeyAudioCreateState = pokeyAudioApi.createState;
-  let pokeyAudioSetTargetBufferSamples = pokeyAudioApi.setTargetBufferSamples;
-  let pokeyAudioSetFillLevelHint = pokeyAudioApi.setFillLevelHint;
-  let pokeyAudioSetTurbo = pokeyAudioApi.setTurbo;
-  let pokeyAudioDrain = pokeyAudioApi.drain;
-  let pokeyAudioClear = pokeyAudioApi.clear;
-  let pokeyAudioResetState = pokeyAudioApi.resetState;
-  let pokeyAudioOnRegisterWrite = pokeyAudioApi.onRegisterWrite;
-  let pokeyAudioSync = pokeyAudioApi.sync;
-  let pokeyAudioConsume = pokeyAudioApi.consume;
-  let pokeySyncLfsr17 = pokeyAudioApi.syncLfsr17;
-  let pokeyPotStartScan = pokeyAudioApi.potStartScan;
-  let pokeyPotUpdate = pokeyAudioApi.potUpdate;
-  let pokeyTimerPeriodCpuCycles = pokeyAudioApi.timerPeriodCpuCycles;
-  let pokeyRestartTimers = pokeyAudioApi.restartTimers;
-  let pokeySeroutWrite = pokeyAudioApi.seroutWrite;
-  let pokeySerinRead = pokeyAudioApi.serinRead;
+  const pokeyAudioCreateState = pokeyAudioApi.createState;
+  const pokeyAudioSetTargetBufferSamples = pokeyAudioApi.setTargetBufferSamples;
+  const pokeyAudioSetFillLevelHint = pokeyAudioApi.setFillLevelHint;
+  const pokeyAudioSetTurbo = pokeyAudioApi.setTurbo;
+  const pokeyAudioDrain = pokeyAudioApi.drain;
+  const pokeyAudioClear = pokeyAudioApi.clear;
+  const pokeyAudioResetState = pokeyAudioApi.resetState;
+  const pokeyAudioOnRegisterWrite = pokeyAudioApi.onRegisterWrite;
+  const pokeyAudioSync = pokeyAudioApi.sync;
+  const pokeyAudioConsume = pokeyAudioApi.consume;
+  const pokeySyncLfsr17 = pokeyAudioApi.syncLfsr17;
+  const pokeyPotStartScan = pokeyAudioApi.potStartScan;
+  const pokeyPotUpdate = pokeyAudioApi.potUpdate;
+  const pokeyTimerPeriodCpuCycles = pokeyAudioApi.timerPeriodCpuCycles;
+  const pokeyRestartTimers = pokeyAudioApi.restartTimers;
+  const pokeySeroutWrite = pokeyAudioApi.seroutWrite;
+  const pokeySerinRead = pokeyAudioApi.serinRead;
 
-  let ioApi =
+  const ioApi =
     window.A8EIo && window.A8EIo.createApi
       ? window.A8EIo.createApi({
           CPU: CPU,
@@ -376,8 +376,8 @@
         })
       : null;
   if (!ioApi) throw new Error("A8EIo is not loaded");
-  let ioAccess = ioApi.ioAccess;
-  let gtiaApi =
+  const ioAccess = ioApi.ioAccess;
+  const gtiaApi =
     window.A8EGtia && window.A8EGtia.createApi
       ? window.A8EGtia.createApi({
           PIXELS_PER_LINE: PIXELS_PER_LINE,
@@ -420,9 +420,9 @@
         })
       : null;
   if (!gtiaApi) throw new Error("A8EGtia is not loaded");
-  let drawPlayerMissiles = gtiaApi.drawPlayerMissiles;
+  const drawPlayerMissiles = gtiaApi.drawPlayerMissiles;
 
-  let anticApi =
+  const anticApi =
     window.A8EAntic && window.A8EAntic.createApi
       ? window.A8EAntic.createApi({
           CPU: CPU,
@@ -481,21 +481,21 @@
       : null;
   if (!anticApi) throw new Error("A8EAntic is not loaded");
 
-  let ioCycleTimedEvent = anticApi.ioCycleTimedEvent;
+  const ioCycleTimedEvent = anticApi.ioCycleTimedEvent;
 
   // --- UI-facing App ---
   function createApp(opts) {
-    let canvas = opts.canvas;
-    let ctx2d = opts.ctx2d;
-    let gl = opts.gl;
-    let debugEl = opts.debugEl;
+    const canvas = opts.canvas;
+    const ctx2d = opts.ctx2d;
+    const gl = opts.gl;
+    const debugEl = opts.debugEl;
 
     let audioEnabled = !!opts.audioEnabled;
     let turbo = !!opts.turbo;
     let sioTurbo = opts.sioTurbo !== false;
     let optionOnStart = !!opts.optionOnStart;
 
-    let video = makeVideo();
+    const video = makeVideo();
     let renderer = null;
     let imageData = null;
     if (gl && window.A8EGlRenderer && window.A8EGlRenderer.create) {
@@ -525,7 +525,7 @@
       };
     }
 
-    let machine = {
+    const machine = {
       ctx: CPU.makeContext(),
       video: video,
       osRomLoaded: false,
@@ -549,7 +549,7 @@
       cycleAccum: 0,
     };
 
-    let memoryRuntime = memoryApi.createRuntime({
+    const memoryRuntime = memoryApi.createRuntime({
       machine: machine,
       video: video,
       ioCycleTimedEvent: ioCycleTimedEvent,
@@ -570,15 +570,15 @@
       pokeyAudioResetState: pokeyAudioResetState,
       pokeyAudioSetTurbo: pokeyAudioSetTurbo,
     });
-    let hardReset = memoryRuntime.hardReset;
-    let loadOsRom = memoryRuntime.loadOsRom;
-    let loadBasicRom = memoryRuntime.loadBasicRom;
-    let loadDiskToDeviceSlot = memoryRuntime.loadDiskToDeviceSlot;
-    let mountImageToDeviceSlot = memoryRuntime.mountImageToDeviceSlot;
-    let unmountDeviceSlot = memoryRuntime.unmountDeviceSlot;
-    let getMountedDiskForDeviceSlot = memoryRuntime.getMountedDiskForDeviceSlot;
-    let hasMountedDiskForDeviceSlot = memoryRuntime.hasMountedDiskForDeviceSlot;
-    let audioRuntime = audioRuntimeApi.createRuntime({
+    const hardReset = memoryRuntime.hardReset;
+    const loadOsRom = memoryRuntime.loadOsRom;
+    const loadBasicRom = memoryRuntime.loadBasicRom;
+    const loadDiskToDeviceSlot = memoryRuntime.loadDiskToDeviceSlot;
+    const mountImageToDeviceSlot = memoryRuntime.mountImageToDeviceSlot;
+    const unmountDeviceSlot = memoryRuntime.unmountDeviceSlot;
+    const getMountedDiskForDeviceSlot = memoryRuntime.getMountedDiskForDeviceSlot;
+    const hasMountedDiskForDeviceSlot = memoryRuntime.hasMountedDiskForDeviceSlot;
+    const audioRuntime = audioRuntimeApi.createRuntime({
       machine: machine,
       getAudioEnabled: function () {
         return audioEnabled;
@@ -595,10 +595,10 @@
       pokeyAudioSync: pokeyAudioSync,
       pokeyAudioConsume: pokeyAudioConsume,
     });
-    let ensureAudio = audioRuntime.ensureAudio;
-    let stopAudio = audioRuntime.stopAudio;
-    let isSioActive = audioRuntime.isSioActive;
-    let syncAudioTurboMode = audioRuntime.syncAudioTurboMode;
+    const ensureAudio = audioRuntime.ensureAudio;
+    const stopAudio = audioRuntime.stopAudio;
+    const isSioActive = audioRuntime.isSioActive;
+    const syncAudioTurboMode = audioRuntime.syncAudioTurboMode;
 
     machine.ctx.ioData = makeIoData(video);
     machine.ctx.ioData.optionOnStart = optionOnStart;
@@ -613,13 +613,13 @@
       return machine.osRomLoaded && machine.basicRomLoaded;
     }
 
-    let inputRuntime = inputApi.createRuntime({
+    const inputRuntime = inputApi.createRuntime({
       machine: machine,
       isReady: isReady,
     });
-    let onKeyDown = inputRuntime.onKeyDown;
-    let onKeyUp = inputRuntime.onKeyUp;
-    let releaseAllKeys = inputRuntime.releaseAll;
+    const onKeyDown = inputRuntime.onKeyDown;
+    const onKeyUp = inputRuntime.onKeyUp;
+    const releaseAllKeys = inputRuntime.releaseAll;
 
     function paint() {
       renderer.paint(video);
@@ -627,7 +627,7 @@
 
     function updateDebug() {
       if (!debugEl) return;
-      let c = machine.ctx.cpu;
+      const c = machine.ctx.cpu;
       debugEl.textContent =
         "PC=$" +
         Util.toHex4(c.pc) +
@@ -648,7 +648,7 @@
       hardReset();
     }
 
-    let CYCLES_PER_FRAME = LINES_PER_SCREEN_PAL * CYCLES_PER_LINE; // 35568
+    const CYCLES_PER_FRAME = LINES_PER_SCREEN_PAL * CYCLES_PER_LINE; // 35568
 
     function frame(ts) {
       if (!machine.running) return;
@@ -660,8 +660,8 @@
       // Clamp big pauses (tab background etc).
       if (dtMs > 100) dtMs = 100;
 
-      let sioFast = !turbo && sioTurbo && isSioActive(machine.ctx.ioData);
-      let emuTurbo = turbo || sioFast;
+      const sioFast = !turbo && sioTurbo && isSioActive(machine.ctx.ioData);
+      const emuTurbo = turbo || sioFast;
       syncAudioTurboMode(emuTurbo);
 
       let mult = turbo ? 4.0 : 1.0;
@@ -672,13 +672,13 @@
       // during mouse movement) from translating into visible speed variation.
       machine.cycleAccum += (dtMs / 1000) * ATARI_CPU_HZ_PAL * mult;
 
-      let frameBudget = CYCLES_PER_FRAME;
+      const frameBudget = CYCLES_PER_FRAME;
       // Cap catch-up work to avoid spiral-of-death after long pauses.
       // Scale the cap with emulation multiplier so turbo can still reach target
       // speed on lower display refresh rates (e.g. 30 Hz).
-      let maxCatchupFrames = Math.max(4, Math.ceil(mult * 4));
+      const maxCatchupFrames = Math.max(4, Math.ceil(mult * 4));
       if (machine.cycleAccum > frameBudget * maxCatchupFrames)
-        machine.cycleAccum = frameBudget * maxCatchupFrames;
+        {machine.cycleAccum = frameBudget * maxCatchupFrames;}
 
       let ranFrames = 0;
       while (machine.cycleAccum >= frameBudget) {
@@ -699,7 +699,7 @@
           machine.audioNode.port
         ) {
           while (true) {
-            let chunk = pokeyAudioDrain(machine.audioState, 4096);
+            const chunk = pokeyAudioDrain(machine.audioState, 4096);
             if (!chunk) break;
             try {
               machine.audioNode.port.postMessage(
@@ -761,7 +761,7 @@
     }
 
     function setTurbo(v) {
-      let next = !!v;
+      const next = !!v;
       if (next === turbo) return;
       turbo = next;
       syncAudioTurboMode(
@@ -783,7 +783,7 @@
     function setSioTurbo(v) {
       sioTurbo = !!v;
       if (machine.ctx && machine.ctx.ioData)
-        machine.ctx.ioData.sioTurbo = sioTurbo;
+        {machine.ctx.ioData.sioTurbo = sioTurbo;}
       syncAudioTurboMode(
         turbo || (!turbo && sioTurbo && isSioActive(machine.ctx.ioData)),
       );
@@ -792,7 +792,7 @@
     function setOptionOnStart(v) {
       optionOnStart = !!v;
       if (machine.ctx && machine.ctx.ioData)
-        machine.ctx.ioData.optionOnStart = optionOnStart;
+        {machine.ctx.ioData.optionOnStart = optionOnStart;}
     }
 
     function dispose() {
