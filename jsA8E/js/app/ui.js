@@ -17,40 +17,46 @@
     const keyboardPanel = document.getElementById("keyboardPanel");
     const joystickPanel = document.getElementById("joystickPanel");
     let app = null;
+    const useWorkerApp =
+      window.A8EApp &&
+      typeof window.A8EApp.supportsWorker === "function" &&
+      window.A8EApp.supportsWorker();
     let gl = null;
-    try {
-      gl =
-        canvas.getContext("webgl2", {
-          alpha: false,
-          antialias: false,
-          depth: false,
-          stencil: false,
-          premultipliedAlpha: false,
-          preserveDrawingBuffer: false,
-          powerPreference: "high-performance",
-          desynchronized: true,
-        }) ||
-        canvas.getContext("webgl", {
-          alpha: false,
-          antialias: false,
-          depth: false,
-          stencil: false,
-          premultipliedAlpha: false,
-          preserveDrawingBuffer: false,
-          powerPreference: "high-performance",
-          desynchronized: true,
-        }) ||
-        canvas.getContext("experimental-webgl", {
-          alpha: false,
-          antialias: false,
-          depth: false,
-          stencil: false,
-          premultipliedAlpha: false,
-          preserveDrawingBuffer: false,
-          desynchronized: true,
-        });
-    } catch {
-      gl = null;
+    if (!useWorkerApp) {
+      try {
+        gl =
+          canvas.getContext("webgl2", {
+            alpha: false,
+            antialias: false,
+            depth: false,
+            stencil: false,
+            premultipliedAlpha: false,
+            preserveDrawingBuffer: false,
+            powerPreference: "high-performance",
+            desynchronized: true,
+          }) ||
+          canvas.getContext("webgl", {
+            alpha: false,
+            antialias: false,
+            depth: false,
+            stencil: false,
+            premultipliedAlpha: false,
+            preserveDrawingBuffer: false,
+            powerPreference: "high-performance",
+            desynchronized: true,
+          }) ||
+          canvas.getContext("experimental-webgl", {
+            alpha: false,
+            antialias: false,
+            depth: false,
+            stencil: false,
+            premultipliedAlpha: false,
+            preserveDrawingBuffer: false,
+            desynchronized: true,
+          });
+      } catch {
+        gl = null;
+      }
     }
 
     let ctx2d = null;
@@ -60,6 +66,8 @@
     let onCrtContextRestored = null;
     let onFullscreenChange = null;
     let didCleanup = false;
+    let workerRenderWidth = 0;
+    let workerRenderHeight = 0;
 
     function readFlexGapPx(el) {
       if (!el || !window.getComputedStyle) return 0;
@@ -140,16 +148,30 @@
 
     function resizeCrtCanvas() {
       resizeDisplayCanvas();
-      if (!gl) return;
+      if (!gl && !useWorkerApp) return;
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
       const cssW = Math.max(1, Math.round(rect.width || nativeScreenW));
       const cssH = Math.max(1, Math.round(rect.height || nativeScreenH));
       const targetW = Math.max(nativeScreenW, Math.round(cssW * dpr));
       const targetH = Math.max(nativeScreenH, Math.round(cssH * dpr));
+      if (useWorkerApp) {
+        if (
+          app &&
+          typeof app.setRenderSize === "function" &&
+          (workerRenderWidth !== targetW || workerRenderHeight !== targetH)
+        ) {
+          workerRenderWidth = targetW;
+          workerRenderHeight = targetH;
+          app.setRenderSize(targetW, targetH);
+        }
+        return;
+      }
       if (canvas.width !== targetW || canvas.height !== targetH) {
         canvas.width = targetW;
         canvas.height = targetH;
+        if (app && typeof app.setRenderSize === "function")
+          {app.setRenderSize(targetW, targetH);}
       }
     }
 
@@ -202,7 +224,9 @@
       if (app && app.dispose) app.dispose();
     }
 
-    if (gl) {
+    if (useWorkerApp) {
+      canvas.classList.add("crtEnabled");
+    } else if (gl) {
       canvas.classList.add("crtEnabled");
       resizeCrtCanvas();
 
@@ -322,7 +346,12 @@
       sdlSym: 275,
     };
 
-    if (gl && window.A8EGlRenderer && window.A8EGlRenderer.loadShaderSources) {
+    if (
+      !useWorkerApp &&
+      gl &&
+      window.A8EGlRenderer &&
+      window.A8EGlRenderer.loadShaderSources
+    ) {
       try {
         await window.A8EGlRenderer.loadShaderSources();
       } catch {
@@ -330,53 +359,67 @@
       }
     }
 
-    try {
+    if (useWorkerApp) {
       app = window.A8EApp.create({
         canvas: canvas,
-        gl: gl,
-        ctx2d: ctx2d,
+        gl: null,
+        ctx2d: null,
         debugEl: debugEl,
         audioEnabled: btnAudio.classList.contains("active"),
         turbo: btnTurbo.classList.contains("active"),
         sioTurbo: btnSioTurbo.classList.contains("active"),
         optionOnStart: btnOptionOnStart.classList.contains("active"),
       });
-    } catch (e) {
-      // If WebGL init succeeded but shader/program setup failed, fall back to 2D by replacing the canvas.
-      if (gl && !ctx2d) {
-        detachCrtHooks();
-        const parent = canvas.parentNode;
-        if (parent) {
-          const nextCanvas = canvas.cloneNode(false);
-          nextCanvas.width = nativeScreenW;
-          nextCanvas.height = nativeScreenH;
-          nextCanvas.classList.remove("crtEnabled");
-          parent.replaceChild(nextCanvas, canvas);
-          canvas = nextCanvas;
-          screenViewport = canvas.parentElement;
-          layoutRoot =
-            screenViewport && screenViewport.closest
-              ? screenViewport.closest(".layout")
-              : null;
-          canvas.tabIndex = 0;
-          gl = null;
-          ctx2d = canvas.getContext("2d", { alpha: false });
-          app = window.A8EApp.create({
-            canvas: canvas,
-            gl: null,
-            ctx2d: ctx2d,
-            debugEl: debugEl,
-            audioEnabled: btnAudio.classList.contains("active"),
-            turbo: btnTurbo.classList.contains("active"),
-            sioTurbo: btnSioTurbo.classList.contains("active"),
-            optionOnStart: btnOptionOnStart.classList.contains("active"),
-          });
-          resizeCrtCanvas();
+      resizeCrtCanvas();
+    } else {
+      try {
+        app = window.A8EApp.create({
+          canvas: canvas,
+          gl: gl,
+          ctx2d: ctx2d,
+          debugEl: debugEl,
+          audioEnabled: btnAudio.classList.contains("active"),
+          turbo: btnTurbo.classList.contains("active"),
+          sioTurbo: btnSioTurbo.classList.contains("active"),
+          optionOnStart: btnOptionOnStart.classList.contains("active"),
+        });
+      } catch (e) {
+        // If WebGL init succeeded but shader/program setup failed, fall back to 2D by replacing the canvas.
+        if (gl && !ctx2d) {
+          detachCrtHooks();
+          const parent = canvas.parentNode;
+          if (parent) {
+            const nextCanvas = canvas.cloneNode(false);
+            nextCanvas.width = nativeScreenW;
+            nextCanvas.height = nativeScreenH;
+            nextCanvas.classList.remove("crtEnabled");
+            parent.replaceChild(nextCanvas, canvas);
+            canvas = nextCanvas;
+            screenViewport = canvas.parentElement;
+            layoutRoot =
+              screenViewport && screenViewport.closest
+                ? screenViewport.closest(".layout")
+                : null;
+            canvas.tabIndex = 0;
+            gl = null;
+            ctx2d = canvas.getContext("2d", { alpha: false });
+            app = window.A8EApp.create({
+              canvas: canvas,
+              gl: null,
+              ctx2d: ctx2d,
+              debugEl: debugEl,
+              audioEnabled: btnAudio.classList.contains("active"),
+              turbo: btnTurbo.classList.contains("active"),
+              sioTurbo: btnSioTurbo.classList.contains("active"),
+              optionOnStart: btnOptionOnStart.classList.contains("active"),
+            });
+            resizeCrtCanvas();
+          } else {
+            throw e;
+          }
         } else {
           throw e;
         }
-      } else {
-        throw e;
       }
     }
 
