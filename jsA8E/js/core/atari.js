@@ -483,6 +483,16 @@
 
   const ioCycleTimedEvent = anticApi.ioCycleTimedEvent;
 
+  // --- H: Device (host filesystem) ---
+  const hostFsApi =
+    window.A8EHostFs && window.A8EHostFs.createApi
+      ? window.A8EHostFs.createApi()
+      : null;
+  const hDeviceApi =
+    window.A8EHDevice && window.A8EHDevice.createApi
+      ? window.A8EHDevice.createApi({ hostFsApi: hostFsApi })
+      : null;
+
   // --- UI-facing App ---
   function createApp(opts) {
     const canvas = opts.canvas;
@@ -547,6 +557,7 @@
       audioTurbo: false,
       audioMode: "none", // "none" | "worklet" | "script" | "loading"
       cycleAccum: 0,
+      frameCycleAccum: 0,
     };
 
     const memoryRuntime = memoryApi.createRuntime({
@@ -570,14 +581,71 @@
       pokeyAudioResetState: pokeyAudioResetState,
       pokeyAudioSetTurbo: pokeyAudioSetTurbo,
     });
-    const hardReset = memoryRuntime.hardReset;
-    const loadOsRom = memoryRuntime.loadOsRom;
+    const memoryHardReset = memoryRuntime.hardReset;
+    const memoryLoadOsRom = memoryRuntime.loadOsRom;
     const loadBasicRom = memoryRuntime.loadBasicRom;
     const loadDiskToDeviceSlot = memoryRuntime.loadDiskToDeviceSlot;
     const mountImageToDeviceSlot = memoryRuntime.mountImageToDeviceSlot;
     const unmountDeviceSlot = memoryRuntime.unmountDeviceSlot;
     const getMountedDiskForDeviceSlot = memoryRuntime.getMountedDiskForDeviceSlot;
     const hasMountedDiskForDeviceSlot = memoryRuntime.hasMountedDiskForDeviceSlot;
+
+    // H: device -- create instance and install CIO hook(s)
+    let hDevice = null;
+    let hDeviceHookAddresses = [];
+
+    function installHDeviceCioHooks() {
+      if (!hDevice) return;
+
+      for (let i = 0; i < hDeviceHookAddresses.length; i++) {
+        CPU.clearPcHook(machine.ctx, hDeviceHookAddresses[i]);
+      }
+      hDeviceHookAddresses = [];
+
+      const addresses = [0xe456];
+      // CIOV is typically a JMP stub at $E456. Hook the resolved target as well
+      // so ROM variants and direct-target calls are covered.
+      const op = machine.ctx.ram[0xe456] & 0xff;
+      if (op === 0x4c) {
+        const jmpTarget =
+          (machine.ctx.ram[0xe457] & 0xff) |
+          ((machine.ctx.ram[0xe458] & 0xff) << 8);
+        if (jmpTarget !== 0xe456) addresses.push(jmpTarget);
+      }
+
+      for (let i = 0; i < addresses.length; i++) {
+        const addr = addresses[i] & 0xffff;
+        if (hDeviceHookAddresses.indexOf(addr) >= 0) continue;
+        CPU.setPcHook(machine.ctx, addr, hDevice.onCioCall);
+        hDeviceHookAddresses.push(addr);
+      }
+    }
+
+    if (hostFsApi && hDeviceApi) {
+      const hostFs = hostFsApi.create();
+      hDevice = hDeviceApi.create(hostFs);
+      // Init IndexedDB (async, but the in-memory cache is usable immediately
+      // after init resolves; the hook is installed synchronously so that H:
+      // is available as soon as the DB loads).
+      hostFs.init().catch(function (err) {
+        console.error("H: device: IndexedDB init failed:", err);
+      });
+      installHDeviceCioHooks();
+    }
+
+    function hardReset() {
+      memoryHardReset();
+      if (hDevice) {
+        hDevice.resetChannels();
+        installHDeviceCioHooks();
+      }
+    }
+
+    function loadOsRom(arrayBuffer) {
+      memoryLoadOsRom(arrayBuffer);
+      installHDeviceCioHooks();
+    }
+
     const audioRuntime = audioRuntimeApi.createRuntime({
       machine: machine,
       getAudioEnabled: function () {
@@ -645,6 +713,8 @@
 
     function hardResetWithInputRelease() {
       if (releaseAllKeys) releaseAllKeys();
+      machine.cycleAccum = 0;
+      machine.frameCycleAccum = 0;
       hardReset();
     }
 
@@ -667,9 +737,9 @@
       let mult = turbo ? 4.0 : 1.0;
       if (!turbo && sioFast) mult = SIO_TURBO_EMU_MULTIPLIER;
 
-      // Accumulate cycles from real elapsed time, then run in whole-frame
-      // steps.  This prevents rAF timing jitter (e.g. from compositor work
-      // during mouse movement) from translating into visible speed variation.
+      // Accumulate cycles from real elapsed time. Run CPU every tick to avoid
+      // audio dead ticks, but only present video when a full PAL frame worth
+      // of cycles has elapsed.
       machine.cycleAccum += (dtMs / 1000) * ATARI_CPU_HZ_PAL * mult;
 
       const frameBudget = CYCLES_PER_FRAME;
@@ -680,19 +750,26 @@
       if (machine.cycleAccum > frameBudget * maxCatchupFrames)
         {machine.cycleAccum = frameBudget * maxCatchupFrames;}
 
-      let ranFrames = 0;
-      while (machine.cycleAccum >= frameBudget) {
-        machine.cycleAccum -= frameBudget;
-        CPU.run(machine.ctx, machine.ctx.cycleCounter + frameBudget);
-        ranFrames++;
+      let cyclesToRun = Math.floor(machine.cycleAccum);
+      if (cyclesToRun < 0) cyclesToRun = 0;
+      machine.cycleAccum -= cyclesToRun;
+
+      while (cyclesToRun > 0) {
+        let runCycles = frameBudget - machine.frameCycleAccum;
+        if (runCycles <= 0) runCycles = frameBudget;
+        if (runCycles > cyclesToRun) runCycles = cyclesToRun;
+        CPU.run(machine.ctx, machine.ctx.cycleCounter + runCycles);
+        cyclesToRun -= runCycles;
+        machine.frameCycleAccum += runCycles;
+        if (machine.frameCycleAccum >= frameBudget) {
+          machine.frameCycleAccum -= frameBudget;
+          paint();
+          updateDebug();
+        }
       }
 
-      if (ranFrames > 0 && machine.audioState) {
-        pokeyAudioSync(
-          machine.ctx,
-          machine.audioState,
-          machine.ctx.cycleCounter,
-        );
+      if (machine.audioState) {
+        pokeyAudioSync(machine.ctx, machine.audioState, machine.ctx.cycleCounter);
         if (
           machine.audioMode === "worklet" &&
           machine.audioNode &&
@@ -713,11 +790,6 @@
         }
       }
 
-      if (ranFrames > 0) {
-        paint();
-        updateDebug();
-      }
-
       machine.rafId = requestAnimationFrame(frame);
     }
 
@@ -732,6 +804,7 @@
       machine.running = true;
       machine.lastTs = 0;
       machine.cycleAccum = 0;
+      machine.frameCycleAccum = 0;
       machine.rafId = requestAnimationFrame(frame);
     }
 
@@ -826,6 +899,7 @@
       unmountDeviceSlot: unmountDeviceSlot,
       getMountedDiskForDeviceSlot: getMountedDiskForDeviceSlot,
       hasMountedDiskForDeviceSlot: hasMountedDiskForDeviceSlot,
+      hDevice: hDevice,
       hasOsRom: hasOsRom,
       hasBasicRom: hasBasicRom,
       isReady: isReady,

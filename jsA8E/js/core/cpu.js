@@ -63,6 +63,8 @@
       irqPending: 0,
       // Set by outside modules (Atari IO).
       ioData: null,
+      // PC hooks: address -> function(ctx).  Return true to skip normal execution.
+      pcHooks: Object.create(null),
     };
 
     for (let i = 0; i < 0x10000; i++) ctx.accessFunctionList[i] = ramAccess;
@@ -838,6 +840,9 @@
       if (ctx.cycleCounter >= ctx.stallCycleCounter) {
         if (ctx.irqPending && !cpu.ps.i) irq(ctx);
 
+        const hook = ctx.pcHooks[cpu.pc];
+        if (hook && hook(ctx)) { cycles = ctx.cycleCounter; continue; }
+
         const opcode = ctx.ram[cpu.pc & 0xffff] & 0xff;
         cpu.pc = (cpu.pc + 1) & 0xffff;
 
@@ -864,6 +869,14 @@
     return ctx.cycleCounter;
   }
 
+  function setPcHook(ctx, addr, fn) {
+    ctx.pcHooks[addr & 0xffff] = fn;
+  }
+
+  function clearPcHook(ctx, addr) {
+    delete ctx.pcHooks[addr & 0xffff];
+  }
+
   window.A8E6502 = {
     makeContext: makeContext,
     setRom: setRom,
@@ -874,6 +887,8 @@
     irq: irq,
     run: run,
     stall: stall,
+    setPcHook: setPcHook,
+    clearPcHook: clearPcHook,
     // exposed for debugging/tests
     getPs: getPs,
     setPs: setPs,

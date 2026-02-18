@@ -1293,6 +1293,15 @@
       btnKeyboard.classList.toggle("active", keyboardActive);
       setKeyboardEnabled(keyboardActive);
     }
+
+    // H: device file manager panel
+    if (window.A8EHostFsUI && app) {
+      window.A8EHostFsUI.init({
+        app: app,
+        panel: document.getElementById("hostfsPanel"),
+        button: document.getElementById("btnHostFs"),
+      });
+    }
   }
 
   window.A8EUI = { boot: boot };

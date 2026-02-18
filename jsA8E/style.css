@@ -1050,3 +1050,103 @@ canvas.crtEnabled {
     margin-inline: 0;
   }
 }
+
+/* ---- H: Device File Manager ---- */
+.hostfsPanel {
+  width: min(100%, 500px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel);
+  align-self: center;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.hostfsPanel[hidden] {
+  display: none;
+}
+.hostfs-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.hostfs-header strong {
+  flex: 1;
+  color: var(--accent);
+}
+.hostfs-upload-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.hostfs-upload-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.hostfs-drop-zone {
+  min-height: 60px;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 6px;
+  transition: border-color 0.15s;
+}
+.hostfs-drop-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(92, 200, 255, 0.05);
+}
+.hostfs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hostfs-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 14px 0;
+  font-size: 12px;
+}
+.hostfs-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+.hostfs-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.hostfs-name {
+  flex: 1;
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hostfs-size {
+  color: var(--muted);
+  font-size: 11px;
+  min-width: 50px;
+  text-align: right;
+}
+.hostfs-actions {
+  display: flex;
+  gap: 4px;
+}
+.hostfs-action-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 5px;
+  font-size: 12px;
+  border-radius: 3px;
+}
+.hostfs-action-btn:hover {
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.06);
+}
