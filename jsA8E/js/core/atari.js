@@ -619,6 +619,18 @@
         CPU.setPcHook(machine.ctx, addr, hDevice.onCioCall);
         hDeviceHookAddresses.push(addr);
       }
+
+      if (hDevice.onPutByteCall && hDevice.putByteHookAddr !== undefined) {
+        const putAddrs = [hDevice.putByteHookAddr & 0xffff];
+        if (hDevice.putByteHookAltAddr !== undefined)
+          {putAddrs.push(hDevice.putByteHookAltAddr & 0xffff);}
+        for (let i = 0; i < putAddrs.length; i++) {
+          const putAddr = putAddrs[i];
+          if (hDeviceHookAddresses.indexOf(putAddr) >= 0) continue;
+          CPU.setPcHook(machine.ctx, putAddr, hDevice.onPutByteCall);
+          hDeviceHookAddresses.push(putAddr);
+        }
+      }
     }
 
     if (hostFsApi && hDeviceApi) {

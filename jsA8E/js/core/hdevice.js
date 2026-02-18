@@ -21,6 +21,8 @@
   const IOCB_ICSTA = 0x03;
   const IOCB_ICBAL = 0x04;
   const IOCB_ICBAH = 0x05;
+  const IOCB_ICPTL = 0x06;
+  const IOCB_ICPTH = 0x07;
   const IOCB_ICBLL = 0x08;
   const IOCB_ICBLH = 0x09;
   const IOCB_ICAX1 = 0x0a;
@@ -52,6 +54,9 @@
 
   // Sentinel for our H: handler in ICHID
   const HDEVICE_HANDLER_ID = 0xfe;
+  // BASIC uses IOCB ICPT as "address minus one" for the one-byte output entry.
+  const HDEVICE_PUTBYTE_HOOK_ADDR = 0xe45a;
+  const HDEVICE_PUTBYTE_VECTOR_VALUE = (HDEVICE_PUTBYTE_HOOK_ADDR - 1) & 0xffff;
 
   function createApi(cfg) {
     const hostFsApi = cfg.hostFsApi;
@@ -163,6 +168,15 @@
         return (mode & 0x0f) === OPEN_UPDATE;
       }
 
+      function _setPutByteVector(ram, x) {
+        _writeIocb(ram, x, IOCB_ICPTL, HDEVICE_PUTBYTE_VECTOR_VALUE & 0xff);
+        _writeIocb(ram, x, IOCB_ICPTH, (HDEVICE_PUTBYTE_VECTOR_VALUE >> 8) & 0xff);
+      }
+
+      function _getPutByteVector(ram, x) {
+        return _readIocb(ram, x, IOCB_ICPTL) | (_readIocb(ram, x, IOCB_ICPTH) << 8);
+      }
+
       function _readDataForChannel(ch) {
         if (ch.writeBuffer) return ch.writeBuffer;
         return ch.fileData;
@@ -259,6 +273,7 @@
           ch.position = 0;
 
           _writeIocb(ctx.ram, x, IOCB_ICHID, HDEVICE_HANDLER_ID);
+          _setPutByteVector(ctx.ram, x);
           _cioReturn(ctx, x, STA_SUCCESS);
           return;
         }
@@ -285,6 +300,7 @@
           ch.dirListing = null;
 
           _writeIocb(ctx.ram, x, IOCB_ICHID, HDEVICE_HANDLER_ID);
+          _setPutByteVector(ctx.ram, x);
           _cioReturn(ctx, x, STA_SUCCESS);
           return;
         }
@@ -330,6 +346,7 @@
           }
 
           _writeIocb(ctx.ram, x, IOCB_ICHID, HDEVICE_HANDLER_ID);
+          _setPutByteVector(ctx.ram, x);
           _cioReturn(ctx, x, STA_SUCCESS);
           return;
         }
@@ -430,6 +447,7 @@
         const bufLen =
           _readIocb(ctx.ram, x, IOCB_ICBLL) |
           (_readIocb(ctx.ram, x, IOCB_ICBLH) << 8);
+        const reqLen = bufLen || 256;
 
         const readData = _readDataForChannel(ch);
         if (!readData || ch.position >= readData.length) {
@@ -440,14 +458,14 @@
         }
 
         const remaining = readData.length - ch.position;
-        const toRead = Math.min(bufLen, remaining);
+        const toRead = Math.min(reqLen, remaining);
         for (let ri = 0; ri < toRead; ri++) {
           ctx.ram[(bufAddr + ri) & 0xffff] = readData[ch.position++] & 0xff;
         }
         _writeIocb(ctx.ram, x, IOCB_ICBLL, toRead & 0xff);
         _writeIocb(ctx.ram, x, IOCB_ICBLH, (toRead >> 8) & 0xff);
 
-        const eof = toRead < bufLen;
+        const eof = toRead < reqLen;
         _cioReturn(ctx, x, eof ? STA_EOF : STA_SUCCESS, toRead);
       }
 
@@ -501,11 +519,12 @@
         const bufLen =
           _readIocb(ctx.ram, x, IOCB_ICBLL) |
           (_readIocb(ctx.ram, x, IOCB_ICBLH) << 8);
+        const reqLen = bufLen || 256;
 
-        for (let wi = 0; wi < bufLen; wi++) {
+        for (let wi = 0; wi < reqLen; wi++) {
           _writeByteToChannel(ch, ctx.ram[(bufAddr + wi) & 0xffff] & 0xff);
         }
-        _cioReturn(ctx, x, STA_SUCCESS, bufLen);
+        _cioReturn(ctx, x, STA_SUCCESS, reqLen);
       }
 
       function _cmdStatus(ctx, x, ch) {
@@ -515,6 +534,65 @@
           return;
         }
         _cioReturn(ctx, x, STA_SUCCESS);
+      }
+
+      function _isPutByteChannel(ctx, x) {
+        if ((x & 0x0f) !== 0 || x > 0x70) return false;
+        if (_readIocb(ctx.ram, x, IOCB_ICHID) !== HDEVICE_HANDLER_ID) return false;
+        return _getPutByteVector(ctx.ram, x) === HDEVICE_PUTBYTE_VECTOR_VALUE;
+      }
+
+      function _candidatePutByteBases(rawX) {
+        const bases = [];
+        function add(base) {
+          const b = base & 0xff;
+          if ((b & 0x0f) !== 0 || b > 0x70) return;
+          if (bases.indexOf(b) >= 0) return;
+          bases.push(b);
+        }
+        // Common CIO convention: X carries IOCB base ($00,$10,...,$70).
+        add(rawX & 0xf0);
+        // Some callers pass channel number in low bits (0..7).
+        if ((rawX & 0xf8) === 0) add((rawX & 0x07) << 4);
+        return bases;
+      }
+
+      function onPutByteCall(ctx) {
+        const rawX = ctx.cpu.x & 0xff;
+        const bases = _candidatePutByteBases(rawX);
+
+        for (let bi = 0; bi < bases.length; bi++) {
+          const x = bases[bi];
+          if (!_isPutByteChannel(ctx, x)) continue;
+          const ch = channels[(x >> 4) & 0x07];
+          if (!ch || !ch.isOpen) {
+            _cioReturn(ctx, x, STA_NOT_OPEN);
+            return true;
+          }
+          if (!ch.writeBuffer) {
+            _cioReturn(ctx, x, STA_INVALID_CMD);
+            return true;
+          }
+          _writeByteToChannel(ch, ctx.cpu.a);
+          _cioReturn(ctx, x, STA_SUCCESS, 1);
+          return true;
+        }
+
+        // Fallback: when X is unreliable, accept only an unambiguous writable H: channel.
+        let target = null;
+        for (let i = 0; i < 8; i++) {
+          const x = (i << 4) & 0xff;
+          if (!_isPutByteChannel(ctx, x)) continue;
+          const ch = channels[i];
+          if (!ch || !ch.isOpen || !ch.writeBuffer) continue;
+          if (target) return false;
+          target = { x: x, ch: ch };
+        }
+        if (!target) return false;
+
+        _writeByteToChannel(target.ch, ctx.cpu.a);
+        _cioReturn(ctx, target.x, STA_SUCCESS, 1);
+        return true;
       }
 
       function _xioRename(ctx, x) {
@@ -611,9 +689,10 @@
       function onCioCall(ctx) {
         if (!_isCalledViaJsr(ctx)) return false;
 
-        const x = ctx.cpu.x & 0xff;
-        // Valid IOCB offsets are $00,$10,...,$70 only.
-        if ((x & 0x0f) !== 0 || x > 0x70) return false;
+        const rawX = ctx.cpu.x & 0xff;
+        const x = rawX & 0xf0;
+        // Valid IOCB bases are $00,$10,...,$70.
+        if (x > 0x70) return false;
 
         const channelNum = (x >> 4) & 0x07;
 
@@ -700,6 +779,9 @@
 
       return {
         onCioCall: onCioCall,
+        onPutByteCall: onPutByteCall,
+        putByteHookAddr: HDEVICE_PUTBYTE_HOOK_ADDR,
+        putByteHookAltAddr: (HDEVICE_PUTBYTE_HOOK_ADDR + 1) & 0xffff,
         resetChannels: resetChannels,
         getHostFs: function () {
           return hostFs;

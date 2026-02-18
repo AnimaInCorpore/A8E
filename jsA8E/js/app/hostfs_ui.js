@@ -16,6 +16,13 @@
     const panel = opts.panel;
     const button = opts.button;
     if (!panel || !button || !app || !app.hDevice) return;
+    if (panel.__a8eHostFsInitialized) return;
+    panel.__a8eHostFsInitialized = true;
+
+    if (panel.__a8eHostFsUnsubscribe) {
+      panel.__a8eHostFsUnsubscribe();
+      panel.__a8eHostFsUnsubscribe = null;
+    }
 
     const hostFs = app.hDevice.getHostFs();
     if (!hostFs) return;
@@ -24,6 +31,7 @@
     const uploadBtn = panel.querySelector(".hostfs-upload-btn");
     const uploadInput = panel.querySelector(".hostfs-upload-input");
     const dropZone = panel.querySelector(".hostfs-drop-zone");
+    let unsubscribeChange = null;
 
     // Toggle panel visibility
     button.addEventListener("click", function () {
@@ -163,9 +171,24 @@
       URL.revokeObjectURL(url);
     }
 
+    if (hostFs.onChange) {
+      unsubscribeChange = hostFs.onChange(function () {
+        if (!panel.hidden) refreshList();
+      });
+      panel.__a8eHostFsUnsubscribe = unsubscribeChange;
+    }
+
     // Initial state: hidden
     panel.hidden = true;
     button.classList.remove("active");
+
+    window.addEventListener("beforeunload", function () {
+      const unsub = unsubscribeChange;
+      if (unsub) unsub();
+      if (panel.__a8eHostFsUnsubscribe === unsub)
+        {panel.__a8eHostFsUnsubscribe = null;}
+      unsubscribeChange = null;
+    });
   }
 
   window.A8EHostFsUI = { init: init };

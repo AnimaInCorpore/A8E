@@ -86,13 +86,33 @@
       let db = null;
       // In-memory file map: key (normalized name) -> { name, data, locked, created, modified }
       const cache = Object.create(null);
+      const changeListeners = new Set();
       let ready = false;
+
+      function _emitChange() {
+        changeListeners.forEach(function (fn) {
+          try {
+            fn();
+          } catch (err) {
+            console.error("H: device listener error:", err);
+          }
+        });
+      }
+
+      function onChange(fn) {
+        if (typeof fn !== "function") return function () {};
+        changeListeners.add(fn);
+        return function () {
+          changeListeners.delete(fn);
+        };
+      }
 
       function init() {
         return new Promise(function (resolve) {
           if (!window.indexedDB) {
             // No IndexedDB -- run with empty in-memory FS only.
             ready = true;
+            _emitChange();
             resolve();
             return;
           }
@@ -122,15 +142,18 @@
                 };
               }
               ready = true;
+              _emitChange();
               resolve();
             };
             getAll.onerror = function () {
               ready = true;
+              _emitChange();
               resolve(); // degrade gracefully
             };
           };
           req.onerror = function () {
             ready = true;
+            _emitChange();
             resolve(); // degrade gracefully
           };
         });
@@ -209,6 +232,7 @@
           modified: now,
         };
         _persist(key);
+        _emitChange();
         return true;
       }
 
@@ -220,6 +244,7 @@
         if (entry.locked) return false;
         delete cache[key];
         _deleteFromDb(key);
+        _emitChange();
         return true;
       }
 
@@ -237,6 +262,7 @@
         entry.modified = Date.now();
         cache[newKey] = entry;
         _persist(newKey);
+        _emitChange();
         return true;
       }
 
@@ -247,6 +273,7 @@
         if (!entry) return false;
         entry.locked = true;
         _persist(key);
+        _emitChange();
         return true;
       }
 
@@ -257,6 +284,7 @@
         if (!entry) return false;
         entry.locked = false;
         _persist(key);
+        _emitChange();
         return true;
       }
 
@@ -289,6 +317,7 @@
         unlockFile: unlockFile,
         getStatus: getStatus,
         fileExists: fileExists,
+        onChange: onChange,
         normalizeName: normalizeName,
         matchesWildcard: matchesWildcard,
       };
