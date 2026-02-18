@@ -1051,102 +1051,309 @@ canvas.crtEnabled {
   }
 }
 
-/* ---- H: Device File Manager ---- */
+/* ---- H: Device File Manager (Atari 800 XL themed) ---- */
 .hostfsPanel {
-  width: min(100%, 500px);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px;
-  background: var(--panel);
+  width: min(100%, 580px);
+  border: 1px solid #1e3455;
+  border-radius: 6px;
+  background: #07101e;
   align-self: center;
   margin-top: 8px;
-  font-size: 13px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
 }
 .hostfsPanel[hidden] {
   display: none;
 }
-.hostfs-header {
+/* Title bar */
+.hostfs-titlebar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
+  gap: 7px;
+  padding: 6px 10px;
+  background: linear-gradient(135deg, #0d2040 0%, #091828 100%);
+  border-bottom: 1px solid #1e3455;
+  flex-shrink: 0;
 }
-.hostfs-header strong {
+.hostfs-title-icon {
+  color: var(--accent);
+  font-size: 13px;
+}
+.hostfs-title-text {
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+  font-size: 13px;
+}
+.hostfs-title-path {
+  color: #3a607a;
+  font-family: monospace;
+  font-size: 11px;
+}
+.hostfs-flex {
   flex: 1;
-  color: var(--accent);
 }
-.hostfs-upload-btn {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 4px;
-  padding: 3px 10px;
+.hostfs-upload-btn,
+.hostfs-folder-btn {
+  background: transparent;
+  border: 1px solid #1e3455;
+  color: var(--muted);
+  border-radius: 3px;
+  padding: 3px 8px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s;
 }
-.hostfs-upload-btn:hover {
+.hostfs-upload-btn:hover,
+.hostfs-folder-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
-.hostfs-drop-zone {
-  min-height: 60px;
-  border: 1px dashed var(--border);
-  border-radius: 6px;
-  padding: 6px;
-  transition: border-color 0.15s;
+/* Toolbar */
+.hostfs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 8px;
+  background: #090e1c;
+  border-bottom: 1px solid #152840;
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
-.hostfs-drop-zone.drag-over {
+.hostfs-btn {
+  background: transparent;
+  border: 1px solid #152840;
+  color: #607890;
+  border-radius: 3px;
+  padding: 2px 7px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  white-space: nowrap;
+  line-height: 1.6;
+}
+.hostfs-btn:hover:not(:disabled) {
   border-color: var(--accent);
-  background: rgba(92, 200, 255, 0.05);
+  color: var(--accent);
+  background: rgba(92, 200, 255, 0.06);
 }
-.hostfs-list {
+.hostfs-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.hostfs-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.hostfs-btn-danger:hover:not(:disabled) {
+  border-color: #c84030;
+  color: #c84030;
+  background: rgba(200, 64, 48, 0.08);
+}
+.hostfs-toolbar-sep {
+  width: 1px;
+  height: 16px;
+  background: #152840;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+.hostfs-sort-label {
+  color: #3a5068;
+  font-size: 10px;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+/* Drop zone / file list area */
+.hostfs-drop-zone {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  overflow: hidden;
+  position: relative;
+  transition: background 0.15s;
 }
+.hostfs-drop-zone.drag-over {
+  background: rgba(92, 200, 255, 0.04);
+  outline: 2px dashed var(--accent);
+  outline-offset: -3px;
+}
+/* Column headers */
+.hostfs-cols-header {
+  display: flex;
+  align-items: center;
+  padding: 3px 6px;
+  background: #07121e;
+  border-bottom: 1px solid #152840;
+  color: #3a5870;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+/* File list */
+.hostfs-list {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 60px;
+}
+.hostfs-list::-webkit-scrollbar {
+  width: 5px;
+}
+.hostfs-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.hostfs-list::-webkit-scrollbar-thumb {
+  background: #152840;
+  border-radius: 3px;
+}
+.hostfs-list::-webkit-scrollbar-thumb:hover {
+  background: #1e3855;
+}
+/* Drop hint */
+.hostfs-drop-hint {
+  text-align: center;
+  color: #1e3050;
+  font-size: 11px;
+  padding: 5px 0 6px;
+  pointer-events: none;
+  transition: color 0.15s;
+}
+.hostfs-drop-zone.drag-over .hostfs-drop-hint {
+  color: var(--accent);
+}
+/* Empty state */
 .hostfs-empty {
   text-align: center;
-  color: var(--muted);
-  padding: 14px 0;
+  color: #2a4060;
+  padding: 22px 0 16px;
   font-size: 12px;
+  line-height: 2.2;
 }
+/* Column layout (shared for header + rows) */
+.hostfs-col {
+  display: flex;
+  align-items: center;
+}
+.hostfs-col-chk {
+  width: 24px;
+  flex-shrink: 0;
+  justify-content: center;
+}
+.hostfs-col-icon {
+  width: 20px;
+  flex-shrink: 0;
+  justify-content: center;
+  font-size: 11px;
+}
+.hostfs-col-name {
+  flex: 1;
+  min-width: 0;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hostfs-col-size {
+  width: 58px;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  color: #3a5870;
+  font-size: 10px;
+}
+.hostfs-col-actions {
+  width: 52px;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 2px;
+}
+/* File rows */
 .hostfs-row {
   display: flex;
   align-items: center;
-  gap: 8px;
   padding: 3px 6px;
-  border-radius: 4px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background 0.1s;
 }
 .hostfs-row:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(92, 200, 255, 0.04);
 }
-.hostfs-name {
-  flex: 1;
-  font-family: monospace;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.hostfs-row:nth-child(even) {
+  background: rgba(255, 255, 255, 0.013);
 }
-.hostfs-size {
-  color: var(--muted);
-  font-size: 11px;
-  min-width: 50px;
-  text-align: right;
+.hostfs-row.selected {
+  background: rgba(210, 100, 0, 0.14);
+  border-left-color: #c86000;
 }
-.hostfs-actions {
-  display: flex;
-  gap: 4px;
+.hostfs-row.selected:hover,
+.hostfs-row.selected:nth-child(even) {
+  background: rgba(210, 100, 0, 0.2);
 }
+/* File name parts */
+.hostfs-fname-base {
+  color: var(--text);
+}
+.hostfs-fname-ext {
+  color: #4a7090;
+}
+.hostfs-lock-icon {
+  font-size: 9px;
+  color: #c89030;
+  margin-left: 5px;
+}
+/* Checkboxes */
+.hostfs-master-chk,
+.hostfs-row-chk {
+  accent-color: #c86000;
+  cursor: pointer;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+/* Row action buttons */
 .hostfs-action-btn {
   background: none;
   border: none;
-  color: var(--muted);
+  color: #1e3855;
   cursor: pointer;
-  padding: 2px 5px;
-  font-size: 12px;
+  padding: 2px 4px;
+  font-size: 11px;
   border-radius: 3px;
+  transition: color 0.1s, background 0.1s;
+  line-height: 1;
 }
-.hostfs-action-btn:hover {
+.hostfs-action-btn:hover:not(:disabled) {
   color: var(--accent);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(92, 200, 255, 0.1);
+}
+.hostfs-action-del:hover:not(:disabled) {
+  color: #c84030;
+  background: rgba(200, 64, 48, 0.1);
+}
+.hostfs-action-btn:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+/* Status bar */
+.hostfs-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  background: #050c18;
+  border-top: 1px solid #152840;
+  color: #3a5068;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.hostfs-stat-sel {
+  color: #c86000;
+  font-weight: 700;
+}
+.hostfs-stat-total {
+  color: #2a4058;
 }
