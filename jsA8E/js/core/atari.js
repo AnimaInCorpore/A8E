@@ -556,6 +556,9 @@
       audioState: null,
       audioTurbo: false,
       audioMode: "none", // "none" | "worklet" | "script" | "loading"
+      audioQueuedSamples: 0,
+      audioWorkletMaxQueuedSamples: 0,
+      audioFillLevelSmoothed: -1,
       cycleAccum: 0,
       frameCycleAccum: 0,
     };
@@ -787,18 +790,29 @@
           machine.audioNode &&
           machine.audioNode.port
         ) {
+          let queued = machine.audioQueuedSamples | 0;
+          const queueCap = machine.audioWorkletMaxQueuedSamples | 0;
           while (true) {
-            const chunk = pokeyAudioDrain(machine.audioState, 4096);
+            let drainLimit = 4096;
+            if (queueCap > 0) {
+              const budget = queueCap - queued;
+              if (budget <= 0) break;
+              if (budget < drainLimit) drainLimit = budget;
+            }
+            if (drainLimit < 256) break;
+            const chunk = pokeyAudioDrain(machine.audioState, drainLimit);
             if (!chunk) break;
             try {
               machine.audioNode.port.postMessage(
                 { type: "samples", samples: chunk },
                 [chunk.buffer],
               );
+              queued += chunk.length | 0;
             } catch {
               break;
             }
           }
+          machine.audioQueuedSamples = queued | 0;
         }
       }
 

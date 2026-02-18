@@ -49,7 +49,7 @@
       this.queue = [];
       this.queueIndex = 0;
       this.lastSample = 0.0;
-      this.maxQueuedSamples = (sampleRate / 20) | 0; // ~50ms cap for lower latency
+      this.maxQueuedSamples = (sampleRate / 8) | 0; // ~125ms cap for jitter tolerance
       if (this.maxQueuedSamples < 256) this.maxQueuedSamples = 256;
       this.statusEveryBlocks = 8;
       this.statusBlockCounter = 0;

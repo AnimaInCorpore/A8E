@@ -41,8 +41,11 @@
     const POKEY_MIX_GAIN = 0.35;
     const POKEY_DC_BLOCK_HZ = 20.0;
     const POKEY_AUDIO_RING_SIZE = 4096; // power-of-two
-    const POKEY_AUDIO_TARGET_BUFFER_SAMPLES = 512;
-    const POKEY_AUDIO_MAX_ADJUST_DIVISOR = 40; // +/-2.5%
+    const POKEY_AUDIO_TARGET_BUFFER_SAMPLES = 1024;
+    const POKEY_AUDIO_ENABLE_ADAPTIVE_SYNC = false;
+    const POKEY_AUDIO_MAX_ADJUST_DIVISOR = 200; // +/-0.5%
+    const POKEY_AUDIO_FILL_DEADBAND_DIVISOR = 8; // +/-12.5% fill deadband
+    const POKEY_AUDIO_CPS_SLEW_DIVISOR = 1000; // max cps delta per sync (~0.1%)
 
     function pokeyAudioCreateState(sampleRate) {
       const ringSize = POKEY_AUDIO_RING_SIZE;
@@ -790,20 +793,31 @@
       let cur = st.lastCycle;
       const cpsBase = st.cyclesPerSampleFpBase || st.cyclesPerSampleFp;
       let cps = cpsBase;
-      let targetFill = st.targetBufferSamples | 0;
-      if (targetFill <= 0) targetFill = 1;
-      let fillLevel = st.ringCount | 0;
-      if ((st.externalFillLevelSamples | 0) >= 0)
-        {fillLevel = st.externalFillLevelSamples | 0;}
-      let fillDelta = fillLevel - targetFill;
-      if (fillDelta > targetFill) fillDelta = targetFill;
-      else if (fillDelta < -targetFill) fillDelta = -targetFill;
-      let maxAdjust = Math.floor(cpsBase / POKEY_AUDIO_MAX_ADJUST_DIVISOR);
-      if (maxAdjust < 1) maxAdjust = 1;
-      const adjust = Math.trunc((fillDelta * maxAdjust) / targetFill);
-      cps = cpsBase + adjust;
-      if (cps < cpsBase - maxAdjust) cps = cpsBase - maxAdjust;
-      else if (cps > cpsBase + maxAdjust) cps = cpsBase + maxAdjust;
+      if (POKEY_AUDIO_ENABLE_ADAPTIVE_SYNC) {
+        let targetFill = st.targetBufferSamples | 0;
+        if (targetFill <= 0) targetFill = 1;
+        let fillLevel = st.ringCount | 0;
+        if ((st.externalFillLevelSamples | 0) >= 0)
+          {fillLevel += st.externalFillLevelSamples | 0;}
+        let fillDelta = fillLevel - targetFill;
+        let fillDeadband = (targetFill / POKEY_AUDIO_FILL_DEADBAND_DIVISOR) | 0;
+        if (fillDeadband < 64) fillDeadband = 64;
+        if (fillDelta > -fillDeadband && fillDelta < fillDeadband) fillDelta = 0;
+        if (fillDelta > targetFill) fillDelta = targetFill;
+        else if (fillDelta < -targetFill) fillDelta = -targetFill;
+        let maxAdjust = Math.floor(cpsBase / POKEY_AUDIO_MAX_ADJUST_DIVISOR);
+        if (maxAdjust < 1) maxAdjust = 1;
+        const adjust = Math.trunc((fillDelta * maxAdjust) / targetFill);
+        let desiredCps = cpsBase + adjust;
+        if (desiredCps < cpsBase - maxAdjust) desiredCps = cpsBase - maxAdjust;
+        else if (desiredCps > cpsBase + maxAdjust) desiredCps = cpsBase + maxAdjust;
+        let cpsSlew = Math.floor(cpsBase / POKEY_AUDIO_CPS_SLEW_DIVISOR);
+        if (cpsSlew < 1) cpsSlew = 1;
+        const cpsPrev = st.cyclesPerSampleFp > 0 ? st.cyclesPerSampleFp : cpsBase;
+        if (desiredCps > cpsPrev + cpsSlew) cps = cpsPrev + cpsSlew;
+        else if (desiredCps < cpsPrev - cpsSlew) cps = cpsPrev - cpsSlew;
+        else cps = desiredCps;
+      }
       if (cps < 1) cps = 1;
       st.cyclesPerSampleFp = cps;
       let samplePhase = st.samplePhaseFp;
@@ -830,22 +844,13 @@
           if (cyclesUntilSample < 1) cyclesUntilSample = 1;
           const batch = left < cyclesUntilSample ? left : cyclesUntilSample;
 
-          st.sampleAccum += level * batch;
-          st.sampleAccumCount = (st.sampleAccumCount + batch) | 0;
           samplePhase += POKEY_FP_ONE * batch;
           left -= batch;
 
           while (samplePhase >= cps) {
-            if (st.sampleAccumCount > 0) {
-              tmp[tmpCount++] = pokeyAudioFinalizeSample(
-                st,
-                st.sampleAccum / st.sampleAccumCount,
-              );
-              st.sampleAccum = 0;
-              st.sampleAccumCount = 0;
-            } else {
-              tmp[tmpCount++] = pokeyAudioFinalizeSample(st, level);
-            }
+            // Match native Pokey.c behavior: sample the current level directly.
+            // This avoids extra averaging blur on transients/high harmonics.
+            tmp[tmpCount++] = pokeyAudioFinalizeSample(st, level);
             samplePhase -= cps;
             if (tmpCount === tmp.length) {
               pokeyAudioRingWrite(st, tmp, tmpCount);

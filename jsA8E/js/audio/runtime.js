@@ -39,6 +39,9 @@
         pokeyAudioSetTurbo(machine.audioState, !!getTurbo());
         if (pokeyAudioSetFillLevelHint)
           {pokeyAudioSetFillLevelHint(machine.audioState, -1);}
+        machine.audioQueuedSamples = 0;
+        machine.audioWorkletMaxQueuedSamples = 0;
+        machine.audioFillLevelSmoothed = -1;
         machine.audioTurbo = !!getTurbo();
         // Initialize audio regs from current POKEY write-shadow.
         {
@@ -138,9 +141,11 @@
             .addModule("js/audio/worklet.js")
             .then(function () {
               if (!machine.audioCtx || !getAudioEnabled()) return;
-              const queueTarget = (machine.audioCtx.sampleRate / 50) | 0 || 960;
+              const queueTarget =
+                (machine.audioCtx.sampleRate / 40) | 0 || 1024;
+              const synthTarget = (queueTarget + 512) | 0;
               const maxQueuedSamples =
-                (machine.audioCtx.sampleRate / 10) | 0 || 4096;
+                (machine.audioCtx.sampleRate / 8) | 0 || 6144;
               const node = new window.AudioWorkletNode(
                 machine.audioCtx,
                 "a8e-sample-queue",
@@ -153,11 +158,14 @@
               if (machine.audioState) {
                 pokeyAudioSetTargetBufferSamples(
                   machine.audioState,
-                  queueTarget,
+                  synthTarget,
                 );
                 if (pokeyAudioSetFillLevelHint)
                   {pokeyAudioSetFillLevelHint(machine.audioState, queueTarget);}
+                machine.audioFillLevelSmoothed = queueTarget;
               }
+              machine.audioQueuedSamples = 0;
+              machine.audioWorkletMaxQueuedSamples = maxQueuedSamples;
               node.port.onmessage = function (e) {
                 const msg = e && e.data ? e.data : null;
                 if (
@@ -168,9 +176,17 @@
                 )
                   {return;}
                 if (typeof msg.queuedSamples !== "number") return;
+                const queued = msg.queuedSamples | 0;
+                machine.audioQueuedSamples = queued;
+                if ((machine.audioFillLevelSmoothed | 0) < 0) {
+                  machine.audioFillLevelSmoothed = queued;
+                } else {
+                  machine.audioFillLevelSmoothed =
+                    ((machine.audioFillLevelSmoothed * 3 + queued) / 4) | 0;
+                }
                 pokeyAudioSetFillLevelHint(
                   machine.audioState,
-                  msg.queuedSamples | 0,
+                  machine.audioFillLevelSmoothed | 0,
                 );
               };
               try {
@@ -186,6 +202,7 @@
               machine.audioMode = "worklet";
               try {
                 node.port.postMessage({ type: "clear" });
+                machine.audioQueuedSamples = 0;
                 if (machine.audioState && pokeyAudioSetFillLevelHint)
                   {pokeyAudioSetFillLevelHint(machine.audioState, 0);}
               } catch {
@@ -214,6 +231,9 @@
               // ignore
             }
           }
+          machine.audioQueuedSamples = 0;
+          machine.audioWorkletMaxQueuedSamples = 0;
+          machine.audioFillLevelSmoothed = -1;
           if (machine.audioState && pokeyAudioSetFillLevelHint)
             {pokeyAudioSetFillLevelHint(machine.audioState, -1);}
           if (machine.audioNode) machine.audioNode.disconnect();
