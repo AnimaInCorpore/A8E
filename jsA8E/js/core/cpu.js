@@ -11,6 +11,9 @@
   const FLAG_I = 0x04;
   const FLAG_Z = 0x02;
   const FLAG_C = 0x01;
+  const ACCESS_MODE_FN = 0;
+  const ACCESS_MODE_RAM = 1;
+  const ACCESS_MODE_ROM = 2;
   const CpuTables = window.A8ECpuTables;
   if (!CpuTables || !CpuTables.buildCodeTable) {
     throw new Error("A8ECpuTables is not loaded");
@@ -55,6 +58,7 @@
       accessFunctionOverride: null,
       accessFunction: null,
       accessAddress: 0,
+      accessMode: ACCESS_MODE_FN,
       pageCrossed: 0,
       cycleCounter: 0,
       stallCycleCounter: 0,
@@ -286,10 +290,23 @@
 
   // Helpers for operations
   function readAccess(ctx) {
+    const addr = ctx.accessAddress & 0xffff;
+    if (ctx.accessMode === ACCESS_MODE_RAM || ctx.accessMode === ACCESS_MODE_ROM) {
+      return ctx.ram[addr] & 0xff;
+    }
     return ctx.accessFunction(ctx, null) & 0xff;
   }
   function writeAccess(ctx, value) {
-    return ctx.accessFunction(ctx, value & 0xff) & 0xff;
+    const addr = ctx.accessAddress & 0xffff;
+    const v = value & 0xff;
+    if (ctx.accessMode === ACCESS_MODE_RAM) {
+      ctx.ram[addr] = v;
+      return v;
+    }
+    if (ctx.accessMode === ACCESS_MODE_ROM) {
+      return ctx.ram[addr] & 0xff;
+    }
+    return ctx.accessFunction(ctx, v) & 0xff;
   }
   function setZN(ctx, value) {
     const ps = ctx.cpu.ps;
@@ -825,9 +842,22 @@
     opSBX,
   ];
   const CODE_TABLE = CpuTables.buildCodeTable();
+  const OPCODE_ADDRESS_FUNCS = new Array(256);
+  const OPCODE_EXEC_FUNCS = new Array(256);
+  const OPCODE_BASE_CYCLES = new Uint8Array(256);
+
+  for (let i = 0; i < 256; i++) {
+    const meta = CODE_TABLE[i];
+    OPCODE_ADDRESS_FUNCS[i] = ADDRESS_FUNCS[meta.addressType];
+    OPCODE_EXEC_FUNCS[i] = OPCODE_FUNCS[meta.opcodeId];
+    OPCODE_BASE_CYCLES[i] = meta.cycles & 0xff;
+  }
 
   function run(ctx, cycleTarget) {
     const cpu = ctx.cpu;
+    const ram = ctx.ram;
+    const accessFunctionList = ctx.accessFunctionList;
+    const pcHooks = ctx.pcHooks;
     let cycles = ctx.cycleCounter;
     while (cycles < cycleTarget) {
       if (
@@ -840,30 +870,49 @@
       if (ctx.cycleCounter >= ctx.stallCycleCounter) {
         if (ctx.irqPending && !cpu.ps.i) irq(ctx);
 
-        const hook = ctx.pcHooks[cpu.pc];
+        const hook = pcHooks[cpu.pc];
         if (hook && hook(ctx)) { cycles = ctx.cycleCounter; continue; }
 
-        const opcode = ctx.ram[cpu.pc & 0xffff] & 0xff;
+        const opcode = ram[cpu.pc & 0xffff] & 0xff;
         cpu.pc = (cpu.pc + 1) & 0xffff;
 
         ctx.accessFunctionOverride = null;
         ctx.accessFunction = null;
+        ctx.accessMode = ACCESS_MODE_FN;
         ctx.pageCrossed = 0;
 
-        const meta = CODE_TABLE[opcode];
-        ADDRESS_FUNCS[meta.addressType](ctx);
+        OPCODE_ADDRESS_FUNCS[opcode](ctx);
 
-        ctx.accessFunction =
-          ctx.accessFunctionOverride ||
-          ctx.accessFunctionList[ctx.accessAddress & 0xffff];
+        if (ctx.accessFunctionOverride) {
+          ctx.accessFunction = ctx.accessFunctionOverride;
+        } else {
+          const addr = ctx.accessAddress & 0xffff;
+          const accessFn = accessFunctionList[addr];
+          if (accessFn === ramAccess) {
+            ctx.accessMode = ACCESS_MODE_RAM;
+          } else if (accessFn === romAccess) {
+            ctx.accessMode = ACCESS_MODE_ROM;
+          } else {
+            ctx.accessFunction = accessFn;
+          }
+        }
 
-        OPCODE_FUNCS[meta.opcodeId](ctx);
+        OPCODE_EXEC_FUNCS[opcode](ctx);
 
-        ctx.cycleCounter += meta.cycles;
+        ctx.cycleCounter += OPCODE_BASE_CYCLES[opcode];
         cycles = ctx.cycleCounter;
       } else {
-        ctx.cycleCounter += 1;
-        cycles = ctx.cycleCounter;
+        let stallTarget = ctx.stallCycleCounter;
+        if (stallTarget > cycleTarget) stallTarget = cycleTarget;
+        if (
+          ctx.ioCycleTimedEventFunction &&
+          ctx.ioCycleTimedEventCycle < stallTarget
+        ) {
+          stallTarget = ctx.ioCycleTimedEventCycle;
+        }
+        if (stallTarget <= ctx.cycleCounter) stallTarget = ctx.cycleCounter + 1;
+        ctx.cycleCounter = stallTarget;
+        cycles = stallTarget;
       }
     }
     return ctx.cycleCounter;
