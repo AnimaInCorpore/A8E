@@ -33,6 +33,7 @@ jobs:
         with:
           dry-run: ${{ inputs.dry-run || false }}
           server: ${{ secrets.FTP_SERVER }}
+          port: 23
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           server-dir: /web/anides.de/jsA8E/
