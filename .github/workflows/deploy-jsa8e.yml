@@ -28,7 +28,7 @@ jobs:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: /public_html/emulator/
+          server-dir: /web/anides.de/jsA8E/
           local-dir: ./jsA8E/
           exclude: |
             **/node_modules/**
