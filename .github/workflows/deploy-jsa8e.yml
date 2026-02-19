@@ -3,6 +3,12 @@ name: Deploy to Website
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Dry Run (simulate upload)'
+        type: boolean
+        default: false
 
 jobs:
   web-deploy:
@@ -25,6 +31,7 @@ jobs:
       - name: FTP Deploy
         uses: SamKirkland/FTP-Deploy-Action@4.3.5
         with:
+          dry-run: ${{ inputs.dry-run || false }}
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
