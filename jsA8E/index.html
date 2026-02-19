@@ -173,6 +173,9 @@
       >
         <div id="atariKeyboard" class="atariKeyboard" role="group" aria-label="Atari 800 XL keyboard keys">
           <div class="atari">
+            <div class="chassis-label" aria-hidden="true">
+              <span class="kbname">ATARI 800 XL</span>
+            </div>
             <div class="case-keyboard">
               <div class="deck">
                 <div class="main">
@@ -213,7 +216,7 @@
                   </div>
                   <div class="row">
                     <div class="spacer" style="--w: 1;"></div>
-                    <button type="button" class="kbKey key wide small" style="--w: 2;" data-modifier="ctrl"><span class="whiteback">CONTROL</span></button>
+                    <button type="button" class="kbKey key wide small ctrl-key" style="--w: 2;" data-modifier="ctrl"><span class="leg leg-tl"><span class="whiteback">CONTROL</span></span></button>
                     <button type="button" class="kbKey key" data-key="a" data-code="KeyA">A</button>
                     <button type="button" class="kbKey key" data-key="s" data-code="KeyS">S</button>
                     <button type="button" class="kbKey key" data-key="d" data-code="KeyD">D</button>
@@ -247,7 +250,7 @@
                   <div class="row">
                     <div class="spacer" style="--w: 4.25;"></div>
                     <button type="button" class="kbKey key space small" style="--w: 8.5;" data-key=" " data-code="Space" aria-label="Space"></button>
-                    <div class="spacer" style="--w: 3.5;"></div>
+                    <div class="spacer" style="--w: 4.5;"></div>
                   </div>
                 </div>
               </div>
@@ -260,7 +263,9 @@
                 <button type="button" class="kbKey side-key" data-key="F4" data-code="F4" data-sdl="285" aria-label="START"></button>
                 <button type="button" class="kbKey side-key" data-key="F1" data-code="F1" data-sdl="282" aria-label="HELP"></button>
               </div>
-              <div class="strip" aria-hidden="true">
+            </div>
+            <div class="case-strip" aria-hidden="true">
+              <div class="strip">
                 <div class="strip-label">RESET</div>
                 <div class="strip-label">OPTION</div>
                 <div class="strip-label">SELECT</div>

@@ -383,9 +383,22 @@
       );
     }
 
+    function syncSideKeyWidthToMainUnit() {
+      if (!atariKeyboard) return;
+      const mainKey = atariKeyboard.querySelector(".main .row .key");
+      if (!mainKey) return;
+      const mainW = mainKey.getBoundingClientRect().width;
+      if (!(mainW > 0)) return;
+      atariKeyboard.style.setProperty(
+        "--side-key-w",
+        Math.round(mainW * 100) / 100 + "px",
+      );
+    }
+
     function checkKeyboardCssScalingConsistency() {
       if (!atariKeyboard || !window.getComputedStyle) return;
       if (!isPanelVisible(keyboardPanel)) return;
+      syncSideKeyWidthToMainUnit();
 
       const rows = Array.from(atariKeyboard.querySelectorAll(".main .row"));
       if (rows.length < 2) return;
