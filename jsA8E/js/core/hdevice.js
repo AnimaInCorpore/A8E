@@ -57,6 +57,9 @@
   // BASIC uses IOCB ICPT as "address minus one" for the one-byte output entry.
   const HDEVICE_PUTBYTE_HOOK_ADDR = 0xe45a;
   const HDEVICE_PUTBYTE_VECTOR_VALUE = (HDEVICE_PUTBYTE_HOOK_ADDR - 1) & 0xffff;
+  const FLAG_N = 0x80;
+  const FLAG_Z = 0x02;
+  const FLAG_C = 0x01;
 
   function createApi(cfg) {
     const hostFsApi = cfg.hostFsApi;
@@ -141,10 +144,11 @@
         // Y = status
         cpu.y = s;
         // Match LDY side effects so callers can branch on N/Z after CIO return.
-        cpu.ps.n = s & 0x80;
-        cpu.ps.z = s === 0 ? 1 : 0;
+        cpu.ps &= ~(FLAG_N | FLAG_Z | FLAG_C);
+        cpu.ps |= s & FLAG_N;
+        if (s === 0) cpu.ps |= FLAG_Z;
         // Carry: clear = success (status < 128), set = error
-        cpu.ps.c = s & 0x80 ? 1 : 0;
+        if (s & FLAG_N) cpu.ps |= FLAG_C;
         // Simulate RTS: pop return address pushed by JSR CIOV.
         const lo = ctx.ram[0x100 + ((cpu.sp + 1) & 0xff)];
         const hi = ctx.ram[0x100 + ((cpu.sp + 2) & 0xff)];

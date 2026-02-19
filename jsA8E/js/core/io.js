@@ -165,7 +165,7 @@
       const sram = ctx.sram;
       const io = ctx.ioData;
 
-      if (value !== null && value !== undefined) {
+      if (value != null) {
         const v = value & 0xff;
 
         switch (addr) {
