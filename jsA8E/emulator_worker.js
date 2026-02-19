@@ -326,6 +326,8 @@
         turbo: !!msg.turbo,
         sioTurbo: msg.sioTurbo !== false,
         optionOnStart: !!msg.optionOnStart,
+        keyboardMappingMode:
+          msg.keyboardMappingMode === "original" ? "original" : "translated",
       });
     } catch (err) {
       if (!gl) throw err;
@@ -340,6 +342,8 @@
         turbo: !!msg.turbo,
         sioTurbo: msg.sioTurbo !== false,
         optionOnStart: !!msg.optionOnStart,
+        keyboardMappingMode:
+          msg.keyboardMappingMode === "original" ? "original" : "translated",
       });
     }
 
@@ -428,6 +432,14 @@
         break;
       case "setOptionOnStart":
         app.setOptionOnStart(!!data.value);
+        break;
+      case "setKeyboardMappingMode":
+        if (app.setKeyboardMappingMode) {
+          app.setKeyboardMappingMode(
+            data.mode === "original" ? "original" : "translated",
+          );
+        }
+        shouldPostState = false;
         break;
       case "loadOsRom":
         app.loadOsRom(data.buffer || new ArrayBuffer(0));

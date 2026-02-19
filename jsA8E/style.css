@@ -611,33 +611,35 @@ button:hover:not(:disabled) {
 }
 
 .atariKeyboard {
-  --bed: #3a3a3c;
-  --bed-hi: #484849;
-  --key-top: #3a3c42;
-  --key-bot: #1b1c20;
-  --legend: #e8eaee;
-  --legend-dim: #c0c4ca;
-  --metal: #bab2a0;
-  --metal-hi: #d0c8b8;
-  --gap: clamp(2px, 0.65vw, 7px);
-  --key-h: clamp(14px, 4.6vw, 52px);
-  --radius: clamp(4px, 1.2vw, 14px);
-  --inner-radius: clamp(3px, 1vw, 12px);
-  --shell-pad-x: clamp(5px, 1.8vw, 20px);
-  --shell-pad-top: clamp(5px, 1.8vw, 20px);
-  --shell-pad-bottom: clamp(7px, 2.4vw, 30px);
-  --deck-pad-x: clamp(4px, 1.35vw, 15px);
-  --deck-pad-top: clamp(4px, 1.35vw, 15px);
-  --deck-pad-bottom: clamp(6px, 2vw, 24px);
-  --main-pad-bottom: clamp(2px, 0.8vw, 8px);
-  --side-pad-x: clamp(3px, 1.1vw, 14px);
-  --key-font: clamp(6px, 1.3vw, 15px);
-  --key-font-wide: clamp(5px, 1.05vw, 12px);
+  --bed: #202018;
+  --bed-hi: #d5d5c8;
+  --stripe: #200218;
+  --key-top: #2f2f27;
+  --key-mid: #282820;
+  --key-bot: #24241d;
+  --legend: #cccccc;
+  --legend-dim: #adada0;
+  --metal: #b0b0b0;
+  --metal-hi: #dbdbdb;
+  --gap: clamp(2px, 0.48vw, 5px);
+  --key-h: clamp(16px, 4.2vw, 48px);
+  --radius: clamp(12px, 1.9vw, 20px);
+  --inner-radius: clamp(8px, 1.4vw, 14px);
+  --shell-pad-x: clamp(6px, 1.6vw, 18px);
+  --shell-pad-top: clamp(8px, 2vw, 24px);
+  --shell-pad-bottom: clamp(8px, 2.4vw, 28px);
+  --deck-pad-x: clamp(4px, 1.1vw, 12px);
+  --deck-pad-top: clamp(3px, 1vw, 11px);
+  --deck-pad-bottom: clamp(5px, 1.5vw, 18px);
+  --main-pad-bottom: clamp(2px, 0.6vw, 7px);
+  --side-pad-x: clamp(4px, 1vw, 12px);
+  --key-font: clamp(6px, 1.25vw, 14px);
+  --key-font-wide: clamp(5px, 1.02vw, 11px);
   --mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
   min-width: 0;
-  width: min(100%, 1100px);
+  width: min(100%, 1160px);
   margin-inline: auto;
   color: var(--legend);
   font-family: var(--mono);
@@ -645,28 +647,27 @@ button:hover:not(:disabled) {
 
 .atariKeyboard .atari {
   border-radius: var(--radius);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
-  overflow: visible;
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  background:
+    linear-gradient(to bottom, var(--bed-hi) 0%, var(--bed-hi) 13%, var(--stripe) 14%, var(--bed) 15%),
+    linear-gradient(to right, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0) 100%);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.42);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.05);
   display: grid;
   grid-template-columns: 1fr auto;
 }
 
 .atariKeyboard .case-keyboard {
   padding: var(--shell-pad-top) var(--shell-pad-x) var(--shell-pad-bottom);
-  background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.12), rgba(255, 255, 255, 0) 18%),
-    linear-gradient(180deg, var(--bed-hi), var(--bed));
+  background: transparent;
   border-radius: var(--radius) 0 0 var(--radius);
 }
 
 .atariKeyboard .deck {
   border-radius: var(--inner-radius);
   padding: var(--deck-pad-top) var(--deck-pad-x) var(--deck-pad-bottom);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.18)),
-    linear-gradient(180deg, #2e2e30, #222224);
-  border: 1px solid rgba(255, 255, 255, 0.03);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(0, 0, 0, 0.13));
+  border: 1px solid rgba(0, 0, 0, 0.32);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
@@ -692,19 +693,22 @@ button:hover:not(:disabled) {
   flex: var(--w, 1) 0 0;
   min-width: 0;
   height: var(--key-h);
-  border-radius: clamp(2px, 0.7vw, 7px);
-  border: 1px solid rgba(0, 0, 0, 0.6);
+  border-radius: clamp(2px, 0.5vw, 5px);
+  border: 1px solid rgba(0, 0, 0, 0.78);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(0, 0, 0, 0) 40%),
-    linear-gradient(180deg, var(--key-top), var(--key-bot));
-  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.5), 0 6px 12px rgba(0, 0, 0, 0.28);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 30%),
+    linear-gradient(180deg, var(--key-top) 0%, var(--key-mid) 56%, var(--key-bot) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 2px 0 rgba(0, 0, 0, 0.6),
+    0 4px 7px rgba(0, 0, 0, 0.22);
   color: var(--legend);
   font-family: var(--mono);
   cursor: pointer;
   position: relative;
   user-select: none;
   touch-action: manipulation;
-  padding: 4px 6px;
+  padding: 3px 5px;
   display: grid;
   place-items: center;
   outline: none;
@@ -712,15 +716,16 @@ button:hover:not(:disabled) {
   font-size: var(--key-font);
   font-weight: 700;
   line-height: 1;
+  letter-spacing: 0.015em;
   white-space: nowrap;
 }
 
 .atariKeyboard .key::after {
   content: "";
   position: absolute;
-  inset: 4px 5px auto 5px;
+  inset: 3px 4px auto 4px;
   height: 1px;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.09);
   border-radius: 1px;
   pointer-events: none;
 }
@@ -732,27 +737,111 @@ button:hover:not(:disabled) {
   grid-template-rows: auto 1fr auto;
   align-items: center;
   justify-items: center;
-  gap: 1px;
+  gap: 0;
+  padding-top: 1px;
+  padding-bottom: 1px;
   text-align: center;
   letter-spacing: 0.02em;
 }
 
 .atariKeyboard .key .top {
-  font-size: clamp(3px, 0.95vw, 10px);
+  font-size: clamp(3px, 0.9vw, 9px);
   color: var(--legend-dim);
-  transform: translateY(1px);
-}
-
-.atariKeyboard .key .mainlbl {
-  font-size: clamp(4px, 1.35vw, 15px);
-  font-weight: 800;
   line-height: 1;
 }
 
+.atariKeyboard .whiteback {
+  background: #f8f8f8;
+  color: #121212;
+  border-radius: 2px;
+  padding: 0.1em;
+  min-width: 1.2em;
+  text-align: center;
+  font-weight: 700;
+  line-height: normal;
+  display: inline-block;
+}
+
+.atariKeyboard .whiteback.arrowbadge {
+  min-width: 1.05em;
+  padding: 0.06em 0.14em;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.atariKeyboard .whiteback.arrowbadge .fa-solid {
+  font-size: clamp(4px, 0.72vw, 8px);
+  line-height: 1;
+}
+
+.atariKeyboard .key .mainlbl {
+  font-size: clamp(4px, 1.3vw, 14px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.03em;
+}
+
 .atariKeyboard .key .sublbl {
-  font-size: clamp(2px, 0.82vw, 9px);
-  color: var(--legend-dim);
+  font-size: clamp(2px, 0.78vw, 8px);
+  color: #f2f2ea;
+  opacity: 0.92;
   line-height: 1.05;
+}
+
+/* TAB key: CLR badge top-left, SET top-right, TAB spanning full width at bottom */
+.atariKeyboard .tabkey .leg {
+  grid-template-rows: 1fr 1fr;
+  grid-template-columns: auto 1fr;
+  justify-items: center;
+  row-gap: clamp(1px, 0.5vw, 5px);
+}
+
+.atariKeyboard .tabkey .leg .top {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  padding-right: 2px;
+}
+
+.atariKeyboard .tabkey .leg .mainlbl {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+}
+
+.atariKeyboard .tabkey .leg .sublbl {
+  grid-column: 1 / 3;
+  grid-row: 2;
+  align-self: center;
+}
+
+/* Arrow keys: badge top-left, main top-right, sub bottom-right */
+.atariKeyboard .arrowkey .leg {
+  grid-template-rows: 1fr 1fr;
+  grid-template-columns: auto 1fr;
+  justify-items: center;
+  row-gap: clamp(1px, 0.5vw, 5px);
+}
+
+.atariKeyboard .arrowkey .leg .top {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  padding-right: 2px;
+}
+
+.atariKeyboard .arrowkey .leg .mainlbl {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+}
+
+.atariKeyboard .arrowkey .leg .sublbl {
+  grid-column: 1 / 3;
+  grid-row: 2;
+  align-self: center;
 }
 
 .atariKeyboard .key.small .mainlbl {
@@ -760,32 +849,45 @@ button:hover:not(:disabled) {
 }
 
 .atariKeyboard .key.wide .mainlbl {
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 
 .atariKeyboard .key.wide {
   font-size: var(--key-font-wide);
-  letter-spacing: 0.03em;
+  letter-spacing: 0.025em;
 }
 
 .atariKeyboard .key.space {
-  border-radius: clamp(2px, 0.9vw, 8px);
+  border-radius: clamp(2px, 0.75vw, 7px);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(0, 0, 0, 0) 36%),
-    linear-gradient(180deg, #38393f, #1e1f24);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 30%),
+    linear-gradient(180deg, #2c2c24, #23231c);
+}
+
+.atariKeyboard .key.space::before {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  top: 46%;
+  height: 1px;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 1px;
+  pointer-events: none;
 }
 
 .atariKeyboard .key.pressed,
 .atariKeyboard .key:active,
 .atariKeyboard .key.active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.5), 0 4px 10px rgba(0, 0, 0, 0.3);
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 0 rgba(0, 0, 0, 0.58),
+    0 3px 6px rgba(0, 0, 0, 0.22);
 }
 
 .atariKeyboard .case-side {
-  background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0) 15%),
-    linear-gradient(180deg, var(--bed-hi), var(--bed));
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(0, 0, 0, 0.2));
   padding:
     calc(var(--shell-pad-top) + var(--deck-pad-top))
     var(--side-pad-x)
@@ -793,7 +895,7 @@ button:hover:not(:disabled) {
   display: grid;
   grid-template-columns: auto auto;
   gap: 0;
-  border-left: 1px solid rgba(0, 0, 0, 0.25);
+  border-left: 1px solid rgba(0, 0, 0, 0.32);
   border-radius: 0 var(--radius) var(--radius) 0;
 }
 
@@ -805,14 +907,17 @@ button:hover:not(:disabled) {
 }
 
 .atariKeyboard .side-key {
-  height: var(--key-h);
-  width: clamp(16px, 5.8vw, 66px);
-  border-radius: clamp(2px, 0.6vw, 6px);
-  border: 1px solid rgba(0, 0, 0, 0.35);
+  height: calc(var(--key-h) * 1.025);
+  width: clamp(16px, 5.6vw, 64px);
+  border-radius: clamp(2px, 0.55vw, 5px);
+  border: 1px solid rgba(64, 64, 64, 0.78);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(0, 0, 0, 0.05)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.2) 38%, rgba(0, 0, 0, 0.08)),
     linear-gradient(180deg, var(--metal-hi), var(--metal));
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.3), 0 6px 12px rgba(0, 0, 0, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 2px 0 rgba(0, 0, 0, 0.28),
+    0 4px 7px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   position: relative;
   user-select: none;
@@ -823,8 +928,11 @@ button:hover:not(:disabled) {
 .atariKeyboard .side-key.pressed,
 .atariKeyboard .side-key:active,
 .atariKeyboard .side-key.active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 3px 8px rgba(0, 0, 0, 0.18);
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    0 1px 0 rgba(0, 0, 0, 0.26),
+    0 2px 5px rgba(0, 0, 0, 0.16);
 }
 
 .atariKeyboard .strip {
@@ -841,9 +949,9 @@ button:hover:not(:disabled) {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.85);
-  font: 700 clamp(3px, 0.9vw, 11px) / 1 var(--mono);
-  letter-spacing: 0.06em;
+  color: #ffffff;
+  font: 700 clamp(3px, 0.86vw, 10px) / 1 var(--mono);
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   user-select: none;
   white-space: nowrap;
@@ -856,16 +964,16 @@ button:hover:not(:disabled) {
 
 .atariKeyboard .kbKey:focus-visible {
   box-shadow:
-    0 4px 0 rgba(0, 0, 0, 0.5),
-    0 8px 14px rgba(0, 0, 0, 0.3),
-    inset 0 0 0 2px rgba(255, 255, 255, 0.25);
+    inset 0 0 0 2px rgba(255, 255, 255, 0.26),
+    0 2px 0 rgba(0, 0, 0, 0.58),
+    0 4px 8px rgba(0, 0, 0, 0.24);
 }
 
 .atariKeyboard .side-key.kbKey:focus-visible {
   box-shadow:
-    0 3px 0 rgba(0, 0, 0, 0.3),
-    0 6px 12px rgba(0, 0, 0, 0.2),
-    inset 0 0 0 2px rgba(255, 255, 255, 0.25);
+    inset 0 0 0 2px rgba(255, 255, 255, 0.25),
+    0 2px 0 rgba(0, 0, 0, 0.26),
+    0 4px 8px rgba(0, 0, 0, 0.18);
 }
 
 @media (max-width: 780px) {
@@ -903,7 +1011,7 @@ button:hover:not(:disabled) {
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: var(--gap);
     border-left: 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
     padding-left: 0;
     padding-top: 6px;
     align-items: center;
@@ -938,6 +1046,14 @@ button:hover:not(:disabled) {
   }
   .atariKeyboard .key .top {
     font-size: clamp(4px, 1.5vw, 10px);
+  }
+  .atariKeyboard .whiteback.arrowbadge {
+    min-width: 0.95em;
+    padding: 0.04em 0.1em;
+    border-radius: 1px;
+  }
+  .atariKeyboard .whiteback.arrowbadge .fa-solid {
+    font-size: clamp(3px, 0.95vw, 6px);
   }
   .atariKeyboard .key .sublbl {
     font-size: clamp(3px, 1.2vw, 9px);

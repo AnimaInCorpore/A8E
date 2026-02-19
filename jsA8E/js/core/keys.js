@@ -2,6 +2,10 @@
   "use strict";
 
   function createApi() {
+    const KEYBOARD_MAPPING_MODE_ORIGINAL = "original";
+    const KEYBOARD_MAPPING_MODE_TRANSLATED = "translated";
+    let keyboardMappingMode = KEYBOARD_MAPPING_MODE_TRANSLATED;
+
     // Key mapping table from AtariIo.c (indexed by SDL 1.2 keysym.sym).
     // Values are Atari POKEY KBCODE codes; 255 => unmapped.
     const KEY_CODE_TABLE = [
@@ -93,41 +97,83 @@
       Slash: 47,
     };
 
-    const SHIFTED_PRINTABLE_TO_BASE = {
-      "!": "1",
-      '"': "2",
-      "#": "3",
-      $: "4",
-      "%": "5",
-      "&": "6",
-      "'": "7",
-      "@": "8",
-      "(": "9",
-      ")": "0",
-      "<": ",",
-      ">": ".",
-      "?": "/",
-      ":": ";",
-      "+": "=",
-      "*": "\\",
-      "^": "-",
+    // Printable symbol-to-Atari mapping.
+    // `base` is the SDL-style unshifted keysym char, `shift` is Atari shift state.
+    const PRINTABLE_TO_ATARI = {
+      "!": { base: "1", shift: true },
+      '"': { base: "2", shift: true },
+      "#": { base: "3", shift: true },
+      $: { base: "4", shift: true },
+      "%": { base: "5", shift: true },
+      "&": { base: "6", shift: true },
+      "'": { base: "7", shift: true },
+      "(": { base: "9", shift: true },
+      ")": { base: "0", shift: true },
+      "@": { base: "8", shift: true },
+      "-": { base: "-", shift: false },
+      _: { base: "-", shift: true },
+      "=": { base: "=", shift: false },
+      "|": { base: "=", shift: true },
+      "+": { base: "'", shift: false },
+      "\\": { base: "'", shift: true },
+      "*": { base: "\\", shift: false },
+      "^": { base: "\\", shift: true },
+      "<": { base: "[", shift: false },
+      ">": { base: "]", shift: false },
+      "[": { base: ",", shift: true },
+      "]": { base: ".", shift: true },
+      ":": { base: ";", shift: true },
+      "?": { base: "/", shift: true },
     };
 
-    function printableKeyToSdlSym(key, shiftKey) {
+    function hasMappedKeyCode(sym) {
+      return KEY_CODE_TABLE[sym] !== undefined && KEY_CODE_TABLE[sym] !== 255;
+    }
+
+    function normalizeKeyboardMappingMode(mode) {
+      return mode === KEYBOARD_MAPPING_MODE_ORIGINAL
+        ? KEYBOARD_MAPPING_MODE_ORIGINAL
+        : KEYBOARD_MAPPING_MODE_TRANSLATED;
+    }
+
+    function setKeyboardMappingMode(mode) {
+      keyboardMappingMode = normalizeKeyboardMappingMode(mode);
+      return keyboardMappingMode;
+    }
+
+    function isPhysicalSourceEvent(e) {
+      if (!e || e.sourceToken === undefined || e.sourceToken === null)
+        {return true;}
+      return String(e.sourceToken).indexOf("phys:") === 0;
+    }
+
+    function shouldPreferPrintableMapping(e) {
+      return (
+        keyboardMappingMode === KEYBOARD_MAPPING_MODE_TRANSLATED &&
+        isPhysicalSourceEvent(e)
+      );
+    }
+
+    function printableKeyToSdlSym(e) {
+      const key = e && typeof e.key === "string" ? e.key : "";
       if (!key || key.length !== 1) return null;
-      const mapped =
-        shiftKey && SHIFTED_PRINTABLE_TO_BASE[key]
-          ? SHIFTED_PRINTABLE_TO_BASE[key]
-          : key.toLowerCase();
-      const sym = mapped.charCodeAt(0) & 0x1ff;
-      if (KEY_CODE_TABLE[sym] === undefined || KEY_CODE_TABLE[sym] === 255)
-        {return null;}
-      return sym;
+
+      const mapped = PRINTABLE_TO_ATARI[key];
+      const baseKey = mapped ? mapped.base : key.toLowerCase();
+      const sym = baseKey.charCodeAt(0) & 0x1ff;
+      if (!hasMappedKeyCode(sym)) return null;
+
+      return {
+        sym: sym,
+        shiftOverride: mapped ? !!mapped.shift : null,
+      };
     }
 
     function browserKeyToSdlSym(e) {
       if (e && typeof e.sdlSym === "number" && isFinite(e.sdlSym))
         {return e.sdlSym | 0;}
+      if (e && Object.prototype.hasOwnProperty.call(e, "atariShiftOverride"))
+        {delete e.atariShiftOverride;}
       // Prefer code/location for side-specific modifiers first.
       if (e.code === "ShiftRight") return 303;
       if (e.code === "ShiftLeft") return 304;
@@ -136,11 +182,23 @@
       if (e.code === "MetaRight") return 309;
       if (e.code === "MetaLeft") return 310;
 
-      const printableSym = printableKeyToSdlSym(e && e.key, !!(e && e.shiftKey));
-      if (printableSym !== null) return printableSym;
-
-      if (e && e.code && CODE_TO_SDL_SYM[e.code] !== undefined)
-        {return CODE_TO_SDL_SYM[e.code];}
+      if (shouldPreferPrintableMapping(e)) {
+        const printable = printableKeyToSdlSym(e);
+        if (printable) {
+          if (e) e.atariShiftOverride = printable.shiftOverride;
+          return printable.sym;
+        }
+        if (e && e.code && CODE_TO_SDL_SYM[e.code] !== undefined)
+          {return CODE_TO_SDL_SYM[e.code];}
+      } else {
+        if (e && e.code && CODE_TO_SDL_SYM[e.code] !== undefined)
+          {return CODE_TO_SDL_SYM[e.code];}
+        const printable = printableKeyToSdlSym(e);
+        if (printable) {
+          if (e) e.atariShiftOverride = printable.shiftOverride;
+          return printable.sym;
+        }
+      }
 
       // SDL 1.2 keysyms mostly follow ASCII for printable keys.
       const k = e.key;
@@ -204,6 +262,9 @@
     return {
       KEY_CODE_TABLE: KEY_CODE_TABLE,
       browserKeyToSdlSym: browserKeyToSdlSym,
+      setKeyboardMappingMode: setKeyboardMappingMode,
+      KEYBOARD_MAPPING_MODE_ORIGINAL: KEYBOARD_MAPPING_MODE_ORIGINAL,
+      KEYBOARD_MAPPING_MODE_TRANSLATED: KEYBOARD_MAPPING_MODE_TRANSLATED,
     };
   }
 

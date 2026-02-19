@@ -62,6 +62,7 @@
     let ctx2d = null;
     let crtCanvas = null;
     let onLayoutResize = null;
+    let onPostLayoutResize = null;
     let onCrtContextLost = null;
     let onCrtContextRestored = null;
     let onFullscreenChange = null;
@@ -256,7 +257,10 @@
       ctx2d = canvas.getContext("2d", { alpha: false });
     }
 
-    onLayoutResize = resizeCrtCanvas;
+    onLayoutResize = function () {
+      resizeCrtCanvas();
+      if (onPostLayoutResize) onPostLayoutResize();
+    };
     window.addEventListener("resize", onLayoutResize);
     if (window.visualViewport)
       {window.visualViewport.addEventListener("resize", onLayoutResize);}
@@ -270,7 +274,15 @@
     const btnAudio = document.getElementById("btnAudio");
     const btnJoystick = document.getElementById("btnJoystick");
     const btnKeyboard = document.getElementById("btnKeyboard");
+    const btnKeyboardMap = document.getElementById("btnKeyboardMap");
     const btnOptionOnStart = document.getElementById("btnOptionOnStart");
+
+    function getKeyboardMappingModeFromUi() {
+      if (!btnKeyboardMap) return "translated";
+      return btnKeyboardMap.classList.contains("active")
+        ? "translated"
+        : "original";
+    }
 
     const romOs = document.getElementById("romOs");
     const romBasic = document.getElementById("romBasic");
@@ -307,6 +319,8 @@
     };
     const pressedButtonRefCount = new WeakMap();
     const pressedButtonsBySource = new Map();
+    let keyboardScaleCheckQueued = false;
+    let keyboardScaleMismatchLogged = false;
     let flashTokenCounter = 0;
     let virtualTapTokenCounter = 0;
     const joystickState = {
@@ -346,6 +360,113 @@
       sdlSym: 275,
     };
 
+    function parseKeyboardRowWeight(el) {
+      if (!el) return 1;
+      let parsed = NaN;
+      if (el.style && typeof el.style.getPropertyValue === "function") {
+        parsed = parseFloat(el.style.getPropertyValue("--w") || "");
+      }
+      if ((!isFinite(parsed) || parsed <= 0) && window.getComputedStyle) {
+        parsed = parseFloat(
+          window.getComputedStyle(el).getPropertyValue("--w") || "",
+        );
+      }
+      return isFinite(parsed) && parsed > 0 ? parsed : 1;
+    }
+
+    function logKeyboardScaleMismatch(details) {
+      if (keyboardScaleMismatchLogged) return;
+      keyboardScaleMismatchLogged = true;
+      console.warn(
+        "[A8E] Keyboard CSS scaling inconsistency detected:",
+        details,
+      );
+    }
+
+    function checkKeyboardCssScalingConsistency() {
+      if (!atariKeyboard || !window.getComputedStyle) return;
+      if (!isPanelVisible(keyboardPanel)) return;
+
+      const rows = Array.from(atariKeyboard.querySelectorAll(".main .row"));
+      if (rows.length < 2) return;
+
+      const rowStats = [];
+      rows.forEach(function (row, index) {
+        const items = Array.from(row.children).filter(function (child) {
+          if (!child.classList) return false;
+          return (
+            child.classList.contains("key") || child.classList.contains("spacer")
+          );
+        });
+        if (items.length < 10) return;
+
+        let totalWeight = 0;
+        items.forEach(function (item) {
+          totalWeight += parseKeyboardRowWeight(item);
+        });
+        if (!(totalWeight > 0)) return;
+
+        const rowRect = row.getBoundingClientRect();
+        if (!(rowRect.width > 0)) return;
+        const st = window.getComputedStyle(row);
+        const gapPx = Math.max(
+          0,
+          parseFloat(st.columnGap || st.gap || "0") || 0,
+        );
+        const usableWidth =
+          rowRect.width - gapPx * Math.max(0, items.length - 1);
+        if (!(usableWidth > 0)) return;
+
+        rowStats.push({
+          row: index + 1,
+          totalWeight: totalWeight,
+          unitPx: usableWidth / totalWeight,
+        });
+      });
+      if (rowStats.length < 2) return;
+
+      const reference = rowStats[0];
+      const weightDrift = [];
+      const unitDrift = [];
+      for (let i = 1; i < rowStats.length; i++) {
+        const row = rowStats[i];
+        if (Math.abs(row.totalWeight - reference.totalWeight) > 0.01)
+          {weightDrift.push(row.row);}
+        if (Math.abs(row.unitPx - reference.unitPx) > 0.75)
+          {unitDrift.push(row.row);}
+      }
+
+      let sideHeightDrift = false;
+      const mainKey = atariKeyboard.querySelector(".main .row .key");
+      const sideKey = atariKeyboard.querySelector(".side-key");
+      if (mainKey && sideKey) {
+        const mainH = mainKey.getBoundingClientRect().height;
+        const sideH = sideKey.getBoundingClientRect().height;
+        sideHeightDrift = Math.abs(mainH - sideH) > 1;
+      }
+
+      const mismatch =
+        weightDrift.length > 0 || unitDrift.length > 0 || sideHeightDrift;
+      if (mismatch) {
+        logKeyboardScaleMismatch({
+          weightRows: weightDrift,
+          unitRows: unitDrift,
+          sideHeight: sideHeightDrift,
+        });
+      }
+    }
+
+    function queueKeyboardScaleConsistencyCheck() {
+      if (keyboardScaleCheckQueued) return;
+      keyboardScaleCheckQueued = true;
+      requestAnimationFrame(function () {
+        keyboardScaleCheckQueued = false;
+        checkKeyboardCssScalingConsistency();
+      });
+    }
+
+    onPostLayoutResize = queueKeyboardScaleConsistencyCheck;
+
     if (
       !useWorkerApp &&
       gl &&
@@ -369,6 +490,7 @@
         turbo: btnTurbo.classList.contains("active"),
         sioTurbo: btnSioTurbo.classList.contains("active"),
         optionOnStart: btnOptionOnStart.classList.contains("active"),
+        keyboardMappingMode: getKeyboardMappingModeFromUi(),
       });
       resizeCrtCanvas();
     } else {
@@ -382,6 +504,7 @@
           turbo: btnTurbo.classList.contains("active"),
           sioTurbo: btnSioTurbo.classList.contains("active"),
           optionOnStart: btnOptionOnStart.classList.contains("active"),
+          keyboardMappingMode: getKeyboardMappingModeFromUi(),
         });
       } catch (e) {
         // If WebGL init succeeded but shader/program setup failed, fall back to 2D by replacing the canvas.
@@ -412,6 +535,7 @@
               turbo: btnTurbo.classList.contains("active"),
               sioTurbo: btnSioTurbo.classList.contains("active"),
               optionOnStart: btnOptionOnStart.classList.contains("active"),
+              keyboardMappingMode: getKeyboardMappingModeFromUi(),
             });
             resizeCrtCanvas();
           } else {
@@ -688,6 +812,11 @@
       return {
         key: e.key,
         code: e.code || "",
+        altGraph: !!(
+          e &&
+          typeof e.getModifierState === "function" &&
+          e.getModifierState("AltGraph")
+        ),
         ctrlKey: !!e.ctrlKey || isModifierActive("ctrl"),
         shiftKey: !!e.shiftKey || isModifierActive("shift"),
         sourceToken: "phys:" + physicalKeyToken(e),
@@ -719,11 +848,13 @@
       const ev = {
         key: key,
         code: code || "",
-        ctrlKey: isModifierActive("ctrl"),
+        // Virtual key presses should be deterministic and only depend on
+        // virtual modifier toggles, not currently held physical modifiers.
+        ctrlKey: !!virtualModifiers.ctrl,
         shiftKey:
           shiftOverride !== undefined
             ? !!shiftOverride
-            : isModifierActive("shift"),
+            : !!virtualModifiers.shift,
       };
       if (typeof sdlSym === "number" && isFinite(sdlSym))
         {ev.sdlSym = sdlSym | 0;}
@@ -936,6 +1067,7 @@
 
       if (!enabled) resetJoystickControls();
       resizeCrtCanvas();
+      queueKeyboardScaleConsistencyCheck();
       focusCanvas(true);
     }
 
@@ -965,7 +1097,28 @@
 
       if (!enabled) resetKeyboardControls();
       resizeCrtCanvas();
+      queueKeyboardScaleConsistencyCheck();
       focusCanvas(true);
+    }
+
+    function setKeyboardMappingMode(mode, applyToApp) {
+      const normalizedMode = mode === "original" ? "original" : "translated";
+      const translated = normalizedMode === "translated";
+      if (btnKeyboardMap) {
+        btnKeyboardMap.classList.toggle("active", translated);
+        const label = translated
+          ? "Keyboard mapping: translated symbols for local layouts (recommended for BASIC typing)."
+          : "Keyboard mapping: original Atari key positions (US layout style).";
+        btnKeyboardMap.title = label;
+        btnKeyboardMap.setAttribute("aria-label", label);
+      }
+      if (
+        applyToApp &&
+        app &&
+        typeof app.setKeyboardMappingMode === "function"
+      ) {
+        app.setKeyboardMappingMode(normalizedMode);
+      }
     }
 
     function requestFullscreen(el) {
@@ -1048,6 +1201,7 @@
           .then(function () {
             updateFullscreenButton();
             resizeCrtCanvas();
+            queueKeyboardScaleConsistencyCheck();
             focusCanvas(false);
           })
           .catch(function () {
@@ -1059,6 +1213,7 @@
     onFullscreenChange = function () {
       updateFullscreenButton();
       resizeCrtCanvas();
+      queueKeyboardScaleConsistencyCheck();
     };
     document.addEventListener("fullscreenchange", onFullscreenChange);
     document.addEventListener("webkitfullscreenchange", onFullscreenChange);
@@ -1082,6 +1237,16 @@
     if (btnKeyboard && keyboardPanel) {
       btnKeyboard.addEventListener("click", function () {
         setKeyboardEnabled(!btnKeyboard.classList.contains("active"));
+      });
+    }
+
+    if (btnKeyboardMap) {
+      btnKeyboardMap.addEventListener("click", function () {
+        const nextMode = btnKeyboardMap.classList.contains("active")
+          ? "original"
+          : "translated";
+        setKeyboardMappingMode(nextMode, true);
+        focusCanvas(true);
       });
     }
 
@@ -1179,6 +1344,7 @@
       atariKeyboard.addEventListener("pointerleave", onKeyboardPointerLeave);
       // Keyboard accessibility fallback for focused on-screen key buttons.
       atariKeyboard.addEventListener("keydown", onKeyboardAccessibilityKeyDown);
+      queueKeyboardScaleConsistencyCheck();
     }
 
     function onJoystickPointerDown(e) {
@@ -1328,6 +1494,7 @@
 
     updateStatus();
     updateFullscreenButton();
+    setKeyboardMappingMode(getKeyboardMappingModeFromUi(), true);
     if (btnJoystick && joystickPanel) {
       setJoystickEnabled(btnJoystick.classList.contains("active"));
     }

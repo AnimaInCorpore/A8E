@@ -617,6 +617,10 @@
     let disposed = false;
     let ready = false;
     const pending = [];
+    let keyboardMappingMode =
+      opts && opts.keyboardMappingMode === "original"
+        ? "original"
+        : "translated";
 
     const state = {
       running: false,
@@ -715,6 +719,7 @@
         turbo: !!opts.turbo,
         sioTurbo: opts.sioTurbo !== false,
         optionOnStart: !!opts.optionOnStart,
+        keyboardMappingMode: keyboardMappingMode,
       },
       [offscreen, audioChannel.port2],
     );
@@ -750,6 +755,10 @@
       },
       setOptionOnStart: function (v) {
         sendCommand("setOptionOnStart", { value: !!v });
+      },
+      setKeyboardMappingMode: function (mode) {
+        keyboardMappingMode = mode === "original" ? "original" : "translated";
+        sendCommand("setKeyboardMappingMode", { mode: keyboardMappingMode });
       },
       loadOsRom: function (arrayBuffer) {
         state.hasOsRom = true;
@@ -858,6 +867,8 @@
     const app = legacyCreate(legacyOpts);
     if (app && typeof app.setRenderSize !== "function")
       {app.setRenderSize = function () {};}
+    if (app && typeof app.setKeyboardMappingMode !== "function")
+      {app.setKeyboardMappingMode = function () {};}
     return app;
   }
 

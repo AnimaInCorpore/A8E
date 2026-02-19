@@ -182,6 +182,7 @@
   if (!keysApi) throw new Error("A8EKeys is not loaded");
   const KEY_CODE_TABLE = keysApi.KEY_CODE_TABLE;
   const browserKeyToSdlSym = keysApi.browserKeyToSdlSym;
+  const setKeysKeyboardMappingMode = keysApi.setKeyboardMappingMode;
   const inputApi =
     window.A8EInput && window.A8EInput.createApi
       ? window.A8EInput.createApi({
@@ -504,6 +505,10 @@
     let turbo = !!opts.turbo;
     let sioTurbo = opts.sioTurbo !== false;
     let optionOnStart = !!opts.optionOnStart;
+    let keyboardMappingMode =
+      opts.keyboardMappingMode === "original" ? "original" : "translated";
+    if (setKeysKeyboardMappingMode)
+      {setKeysKeyboardMappingMode(keyboardMappingMode);}
 
     const video = makeVideo();
     let renderer = null;
@@ -894,6 +899,12 @@
         {machine.ctx.ioData.optionOnStart = optionOnStart;}
     }
 
+    function setKeyboardMappingMode(mode) {
+      keyboardMappingMode = mode === "original" ? "original" : "translated";
+      if (setKeysKeyboardMappingMode)
+        {setKeysKeyboardMappingMode(keyboardMappingMode);}
+    }
+
     function dispose() {
       pause();
       stopAudio();
@@ -918,6 +929,7 @@
       setSioTurbo: setSioTurbo,
       setAudioEnabled: setAudioEnabled,
       setOptionOnStart: setOptionOnStart,
+      setKeyboardMappingMode: setKeyboardMappingMode,
       loadOsRom: loadOsRom,
       loadBasicRom: loadBasicRom,
       loadDiskToDeviceSlot: loadDiskToDeviceSlot,

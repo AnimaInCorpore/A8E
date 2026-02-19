@@ -89,6 +89,21 @@
         return { handled: true, newlyReleased: !stillDown };
       }
 
+      function releaseSymBySource(e) {
+        const source = normalizeSourceToken(e);
+        if (source === null) return { handled: false, newlyReleased: false, sym: null };
+        const syms = Object.keys(pressedKeys);
+        for (let i = 0; i < syms.length; i++) {
+          const sym = syms[i] | 0;
+          const st = pressedKeys[sym];
+          if (!st || !st.sources || !st.sources.has(source)) continue;
+          const released = releaseSym(sym, e);
+          if (released.handled)
+            {return { handled: true, newlyReleased: released.newlyReleased, sym: sym };}
+        }
+        return { handled: false, newlyReleased: false, sym: null };
+      }
+
       function triggerRegister(index) {
         if (index === 0) return IO_GRAFP3_TRIG0;
         if (index === 1) return IO_GRAFM_TRIG1;
@@ -136,6 +151,17 @@
         return 0;
       }
 
+      function effectiveShiftKey(e) {
+        if (e && typeof e.atariShiftOverride === "boolean")
+          {return e.atariShiftOverride;}
+        return !!(e && e.shiftKey);
+      }
+
+      function effectiveCtrlKey(e) {
+        if (e && e.altGraph) return false;
+        return !!(e && e.ctrlKey);
+      }
+
       function cursorKeyCodeForArrowSym(sym) {
         if (sym === SDLK_UP) return 54 | 0x80; // Ctrl + '-'
         if (sym === SDLK_DOWN) return 55 | 0x80; // Ctrl + '='
@@ -165,11 +191,13 @@
         const down = pressSym(sym, e);
         if (!down.handled) return false;
         if (!down.newlyPressed) return true;
+        const shiftKeyDown = effectiveShiftKey(e);
+        const ctrlKeyDown = effectiveCtrlKey(e);
 
         // Joystick / console / reset/break follow C behavior.
         const arrowMask = joystickMaskForArrowSym(sym);
         if (arrowMask) {
-          if (e.shiftKey) {
+          if (shiftKeyDown) {
             const cursorKeyCode = cursorKeyCodeForArrowSym(sym);
             if (cursorKeyCode !== null) queueKeyCode(cursorKeyCode);
             return true;
@@ -233,8 +261,8 @@
           return false;
         }
 
-        if (e.ctrlKey) kc |= 0x80;
-        if (e.shiftKey) kc |= 0x40;
+        if (ctrlKeyDown) kc |= 0x80;
+        if (shiftKeyDown) kc |= 0x40;
 
         queueKeyCode(kc);
         return true;
@@ -242,10 +270,18 @@
 
       function onKeyUp(e) {
         if (!isReady()) return false;
-        const sym = browserKeyToSdlSym(e);
-        if (sym === null) return false;
-        const up = releaseSym(sym, e);
-        if (!up.handled) return false;
+        const resolvedSym = browserKeyToSdlSym(e);
+        let up =
+          resolvedSym === null
+            ? { handled: false, newlyReleased: false }
+            : releaseSym(resolvedSym, e);
+        let sym = resolvedSym;
+        if (!up.handled) {
+          const fallback = releaseSymBySource(e);
+          if (!fallback.handled) return false;
+          up = fallback;
+          sym = fallback.sym;
+        }
         if (!up.newlyReleased) return true;
 
         const arrowMask = joystickMaskForArrowSym(sym);

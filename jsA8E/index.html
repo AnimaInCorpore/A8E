@@ -64,6 +64,7 @@
                   <span class="tt-icon"><i class="fa-solid fa-volume-high"></i> audio</span>
                   <span class="tt-icon"><i class="fa-solid fa-gamepad"></i> joystick</span>
                   <span class="tt-icon"><i class="fa-solid fa-keyboard"></i> keyboard</span>
+                  <span class="tt-icon"><i class="fa-solid fa-language"></i> key map</span>
                   <span class="tt-icon"><i class="fa-solid fa-hand-point-down"></i> BASIC off</span>
                   <span class="tt-icon"><i class="fa-solid fa-folder-open"></i> H: files</span>
                 </div>
@@ -116,6 +117,9 @@
               <i class="fa-solid fa-keyboard"></i>
               <i class="fa-solid fa-slash keyboard-off-mark"></i>
             </span>
+          </button>
+          <button id="btnKeyboardMap" class="toggle-btn active" title="Keyboard mapping: translated symbols for local layouts (recommended for BASIC typing)." aria-label="Keyboard mapping: translated symbols for local layouts (recommended for BASIC typing).">
+            <i class="fa-solid fa-language"></i>
           </button>
           <button id="btnOptionOnStart" class="toggle-btn active" title="Toggle Option on Start. When enabled, OPTION is held during boot to disable BASIC ROM mapping for software that requires BASIC off." aria-label="Toggle Option on Start. When enabled, OPTION is held during boot to disable BASIC ROM mapping for software that requires BASIC off.">
             <i class="fa-solid fa-hand-point-down"></i>
@@ -173,7 +177,8 @@
               <div class="deck">
                 <div class="main">
                   <div class="row">
-                    <button type="button" class="kbKey key small" style="--w: 1.15;" data-key="Escape" data-code="Escape">ESC</button>
+                    <div class="spacer" style="--w: 1;"></div>
+                    <button type="button" class="kbKey key small" style="--w: 1.25;" data-key="Escape" data-code="Escape">ESC</button>
                     <button type="button" class="kbKey key" data-key="1" data-code="Digit1"><span class="leg"><span class="top">!</span><span class="mainlbl">1</span><span class="sublbl"></span></span></button>
                     <button type="button" class="kbKey key" data-key="2" data-code="Digit2"><span class="leg"><span class="top">&quot;</span><span class="mainlbl">2</span><span class="sublbl"></span></span></button>
                     <button type="button" class="kbKey key" data-key="3" data-code="Digit3"><span class="leg"><span class="top">#</span><span class="mainlbl">3</span><span class="sublbl"></span></span></button>
@@ -184,13 +189,14 @@
                     <button type="button" class="kbKey key" data-key="8" data-code="Digit8"><span class="leg"><span class="top">@</span><span class="mainlbl">8</span><span class="sublbl"></span></span></button>
                     <button type="button" class="kbKey key" data-key="9" data-code="Digit9"><span class="leg"><span class="top">(</span><span class="mainlbl">9</span><span class="sublbl"></span></span></button>
                     <button type="button" class="kbKey key" data-key="0" data-code="Digit0"><span class="leg"><span class="top">)</span><span class="mainlbl">0</span><span class="sublbl"></span></span></button>
-                    <button type="button" class="kbKey key small" data-key="[" data-code="BracketLeft"><span class="leg"><span class="top">CLEAR</span><span class="mainlbl">&lt;</span><span class="sublbl"></span></span></button>
-                    <button type="button" class="kbKey key small" data-key="]" data-code="BracketRight"><span class="leg"><span class="top">INSERT</span><span class="mainlbl">&gt;</span><span class="sublbl"></span></span></button>
-                    <button type="button" class="kbKey key small" style="--w: 1.55;" data-key="Backspace" data-code="Backspace" aria-label="Delete / Backspace"><span class="leg"><span class="top">DELETE</span><span class="mainlbl">BACK</span><span class="sublbl">SPACE</span></span></button>
-                    <button type="button" class="kbKey key small" style="--w: 1.15;" data-key="F8" data-code="F8" data-sdl="289">BREAK</button>
+                    <button type="button" class="kbKey key small" data-key="[" data-code="BracketLeft" data-sdl="91"><span class="leg"><span class="top">CLEAR</span><span class="mainlbl">&lt;</span><span class="sublbl"></span></span></button>
+                    <button type="button" class="kbKey key small" data-key="]" data-code="BracketRight" data-sdl="93"><span class="leg"><span class="top">INSERT</span><span class="mainlbl">&gt;</span><span class="sublbl"></span></span></button>
+                    <button type="button" class="kbKey key small" data-key="Backspace" data-code="Backspace" aria-label="Delete / Backspace"><span class="leg"><span class="top">DELETE</span><span class="mainlbl">BACK</span><span class="sublbl">SPACE</span></span></button>
+                    <button type="button" class="kbKey key small" data-key="F8" data-code="F8" data-sdl="289">BREAK</button>
                   </div>
                   <div class="row">
-                    <button type="button" class="kbKey key small" style="--w: 1.55;" data-key="Tab" data-code="Tab"><span class="leg"><span class="top">CLR</span><span class="mainlbl">SET</span><span class="sublbl">TAB</span></span></button>
+                    <div class="spacer" style="--w: 1;"></div>
+                    <button type="button" class="kbKey key small tabkey" style="--w: 1.75;" data-key="Tab" data-code="Tab"><span class="leg"><span class="top"><span class="whiteback">CLR</span></span><span class="mainlbl">SET</span><span class="sublbl">TAB</span></span></button>
                     <button type="button" class="kbKey key" data-key="q" data-code="KeyQ">Q</button>
                     <button type="button" class="kbKey key" data-key="w" data-code="KeyW">W</button>
                     <button type="button" class="kbKey key" data-key="e" data-code="KeyE">E</button>
@@ -201,12 +207,13 @@
                     <button type="button" class="kbKey key" data-key="i" data-code="KeyI">I</button>
                     <button type="button" class="kbKey key" data-key="o" data-code="KeyO">O</button>
                     <button type="button" class="kbKey key" data-key="p" data-code="KeyP">P</button>
-                    <button type="button" class="kbKey key small" data-key="-" data-code="Minus"><span class="leg"><span class="top">&#x2191;</span><span class="mainlbl">-</span><span class="sublbl"></span></span></button>
-                    <button type="button" class="kbKey key small" data-key="=" data-code="Equal"><span class="leg"><span class="top">&#x2193;</span><span class="mainlbl">=</span><span class="sublbl"></span></span></button>
-                    <button type="button" class="kbKey key wide small" style="--w: 1.75;" data-key="Enter" data-code="Enter">RETURN</button>
+                    <button type="button" class="kbKey key small arrowkey" data-key="-" data-code="Minus"><span class="leg"><span class="top"><span class="whiteback arrowbadge"><i class="fa-solid fa-arrow-up"></i></span></span><span class="mainlbl">_</span><span class="sublbl">-</span></span></button>
+                    <button type="button" class="kbKey key small arrowkey" data-key="=" data-code="Equal"><span class="leg"><span class="top"><span class="whiteback arrowbadge"><i class="fa-solid fa-arrow-down"></i></span></span><span class="mainlbl">|</span><span class="sublbl">=</span></span></button>
+                    <button type="button" class="kbKey key wide small" style="--w: 1.5;" data-key="Enter" data-code="Enter">RETURN</button>
                   </div>
                   <div class="row">
-                    <button type="button" class="kbKey key wide small" style="--w: 1.75;" data-modifier="ctrl">CONTROL</button>
+                    <div class="spacer" style="--w: 1;"></div>
+                    <button type="button" class="kbKey key wide small" style="--w: 2;" data-modifier="ctrl"><span class="whiteback">CONTROL</span></button>
                     <button type="button" class="kbKey key" data-key="a" data-code="KeyA">A</button>
                     <button type="button" class="kbKey key" data-key="s" data-code="KeyS">S</button>
                     <button type="button" class="kbKey key" data-key="d" data-code="KeyD">D</button>
@@ -217,12 +224,13 @@
                     <button type="button" class="kbKey key" data-key="k" data-code="KeyK">K</button>
                     <button type="button" class="kbKey key" data-key="l" data-code="KeyL">L</button>
                     <button type="button" class="kbKey key small" data-key=";" data-code="Semicolon"><span class="leg"><span class="top">:</span><span class="mainlbl">;</span><span class="sublbl"></span></span></button>
-                    <button type="button" class="kbKey key small" data-key="'" data-code="Quote"><span class="leg"><span class="top">&#x2190;</span><span class="mainlbl">+</span><span class="sublbl">\</span></span></button>
-                    <button type="button" class="kbKey key small" data-key="\\" data-code="Backslash" data-sdl="92"><span class="leg"><span class="top">&#x2192;</span><span class="mainlbl">*</span><span class="sublbl">^</span></span></button>
-                    <button type="button" class="kbKey key wide small" style="--w: 1.55;" data-key="CapsLock" data-code="CapsLock" data-sdl="301">CAPS</button>
+                    <button type="button" class="kbKey key small arrowkey" data-key="'" data-code="Quote"><span class="leg"><span class="top"><span class="whiteback arrowbadge"><i class="fa-solid fa-arrow-left"></i></span></span><span class="mainlbl">\</span><span class="sublbl">+</span></span></button>
+                    <button type="button" class="kbKey key small arrowkey" data-key="\\" data-code="Backslash" data-sdl="92"><span class="leg"><span class="top"><span class="whiteback arrowbadge"><i class="fa-solid fa-arrow-right"></i></span></span><span class="mainlbl">^</span><span class="sublbl">*</span></span></button>
+                    <button type="button" class="kbKey key wide small" style="--w: 1.25;" data-key="CapsLock" data-code="CapsLock" data-sdl="301">CAPS</button>
                   </div>
                   <div class="row">
-                    <button type="button" class="kbKey key wide small" style="--w: 2.1;" data-modifier="shift">SHIFT</button>
+                    <div class="spacer" style="--w: 1;"></div>
+                    <button type="button" class="kbKey key wide small" style="--w: 2.5;" data-modifier="shift">SHIFT</button>
                     <button type="button" class="kbKey key" data-key="z" data-code="KeyZ">Z</button>
                     <button type="button" class="kbKey key" data-key="x" data-code="KeyX">X</button>
                     <button type="button" class="kbKey key" data-key="c" data-code="KeyC">C</button>
@@ -233,13 +241,13 @@
                     <button type="button" class="kbKey key small" data-key="," data-code="Comma"><span class="leg"><span class="top">[</span><span class="mainlbl">,</span><span class="sublbl"></span></span></button>
                     <button type="button" class="kbKey key small" data-key="." data-code="Period"><span class="leg"><span class="top">]</span><span class="mainlbl">.</span><span class="sublbl"></span></span></button>
                     <button type="button" class="kbKey key small" data-key="/" data-code="Slash"><span class="leg"><span class="top">?</span><span class="mainlbl">/</span><span class="sublbl"></span></span></button>
-                    <button type="button" class="kbKey key wide small" style="--w: 2.1;" data-modifier="shift">SHIFT</button>
-                    <button type="button" class="kbKey key small" data-key="F6" data-code="F6" data-sdl="287" aria-label="Inverse video" title="Inverse Video">&#x25E2;</button>
+                    <button type="button" class="kbKey key wide small" style="--w: 1.75;" data-modifier="shift">SHIFT</button>
+                    <button type="button" class="kbKey key small" data-key="F6" data-code="F6" data-sdl="287" aria-label="Inverse video" title="Inverse Video">&#x25E9;</button>
                   </div>
                   <div class="row">
-                    <div class="spacer" style="--w: 2.1;"></div>
-                    <button type="button" class="kbKey key space small" style="--w: 9.8;" data-key=" " data-code="Space" aria-label="Space"></button>
-                    <div class="spacer" style="--w: 2.1;"></div>
+                    <div class="spacer" style="--w: 4.25;"></div>
+                    <button type="button" class="kbKey key space small" style="--w: 8.5;" data-key=" " data-code="Space" aria-label="Space"></button>
+                    <div class="spacer" style="--w: 3.5;"></div>
                   </div>
                 </div>
               </div>
