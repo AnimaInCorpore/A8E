@@ -27,7 +27,16 @@ A8E [options] [disk.atr|program.xex]
 Options currently implemented:
 
 - `-f` / `-F`: fullscreen
-- `-b` / `-B`: alternate legacy mode (`lMode=1`, affects internal CONSOL hack state)
+- `-b` / `-B`: boot **with** BASIC enabled. By default the emulator simulates holding OPTION at power-on (sets `CONSOL = 0x03`) which disables BASIC on the XL. Passing `-b` releases all console buttons at startup (`CONSOL = 0x07`) so BASIC loads normally.
+
+## Window
+
+The emulator window opens at **2× scale** by default:
+
+- Windowed: 672 × 480 (336 × 240 Atari pixels × 2)
+- Fullscreen (`-f`): 640 × 480 (320 × 240 — narrower to fill standard fullscreen)
+
+If the 2× mode is unavailable, it falls back to 1× (native Atari resolution).
 
 ## Build Version
 
@@ -44,6 +53,43 @@ Additional native-only key:
 | Key | Function |
 |-----|----------|
 | F11 | Turbo mode (hold) + reload `D1.ATR` |
+| F12 | Start live CPU disassembly — **one-way latch**, requires `ENABLE_VERBOSE_DEBUGGING` compile flag; restart to stop |
+
+## Debug Options
+
+All debug/verbose output options are controlled via compile-time `#define` macros in `AtariIo.h`.
+
+### Runtime key (requires compile flag)
+
+`ENABLE_VERBOSE_DEBUGGING` is defined by default in `AtariIo.h`. When active, pressing **F12** at runtime enables a live CPU disassembly loop that prints each instruction to stdout.
+
+### Verbose logging macros
+
+Uncomment in `AtariIo.h` or pass via `CMAKE_C_FLAGS` to enable detailed logging:
+
+| Macro | Logs |
+|-------|------|
+| `VERBOSE_NMI` | NMI events |
+| `VERBOSE_IRQ` | IRQ events |
+| `VERBOSE_SIO` | Serial I/O (SIO) command and data phases |
+| `VERBOSE_ROM_SWITCH` | ROM bank switching (PIA port B) |
+| `VERBOSE_REGISTER` | All chip register reads/writes (GTIA, Pokey, Antic, PIA) |
+| `VERBOSE_DL` | ANTIC display-list fetch activity |
+
+### Other debug macros
+
+| Macro | Effect |
+|-------|--------|
+| `DISABLE_COLLISIONS` | Disables GTIA sprite/playfield collision detection |
+
+### Enabling via CMake
+
+```sh
+cmake -S . -B build -DCMAKE_C_FLAGS="-DVERBOSE_REGISTER -DVERBOSE_SIO"
+cmake --build build -j
+```
+
+> **Warning:** `VERBOSE_REGISTER` in particular generates very high output volume and will noticeably slow emulation.
 
 ## Build (Windows, MSYS2 MinGW-w64)
 
