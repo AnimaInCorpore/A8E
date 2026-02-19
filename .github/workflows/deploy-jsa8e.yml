@@ -1,0 +1,37 @@
+name: Deploy to Website
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  web-deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # If you have a build process (e.g., minification), uncomment and configure these lines:
+      # - name: Setup Node.js
+      #   uses: actions/setup-node@v4
+      #   with:
+      #     node-version: '20'
+      # - name: Install and Build
+      #   run: |
+      #     npm install
+      #     npm run build
+
+      - name: FTP Deploy
+        uses: SamKirkland/FTP-Deploy-Action@4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: /public_html/emulator/
+          local-dir: ./jsA8E/
+          exclude: |
+            **/node_modules/**
+            eslint.config.cjs
+            package.json
+            package-lock.json
