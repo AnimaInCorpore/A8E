@@ -1,8 +1,10 @@
-name: Deploy to Website
+name: Deploy Dev to Website
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+    paths:
+      - 'jsA8E/**'
   workflow_dispatch:
     inputs:
       dry-run:
@@ -11,22 +13,12 @@ on:
         default: false
 
 jobs:
-  web-deploy:
-    name: Deploy
+  web-deploy-dev:
+    name: Deploy Dev
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
-      # If you have a build process (e.g., minification), uncomment and configure these lines:
-      # - name: Setup Node.js
-      #   uses: actions/setup-node@v4
-      #   with:
-      #     node-version: '20'
-      # - name: Install and Build
-      #   run: |
-      #     npm install
-      #     npm run build
 
       - name: FTP Deploy
         run: |
@@ -40,6 +32,6 @@ jobs:
               --exclude package.json \
               --exclude package-lock.json \
               $([ \"$DRY_RUN\" = 'true' ] && echo '--dry-run') \
-              ./jsA8E/ /web/anides.de/jsA8E/;
+              ./jsA8E/ /web/anides.de/jsA8E.dev/;
           "
           lftp -c "$LFTP_CMD"
