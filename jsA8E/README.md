@@ -38,7 +38,8 @@ Behavior:
 - The emulator only becomes start-ready after both ROMs are loaded.
 - Load ROMs via the top bar file inputs, or
 - Serve from repo root and let auto-load try `../ATARIXL.ROM` and `../ATARIBAS.ROM`.
-- Disk image/program load (`Load Disk`) accepts `.atr` and `.xex`.
+- Disk image/program load (`Load Disk`) accepts `.atr`, `.xex`, and `.zip`.
+  - `.zip` archives are scanned for the first `.atr` (preferred) or `.xex` entry and loaded directly.
   - `.xex` files are converted in-memory to an ATR-compatible boot stream using the same XEX boot loader logic as the native path.
 
 ## Controls

@@ -1418,19 +1418,92 @@
       document.addEventListener("pointercancel", onGlobalPointerEnd);
     }
 
-    function attachFileInput(inputEl, handler) {
+    function getLowercaseExtension(name) {
+      if (!name) return "";
+      const dot = name.lastIndexOf(".");
+      if (dot < 0) return "";
+      return name.substring(dot).toLowerCase();
+    }
+
+    function isZipFileName(name) {
+      return getLowercaseExtension(name) === ".zip";
+    }
+
+    function pickDiskEntryFromZip(unzipped) {
+      const names = Object.keys(unzipped || {});
+      let atrName = "";
+      let xexName = "";
+      for (let i = 0; i < names.length; i += 1) {
+        const entryName = names[i];
+        const ext = getLowercaseExtension(entryName);
+        if (!atrName && ext === ".atr") atrName = entryName;
+        if (!xexName && ext === ".xex") xexName = entryName;
+      }
+      return atrName || xexName || "";
+    }
+
+    function uint8ArrayToArrayBuffer(bytes) {
+      return bytes.buffer.slice(
+        bytes.byteOffset,
+        bytes.byteOffset + bytes.byteLength,
+      );
+    }
+
+    async function resolveDiskInputFile(file) {
+      const rawBuffer = await Util.readFileAsArrayBuffer(file);
+      if (!isZipFileName(file && file.name)) {
+        return {
+          buffer: rawBuffer,
+          name: (file && file.name) || "disk.atr",
+        };
+      }
+
+      const unzipSync = window.fflate && window.fflate.unzipSync;
+      if (typeof unzipSync !== "function") {
+        throw new Error("ZIP support unavailable (fflate not loaded).");
+      }
+
+      let unzipped = null;
+      try {
+        unzipped = unzipSync(new Uint8Array(rawBuffer));
+      } catch (e) {
+        throw new Error("Invalid ZIP archive: " + ((e && e.message) || e));
+      }
+
+      const entryName = pickDiskEntryFromZip(unzipped);
+      if (!entryName) {
+        throw new Error("ZIP archive does not contain .atr or .xex files.");
+      }
+
+      const entryBytes = unzipped[entryName];
+      if (!(entryBytes instanceof Uint8Array) || entryBytes.length === 0) {
+        throw new Error("ZIP entry is empty or invalid: " + entryName);
+      }
+
+      return {
+        buffer: uint8ArrayToArrayBuffer(entryBytes),
+        name: entryName,
+      };
+    }
+
+    function attachFileInput(inputEl, handler, resolveFile) {
       if (!inputEl) return;
-      inputEl.addEventListener("change", function () {
+      inputEl.addEventListener("change", async function () {
         const file = inputEl.files && inputEl.files[0];
         if (!file) return;
-        Util.readFileAsArrayBuffer(file).then(function (buf) {
-          try {
-            handler(buf, file.name);
-            updateStatus();
-          } catch (e) {
-            console.error("File load error:", e);
-          }
-        });
+        try {
+          const resolved = resolveFile
+            ? await resolveFile(file)
+            : {
+              buffer: await Util.readFileAsArrayBuffer(file),
+              name: file.name,
+            };
+          handler(resolved.buffer, resolved.name || file.name);
+          updateStatus();
+        } catch (e) {
+          console.error("File load error:", e);
+        }
+        inputEl.value = "";
       });
     }
 
@@ -1442,9 +1515,13 @@
       app.loadBasicRom(buf);
     });
 
-    attachFileInput(disk1, function (buf, name) {
-      app.loadDiskToDeviceSlot(buf, name, 0);
-    });
+    attachFileInput(
+      disk1,
+      function (buf, name) {
+        app.loadDiskToDeviceSlot(buf, name, 0);
+      },
+      resolveDiskInputFile,
+    );
 
     // Keyboard input forwarded to emulator.
     function onCanvasKeyDown(e) {

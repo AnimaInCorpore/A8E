@@ -82,8 +82,8 @@
           <input type="file" id="romBasic" accept=".rom,application/octet-stream" />
           <span>ATARIBAS.ROM <i id="romBasicStatus" class="fa-solid fa-circle-xmark status-icon"></i></span>
         </label>
-        <label class="fileBtn" title="Load an ATR disk image or XEX executable into drive 1. Status icon: red cross means no disk loaded, green check means disk loaded.">
-          <input type="file" id="disk1" accept=".atr,.xex,application/octet-stream" />
+        <label class="fileBtn" title="Load an ATR disk image, XEX executable, or ZIP archive containing ATR/XEX into drive 1. Status icon: red cross means no disk loaded, green check means disk loaded.">
+          <input type="file" id="disk1" accept=".atr,.xex,.zip,application/zip,application/octet-stream" />
           <span>Load Disk <i id="diskStatus" class="fa-solid fa-circle-xmark status-icon"></i></span>
         </label>
         <div class="iconControls">
@@ -362,6 +362,7 @@
     <script src="js/core/hdevice.js"></script>
     <script src="js/core/atari.js"></script>
     <script src="js/core/app_proxy.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
     <script src="js/app/ui.js"></script>
     <script src="js/app/hostfs_ui.js"></script>
     <script src="js/app/version.js"></script>

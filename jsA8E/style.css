@@ -342,7 +342,7 @@ button:hover:not(:disabled) {
 }
 
 .keyboardPanel {
-  width: min(100%, 1160px);
+  width: min(100%, 1083px);
   border: 0;
   border-radius: 0;
   padding: 8px 0 18px;
@@ -621,8 +621,8 @@ button:hover:not(:disabled) {
   --legend-dim: #a7a79a;
   --metal: #b0b0b0;
   --metal-hi: #d0d0d0;
-  --gap: clamp(2px, 0.48vw, 5px);
-  --key-h: clamp(29px, calc(4.2vw + 13px), 61px);
+  --gap: clamp(2px, 0.45vw, 5px);
+  --key-h: clamp(29px, calc(3.8vw + 13px), 52px);
   --radius: clamp(12px, 1.9vw, 20px);
   --shell-pad-x: clamp(6px, 1.6vw, 16px);
   --shell-pad-top: clamp(18px, 4.3vw, 50px);
@@ -635,12 +635,17 @@ button:hover:not(:disabled) {
   --key-font: clamp(6px, 1.25vw, 14px);
   --key-font-wide: clamp(5px, 1.02vw, 11px);
   --side-key-w: clamp(16px, 4.2vw, 48px);
+  --side-band-w: calc(var(--side-key-w) * 0.962);
+  --side-key-h: calc(var(--key-h) * 0.9875);
+  --side-key-gap: calc(var(--key-h) * 0.051);
+  --side-band-top: 0px;
+  --side-band-bottom: var(--shell-pad-bottom);
   --legend-font: "Exo 2", "Roboto Condensed", "Segoe UI", system-ui, sans-serif;
   --mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
   min-width: 0;
-  width: min(100%, 1160px);
+  width: min(100%, 1083px);
   margin-inline: auto;
   color: var(--legend);
   font-family: var(--legend-font);
@@ -651,10 +656,11 @@ button:hover:not(:disabled) {
   overflow: hidden;
   background: linear-gradient(
     to bottom,
-    var(--bed-hi) 0px,
-    var(--bed-hi) var(--shell-pad-top),
-    var(--stripe) calc(var(--shell-pad-top) + 1px),
-    var(--bed)    calc(var(--shell-pad-top) + 3px)
+    var(--bed-hi) 0%,
+    var(--bed-hi) 13%,
+    var(--stripe) 14%,
+    var(--bed) 15%,
+    var(--bed) 100%
   );
   box-shadow:
     0 8px 0 #060603,
@@ -724,7 +730,7 @@ button:hover:not(:disabled) {
   min-width: 0;
   box-sizing: border-box;
   height: var(--key-h);
-  border-radius: clamp(3px, 0.6vw, 6px);
+  border-radius: clamp(3px, 0.55vw, 6px);
   border-top:    1px solid #3a3a30;
   border-left:   1px solid #3a3a30;
   border-right:  1px solid #0e0e0a;
@@ -749,7 +755,7 @@ button:hover:not(:disabled) {
   letter-spacing: 0.02em;
   white-space: nowrap;
   transition: filter .06s, transform .06s, border-bottom-width .06s;
-  /* creates own stacking context so ::before z-index:-1 sits above the key background
+  /* creates own stacking context so the pseudo keycap layers sit above the key background
      but below all in-flow text content (letter keys like "A" that have no .leg wrapper) */
   z-index: 0;
 }
@@ -761,12 +767,21 @@ button:hover:not(:disabled) {
   inset: 3px 5px 7px 5px;
   background: var(--key-top);
   border-radius: 3px;
+  pointer-events: none;
+  z-index: -2;
+}
+
+.atariKeyboard .key::after {
+  content: "";
+  position: absolute;
+  inset: 3px 5px 7px 5px;
+  border-radius: 3px;
   background-image: linear-gradient(
-    158deg,
-    rgba(255, 255, 255, 0.055) 0%,
-    rgba(0, 0, 0, 0.10) 44%,
-    rgba(0, 0, 0, 0.10) 56%,
-    rgba(255, 255, 255, 0.03) 100%
+    135deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(0, 0, 0, 0.06) 40%,
+    rgba(0, 0, 0, 0.06) 60%,
+    rgba(255, 255, 255, 0.02) 100%
   );
   pointer-events: none;
   z-index: -1;
@@ -918,18 +933,16 @@ button:hover:not(:disabled) {
 .atariKeyboard .key.active {
   transform: translateY(3px);
   border-bottom-width: 1px;
-  filter: brightness(0.82);
+  filter: brightness(0.82) drop-shadow(0 0 6px rgba(255, 170, 80, 0.45));
 }
 
 .atariKeyboard .case-side {
   grid-column: 2;
   grid-row: 2;
-  background: var(--metal);
-  border-top:    1px solid var(--metal-hi);
-  border-left:   1px solid var(--metal-hi);
-  border-right:  1px solid #888888;
-  border-bottom: 3px solid #888888;
-  padding: var(--deck-pad-top) 0 var(--shell-pad-bottom);
+  width: var(--side-band-w);
+  background: transparent;
+  border: 0;
+  padding: 0;
   position: relative;
   z-index: 0;
 }
@@ -942,13 +955,37 @@ button:hover:not(:disabled) {
   align-items: flex-start;
 }
 
-/* FLAT inner face on the column — mirrors the reference's large 7u FLAT key */
 .atariKeyboard .case-side::before {
   content: "";
   position: absolute;
-  inset: 2px 3px 5px 3px;
+  top: calc(-1 * var(--side-band-top));
+  right: 0;
+  bottom: calc(-1 * var(--side-band-bottom));
+  left: 0;
+  background: var(--metal);
+  border-top: 1px solid var(--metal-hi);
+  border-left: 1px solid var(--metal-hi);
+  border-right: 1px solid #888888;
+  border-bottom: 3px solid #888888;
+  border-radius: 5px;
+  z-index: -2;
+  pointer-events: none;
+}
+
+.atariKeyboard .case-side::after {
+  content: "";
+  position: absolute;
+  top: calc(-1 * var(--side-band-top) + 2px);
+  right: 3px;
+  bottom: calc(-1 * var(--side-band-bottom) + 5px);
+  left: 3px;
   background: var(--metal-hi);
   border-radius: 3px;
+  background-image: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.04),
+    rgba(0, 0, 0, 0.04)
+  );
   z-index: -1;
   pointer-events: none;
 }
@@ -956,14 +993,13 @@ button:hover:not(:disabled) {
 .atariKeyboard .side-keys {
   display: flex;
   flex-direction: column;
-  gap: var(--gap);
-  padding-right: 0;
-  width: var(--side-key-w);
+  gap: var(--side-key-gap);
+  width: 100%;
 }
 
 .atariKeyboard .side-key {
-  height: calc(var(--key-h) * 1.025);
-  width: var(--side-key-w);
+  height: var(--side-key-h);
+  width: 100%;
   box-sizing: border-box;
   border-radius: clamp(2px, 0.55vw, 5px);
   border-top:    1px solid var(--metal-hi);
@@ -979,6 +1015,7 @@ button:hover:not(:disabled) {
   outline: none;
   padding: 0;
   transition: filter .06s, transform .06s, border-bottom-width .06s;
+  z-index: 0;
 }
 
 .atariKeyboard .side-key::before {
@@ -988,18 +1025,33 @@ button:hover:not(:disabled) {
   background: var(--metal-hi);
   border-radius: 3px;
   pointer-events: none;
+  z-index: -2;
+}
+
+.atariKeyboard .side-key::after {
+  content: "";
+  position: absolute;
+  inset: 2px 3px 5px 3px;
+  border-radius: 3px;
+  background-image: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.04),
+    rgba(0, 0, 0, 0.04)
+  );
+  pointer-events: none;
+  z-index: -1;
 }
 
 .atariKeyboard .side-key:not(.active):hover {
-  filter: brightness(1.1);
+  filter: brightness(1.18);
 }
 
 .atariKeyboard .side-key.pressed,
 .atariKeyboard .side-key:active,
 .atariKeyboard .side-key.active {
-  transform: translateY(2px);
+  transform: translateY(3px);
   border-bottom-width: 1px;
-  filter: brightness(0.88);
+  filter: brightness(0.88) drop-shadow(0 0 5px rgba(200, 200, 180, 0.35));
 }
 
 .atariKeyboard .strip {
@@ -1011,8 +1063,8 @@ button:hover:not(:disabled) {
 }
 
 .atariKeyboard .strip-label {
-  height: calc(var(--key-h) * 1.025);
-  margin-bottom: var(--gap);
+  height: var(--side-key-h);
+  margin-bottom: var(--side-key-gap);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1064,11 +1116,30 @@ button:hover:not(:disabled) {
   .atariKeyboard .case-side {
     grid-column: 1;
     grid-row: 3;
+    width: auto;
     padding: clamp(4px, 1.4vw, 16px) var(--side-pad-x) clamp(4px, 1.4vw, 16px);
     border-left: 0;
     border-bottom: 1px solid #888888;
     border-top: 1px solid rgba(0, 0, 0, 0.25);
     border-radius: 0;
+  }
+  .atariKeyboard .case-side::before {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    border-left: 0;
+    border-bottom: 1px solid #888888;
+    border-top: 1px solid rgba(0, 0, 0, 0.25);
+    border-right: 1px solid #888888;
+    border-radius: 0;
+  }
+  .atariKeyboard .case-side::after {
+    top: 2px;
+    right: 3px;
+    bottom: 5px;
+    left: 3px;
+    border-radius: 3px;
   }
   .atariKeyboard .case-strip {
     grid-column: 1;
