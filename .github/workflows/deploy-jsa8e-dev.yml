@@ -43,7 +43,7 @@ jobs:
             set net:max-retries 2;
             set net:reconnect-interval-base 5;
             set net:reconnect-interval-max 15;
-            set ftp:ssl-allow no;
+            set ftp:ssl-force yes;
             open -u ${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }} -p 23 ${{ secrets.FTP_SERVER }};
             mirror --reverse --delete --verbose \
               --exclude node_modules/ \
