@@ -17,14 +17,15 @@ jobs:
   web-deploy-dev:
     name: Deploy Dev
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Install lftp
         run: |
-          sudo apt-get update
-          sudo apt-get install -y lftp
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lftp
 
       - name: FTP Deploy
         shell: bash
@@ -37,6 +38,11 @@ jobs:
           fi
 
           LFTP_CMD="
+            set cmd:fail-exit yes;
+            set net:timeout 20;
+            set net:max-retries 2;
+            set net:reconnect-interval-base 5;
+            set net:reconnect-interval-max 15;
             set ftp:ssl-allow no;
             open -u ${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }} -p 23 ${{ secrets.FTP_SERVER }};
             mirror --reverse --delete --verbose \
@@ -47,4 +53,4 @@ jobs:
               $DRY_ARG \
               ./jsA8E/ /web/anides.de/jsA8E.dev/;
           "
-          lftp -c "$LFTP_CMD"
+          timeout 240s lftp -c "$LFTP_CMD"
