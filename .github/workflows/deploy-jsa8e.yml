@@ -29,8 +29,15 @@ jobs:
       #     npm run build
 
       - name: FTP Deploy
+        shell: bash
+        env:
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs['dry-run'] || 'false' }}
         run: |
-          DRY_RUN="${{ inputs.dry-run || false }}"
+          DRY_ARG=""
+          if [ "$DRY_RUN" = "true" ]; then
+            DRY_ARG="--dry-run"
+          fi
+
           LFTP_CMD="
             set ftp:ssl-allow no;
             open -u ${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }} -p 23 ${{ secrets.FTP_SERVER }};
@@ -39,7 +46,7 @@ jobs:
               --exclude eslint.config.cjs \
               --exclude package.json \
               --exclude package-lock.json \
-              $([ \"$DRY_RUN\" = 'true' ] && echo '--dry-run') \
+              $DRY_ARG \
               ./jsA8E/ /web/anides.de/jsA8E/;
           "
           lftp -c "$LFTP_CMD"
