@@ -17,7 +17,7 @@ jobs:
   web-deploy-dev:
     name: Deploy Dev
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -53,4 +53,4 @@ jobs:
               $DRY_ARG \
               ./jsA8E/ /web/anides.de/jsA8E.dev/;
           "
-          timeout 240s lftp -c "$LFTP_CMD"
+          timeout 840s lftp -c "$LFTP_CMD"
