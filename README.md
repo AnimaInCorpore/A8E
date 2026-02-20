@@ -15,7 +15,6 @@ The original codebase is by Sascha Springer (2004). Each subproject has its own 
 |-----------|-------------|
 | `A8E/` | [Native C/SDL code and CMake project](A8E/README.md) |
 | `jsA8E/` | [Browser app (`index.html` + JavaScript modules + shaders)](jsA8E/README.md) |
-| `disks/` | Optional ATR disk images and XEX executables for testing |
 
 ## ROM Requirements
 
@@ -44,15 +43,15 @@ For an online demo of the jsA8E version, visit https://jsa8e.anides.de/
 
 ## Quick Start (Native)
 
-Build from repo root:
+Building requires **SDL 1.2** development headers. See the [A8E README](A8E/README.md) for full build instructions covering Windows (MSVC, MinGW), macOS (Homebrew, legacy macOS without CMake), and Linux.
 
 ```sh
 cmake -S . -B build
-cmake --build build --target A8E -j
+cmake --build build -j
+./build/A8E/A8E
 ```
 
-Then run the produced `A8E` executable with ROM files in the current working directory.
-Typical path after this top-level build is `build/A8E/A8E` (or `build/A8E/A8E.exe` on Windows).
+Ensure `ATARIXL.ROM` and `ATARIBAS.ROM` are in the current working directory before starting.
 
 ## Controls
 

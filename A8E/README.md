@@ -1,134 +1,154 @@
-# A8E (Native C/SDL Emulator)
+﻿# A8E (Native C/SDL Emulator)
 
-Native Atari 800 XL emulator written in C with SDL 1.2 style headers (`<SDL/SDL.h>`).
+A native Atari 800 XL emulator written in C, utilizing SDL 1.2 style headers (`<SDL/SDL.h>`).
 
-## Runtime Requirements
+## Requirements & Usage
 
-The executable requires these ROM files in its current working directory:
+To run A8E, the following ROM files must be present in your current working directory:
+* `ATARIXL.ROM` (16 KB)
+* `ATARIBAS.ROM` (8 KB)
 
-- `ATARIXL.ROM` (16 KB)
-- `ATARIBAS.ROM` (8 KB)
-
-Disk handling:
-
-- Startup default disk path is `d1.atr` (lowercase) if no disk argument is passed.
-- You can pass either an ATR image (`.atr`) or an Atari executable (`.xex`) as the first non-flag argument.
-- `.xex` files are converted to a temporary ATR layout at load time, using the built-in XEX boot loader.
-  - Conversion normalizes XEX segments and supports multi-segment files with `INITAD`/`RUNAD` behavior.
-- Pressing `F11` attempts to reload `D1.ATR` (uppercase) from the current working directory.
-  - On Linux/macOS, filename case matters.
-
-## Command Line
-
+**Command Line:**
 ```text
 A8E [options] [disk.atr|program.xex]
 ```
 
-Options currently implemented:
-
-- `-f` / `-F`: fullscreen
-- `-b` / `-B`: boot **with** BASIC enabled. By default the emulator simulates holding OPTION at power-on (sets `CONSOL = 0x03`) which disables BASIC on the XL. Passing `-b` releases all console buttons at startup (`CONSOL = 0x07`) so BASIC loads normally.
-
-## Window
-
-The emulator window opens at **2× scale** by default:
-
-- Windowed: 672 × 480 (336 × 240 Atari pixels × 2)
-- Fullscreen (`-f`): 640 × 480 (320 × 240 — narrower to fill standard fullscreen)
-
-If the 2× mode is unavailable, it falls back to 1× (native Atari resolution).
-
-## Build Version
-
-- The window caption version is injected at compile time.
-- `A8E/CMakeLists.txt` reads `../jsA8E/version.json` (shared with the jsA8E release workflow).
-- If that file is missing or invalid, the native build falls back to `dev`.
+**Options & Arguments:**
+* `disk.atr` / `program.xex`: Pass an ATR image or Atari executable as the first argument. `.xex` files are converted to a temporary ATR layout at load time. If no argument is passed, the emulator defaults to looking for `d1.atr`.
+* `-f` / `-F`: Launch in fullscreen mode. (Default is windowed at 2× scale: 672×480. Fullscreen scales to 640×480. If 2× is unavailable, it falls back to 1× native resolution).
+* `-b` / `-B`: Boot **with** BASIC enabled. By default, A8E simulates holding the OPTION key to disable BASIC. Passing this flag releases the console buttons.
 
 ## Controls
 
-See the [root README](../README.md#controls) for the shared keyboard, joystick, and console key mappings.
+For standard keyboard, joystick, and console mappings, please see the [main README](../README.md#controls).
 
-Additional native-only key:
-
+**Native-Specific Keys:**
 | Key | Function |
 |-----|----------|
-| F11 | Turbo mode (hold) + reload `D1.ATR` |
-| F12 | Start live CPU disassembly — **one-way latch**, requires `ENABLE_VERBOSE_DEBUGGING` compile flag; restart to stop |
+| **F11** | Turbo mode (hold) + attempts to reload `D1.ATR` from the current directory (case-sensitive on UNIX-like systems). |
+| **F12** | Start live CPU disassembly. *Note: This is a one-way latch and requires the `ENABLE_VERBOSE_DEBUGGING` compile flag. Restart the emulator to stop.* |
 
-## Debug Options
+---
 
-All debug/verbose output options are controlled via compile-time `#define` macros in `AtariIo.h`.
+## Building from Source
 
-### Runtime key (requires compile flag)
+Building requires **SDL 1.2** development headers. CMake 3.16+ is recommended but not strictly required (see the macOS section for a manual `clang`/`gcc` build).
 
-`ENABLE_VERBOSE_DEBUGGING` is defined by default in `AtariIo.h`. When active, pressing **F12** at runtime enables a live CPU disassembly loop that prints each instruction to stdout.
+> **Version Note:** The window caption version is injected at compile time via `../jsA8E/version.json`. If this file is missing, the build defaults to `dev`.
 
-### Verbose logging macros
+### Windows — Visual Studio / MSVC (Recommended)
+This method produces a standalone `.exe` without external DLL dependencies.
 
-Uncomment in `AtariIo.h` or pass via `CMAKE_C_FLAGS` to enable detailed logging:
+1. **Prerequisites**: Install Visual Studio 2022 with the "Desktop development with C++" workload, or the standalone Build Tools.
+2. **Install vcpkg & SDL**: Use Microsoft's package manager to grab the static SDL 1.2 libraries.
+   ```powershell
+   git clone https://github.com/microsoft/vcpkg C:\vcpkg
+   C:\vcpkg\bootstrap-vcpkg.bat
+   C:\vcpkg\vcpkg install sdl1:x64-windows-static
+   ```
+3. **Build**: Run from the repository root.
+   ```powershell
+   cmake -S . -B build/msvc `
+     -G "Visual Studio 17 2022" -A x64 `
+     -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake `
+     -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+     -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded$<$<CONFIG:Debug>:Debug>"
 
-| Macro | Logs |
-|-------|------|
-| `VERBOSE_NMI` | NMI events |
-| `VERBOSE_IRQ` | IRQ events |
-| `VERBOSE_SIO` | Serial I/O (SIO) command and data phases |
-| `VERBOSE_ROM_SWITCH` | ROM bank switching (PIA port B) |
-| `VERBOSE_REGISTER` | All chip register reads/writes (GTIA, Pokey, Antic, PIA) |
-| `VERBOSE_DL` | ANTIC display-list fetch activity |
+   cmake --build build/msvc --config Release
+   ```
+   *Executable output: `build\msvc\A8E\Release\A8E.exe`*
 
-### Other debug macros
+### Windows — MSYS2 / MinGW-w64
+Produces a standalone `.exe` (statically linked, no external DLLs required).
 
-| Macro | Effect |
-|-------|--------|
-| `DISABLE_COLLISIONS` | Disables GTIA sprite/playfield collision detection |
+1. **Install Tools**: Open the [MSYS2](https://www.msys2.org/) MinGW x64 shell:
+   ```sh
+   pacman -S --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-SDL
+   ```
+2. **Build**:
+   ```sh
+   cmake -S . -B build/mingw -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXE_LINKER_FLAGS="-static"
+   cmake --build build/mingw -j
+   ```
+   *Executable output: `build/mingw/A8E/A8E.exe`*
 
-### Enabling via CMake
+### Linux (Ubuntu / Debian / Others)
+1. **Install Prerequisites**:
+   * Ubuntu/Debian: `sudo apt-get install -y build-essential cmake libsdl1.2-dev`
+   * Fedora/RHEL: `sudo dnf install gcc cmake SDL-devel`
+   * Arch Linux: `sudo pacman -S gcc cmake sdl12-compat`
+2. **Build**:
+   ```sh
+   cmake -S . -B build
+   cmake --build build -j
+   ```
+   *Executable output: `build/A8E/A8E`*
 
+### macOS (Homebrew)
+1. **Install Prerequisites**:
+   ```sh
+   xcode-select --install
+   brew install cmake sdl12-compat
+   ```
+2. **Build**:
+   ```sh
+   cmake -S . -B build
+   cmake --build build -j
+   ```
+   *Executable output: `build/A8E/A8E`*
+
+#### Without CMake (legacy macOS)
+If CMake is unavailable or you are on an older/legacy macOS,
+you can compile all sources in a single `clang`/`gcc` invocation.  The
+`sdl-config` helper (installed by `sdl12-compat`/`libsdl`) prints the correct
+flags automatically:
+
+```sh
+# from the A8E source directory
+clang -std=c99 -O2 -Wall \
+      -I. $(sdl-config --cflags) -I$(sdl-config --prefix)/include \
+      6502.c A8E.c Antic.c AtariIo.c Gtia.c Pia.c Pokey.c \
+      -o A8E \
+      $(sdl-config --libs) -lm
+```
+
+The extra `-I$(sdl-config --prefix)/include` is needed because the source
+code uses `#include <SDL/SDL.h>` — `sdl-config --cflags` alone only adds the
+SDL subdirectory.
+
+If `sdl-config` is not on your path, spell the flags out manually:
+
+```sh
+clang -std=c99 -O2 -Wall \
+      -I. -I/usr/local/include -I/usr/local/include/SDL \
+      6502.c A8E.c Antic.c AtariIo.c Gtia.c Pia.c Pokey.c \
+      -o A8E \
+      -L/usr/local/lib -lSDLmain -lSDL -lm -framework Cocoa
+```
+
+Replace `/usr/local` with the prefix where SDL is installed (e.g.
+`/opt/homebrew` on Apple Silicon).  Substitute `gcc` for `clang` if needed.
+Add `-DA8E_BUILD_VERSION="…"` to override the version string.
+
+---
+
+## Debugging & Logging
+
+Debug output is controlled via compile-time `#define` macros in `AtariIo.h`. You can uncomment them in the header or pass them directly via `CMAKE_C_FLAGS`.
+
+**CMake Example:**
 ```sh
 cmake -S . -B build -DCMAKE_C_FLAGS="-DVERBOSE_REGISTER -DVERBOSE_SIO"
 cmake --build build -j
 ```
 
-> **Warning:** `VERBOSE_REGISTER` in particular generates very high output volume and will noticeably slow emulation.
-
-## Build (Windows, MSYS2 MinGW-w64)
-
-Run inside `A8E/`:
-
-```sh
-cmake -S . -B build/msys2-mingw64 -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
-cmake --build build/msys2-mingw64 -j
-```
-
-Output executable:
-
-- `A8E/build/msys2-mingw64/A8E.exe`
-
-If needed, add `C:\msys64\mingw64\bin` to `PATH` (or copy required DLLs such as `SDL.dll` next to `A8E.exe`).
-
-## Build (Linux / macOS)
-
-Run inside `A8E/`:
-
-```sh
-cmake -S . -B build
-cmake --build build -j
-```
-
-Output executable:
-
-- `A8E/build/A8E` (or `A8E/build/A8E.exe` on some toolchains)
-
-## Running After Build
-
-From repository root (where ROM files are typically stored):
-
-- Linux/macOS: `./A8E/build/A8E`
-- Windows: `.\A8E\build\msys2-mingw64\A8E.exe`
-
-Example with explicit disk:
-
-- Linux/macOS: `./A8E/build/A8E disks/dos.atr`
-- Windows: `.\A8E\build\msys2-mingw64\A8E.exe disks\dos.atr`
-- Linux/macOS (XEX): `./A8E/build/A8E disks/game.xex`
-- Windows (XEX): `.\A8E\build\msys2-mingw64\A8E.exe disks\game.xex`
+**Available Macros:**
+| Macro | Function / Log Output |
+|-------|-----------------------|
+| `ENABLE_VERBOSE_DEBUGGING` | Allows runtime CPU disassembly via **F12** (Active by default). |
+| `VERBOSE_NMI` / `VERBOSE_IRQ` | NMI and IRQ events. |
+| `VERBOSE_SIO` | Serial I/O command and data phases. |
+| `VERBOSE_ROM_SWITCH` | ROM bank switching (PIA port B). |
+| `VERBOSE_REGISTER` | **Warning: Noticeably slows emulation.** Logs all chip register reads/writes (GTIA, Pokey, Antic, PIA). |
+| `VERBOSE_DL` | ANTIC display-list fetch activity. |
+| `DISABLE_COLLISIONS` | Disables GTIA sprite/playfield collision detection. |
