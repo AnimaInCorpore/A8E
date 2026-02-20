@@ -156,14 +156,20 @@
       }
 
       function effectiveShiftKey(e) {
+        const virtualShift = !!(e && e.virtualShiftKey);
         if (e && typeof e.atariShiftOverride === "boolean")
-          {return e.atariShiftOverride;}
+          {return e.atariShiftOverride || virtualShift;}
         return !!(e && e.shiftKey);
       }
 
       function effectiveCtrlKey(e) {
-        if (e && e.altGraph) return false;
+        const virtualCtrl = !!(e && e.virtualCtrlKey);
+        if (e && e.altGraph && !virtualCtrl) return false;
         return !!(e && e.ctrlKey);
+      }
+
+      function isSymCurrentlyDown(sym) {
+        return isSymDown(getPressedState(sym, false));
       }
 
       function cursorKeyCodeForArrowSym(sym) {
@@ -324,7 +330,8 @@
           return true;
         }
         if (sym === 303 || sym === 304) {
-          machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x08;
+          if (!isSymCurrentlyDown(303) && !isSymCurrentlyDown(304))
+            {machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x08;}
           return true;
         }
 

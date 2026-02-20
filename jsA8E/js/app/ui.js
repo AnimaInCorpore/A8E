@@ -822,6 +822,8 @@
     function normalizePhysicalKeyEvent(e, isDown) {
       trackPhysicalModifier(e, isDown);
       if (modifierForPhysicalEvent(e) === "shift") return null;
+      const virtualCtrlActive = !!virtualModifiers.ctrl;
+      const virtualShiftActive = !!virtualModifiers.shift;
       return {
         key: e.key,
         code: e.code || "",
@@ -832,6 +834,8 @@
         ),
         ctrlKey: !!e.ctrlKey || isModifierActive("ctrl"),
         shiftKey: !!e.shiftKey || isModifierActive("shift"),
+        virtualCtrlKey: virtualCtrlActive,
+        virtualShiftKey: virtualShiftActive,
         sourceToken: "phys:" + physicalKeyToken(e),
       };
     }

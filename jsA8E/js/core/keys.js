@@ -45,6 +45,9 @@
       255, 255, 255, 255, 255, 255, 255,
     ];
 
+    // Fix SDLK_ESCAPE (27) to Atari Esc scan code $1C (28).
+    KEY_CODE_TABLE[27] = 28;
+
     // SDL keysyms for printable keys are based on the physical key identity
     // (unshifted symbol), not the shifted character produced by layout.
     const CODE_TO_SDL_SYM = {
@@ -110,16 +113,16 @@
       "(": { base: "9", shift: true },
       ")": { base: "0", shift: true },
       "@": { base: "8", shift: true },
-      "-": { base: "-", shift: false },
-      _: { base: "-", shift: true },
-      "=": { base: "=", shift: false },
-      "|": { base: "=", shift: true },
+      "<": { base: "-", shift: false },
+      ">": { base: "=", shift: false },
+      "-": { base: "[", shift: false },
+      _: { base: "[", shift: true },
+      "=": { base: "]", shift: false },
+      "|": { base: "]", shift: true },
       "+": { base: "'", shift: false },
       "\\": { base: "'", shift: true },
       "*": { base: "\\", shift: false },
       "^": { base: "\\", shift: true },
-      "<": { base: "[", shift: false },
-      ">": { base: "]", shift: false },
       "[": { base: ",", shift: true },
       "]": { base: ".", shift: true },
       ":": { base: ";", shift: true },
