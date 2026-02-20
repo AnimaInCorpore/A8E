@@ -636,8 +636,8 @@ button:hover:not(:disabled) {
   --key-font-wide: clamp(5px, 1.02vw, 11px);
   --side-key-w: clamp(16px, 4.2vw, 48px);
   --side-band-w: calc(var(--side-key-w) * 0.962);
-  --side-key-h: calc(var(--key-h) * 0.9875);
-  --side-key-gap: calc(var(--key-h) * 0.051);
+  --side-key-h: var(--key-h);
+  --side-key-gap: var(--gap);
   --side-band-top: 0px;
   --side-band-bottom: var(--shell-pad-bottom);
   --legend-font: "Exo 2", "Roboto Condensed", "Segoe UI", system-ui, sans-serif;
@@ -947,13 +947,6 @@ button:hover:not(:disabled) {
   z-index: 0;
 }
 
-.atariKeyboard .case-strip {
-  grid-column: 3;
-  grid-row: 2;
-  padding: var(--deck-pad-top) var(--side-pad-x) var(--shell-pad-bottom) 0;
-  display: flex;
-  align-items: flex-start;
-}
 
 .atariKeyboard .case-side::before {
   content: "";
@@ -1054,6 +1047,14 @@ button:hover:not(:disabled) {
   filter: brightness(0.88) drop-shadow(0 0 5px rgba(200, 200, 180, 0.35));
 }
 
+.atariKeyboard .case-strip {
+  grid-column: 3;
+  grid-row: 2;
+  padding: var(--deck-pad-top) var(--side-pad-x) var(--shell-pad-bottom) 0;
+  display: flex;
+  align-items: flex-start;
+}
+
 .atariKeyboard .strip {
   display: flex;
   flex-direction: column;
@@ -1080,6 +1081,7 @@ button:hover:not(:disabled) {
 .atariKeyboard .strip-label:last-child {
   margin-bottom: 0;
 }
+
 
 .atariKeyboard .kbKey:focus-visible {
   box-shadow:
@@ -1141,12 +1143,6 @@ button:hover:not(:disabled) {
     left: 3px;
     border-radius: 3px;
   }
-  .atariKeyboard .case-strip {
-    grid-column: 1;
-    grid-row: 4;
-    padding: 0 var(--side-pad-x) clamp(4px, 1.4vw, 16px);
-    border-radius: 0 0 var(--radius) var(--radius);
-  }
   .atariKeyboard .case-keyboard {
     grid-row: 2;
     border-radius: 0;
@@ -1162,6 +1158,12 @@ button:hover:not(:disabled) {
     width: 100%;
     min-width: 0;
     flex: initial;
+  }
+  .atariKeyboard .case-strip {
+    grid-column: 1;
+    grid-row: 4;
+    padding: 0 var(--side-pad-x) clamp(4px, 1.4vw, 16px);
+    border-radius: 0 0 var(--radius) var(--radius);
   }
   .atariKeyboard .strip {
     display: grid;
