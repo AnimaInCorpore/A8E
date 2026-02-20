@@ -18,6 +18,11 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Install lftp
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lftp
+
       # If you have a build process (e.g., minification), uncomment and configure these lines:
       # - name: Setup Node.js
       #   uses: actions/setup-node@v4
