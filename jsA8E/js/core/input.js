@@ -135,6 +135,10 @@
       }
 
       function queueKeyCode(kc) {
+        // Keyboard overrun: key pressed while keyboard IRQ is still pending.
+        if ((machine.ctx.ram[IO_IRQEN_IRQST] & IRQ_OTHER_KEY_PRESSED) === 0) {
+          machine.ctx.ram[IO_SKCTL_SKSTAT] &= ~0x40;
+        }
         machine.ctx.ram[IO_STIMER_KBCODE] = kc & 0xff;
         machine.ctx.ram[IO_IRQEN_IRQST] &= ~IRQ_OTHER_KEY_PRESSED;
         if (machine.ctx.sram[IO_IRQEN_IRQST] & IRQ_OTHER_KEY_PRESSED)
