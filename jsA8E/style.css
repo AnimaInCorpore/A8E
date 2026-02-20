@@ -329,7 +329,7 @@ button:hover:not(:disabled) {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: #000;
+  background: transparent;
 }
 
 .screenViewport:fullscreen,
@@ -337,7 +337,7 @@ button:hover:not(:disabled) {
   width: 100vw;
   height: 100vh;
   min-height: 100vh;
-  background: #000;
+  background: transparent;
   padding: 0;
 }
 
@@ -622,7 +622,7 @@ button:hover:not(:disabled) {
   --metal: #b0b0b0;
   --metal-hi: #d0d0d0;
   --gap: clamp(2px, 0.48vw, 5px);
-  --key-h: clamp(16px, 4.2vw, 48px);
+  --key-h: clamp(29px, calc(4.2vw + 13px), 61px);
   --radius: clamp(12px, 1.9vw, 20px);
   --shell-pad-x: clamp(6px, 1.6vw, 16px);
   --shell-pad-top: clamp(18px, 4.3vw, 50px);
@@ -722,6 +722,7 @@ button:hover:not(:disabled) {
 .atariKeyboard .key {
   flex: var(--w, 1) 0 0;
   min-width: 0;
+  box-sizing: border-box;
   height: var(--key-h);
   border-radius: clamp(3px, 0.6vw, 6px);
   border-top:    1px solid #3a3a30;
@@ -1010,7 +1011,7 @@ button:hover:not(:disabled) {
 }
 
 .atariKeyboard .strip-label {
-  height: var(--key-h);
+  height: calc(var(--key-h) * 1.025);
   margin-bottom: var(--gap);
   display: flex;
   align-items: center;

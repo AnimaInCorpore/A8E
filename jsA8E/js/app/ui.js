@@ -26,7 +26,7 @@
       try {
         gl =
           canvas.getContext("webgl2", {
-            alpha: false,
+            alpha: true,
             antialias: false,
             depth: false,
             stencil: false,
@@ -36,7 +36,7 @@
             desynchronized: true,
           }) ||
           canvas.getContext("webgl", {
-            alpha: false,
+            alpha: true,
             antialias: false,
             depth: false,
             stencil: false,
@@ -46,7 +46,7 @@
             desynchronized: true,
           }) ||
           canvas.getContext("experimental-webgl", {
-            alpha: false,
+            alpha: true,
             antialias: false,
             depth: false,
             stencil: false,

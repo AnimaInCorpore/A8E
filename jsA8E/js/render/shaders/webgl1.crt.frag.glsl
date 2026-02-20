@@ -182,7 +182,7 @@ void main(){
 
   // Apply tube corner mask
   vec2 outPx = max(u_outputSize, 1.0);
-  col *= tubeCornerMask(uv, outPx);
+  float tubeMask = tubeCornerMask(uv, outPx);
 
-  gl_FragColor = vec4(toSrgb(col), 1.0);
+  gl_FragColor = vec4(toSrgb(col), tubeMask);
 }

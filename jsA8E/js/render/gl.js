@@ -306,7 +306,7 @@
 
       gl.disable(gl.DITHER);
       gl.disable(gl.BLEND);
-      gl.clearColor(0, 0, 0, 1);
+      gl.clearColor(0, 0, 0, 0);
 
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
       if (!gl2 && gl.UNPACK_COLORSPACE_CONVERSION_WEBGL) {

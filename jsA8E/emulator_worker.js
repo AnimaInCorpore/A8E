@@ -275,7 +275,7 @@
     try {
       gl =
         screenCanvas.getContext("webgl2", {
-          alpha: false,
+          alpha: true,
           antialias: false,
           depth: false,
           stencil: false,
@@ -285,7 +285,7 @@
           desynchronized: true,
         }) ||
         screenCanvas.getContext("webgl", {
-          alpha: false,
+          alpha: true,
           antialias: false,
           depth: false,
           stencil: false,
@@ -295,7 +295,7 @@
           desynchronized: true,
         }) ||
         screenCanvas.getContext("experimental-webgl", {
-          alpha: false,
+          alpha: true,
           antialias: false,
           depth: false,
           stencil: false,
