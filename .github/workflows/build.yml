@@ -3,6 +3,7 @@ name: Build A8E
 on:
   push:
     branches: ["main", "master"]
+    tags: ["v*"]
   pull_request:
     branches: ["main", "master"]
 
@@ -18,8 +19,22 @@ jobs:
 
       - name: Configure and Build
         run: |
-          cmake -S . -B build
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build -j4
+
+      - name: Package binary (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          mkdir -p dist
+          cp build/A8E/A8E "dist/A8E-${GITHUB_REF_NAME}-linux"
+          chmod +x "dist/A8E-${GITHUB_REF_NAME}-linux"
+
+      - name: Upload artifact (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: A8E-linux
+          path: dist/A8E-${{ github.ref_name }}-linux
 
   build-macos:
     name: macOS (Homebrew)
@@ -32,8 +47,22 @@ jobs:
 
       - name: Configure and Build
         run: |
-          cmake -S . -B build
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build -j4
+
+      - name: Package binary (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          mkdir -p dist
+          cp build/A8E/A8E "dist/A8E-${GITHUB_REF_NAME}-macos"
+          chmod +x "dist/A8E-${GITHUB_REF_NAME}-macos"
+
+      - name: Upload artifact (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: A8E-macos
+          path: dist/A8E-${{ github.ref_name }}-macos
 
   build-windows-msvc:
     name: Windows (MSVC)
@@ -55,6 +84,19 @@ jobs:
 
       - name: Build
         run: cmake --build build/msvc --config Release
+
+      - name: Package binary (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "build/msvc/A8E/Release/A8E.exe" "dist/A8E-$env:GITHUB_REF_NAME-windows-msvc.exe"
+
+      - name: Upload artifact (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: A8E-windows-msvc
+          path: dist/A8E-${{ github.ref_name }}-windows-msvc.exe
 
   build-windows-mingw:
     name: Windows (MinGW / MSYS2)
@@ -80,3 +122,45 @@ jobs:
         run: |
           cmake -S . -B build/mingw -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXE_LINKER_FLAGS="-static"
           cmake --build build/mingw -j4
+
+      - name: Package binary (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          mkdir -p dist
+          cp build/mingw/A8E/A8E.exe "dist/A8E-${GITHUB_REF_NAME}-windows-mingw.exe"
+
+      - name: Upload artifact (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: A8E-windows-mingw
+          path: dist/A8E-${{ github.ref_name }}-windows-mingw.exe
+
+  publish-release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - build-linux
+      - build-macos
+      - build-windows-msvc
+      - build-windows-mingw
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Create/Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          overwrite_files: true
+          files: |
+            release-assets/A8E-linux/A8E-${{ github.ref_name }}-linux
+            release-assets/A8E-macos/A8E-${{ github.ref_name }}-macos
+            release-assets/A8E-windows-msvc/A8E-${{ github.ref_name }}-windows-msvc.exe
+            release-assets/A8E-windows-mingw/A8E-${{ github.ref_name }}-windows-mingw.exe
