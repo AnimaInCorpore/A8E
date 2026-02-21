@@ -63,6 +63,8 @@ jobs:
             open -u $FTP_USERNAME,$FTP_PASSWORD -p 21 $FTP_SERVER;
             mirror --reverse --delete --verbose \
               --exclude node_modules/ \
+              --exclude-glob *.rom \
+              --exclude-glob *.ROM \
               --exclude eslint.config.cjs \
               --exclude package.json \
               --exclude package-lock.json \
