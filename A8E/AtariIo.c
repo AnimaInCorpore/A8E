@@ -25,6 +25,10 @@
 #include <stdarg.h>
 #include <errno.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #include "6502.h"
 #include "AtariIo.h"
 #include "Gtia.h"
@@ -910,7 +914,7 @@ static void AtariIo_FillRect(
 	SDL_Surface *pSurface, u32 lX, u32 lY, u32 lW, u32 lH, u8 cColor)
 {
 	u32 lOldW = lW;
-	u8 *pScreen = pSurface->pixels + lY * PIXELS_PER_LINE + lX;
+	u8 *pScreen = (u8 *)pSurface->pixels + lY * PIXELS_PER_LINE + lX;
 	
 	while(lH--)
 	{
@@ -1951,7 +1955,7 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 			u32 lRightBorderSize = 0;
 
 			pIoData->tDrawLineData.pDestination = 
-				pIoData->tVideoData.pSdlAtariSurface->pixels + 
+				(u8 *)pIoData->tVideoData.pSdlAtariSurface->pixels + 
 				pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
 				
 			pIoData->tDrawLineData.pPriorityData = 
@@ -2327,7 +2331,7 @@ void AtariIoDrawPlayerMissiles(_6502_Context_t *pContext)
 	{
 		pDestination = 
 			SRAM[IO_HPOSP3_M3PF] * 2 +
-			pIoData->tVideoData.pSdlAtariSurface->pixels + 
+			(u8 *)pIoData->tVideoData.pSdlAtariSurface->pixels + 
 			pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
         
 		pPriorityData = 
@@ -2394,7 +2398,7 @@ void AtariIoDrawPlayerMissiles(_6502_Context_t *pContext)
 	{
 		pDestination = 
 			SRAM[IO_HPOSP2_M2PF] * 2 +
-			pIoData->tVideoData.pSdlAtariSurface->pixels + 
+			(u8 *)pIoData->tVideoData.pSdlAtariSurface->pixels + 
 			pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
         
 		pPriorityData = 
@@ -2466,7 +2470,7 @@ void AtariIoDrawPlayerMissiles(_6502_Context_t *pContext)
 	{
 		pDestination = 
 			SRAM[IO_HPOSP1_M1PF] * 2 +
-			pIoData->tVideoData.pSdlAtariSurface->pixels + 
+			(u8 *)pIoData->tVideoData.pSdlAtariSurface->pixels + 
 			pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
         
 		pPriorityData = 
@@ -2537,7 +2541,7 @@ void AtariIoDrawPlayerMissiles(_6502_Context_t *pContext)
 	{
 		pDestination = 
 			SRAM[IO_HPOSP0_M0PF] * 2 +
-			pIoData->tVideoData.pSdlAtariSurface->pixels + 
+			(u8 *)pIoData->tVideoData.pSdlAtariSurface->pixels + 
 			pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
         
 		pPriorityData = 
@@ -2609,7 +2613,7 @@ void AtariIoDrawPlayerMissiles(_6502_Context_t *pContext)
 	{
 		pDestination = 
 			SRAM[IO_HPOSM3_P3PF] * 2 +
-			pIoData->tVideoData.pSdlAtariSurface->pixels + 
+			(u8 *)pIoData->tVideoData.pSdlAtariSurface->pixels + 
 			pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
 
 		pPriorityData = 
@@ -2674,7 +2678,7 @@ void AtariIoDrawPlayerMissiles(_6502_Context_t *pContext)
 	{
 		pDestination = 
 			SRAM[IO_HPOSM2_P2PF] * 2 +
-			pIoData->tVideoData.pSdlAtariSurface->pixels + 
+			(u8 *)pIoData->tVideoData.pSdlAtariSurface->pixels + 
 			pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
         
 		pPriorityData = 
@@ -2739,7 +2743,7 @@ void AtariIoDrawPlayerMissiles(_6502_Context_t *pContext)
 	{
 		pDestination = 
 			SRAM[IO_HPOSM1_P1PF] * 2 +
-			pIoData->tVideoData.pSdlAtariSurface->pixels + 
+			(u8 *)pIoData->tVideoData.pSdlAtariSurface->pixels + 
 			pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
         
 		pPriorityData = 
@@ -2804,7 +2808,7 @@ void AtariIoDrawPlayerMissiles(_6502_Context_t *pContext)
 	{
 		pDestination = 
 			SRAM[IO_HPOSM0_P0PF] * 2 +
-			pIoData->tVideoData.pSdlAtariSurface->pixels + 
+			(u8 *)pIoData->tVideoData.pSdlAtariSurface->pixels + 
 			pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
         
 		pPriorityData = 

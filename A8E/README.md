@@ -92,7 +92,7 @@ Produces a standalone `.exe` (statically linked, no external DLLs required).
 #### Prerequisites
 - Open the [MSYS2](https://www.msys2.org/) MinGW x64 shell and install tools:
   ```sh
-  pacman -S --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-SDL
+  pacman -S --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make mingw-w64-x86_64-SDL
   ```
 
 #### Build (MSYS2 MinGW shell)
