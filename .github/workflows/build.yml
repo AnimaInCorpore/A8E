@@ -6,6 +6,15 @@ on:
     tags: ["v*"]
   pull_request:
     branches: ["main", "master"]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing tag to build/publish (e.g. v1.1.1). Leave empty for build-only run."
+        required: false
+        type: string
+
+env:
+  A8E_RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref_name }}
 
 jobs:
   build-linux:
@@ -13,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref }}
 
       - name: Install Dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake libsdl1.2-dev
@@ -23,24 +34,26 @@ jobs:
           cmake --build build -j4
 
       - name: Package binary (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(env.A8E_RELEASE_TAG, 'v')
         run: |
           mkdir -p dist
-          cp build/A8E/A8E "dist/A8E-${GITHUB_REF_NAME}-linux"
-          chmod +x "dist/A8E-${GITHUB_REF_NAME}-linux"
+          cp build/A8E/A8E "dist/A8E-${A8E_RELEASE_TAG}-linux"
+          chmod +x "dist/A8E-${A8E_RELEASE_TAG}-linux"
 
       - name: Upload artifact (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(env.A8E_RELEASE_TAG, 'v')
         uses: actions/upload-artifact@v4
         with:
           name: A8E-linux
-          path: dist/A8E-${{ github.ref_name }}-linux
+          path: dist/A8E-${{ env.A8E_RELEASE_TAG }}-linux
 
   build-macos:
     name: macOS (Homebrew)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref }}
 
       - name: Install Dependencies
         run: brew install cmake sdl12-compat
@@ -51,24 +64,26 @@ jobs:
           cmake --build build -j4
 
       - name: Package binary (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(env.A8E_RELEASE_TAG, 'v')
         run: |
           mkdir -p dist
-          cp build/A8E/A8E "dist/A8E-${GITHUB_REF_NAME}-macos"
-          chmod +x "dist/A8E-${GITHUB_REF_NAME}-macos"
+          cp build/A8E/A8E "dist/A8E-${A8E_RELEASE_TAG}-macos"
+          chmod +x "dist/A8E-${A8E_RELEASE_TAG}-macos"
 
       - name: Upload artifact (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(env.A8E_RELEASE_TAG, 'v')
         uses: actions/upload-artifact@v4
         with:
           name: A8E-macos
-          path: dist/A8E-${{ github.ref_name }}-macos
+          path: dist/A8E-${{ env.A8E_RELEASE_TAG }}-macos
 
   build-windows-msvc:
     name: Windows (MSVC)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref }}
 
       - name: Install SDL via vcpkg
         # Note: vcpkg is pre-installed on GitHub's windows-latest runners!
@@ -86,17 +101,17 @@ jobs:
         run: cmake --build build/msvc --config Release
 
       - name: Package binary (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(env.A8E_RELEASE_TAG, 'v')
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item "build/msvc/A8E/Release/A8E.exe" "dist/A8E-$env:GITHUB_REF_NAME-windows-msvc.exe"
+          Copy-Item "build/msvc/A8E/Release/A8E.exe" "dist/A8E-$env:A8E_RELEASE_TAG-windows-msvc.exe"
 
       - name: Upload artifact (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(env.A8E_RELEASE_TAG, 'v')
         uses: actions/upload-artifact@v4
         with:
           name: A8E-windows-msvc
-          path: dist/A8E-${{ github.ref_name }}-windows-msvc.exe
+          path: dist/A8E-${{ env.A8E_RELEASE_TAG }}-windows-msvc.exe
 
   build-windows-mingw:
     name: Windows (MinGW / MSYS2)
@@ -106,6 +121,8 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref }}
 
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
@@ -124,21 +141,21 @@ jobs:
           cmake --build build/mingw -j4
 
       - name: Package binary (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(env.A8E_RELEASE_TAG, 'v')
         run: |
           mkdir -p dist
-          cp build/mingw/A8E/A8E.exe "dist/A8E-${GITHUB_REF_NAME}-windows-mingw.exe"
+          cp build/mingw/A8E/A8E.exe "dist/A8E-${A8E_RELEASE_TAG}-windows-mingw.exe"
 
       - name: Upload artifact (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(env.A8E_RELEASE_TAG, 'v')
         uses: actions/upload-artifact@v4
         with:
           name: A8E-windows-mingw
-          path: dist/A8E-${{ github.ref_name }}-windows-mingw.exe
+          path: dist/A8E-${{ env.A8E_RELEASE_TAG }}-windows-mingw.exe
 
   publish-release:
     name: Publish GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(env.A8E_RELEASE_TAG, 'v')
     needs:
       - build-linux
       - build-macos
@@ -156,11 +173,11 @@ jobs:
       - name: Create/Update Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ env.A8E_RELEASE_TAG }}
           generate_release_notes: true
           overwrite_files: true
           files: |
-            release-assets/A8E-linux/A8E-${{ github.ref_name }}-linux
-            release-assets/A8E-macos/A8E-${{ github.ref_name }}-macos
-            release-assets/A8E-windows-msvc/A8E-${{ github.ref_name }}-windows-msvc.exe
-            release-assets/A8E-windows-mingw/A8E-${{ github.ref_name }}-windows-mingw.exe
+            release-assets/A8E-linux/A8E-${{ env.A8E_RELEASE_TAG }}-linux
+            release-assets/A8E-macos/A8E-${{ env.A8E_RELEASE_TAG }}-macos
+            release-assets/A8E-windows-msvc/A8E-${{ env.A8E_RELEASE_TAG }}-windows-msvc.exe
+            release-assets/A8E-windows-mingw/A8E-${{ env.A8E_RELEASE_TAG }}-windows-mingw.exe
