@@ -49,6 +49,7 @@ For standard keyboard, joystick, and console mappings, please see the [main READ
 Building requires **SDL 1.2** development headers. SDL 1.2 is legacy, so for modern systems we recommend `sdl12-compat`, which preserves SDL 1.2 APIs while keeping this codebase unchanged. CMake 3.16+ is recommended but not strictly required (see the manual compilation section for a direct `clang`/`gcc` build).
 
 The build process aims to produce **portable standalone binaries** with minimal external runtime dependencies. Where possible, static linking is used to achieve this.
+For local release binaries with single-config generators (Makefiles/Ninja/MinGW Makefiles), pass `-DCMAKE_BUILD_TYPE=Release` during configure.
 
 > **Version Note:** The window caption version is injected at compile time via `../jsA8E/version.json`. If this file is missing, the build defaults to `dev`.
 >
@@ -82,6 +83,7 @@ cmake --build build/msvc --config Release
 ```
 
 *Executable output: `build\msvc\A8E\Release\A8E.exe`*
+> **Note:** For MSVC static SDL builds, required Win32 system libraries are linked automatically by the project's CMake configuration.
 
 ---
 
@@ -114,7 +116,7 @@ cmake --build build/mingw -j
 
 #### Build (Bash/Zsh)
 ```sh
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
@@ -132,7 +134,7 @@ brew install cmake sdl12-compat
 
 #### Build (Zsh/Bash)
 ```sh
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
@@ -154,6 +156,7 @@ You can cross-compile a Windows `.exe` from Linux or macOS with MinGW-w64 and Wi
 ```sh
 cmake -S . -B build/win64 \
   -DCMAKE_SYSTEM_NAME=Windows \
+  -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
   -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
   -DSDL_INCLUDE_DIR=<path-to-mingw>/include/SDL \
@@ -181,6 +184,7 @@ You can cross-compile a Linux binary from macOS using a Linux cross-toolchain.
 ```sh
 cmake -S . -B build/linux \
   -DCMAKE_SYSTEM_NAME=Linux \
+  -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER=x86_64-linux-gnu-gcc \
   -DSDL_INCLUDE_DIR=<path-to-linux-sysroot>/include/SDL \
   -DSDL_LIBRARY=<path-to-linux-sysroot>/lib/libSDL.a \
