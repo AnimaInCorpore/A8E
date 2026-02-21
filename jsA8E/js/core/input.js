@@ -230,11 +230,6 @@
           setTriggerPressed(2, true);
           return true;
         }
-        if (sym === 309 || sym === 310) {
-          setTriggerPressed(3, true);
-          return true;
-        }
-
         if (sym === 283) {
           machine.ctx.ram[IO_CONSOL] &= ~0x4;
           return true;
@@ -311,10 +306,6 @@
         }
         if (sym === 307) {
           setTriggerPressed(2, false);
-          return true;
-        }
-        if (sym === 309 || sym === 310) {
-          setTriggerPressed(3, false);
           return true;
         }
         if (sym === 283) {

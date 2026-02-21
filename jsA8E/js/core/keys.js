@@ -182,8 +182,6 @@
       if (e.code === "ShiftLeft") return 304;
       if (e.code === "AltRight") return 307;
       if (e.code === "AltLeft") return 308;
-      if (e.code === "MetaRight") return 309;
-      if (e.code === "MetaLeft") return 310;
 
       if (shouldPreferPrintableMapping(e)) {
         const printable = printableKeyToSdlSym(e);
@@ -253,8 +251,6 @@
           return 308;
         case "Control":
           return 306; // SDLK_LCTRL (approx; unused for table)
-        case "Meta":
-          return 310; // SDLK_LMETA (approx; unused for table)
         default:
           break;
       }

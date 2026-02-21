@@ -1528,7 +1528,12 @@
     );
 
     // Keyboard input forwarded to emulator.
+    function isMetaKeyEvent(e) {
+      return !!e && (e.key === "Meta" || !!e.metaKey);
+    }
+
     function onCanvasKeyDown(e) {
+      if (isMetaKeyEvent(e)) return;
       syncPhysicalKeyVisual(e, true);
       const ev = normalizePhysicalKeyEvent(e, true);
       if (!ev) {
@@ -1539,6 +1544,7 @@
     }
 
     function onCanvasKeyUp(e) {
+      if (isMetaKeyEvent(e)) return;
       syncPhysicalKeyVisual(e, false);
       const ev = normalizePhysicalKeyEvent(e, false);
       if (!ev) {
