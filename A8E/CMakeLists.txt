@@ -83,6 +83,14 @@ if(MINGW)
   target_link_libraries(A8E PRIVATE mingw32 ${SDLMAIN_LIBRARY})
 endif()
 
+if(MSVC)
+  # SDL 1.2 static builds on MSVC need explicit Win32 system libs.
+  if(SDLMAIN_LIBRARY)
+    target_link_libraries(A8E PRIVATE "${SDLMAIN_LIBRARY}")
+  endif()
+  target_link_libraries(A8E PRIVATE winmm dinput8 dxguid ddraw)
+endif()
+
 if(APPLE)
   # Avoid duplicate link items when FindSDL already returns SDLmain/Cocoa.
   if(SDLMAIN_LIBRARY AND NOT SDL_LIBRARY MATCHES "SDLmain")
