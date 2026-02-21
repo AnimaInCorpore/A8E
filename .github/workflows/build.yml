@@ -34,14 +34,14 @@ jobs:
           cmake --build build -j4
 
       - name: Package binary (tags only)
-        if: startsWith(env.A8E_RELEASE_TAG, 'v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.release_tag, 'v'))
         run: |
           mkdir -p dist
           cp build/A8E/A8E "dist/A8E-${A8E_RELEASE_TAG}-linux"
           chmod +x "dist/A8E-${A8E_RELEASE_TAG}-linux"
 
       - name: Upload artifact (tags only)
-        if: startsWith(env.A8E_RELEASE_TAG, 'v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.release_tag, 'v'))
         uses: actions/upload-artifact@v4
         with:
           name: A8E-linux
@@ -64,14 +64,14 @@ jobs:
           cmake --build build -j4
 
       - name: Package binary (tags only)
-        if: startsWith(env.A8E_RELEASE_TAG, 'v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.release_tag, 'v'))
         run: |
           mkdir -p dist
           cp build/A8E/A8E "dist/A8E-${A8E_RELEASE_TAG}-macos"
           chmod +x "dist/A8E-${A8E_RELEASE_TAG}-macos"
 
       - name: Upload artifact (tags only)
-        if: startsWith(env.A8E_RELEASE_TAG, 'v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.release_tag, 'v'))
         uses: actions/upload-artifact@v4
         with:
           name: A8E-macos
@@ -101,13 +101,13 @@ jobs:
         run: cmake --build build/msvc --config Release
 
       - name: Package binary (tags only)
-        if: startsWith(env.A8E_RELEASE_TAG, 'v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.release_tag, 'v'))
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item "build/msvc/A8E/Release/A8E.exe" "dist/A8E-$env:A8E_RELEASE_TAG-windows-msvc.exe"
 
       - name: Upload artifact (tags only)
-        if: startsWith(env.A8E_RELEASE_TAG, 'v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.release_tag, 'v'))
         uses: actions/upload-artifact@v4
         with:
           name: A8E-windows-msvc
@@ -141,13 +141,13 @@ jobs:
           cmake --build build/mingw -j4
 
       - name: Package binary (tags only)
-        if: startsWith(env.A8E_RELEASE_TAG, 'v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.release_tag, 'v'))
         run: |
           mkdir -p dist
           cp build/mingw/A8E/A8E.exe "dist/A8E-${A8E_RELEASE_TAG}-windows-mingw.exe"
 
       - name: Upload artifact (tags only)
-        if: startsWith(env.A8E_RELEASE_TAG, 'v')
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.release_tag, 'v'))
         uses: actions/upload-artifact@v4
         with:
           name: A8E-windows-mingw
@@ -155,7 +155,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
-    if: startsWith(env.A8E_RELEASE_TAG, 'v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.release_tag, 'v'))
     needs:
       - build-linux
       - build-macos
