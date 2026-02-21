@@ -38,11 +38,11 @@
 
     // --- POKEY audio (ported from Pokey.c; still simplified, but cycle-based) ---
     const POKEY_FP_ONE = 4294967296; // 1<<32 as an exact integer.
-    const POKEY_MIX_GAIN = 0.35;
+    const POKEY_MIX_GAIN = 0.75;
     const POKEY_DC_BLOCK_HZ = 20.0;
     const POKEY_AUDIO_RING_SIZE = 4096; // power-of-two
     const POKEY_AUDIO_TARGET_BUFFER_SAMPLES = 1024;
-    const POKEY_AUDIO_ENABLE_ADAPTIVE_SYNC = false;
+    const POKEY_AUDIO_ENABLE_ADAPTIVE_SYNC = true;
     const POKEY_AUDIO_MAX_ADJUST_DIVISOR = 200; // +/-0.5%
     const POKEY_AUDIO_FILL_DEADBAND_DIVISOR = 8; // +/-12.5% fill deadband
     const POKEY_AUDIO_CPS_SLEW_DIVISOR = 1000; // max cps delta per sync (~0.1%)
@@ -839,23 +839,34 @@
         let left = runCycles;
 
         while (left > 0) {
-          let cyclesUntilSample =
-            ((cps - samplePhase + POKEY_FP_ONE - 1) / POKEY_FP_ONE) | 0;
-          if (cyclesUntilSample < 1) cyclesUntilSample = 1;
-          const batch = left < cyclesUntilSample ? left : cyclesUntilSample;
+          let cyclesNeededFp = cps - samplePhase;
+          let batchFp = POKEY_FP_ONE * left;
 
-          samplePhase += POKEY_FP_ONE * batch;
-          left -= batch;
-
-          while (samplePhase >= cps) {
-            // Match native Pokey.c behavior: sample the current level directly.
-            // This avoids extra averaging blur on transients/high harmonics.
-            tmp[tmpCount++] = pokeyAudioFinalizeSample(st, level);
-            samplePhase -= cps;
+          if (batchFp < cyclesNeededFp) {
+            st.sampleAccum += level * batchFp;
+            samplePhase += batchFp;
+            left = 0;
+          } else {
+            st.sampleAccum += level * cyclesNeededFp;
+            tmp[tmpCount++] = pokeyAudioFinalizeSample(st, st.sampleAccum / cps);
             if (tmpCount === tmp.length) {
               pokeyAudioRingWrite(st, tmp, tmpCount);
               tmpCount = 0;
             }
+
+            batchFp -= cyclesNeededFp;
+            while (batchFp >= cps) {
+              tmp[tmpCount++] = pokeyAudioFinalizeSample(st, level);
+              if (tmpCount === tmp.length) {
+                pokeyAudioRingWrite(st, tmp, tmpCount);
+                tmpCount = 0;
+              }
+              batchFp -= cps;
+            }
+
+            st.sampleAccum = level * batchFp;
+            samplePhase = batchFp;
+            left = 0;
           }
         }
 
