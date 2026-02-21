@@ -175,7 +175,6 @@ jobs:
         with:
           tag_name: ${{ env.A8E_RELEASE_TAG }}
           generate_release_notes: true
-          overwrite_files: true
           files: |
             release-assets/A8E-linux/A8E-${{ env.A8E_RELEASE_TAG }}-linux
             release-assets/A8E-macos/A8E-${{ env.A8E_RELEASE_TAG }}-macos
