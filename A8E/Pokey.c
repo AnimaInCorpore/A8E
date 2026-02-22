@@ -77,7 +77,7 @@ typedef struct
 
 	/* Sample phase (32.32 fixed-point CPU cycles since last output sample). */
 	u64 sample_phase_fp;
-	u64 sample_accum;
+	int64_t sample_accum;
 
 	/* Non-linear-ish DAC/mixer approximation: sum(volume gates) -> raw level. */
 	int32_t dac_table[61]; /* 0..60 */
@@ -229,8 +229,8 @@ static void PokeyAudio_Callback(void *userdata, Uint8 *stream, int len)
 static void PokeyAudio_RecomputeDacTable(PokeyState_t *pPokey)
 {
 	/* Simple linear DAC table for maximum speed.
-	   Output is unipolar (0 to positive). */
-	const int32_t max_output = 24000; /* Leave headroom */
+	   Output is bipolar (-24000 to +24000) to avoid DC offset. */
+	const int32_t max_output = 24000;
 	u32 i;
 
 	if(!pPokey)
@@ -238,7 +238,7 @@ static void PokeyAudio_RecomputeDacTable(PokeyState_t *pPokey)
 
 	for(i = 0; i <= 60; i++)
 	{
-		pPokey->dac_table[i] = (int32_t)((i * max_output) / 60);
+		pPokey->dac_table[i] = (int32_t)(((i - 30) * 800));
 	}
 }
 
@@ -903,19 +903,32 @@ void Pokey_Sync(_6502_Context_t *pContext, u64 llCycleCounter)
 		while(cur < llCycleCounter)
 		{
 			int32_t level = PokeyAudio_MixCycleLevel(pPokey, pPokey->aChannels, pPokey->audctl);
-			u64 cycles_needed_fp = adjusted_cps - pPokey->sample_phase_fp;
+			u64 cycles_needed_fp;
 			u64 batch_fp = (1ull << 32);
+
+			/* adjusted_cps can decrease between sync calls due adaptive rate control.
+			   Keep phase/accum consistent so subtraction below cannot underflow. */
+			if(pPokey->sample_phase_fp >= adjusted_cps)
+			{
+				int64_t avg_level = 0;
+				if(pPokey->sample_phase_fp != 0)
+					avg_level = pPokey->sample_accum / (int64_t)pPokey->sample_phase_fp;
+				pPokey->sample_accum = avg_level * (int64_t)adjusted_cps;
+				pPokey->sample_phase_fp = adjusted_cps;
+			}
+
+			cycles_needed_fp = adjusted_cps - pPokey->sample_phase_fp;
 
 			if(batch_fp < cycles_needed_fp)
 			{
-				pPokey->sample_accum += (u64)level * batch_fp;
+				pPokey->sample_accum += (int64_t)level * (int64_t)batch_fp;
 				pPokey->sample_phase_fp += batch_fp;
 			}
 			else
 			{
 				int32_t s;
-				pPokey->sample_accum += (u64)level * cycles_needed_fp;
-				s = (int32_t)(pPokey->sample_accum / adjusted_cps);
+				pPokey->sample_accum += (int64_t)level * (int64_t)cycles_needed_fp;
+				s = (int32_t)(pPokey->sample_accum / (int64_t)adjusted_cps);
 				if(s > 32767) s = 32767;
 				else if(s < -32768) s = -32768;
 				tmp[tmpCount++] = (int16_t)s;
@@ -942,7 +955,7 @@ void Pokey_Sync(_6502_Context_t *pContext, u64 llCycleCounter)
 					batch_fp -= adjusted_cps;
 				}
 
-				pPokey->sample_accum = (u64)level * batch_fp;
+				pPokey->sample_accum = (int64_t)level * (int64_t)batch_fp;
 				pPokey->sample_phase_fp = batch_fp;
 			}
 
