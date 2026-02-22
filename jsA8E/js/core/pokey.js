@@ -460,11 +460,20 @@
       if (pulse3 && audctl & 0x02) st.hp2Latch = st.channels[1].output & 1;
     }
 
+    // Per-channel non-linear volume (~3 dB/step). Index 15 => 1.0 (normalized).
+    const POKEY_CHAN_VOL_TABLE = [
+      0.000, 0.008, 0.011, 0.016, 0.022, 0.031, 0.044, 0.063,
+      0.088, 0.125, 0.177, 0.250, 0.354, 0.500, 0.707, 1.000,
+    ];
+    // Soft-clip compressed maximum: 1.0 + 3.0 * 0.75 (all 4 ch at vol=15).
+    const POKEY_MIX_COMPRESSED_MAX = 3.25;
+
     function pokeyAudioMixCycleSample(st) {
       const audctl = st.audctl & 0xff;
       const pair12 = (audctl & 0x10) !== 0;
       const pair34 = (audctl & 0x08) !== 0;
-      let sum = 0;
+      const twoTone = (st.skctl & 0x08) !== 0;
+      let sum = 0.0;
 
       for (let i = 0; i < 4; i++) {
         if (i === 0 && pair12) continue;
@@ -478,20 +487,21 @@
         const volOnly = (audc & 0x10) !== 0;
         let bit = volOnly ? 1 : ch.output & 1;
 
+        // Two-tone mode (SKCTL bit 3): ch1 output ANDed with ch2 flip-flop.
+        if (i === 0 && twoTone) bit &= st.channels[1].output & 1;
+
         if (!volOnly) {
           if (i === 0 && audctl & 0x04) bit ^= st.hp1Latch & 1;
           if (i === 1 && audctl & 0x02) bit ^= st.hp2Latch & 1;
         }
 
-        sum += bit * vol;
+        sum += POKEY_CHAN_VOL_TABLE[vol] * bit;
       }
 
-      if (sum < 0) sum = 0;
-      if (sum > 60) sum = 60;
+      // Soft-clip: compress beyond one channel's max (transistor output stage).
+      if (sum > 1.0) sum = 1.0 + (sum - 1.0) * 0.75;
 
-      // Keep a centered raw mix in [-0.5..+0.5]. Gain and DC filtering are applied
-      // after resampling so they operate in the final audio sample domain.
-      return (sum - 30) / 60;
+      return sum / POKEY_MIX_COMPRESSED_MAX;
     }
 
     function pokeyAudioNextPulseCycles(counter, clockCh) {
@@ -682,7 +692,6 @@
 
     function pokeyAudioOnRegisterWrite(st, addr, v) {
       if (!st) return;
-      let ch;
 
       switch (addr & 0xffff) {
         case IO_AUDF1_POT0:
