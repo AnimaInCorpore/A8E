@@ -415,6 +415,8 @@
       }
 
       if (pair34) {
+        // In 16-bit pair mode ch3 is a prescaler; only ch4 (chHigh) independently
+        // underflows.  pulse2 (ch3 clock used for HP filter on ch1) stays 0.
         if (st.channels[2].clkDivCycles === 1) {
           pulse3 = pokeyAudioPairTick(
             st,
@@ -422,7 +424,6 @@
             st.channels[3],
             audctl,
           );
-          pulse2 = pulse3;
         } else {
           st.channels[2].clkAccCycles = (st.channels[2].clkAccCycles + 1) | 0;
           if (st.channels[2].clkAccCycles >= st.channels[2].clkDivCycles) {
@@ -434,7 +435,6 @@
               st.channels[3],
               audctl,
             );
-            pulse2 = pulse3;
           }
         }
       } else {
@@ -686,48 +686,16 @@
 
       switch (addr & 0xffff) {
         case IO_AUDF1_POT0:
-          ch = st.channels[0];
-          ch.audf = v & 0xff;
-          ch.counter = st.audctl & 0x40 ? (v & 0xff) + 4 : (v & 0xff) + 1;
-          if (st.audctl & 0x10) {
-            const period12 =
-              (((st.channels[1].audf & 0xff) << 8) | (v & 0xff)) >>> 0;
-            st.channels[1].counter =
-              st.audctl & 0x40 ? period12 + 7 : period12 + 1;
-          }
+          st.channels[0].audf = v & 0xff;
           break;
         case IO_AUDF2_POT2:
-          ch = st.channels[1];
-          ch.audf = v & 0xff;
-          ch.counter = ((v & 0xff) + 1) | 0;
-          if (st.audctl & 0x10) {
-            const period12b =
-              (((v & 0xff) << 8) | (st.channels[0].audf & 0xff)) >>> 0;
-            st.channels[1].counter =
-              st.audctl & 0x40 ? period12b + 7 : period12b + 1;
-          }
+          st.channels[1].audf = v & 0xff;
           break;
         case IO_AUDF3_POT4:
-          ch = st.channels[2];
-          ch.audf = v & 0xff;
-          ch.counter = st.audctl & 0x20 ? (v & 0xff) + 4 : (v & 0xff) + 1;
-          if (st.audctl & 0x08) {
-            const period34 =
-              (((st.channels[3].audf & 0xff) << 8) | (v & 0xff)) >>> 0;
-            st.channels[3].counter =
-              st.audctl & 0x20 ? period34 + 7 : period34 + 1;
-          }
+          st.channels[2].audf = v & 0xff;
           break;
         case IO_AUDF4_POT6:
-          ch = st.channels[3];
-          ch.audf = v & 0xff;
-          ch.counter = ((v & 0xff) + 1) | 0;
-          if (st.audctl & 0x08) {
-            const period34b =
-              (((v & 0xff) << 8) | (st.channels[2].audf & 0xff)) >>> 0;
-            st.channels[3].counter =
-              st.audctl & 0x20 ? period34b + 7 : period34b + 1;
-          }
+          st.channels[3].audf = v & 0xff;
           break;
 
         case IO_AUDC1_POT1:
@@ -746,7 +714,6 @@
         case IO_AUDCTL_ALLPOT: {
           st.audctl = v & 0xff;
           pokeyAudioRecomputeClocks(st.channels, st.audctl);
-          pokeyAudioReloadDividerCounters(st);
           break;
         }
 
@@ -839,7 +806,7 @@
         let left = runCycles;
 
         while (left > 0) {
-          let cyclesNeededFp = cps - samplePhase;
+          const cyclesNeededFp = cps - samplePhase;
           let batchFp = POKEY_FP_ONE * left;
 
           if (batchFp < cyclesNeededFp) {
