@@ -77,9 +77,7 @@ typedef struct
 
 	/* Sample phase (32.32 fixed-point CPU cycles since last output sample). */
 	u64 sample_phase_fp;
-
-	/* Non-linear-ish DAC/mixer approximation: sum(volume gates) -> raw level. */
-	int32_t dac_table[61]; /* 0..60 */
+	int64_t sample_accum;
 
 	/* Last emitted sample (for underrun hold). */
 	int16_t last_sample;
@@ -98,6 +96,11 @@ typedef struct
 	u8 audctl;
 	u8 skctl;
 	PokeyAudioChannel_t aChannels[4];
+
+	/* DC block (AC coupling): removes low-frequency bias from unipolar mixer output. */
+	float dc_block_r;
+	float dc_block_x1;
+	float dc_block_y1;
 } PokeyState_t;
 
 static u32 PokeyAudio_ClampU32(u32 v, u32 lo, u32 hi)
@@ -225,21 +228,12 @@ static void PokeyAudio_Callback(void *userdata, Uint8 *stream, int len)
 		pPokey->last_sample = hold;
 }
 
-static void PokeyAudio_RecomputeDacTable(PokeyState_t *pPokey)
-{
-	/* Simple linear DAC table for maximum speed.
-	   Output is unipolar (0 to positive). */
-	const int32_t max_output = 24000; /* Leave headroom */
-	u32 i;
-
-	if(!pPokey)
-		return;
-
-	for(i = 0; i <= 60; i++)
-	{
-		pPokey->dac_table[i] = (int32_t)((i * max_output) / 60);
-	}
-}
+/* Per-channel non-linear volume (~3 dB/step). vol=15 -> 8000 units.
+   Soft-clip threshold = 8000; 4-ch max compressed ~= 26000. */
+static const int32_t g_pokey_chan_vol[16] = {
+	0, 63, 88, 125, 177, 250, 354, 500,
+	707, 1000, 1414, 2000, 2828, 4000, 5657, 8000
+};
 
 static void PokeyAudio_RecomputeClocks(PokeyAudioChannel_t *pChannels, u8 audctl)
 {
@@ -462,10 +456,11 @@ static void PokeyAudio_StepCpuCycle(
 
 	if(pair34)
 	{
+		/* In 16-bit pair mode ch3 is a prescaler; only ch4 (chHigh) independently
+		   underflows.  pulse2 (ch3 clock used for HP filter on ch1) stays 0. */
 		if(pChannels[2].clk_div_cycles == 1)
 		{
 			pulse3 = PokeyAudio_PairTick(pPokey, &pChannels[2], &pChannels[3], audctl);
-			pulse2 = pulse3;
 		}
 		else
 		{
@@ -474,7 +469,6 @@ static void PokeyAudio_StepCpuCycle(
 			{
 				pChannels[2].clk_acc_cycles -= pChannels[2].clk_div_cycles;
 				pulse3 = PokeyAudio_PairTick(pPokey, &pChannels[2], &pChannels[3], audctl);
-				pulse2 = pulse3;
 			}
 		}
 	}
@@ -514,12 +508,28 @@ static void PokeyAudio_StepCpuCycle(
 		pPokey->hp2_latch = pChannels[1].output;
 }
 
+/* Normalize unipolar mixer output (0..28000), apply 0.75 gain, DC block, and
+   scale to int16. Max-vol-all-ch soft-clipped ~= 26000, so 28000 headroom. */
+static int16_t PokeyAudio_FinalizeSample(PokeyState_t *pPokey, int32_t raw)
+{
+	float sample = (float)raw * (0.75f / 28000.0f);
+	float out = sample - pPokey->dc_block_x1
+	            + pPokey->dc_block_r * pPokey->dc_block_y1;
+	pPokey->dc_block_x1 = sample;
+	pPokey->dc_block_y1 = out;
+	out *= 32767.0f;
+	if(out > 32767.0f) out = 32767.0f;
+	else if(out < -32768.0f) out = -32768.0f;
+	return (int16_t)out;
+}
+
 static int32_t PokeyAudio_MixCycleLevel(PokeyState_t *pPokey, PokeyAudioChannel_t *pChannels, u8 audctl)
 {
 	u32 i;
 	int32_t sum = 0;
 	u8 pair12 = (u8)((audctl & 0x10) != 0);
 	u8 pair34 = (u8)((audctl & 0x08) != 0);
+	u8 two_tone = (u8)((pPokey->skctl & 0x08) != 0);
 
 	if(!pPokey)
 		return 0;
@@ -542,6 +552,10 @@ static int32_t PokeyAudio_MixCycleLevel(PokeyState_t *pPokey, PokeyAudioChannel_
 		/* Unipolar volume gate: 0 -> silence, 1 -> full channel volume. */
 		bit = vol_only ? 1u : (u8)(pChannels[i].output & 1u);
 
+		/* Two-tone mode (SKCTL bit 3): ch1 output ANDed with ch2 flip-flop. */
+		if(i == 0 && two_tone)
+			bit &= (u8)(pChannels[1].output & 1u);
+
 		/* Optional POKEY digital high-pass filters (bypassed in volume-only mode). */
 		if(!vol_only)
 		{
@@ -551,15 +565,16 @@ static int32_t PokeyAudio_MixCycleLevel(PokeyState_t *pPokey, PokeyAudioChannel_
 				bit ^= (u8)(pPokey->hp2_latch & 1u);
 		}
 
-		sum += (int32_t)(bit * vol);
+		sum += g_pokey_chan_vol[vol] * (int32_t)bit;
 	}
 
-	if(sum < 0)
-		sum = 0;
-	if(sum > 60)
-		sum = 60;
+	/* Soft-clip: compress beyond one channel's max (transistor output stage). */
+	if(sum > 8000)
+		sum = 8000 + (sum - 8000) * 3 / 4;
+	if(sum < 0) sum = 0;
+	if(sum > 28000) sum = 28000;
 
-	return pPokey->dac_table[sum];
+	return sum;
 }
 
 static PokeyState_t *Pokey_GetState(_6502_Context_t *pContext)
@@ -669,8 +684,9 @@ void Pokey_Init(_6502_Context_t *pContext)
 	pPokey->lfsr4 = 0x00u;
 	pPokey->hp1_latch = 0;
 	pPokey->hp2_latch = 0;
-	PokeyAudio_RecomputeDacTable(pPokey);
-
+	pPokey->dc_block_r = (float)exp(-2.0 * 3.14159265358979 * 20.0 / (double)pPokey->sample_rate_hz);
+	pPokey->dc_block_x1 = 0.0f;
+	pPokey->dc_block_y1 = 0.0f;
 	/* Ring buffer to absorb timing variations between emulation and audio output. */
 	pPokey->ring_size = 8192;
 	pPokey->ring_mask = ((pPokey->ring_size & (pPokey->ring_size - 1u)) == 0) ? (pPokey->ring_size - 1u) : 0;
@@ -902,23 +918,54 @@ void Pokey_Sync(_6502_Context_t *pContext, u64 llCycleCounter)
 		while(cur < llCycleCounter)
 		{
 			int32_t level = PokeyAudio_MixCycleLevel(pPokey, pPokey->aChannels, pPokey->audctl);
-			pPokey->sample_phase_fp += (1ull << 32);
-			while(pPokey->sample_phase_fp >= adjusted_cps)
-			{
-				int32_t s = level;
-				if(s > 32767)
-					s = 32767;
-				else if(s < -32768)
-					s = -32768;
-				tmp[tmpCount++] = (int16_t)s;
+			u64 cycles_needed_fp;
+			u64 batch_fp = (1ull << 32);
 
-				pPokey->sample_phase_fp -= adjusted_cps;
+			/* adjusted_cps can decrease between sync calls due adaptive rate control.
+			   Keep phase/accum consistent so subtraction below cannot underflow. */
+			if(pPokey->sample_phase_fp >= adjusted_cps)
+			{
+				int64_t avg_level = 0;
+				if(pPokey->sample_phase_fp != 0)
+					avg_level = pPokey->sample_accum / (int64_t)pPokey->sample_phase_fp;
+				pPokey->sample_accum = avg_level * (int64_t)adjusted_cps;
+				pPokey->sample_phase_fp = adjusted_cps;
+			}
+
+			cycles_needed_fp = adjusted_cps - pPokey->sample_phase_fp;
+
+			if(batch_fp < cycles_needed_fp)
+			{
+				pPokey->sample_accum += (int64_t)level * (int64_t)batch_fp;
+				pPokey->sample_phase_fp += batch_fp;
+			}
+			else
+			{
+				pPokey->sample_accum += (int64_t)level * (int64_t)cycles_needed_fp;
+				tmp[tmpCount++] = PokeyAudio_FinalizeSample(pPokey,
+					(int32_t)(pPokey->sample_accum / (int64_t)adjusted_cps));
 
 				if(tmpCount == (sizeof(tmp) / sizeof(tmp[0])))
 				{
 					PokeyAudio_RingWrite(pPokey, tmp, tmpCount);
 					tmpCount = 0;
 				}
+
+				batch_fp -= cycles_needed_fp;
+				while(batch_fp >= adjusted_cps)
+				{
+					tmp[tmpCount++] = PokeyAudio_FinalizeSample(pPokey, level);
+
+					if(tmpCount == (sizeof(tmp) / sizeof(tmp[0])))
+					{
+						PokeyAudio_RingWrite(pPokey, tmp, tmpCount);
+						tmpCount = 0;
+					}
+					batch_fp -= adjusted_cps;
+				}
+
+				pPokey->sample_accum = (int64_t)level * (int64_t)batch_fp;
+				pPokey->sample_phase_fp = batch_fp;
 			}
 
 			PokeyAudio_StepCpuCycle(pPokey, pPokey->aChannels, pPokey->audctl);
@@ -1065,16 +1112,7 @@ u8 *Pokey_AUDF1_POT0(_6502_Context_t *pContext, u8 *pValue)
 		{
 			PokeyState_t *pPokey = Pokey_GetState(pContext);
 			if(pPokey)
-			{
 				pPokey->aChannels[0].audf = *pValue;
-				pPokey->aChannels[0].counter = (pPokey->audctl & 0x40) ? ((u32)(*pValue) + 4u) : ((u32)(*pValue) + 1u);
-
-				if(pPokey->audctl & 0x10)
-				{
-					u32 period = (((u32)pPokey->aChannels[1].audf) << 8) | (u32)(*pValue);
-					pPokey->aChannels[1].counter = (pPokey->audctl & 0x40) ? (period + 7u) : (period + 1u);
-				}
-			}
 		}
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
@@ -1113,22 +1151,13 @@ u8 *Pokey_AUDC1_POT1(_6502_Context_t *pContext, u8 *pValue)
 u8 *Pokey_AUDF2_POT2(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
- 	{	
+ 	{
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_AUDF2_POT2] = *pValue;
 		{
 			PokeyState_t *pPokey = Pokey_GetState(pContext);
 			if(pPokey)
-			{
 				pPokey->aChannels[1].audf = *pValue;
-				pPokey->aChannels[1].counter = (u32)(*pValue) + 1u;
-
-				if(pPokey->audctl & 0x10)
-				{
-					u32 period = (((u32)(*pValue)) << 8) | (u32)pPokey->aChannels[0].audf;
-					pPokey->aChannels[1].counter = (pPokey->audctl & 0x40) ? (period + 7u) : (period + 1u);
-				}
-			}
 		}
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
@@ -1167,22 +1196,13 @@ u8 *Pokey_AUDC2_POT3(_6502_Context_t *pContext, u8 *pValue)
 u8 *Pokey_AUDF3_POT4(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
- 	{	
+ 	{
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_AUDF3_POT4] = *pValue;
 		{
 			PokeyState_t *pPokey = Pokey_GetState(pContext);
 			if(pPokey)
-			{
 				pPokey->aChannels[2].audf = *pValue;
-				pPokey->aChannels[2].counter = (pPokey->audctl & 0x20) ? ((u32)(*pValue) + 4u) : ((u32)(*pValue) + 1u);
-
-				if(pPokey->audctl & 0x08)
-				{
-					u32 period = (((u32)pPokey->aChannels[3].audf) << 8) | (u32)(*pValue);
-					pPokey->aChannels[3].counter = (pPokey->audctl & 0x20) ? (period + 7u) : (period + 1u);
-				}
-			}
 		}
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
@@ -1221,22 +1241,13 @@ u8 *Pokey_AUDC3_POT5(_6502_Context_t *pContext, u8 *pValue)
 u8 *Pokey_AUDF4_POT6(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
- 	{	
+ 	{
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_AUDF4_POT6] = *pValue;
 		{
 			PokeyState_t *pPokey = Pokey_GetState(pContext);
 			if(pPokey)
-			{
 				pPokey->aChannels[3].audf = *pValue;
-				pPokey->aChannels[3].counter = (u32)(*pValue) + 1u;
-
-				if(pPokey->audctl & 0x08)
-				{
-					u32 period = (((u32)(*pValue)) << 8) | (u32)pPokey->aChannels[2].audf;
-					pPokey->aChannels[3].counter = (pPokey->audctl & 0x20) ? (period + 7u) : (period + 1u);
-				}
-			}
 		}
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
@@ -1284,30 +1295,6 @@ u8 *Pokey_AUDCTL_ALLPOT(_6502_Context_t *pContext, u8 *pValue)
 			{
 				pPokey->audctl = *pValue;
 				PokeyAudio_RecomputeClocks(pPokey->aChannels, pPokey->audctl);
-
-				if(pPokey->audctl & 0x10)
-				{
-					u32 period12 = (((u32)pPokey->aChannels[1].audf) << 8) | (u32)pPokey->aChannels[0].audf;
-					pPokey->aChannels[1].counter = (pPokey->audctl & 0x40) ? (period12 + 7u) : (period12 + 1u);
-				}
-				else
-				{
-					pPokey->aChannels[0].counter =
-						(pPokey->audctl & 0x40) ? ((u32)pPokey->aChannels[0].audf + 4u) : ((u32)pPokey->aChannels[0].audf + 1u);
-					pPokey->aChannels[1].counter = (u32)pPokey->aChannels[1].audf + 1u;
-				}
-
-				if(pPokey->audctl & 0x08)
-				{
-					u32 period34 = (((u32)pPokey->aChannels[3].audf) << 8) | (u32)pPokey->aChannels[2].audf;
-					pPokey->aChannels[3].counter = (pPokey->audctl & 0x20) ? (period34 + 7u) : (period34 + 1u);
-				}
-				else
-				{
-					pPokey->aChannels[2].counter =
-						(pPokey->audctl & 0x20) ? ((u32)pPokey->aChannels[2].audf + 4u) : ((u32)pPokey->aChannels[2].audf + 1u);
-					pPokey->aChannels[3].counter = (u32)pPokey->aChannels[3].audf + 1u;
-				}
 			}
 		}
 #ifdef VERBOSE_REGISTER
@@ -1327,16 +1314,50 @@ u8 *Pokey_AUDCTL_ALLPOT(_6502_Context_t *pContext, u8 *pValue)
 u8 *Pokey_STIMER_KBCODE(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
-  	{	
+  	{
 		IoData_t *pIoData = (IoData_t *)pContext->pIoData;
 		u64 period;
-		
+
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		SRAM[IO_STIMER_KBCODE] = *pValue;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" STIMER: %02X\n", *pValue);
 #endif
+
+		/* STIMER resets all audio channel dividers to their AUDF values. */
+		{
+			PokeyState_t *pPokey = Pokey_GetState(pContext);
+			if(pPokey)
+			{
+				u32 i;
+				for(i = 0; i < 4; i++)
+					pPokey->aChannels[i].clk_acc_cycles = 0;
+
+				if(pPokey->audctl & 0x10)
+				{
+					u32 p12 = (((u32)pPokey->aChannels[1].audf) << 8) | (u32)pPokey->aChannels[0].audf;
+					pPokey->aChannels[1].counter = (pPokey->audctl & 0x40) ? (p12 + 7u) : (p12 + 1u);
+				}
+				else
+				{
+					pPokey->aChannels[0].counter = (pPokey->audctl & 0x40) ?
+						((u32)pPokey->aChannels[0].audf + 4u) : ((u32)pPokey->aChannels[0].audf + 1u);
+					pPokey->aChannels[1].counter = (u32)pPokey->aChannels[1].audf + 1u;
+				}
+				if(pPokey->audctl & 0x08)
+				{
+					u32 p34 = (((u32)pPokey->aChannels[3].audf) << 8) | (u32)pPokey->aChannels[2].audf;
+					pPokey->aChannels[3].counter = (pPokey->audctl & 0x20) ? (p34 + 7u) : (p34 + 1u);
+				}
+				else
+				{
+					pPokey->aChannels[2].counter = (pPokey->audctl & 0x20) ?
+						((u32)pPokey->aChannels[2].audf + 4u) : ((u32)pPokey->aChannels[2].audf + 1u);
+					pPokey->aChannels[3].counter = (u32)pPokey->aChannels[3].audf + 1u;
+				}
+			}
+		}
 
 		period = Pokey_TimerPeriodCpuCycles(pContext, 1);
 		pIoData->llTimer1Cycle = period ? (pContext->llCycleCounter + period) : CYCLE_NEVER;

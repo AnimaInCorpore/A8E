@@ -73,14 +73,22 @@ target_include_directories(A8E PRIVATE "${SDL_INCLUDE_PARENT}")
 
 # --- Linking ---
 
-# Link SDL
-target_link_libraries(A8E PRIVATE ${SDL_LIBRARY})
-
 # --- Platform Specifics ---
 
 if(MINGW)
-  # Windows (MinGW) often requires mingw32 before SDLmain
-  target_link_libraries(A8E PRIVATE mingw32 ${SDLMAIN_LIBRARY})
+  # MinGW link order matters: mingw32, SDLmain, then SDL.
+  target_link_libraries(A8E PRIVATE mingw32 ${SDLMAIN_LIBRARY} ${SDL_LIBRARY})
+else()
+  # Other platforms can link SDL directly.
+  target_link_libraries(A8E PRIVATE ${SDL_LIBRARY})
+endif()
+
+if(MSVC)
+  # SDL 1.2 static builds on MSVC need explicit Win32 system libs.
+  if(SDLMAIN_LIBRARY)
+    target_link_libraries(A8E PRIVATE "${SDLMAIN_LIBRARY}")
+  endif()
+  target_link_libraries(A8E PRIVATE winmm dinput8 dxguid ddraw)
 endif()
 
 if(APPLE)

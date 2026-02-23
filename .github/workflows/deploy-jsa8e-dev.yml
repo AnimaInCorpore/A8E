@@ -13,6 +13,10 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true
+
 jobs:
   web-deploy-dev:
     name: Deploy Dev
@@ -31,6 +35,9 @@ jobs:
         shell: bash
         env:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs['dry-run'] || 'false' }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
         run: |
           DRY_ARG=""
           if [ "$DRY_RUN" = "true" ]; then
@@ -44,9 +51,11 @@ jobs:
             set net:reconnect-interval-base 5;
             set net:reconnect-interval-max 15;
             set ftp:ssl-force yes;
-            open -u ${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }} -p 23 ${{ secrets.FTP_SERVER }};
+            open -u $FTP_USERNAME,$FTP_PASSWORD -p 21 $FTP_SERVER;
             mirror --reverse --delete --verbose \
               --exclude node_modules/ \
+              --exclude-glob *.rom \
+              --exclude-glob *.ROM \
               --exclude eslint.config.cjs \
               --exclude package.json \
               --exclude package-lock.json \

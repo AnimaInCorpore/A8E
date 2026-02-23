@@ -46,7 +46,7 @@ For an online demo of the jsA8E version, visit https://jsa8e.anides.de/
 Building requires **SDL 1.2** development headers. See the [A8E README](A8E/README.md) for full build instructions covering Windows (MSVC, MinGW), macOS (Homebrew, legacy macOS without CMake), and Linux.
 
 ```sh
-cmake -S . -B build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ./build/A8E/A8E
 ```

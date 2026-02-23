@@ -51,7 +51,6 @@ Additional browser-only triggers:
 | Key | Function |
 |-----|----------|
 | Right Alt | TRIG2 |
-| Win / Cmd | TRIG3 |
 
 ## UI Toggles / Features
 

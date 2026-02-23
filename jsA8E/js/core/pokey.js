@@ -38,11 +38,11 @@
 
     // --- POKEY audio (ported from Pokey.c; still simplified, but cycle-based) ---
     const POKEY_FP_ONE = 4294967296; // 1<<32 as an exact integer.
-    const POKEY_MIX_GAIN = 0.35;
+    const POKEY_MIX_GAIN = 0.75;
     const POKEY_DC_BLOCK_HZ = 20.0;
     const POKEY_AUDIO_RING_SIZE = 4096; // power-of-two
     const POKEY_AUDIO_TARGET_BUFFER_SAMPLES = 1024;
-    const POKEY_AUDIO_ENABLE_ADAPTIVE_SYNC = false;
+    const POKEY_AUDIO_ENABLE_ADAPTIVE_SYNC = true;
     const POKEY_AUDIO_MAX_ADJUST_DIVISOR = 200; // +/-0.5%
     const POKEY_AUDIO_FILL_DEADBAND_DIVISOR = 8; // +/-12.5% fill deadband
     const POKEY_AUDIO_CPS_SLEW_DIVISOR = 1000; // max cps delta per sync (~0.1%)
@@ -415,6 +415,8 @@
       }
 
       if (pair34) {
+        // In 16-bit pair mode ch3 is a prescaler; only ch4 (chHigh) independently
+        // underflows.  pulse2 (ch3 clock used for HP filter on ch1) stays 0.
         if (st.channels[2].clkDivCycles === 1) {
           pulse3 = pokeyAudioPairTick(
             st,
@@ -422,7 +424,6 @@
             st.channels[3],
             audctl,
           );
-          pulse2 = pulse3;
         } else {
           st.channels[2].clkAccCycles = (st.channels[2].clkAccCycles + 1) | 0;
           if (st.channels[2].clkAccCycles >= st.channels[2].clkDivCycles) {
@@ -434,7 +435,6 @@
               st.channels[3],
               audctl,
             );
-            pulse2 = pulse3;
           }
         }
       } else {
@@ -460,11 +460,20 @@
       if (pulse3 && audctl & 0x02) st.hp2Latch = st.channels[1].output & 1;
     }
 
+    // Per-channel non-linear volume (~3 dB/step). Index 15 => 1.0 (normalized).
+    const POKEY_CHAN_VOL_TABLE = [
+      0.000, 0.008, 0.011, 0.016, 0.022, 0.031, 0.044, 0.063,
+      0.088, 0.125, 0.177, 0.250, 0.354, 0.500, 0.707, 1.000,
+    ];
+    // Soft-clip compressed maximum: 1.0 + 3.0 * 0.75 (all 4 ch at vol=15).
+    const POKEY_MIX_COMPRESSED_MAX = 3.25;
+
     function pokeyAudioMixCycleSample(st) {
       const audctl = st.audctl & 0xff;
       const pair12 = (audctl & 0x10) !== 0;
       const pair34 = (audctl & 0x08) !== 0;
-      let sum = 0;
+      const twoTone = (st.skctl & 0x08) !== 0;
+      let sum = 0.0;
 
       for (let i = 0; i < 4; i++) {
         if (i === 0 && pair12) continue;
@@ -478,20 +487,21 @@
         const volOnly = (audc & 0x10) !== 0;
         let bit = volOnly ? 1 : ch.output & 1;
 
+        // Two-tone mode (SKCTL bit 3): ch1 output ANDed with ch2 flip-flop.
+        if (i === 0 && twoTone) bit &= st.channels[1].output & 1;
+
         if (!volOnly) {
           if (i === 0 && audctl & 0x04) bit ^= st.hp1Latch & 1;
           if (i === 1 && audctl & 0x02) bit ^= st.hp2Latch & 1;
         }
 
-        sum += bit * vol;
+        sum += POKEY_CHAN_VOL_TABLE[vol] * bit;
       }
 
-      if (sum < 0) sum = 0;
-      if (sum > 60) sum = 60;
+      // Soft-clip: compress beyond one channel's max (transistor output stage).
+      if (sum > 1.0) sum = 1.0 + (sum - 1.0) * 0.75;
 
-      // Keep a centered raw mix in [-0.5..+0.5]. Gain and DC filtering are applied
-      // after resampling so they operate in the final audio sample domain.
-      return (sum - 30) / 60;
+      return sum / POKEY_MIX_COMPRESSED_MAX;
     }
 
     function pokeyAudioNextPulseCycles(counter, clockCh) {
@@ -682,52 +692,19 @@
 
     function pokeyAudioOnRegisterWrite(st, addr, v) {
       if (!st) return;
-      let ch;
 
       switch (addr & 0xffff) {
         case IO_AUDF1_POT0:
-          ch = st.channels[0];
-          ch.audf = v & 0xff;
-          ch.counter = st.audctl & 0x40 ? (v & 0xff) + 4 : (v & 0xff) + 1;
-          if (st.audctl & 0x10) {
-            const period12 =
-              (((st.channels[1].audf & 0xff) << 8) | (v & 0xff)) >>> 0;
-            st.channels[1].counter =
-              st.audctl & 0x40 ? period12 + 7 : period12 + 1;
-          }
+          st.channels[0].audf = v & 0xff;
           break;
         case IO_AUDF2_POT2:
-          ch = st.channels[1];
-          ch.audf = v & 0xff;
-          ch.counter = ((v & 0xff) + 1) | 0;
-          if (st.audctl & 0x10) {
-            const period12b =
-              (((v & 0xff) << 8) | (st.channels[0].audf & 0xff)) >>> 0;
-            st.channels[1].counter =
-              st.audctl & 0x40 ? period12b + 7 : period12b + 1;
-          }
+          st.channels[1].audf = v & 0xff;
           break;
         case IO_AUDF3_POT4:
-          ch = st.channels[2];
-          ch.audf = v & 0xff;
-          ch.counter = st.audctl & 0x20 ? (v & 0xff) + 4 : (v & 0xff) + 1;
-          if (st.audctl & 0x08) {
-            const period34 =
-              (((st.channels[3].audf & 0xff) << 8) | (v & 0xff)) >>> 0;
-            st.channels[3].counter =
-              st.audctl & 0x20 ? period34 + 7 : period34 + 1;
-          }
+          st.channels[2].audf = v & 0xff;
           break;
         case IO_AUDF4_POT6:
-          ch = st.channels[3];
-          ch.audf = v & 0xff;
-          ch.counter = ((v & 0xff) + 1) | 0;
-          if (st.audctl & 0x08) {
-            const period34b =
-              (((v & 0xff) << 8) | (st.channels[2].audf & 0xff)) >>> 0;
-            st.channels[3].counter =
-              st.audctl & 0x20 ? period34b + 7 : period34b + 1;
-          }
+          st.channels[3].audf = v & 0xff;
           break;
 
         case IO_AUDC1_POT1:
@@ -746,7 +723,6 @@
         case IO_AUDCTL_ALLPOT: {
           st.audctl = v & 0xff;
           pokeyAudioRecomputeClocks(st.channels, st.audctl);
-          pokeyAudioReloadDividerCounters(st);
           break;
         }
 
@@ -839,23 +815,34 @@
         let left = runCycles;
 
         while (left > 0) {
-          let cyclesUntilSample =
-            ((cps - samplePhase + POKEY_FP_ONE - 1) / POKEY_FP_ONE) | 0;
-          if (cyclesUntilSample < 1) cyclesUntilSample = 1;
-          const batch = left < cyclesUntilSample ? left : cyclesUntilSample;
+          const cyclesNeededFp = cps - samplePhase;
+          let batchFp = POKEY_FP_ONE * left;
 
-          samplePhase += POKEY_FP_ONE * batch;
-          left -= batch;
-
-          while (samplePhase >= cps) {
-            // Match native Pokey.c behavior: sample the current level directly.
-            // This avoids extra averaging blur on transients/high harmonics.
-            tmp[tmpCount++] = pokeyAudioFinalizeSample(st, level);
-            samplePhase -= cps;
+          if (batchFp < cyclesNeededFp) {
+            st.sampleAccum += level * batchFp;
+            samplePhase += batchFp;
+            left = 0;
+          } else {
+            st.sampleAccum += level * cyclesNeededFp;
+            tmp[tmpCount++] = pokeyAudioFinalizeSample(st, st.sampleAccum / cps);
             if (tmpCount === tmp.length) {
               pokeyAudioRingWrite(st, tmp, tmpCount);
               tmpCount = 0;
             }
+
+            batchFp -= cyclesNeededFp;
+            while (batchFp >= cps) {
+              tmp[tmpCount++] = pokeyAudioFinalizeSample(st, level);
+              if (tmpCount === tmp.length) {
+                pokeyAudioRingWrite(st, tmp, tmpCount);
+                tmpCount = 0;
+              }
+              batchFp -= cps;
+            }
+
+            st.sampleAccum = level * batchFp;
+            samplePhase = batchFp;
+            left = 0;
           }
         }
 
