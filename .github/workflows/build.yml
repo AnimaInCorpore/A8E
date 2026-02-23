@@ -77,6 +77,36 @@ jobs:
           name: A8E-macos
           path: dist/A8E-${{ env.A8E_RELEASE_TAG }}-macos
 
+  build-macos-arm64:
+    name: macOS (Apple Silicon)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref }}
+
+      - name: Install Dependencies
+        run: brew install cmake sdl12-compat
+
+      - name: Configure and Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
+          cmake --build build -j4
+
+      - name: Package binary (tags only)
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.release_tag, 'v'))
+        run: |
+          mkdir -p dist
+          cp build/A8E/A8E "dist/A8E-${A8E_RELEASE_TAG}-macos-arm64"
+          chmod +x "dist/A8E-${A8E_RELEASE_TAG}-macos-arm64"
+
+      - name: Upload artifact (tags only)
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.release_tag, 'v'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: A8E-macos-arm64
+          path: dist/A8E-${{ env.A8E_RELEASE_TAG }}-macos-arm64
+
   build-windows-msvc:
     name: Windows (MSVC)
     runs-on: windows-latest
@@ -159,6 +189,7 @@ jobs:
     needs:
       - build-linux
       - build-macos
+      - build-macos-arm64
       - build-windows-msvc
       - build-windows-mingw
     runs-on: ubuntu-latest
@@ -178,5 +209,6 @@ jobs:
           files: |
             release-assets/A8E-linux/A8E-${{ env.A8E_RELEASE_TAG }}-linux
             release-assets/A8E-macos/A8E-${{ env.A8E_RELEASE_TAG }}-macos
+            release-assets/A8E-macos-arm64/A8E-${{ env.A8E_RELEASE_TAG }}-macos-arm64
             release-assets/A8E-windows-msvc/A8E-${{ env.A8E_RELEASE_TAG }}-windows-msvc.exe
             release-assets/A8E-windows-mingw/A8E-${{ env.A8E_RELEASE_TAG }}-windows-mingw.exe
