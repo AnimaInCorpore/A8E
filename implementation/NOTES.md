@@ -43,6 +43,7 @@ Process rule: review this file before planning any improvement, and update it af
 - [Debug](jsA8E/DEBUG.md)
 
 ## Recent Improvements
+- 2026-02-23: `.github/workflows/build.yml` now packages Linux/macOS release artifacts as standalone `tar.gz` bundles that include SDL runtime libraries (`libSDL-1.2.so.0` or `libSDL-1.2.0.dylib`) and adds packaging-time dependency checks (`ldd`/`otool`) to fail on unresolved or Homebrew-linked SDL paths.
 - 2026-02-23: `jsA8E/version.json` runtime build version updated from `v1.1.1` to `v1.2.0`.
 - 2026-02-23: HostFS directory behavior is now explicitly documented as a design choice: keep a flat filename namespace (no subdirectory hierarchy) for Atari DOS/FMS-style compatibility in the H: workflow.
 - 2026-02-23: `jsA8E/js/app/hostfs_ui.js` status bar now shows DOS-style `FREE SECTORS` in the HostFS panel using the same logical model as H: (`999` sectors, `128` bytes per sector, per-file sector rounding), alongside total byte size.
