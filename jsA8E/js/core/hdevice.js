@@ -33,6 +33,7 @@
   const STA_INVALID_CMD = 0x84;
   const STA_NOT_OPEN = 0x85;
   const STA_INVALID_IOCB = 0x86;
+  const STA_DISK_FULL = 0xa2;
   // DOS/FMS-compatible file errors
   const STA_FILE_EXISTS = 0xae; // duplicate filename
   const STA_FILE_NOT_FOUND = 0xaa;
@@ -48,6 +49,8 @@
   // Approximate host-side CIO timing so H: calls are not zero-cycle operations.
   const HDEVICE_CIO_BASE_CYCLES = 96;
   const HDEVICE_CIO_PER_BYTE_CYCLES = 2;
+  const HDEVICE_SECTOR_SIZE = 128;
+  const HDEVICE_TOTAL_SECTORS = 999;
 
   // Atari EOL character
   const ATARI_EOL = 0x9b;
@@ -198,6 +201,39 @@
         ch.writeBuffer.push(b);
       }
 
+      function _bytesToSectors(sizeBytes) {
+        return Math.max(1, Math.ceil(Math.max(0, sizeBytes | 0) / HDEVICE_SECTOR_SIZE));
+      }
+
+      function _canStoreFileSize(nextName, nextSizeBytes) {
+        const allFiles = hostFs.listFiles();
+        let usedSectors = 0;
+        let currentSectors = 0;
+        for (let i = 0; i < allFiles.length; i++) {
+          const info = allFiles[i];
+          if (info.name === nextName) {
+            currentSectors = _bytesToSectors(info.size);
+          } else {
+            usedSectors += _bytesToSectors(info.size);
+          }
+        }
+        const nextSectors = _bytesToSectors(nextSizeBytes);
+        const allowedSectors = HDEVICE_TOTAL_SECTORS - usedSectors;
+        // If storage is already over the budget, allow same-size or smaller
+        // rewrites of the current file but block further growth.
+        const maxForThisFile = Math.max(currentSectors, allowedSectors);
+        return nextSectors <= maxForThisFile;
+      }
+
+      function _computeFreeSectors() {
+        const allFiles = hostFs.listFiles();
+        let usedSectors = 0;
+        for (let i = 0; i < allFiles.length; i++) {
+          usedSectors += _bytesToSectors(allFiles[i].size);
+        }
+        return Math.max(0, HDEVICE_TOTAL_SECTORS - usedSectors);
+      }
+
       /**
        * Format a directory listing entry in Atari DOS style.
        * Returns an array of ATASCII bytes including trailing EOL.
@@ -210,7 +246,7 @@
         while (baseName.length < 8) baseName += " ";
         while (ext.length < 3) ext += " ";
         // Size in sectors (128 bytes per sector, round up)
-        const sectors = Math.max(1, Math.ceil(size / 128));
+        const sectors = _bytesToSectors(size);
         let sizeStr = "" + sectors;
         while (sizeStr.length < 3) sizeStr = " " + sizeStr;
         const prefix = locked ? "*" : " ";
@@ -223,9 +259,8 @@
         return bytes;
       }
 
-      function _formatDirFooter(fileCount) {
-        let free = 999 - fileCount;
-        if (free < 0) free = 0;
+      function _formatDirFooter(freeSectors) {
+        const free = Math.max(0, freeSectors | 0);
         const line = free + " FREE SECTORS";
         const bytes = [];
         for (let i = 0; i < line.length; i++) {
@@ -265,7 +300,7 @@
               _formatDirEntry(files[fi].name, files[fi].size, files[fi].locked),
             );
           }
-          listing.push(_formatDirFooter(files.length));
+          listing.push(_formatDirFooter(_computeFreeSectors()));
 
           ch.isOpen = true;
           ch.mode = OPEN_DIRECTORY;
@@ -366,7 +401,15 @@
         }
         // Flush write buffer
         if (ch.writeBuffer && ch.fileName) {
-          hostFs.writeFile(ch.fileName, new Uint8Array(ch.writeBuffer));
+          if (!_canStoreFileSize(ch.fileName, ch.writeBuffer.length)) {
+            _cioReturn(ctx, x, STA_DISK_FULL);
+            return;
+          }
+          if (!hostFs.writeFile(ch.fileName, new Uint8Array(ch.writeBuffer))) {
+            const stat = hostFs.getStatus(ch.fileName);
+            _cioReturn(ctx, x, stat && stat.locked ? STA_FILE_LOCKED : STA_INVALID_CMD);
+            return;
+          }
         }
         ch.isOpen = false;
         ch.fileName = null;

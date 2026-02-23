@@ -2,6 +2,8 @@
   "use strict";
 
   const Util = window.A8EUtil;
+  const HOSTFS_LOGICAL_TOTAL_SECTORS = 999;
+  const HOSTFS_LOGICAL_SECTOR_SIZE = 128;
 
   // Atari 8-bit file type metadata used for icons in the file list
   const ATARI_TYPES = {
@@ -35,6 +37,17 @@
 
   function _totalSize(files) {
     return files.reduce(function (acc, f) { return acc + f.size; }, 0);
+  }
+
+  function _bytesToSectors(sizeBytes) {
+    return Math.max(1, Math.ceil(Math.max(0, sizeBytes) / HOSTFS_LOGICAL_SECTOR_SIZE));
+  }
+
+  function _freeSectors(files) {
+    const used = files.reduce(function (acc, f) {
+      return acc + _bytesToSectors(f.size);
+    }, 0);
+    return Math.max(0, HOSTFS_LOGICAL_TOTAL_SECTORS - used);
   }
 
   /**
@@ -289,7 +302,8 @@
         statCount.textContent = files.length === 1 ? "1 file" : files.length + " files";
       }
       if (statTotal) {
-        statTotal.textContent = files.length ? _formatSize(_totalSize(files)) : "";
+        const totalSize = files.length ? _formatSize(_totalSize(files)) + " | " : "";
+        statTotal.textContent = totalSize + _freeSectors(files) + " FREE SECTORS";
       }
     }
 
@@ -499,9 +513,13 @@
       if (!listEl || panel.hidden) return;
       const clientH   = document.documentElement.clientHeight;
       const rect      = listEl.getBoundingClientRect();
+      const isEmpty   = !!listEl.querySelector(".hostfs-empty");
+      const minHeight = isEmpty ? 150 : 96;
       // Keep at least 60 px of bottom margin (status bar + gap)
       const available = clientH - rect.top - 60;
-      listEl.style.maxHeight = Math.max(80, Math.min(available, clientH * 0.6)) + "px";
+      const maxHeight = Math.max(minHeight, Math.min(available, clientH * 0.6));
+      listEl.style.minHeight = minHeight + "px";
+      listEl.style.maxHeight = maxHeight + "px";
     }
 
     let _resizeTimer = null;

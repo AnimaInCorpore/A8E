@@ -1327,7 +1327,8 @@ canvas.crtEnabled {
 
 /* ---- H: Device File Manager (Atari 800 XL themed) ---- */
 .hostfsPanel {
-  width: 100%;
+  width: min(100%, 1083px);
+  min-height: clamp(220px, 36vh, 420px);
   border: 1px solid #1e3455;
   border-radius: 6px;
   background: #07101e;
@@ -1337,6 +1338,7 @@ canvas.crtEnabled {
   flex-direction: column;
   overflow: hidden;
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  align-self: center;
 }
 .hostfsPanel[hidden] {
   display: none;
@@ -1450,6 +1452,8 @@ canvas.crtEnabled {
 .hostfs-drop-zone {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
   position: relative;
   transition: background 0.15s;
@@ -1475,9 +1479,10 @@ canvas.crtEnabled {
 }
 /* File list */
 .hostfs-list {
+  flex: 1 1 auto;
   overflow-y: auto;
   overflow-x: hidden;
-  min-height: 60px;
+  min-height: 96px;
 }
 .hostfs-list::-webkit-scrollbar {
   width: 5px;
@@ -1508,9 +1513,9 @@ canvas.crtEnabled {
 .hostfs-empty {
   text-align: center;
   color: #2a4060;
-  padding: 22px 0 16px;
-  font-size: 12px;
-  line-height: 2.2;
+  padding: 28px 0 20px;
+  font-size: 13px;
+  line-height: 2;
 }
 /* Column layout (shared for header + rows) */
 .hostfs-col {
