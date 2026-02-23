@@ -1355,13 +1355,10 @@ canvas.crtEnabled {
 }
 .hostfs-title-icon {
   color: var(--accent);
-  font-size: 13px;
 }
 .hostfs-title-text {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--accent);
-  letter-spacing: 0.5px;
-  font-size: 13px;
 }
 .hostfs-title-path {
   color: #3a607a;
@@ -1379,7 +1376,6 @@ canvas.crtEnabled {
   border-radius: 3px;
   padding: 3px 8px;
   cursor: pointer;
-  font-size: 11px;
   white-space: nowrap;
   transition: border-color 0.15s, color 0.15s;
 }
@@ -1405,7 +1401,6 @@ canvas.crtEnabled {
   border-radius: 3px;
   padding: 2px 7px;
   cursor: pointer;
-  font-size: 11px;
   transition: border-color 0.15s, color 0.15s, background 0.15s;
   white-space: nowrap;
   line-height: 1.6;
@@ -1471,10 +1466,7 @@ canvas.crtEnabled {
   background: #07121e;
   border-bottom: 1px solid #152840;
   color: #3a5870;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
+  font-size: 11px;
   flex-shrink: 0;
 }
 /* File list */
@@ -1502,7 +1494,7 @@ canvas.crtEnabled {
   text-align: center;
   color: #1e3050;
   font-size: 11px;
-  padding: 5px 0 6px;
+  padding: 4px 0 5px;
   pointer-events: none;
   transition: color 0.15s;
 }
@@ -1514,7 +1506,6 @@ canvas.crtEnabled {
   text-align: center;
   color: #2a4060;
   padding: 28px 0 20px;
-  font-size: 13px;
   line-height: 2;
 }
 /* Column layout (shared for header + rows) */
@@ -1531,7 +1522,6 @@ canvas.crtEnabled {
   width: 28px;
   flex-shrink: 0;
   justify-content: center;
-  font-size: 11px;
 }
 .hostfs-col-name {
   flex: 1;
@@ -1546,7 +1536,7 @@ canvas.crtEnabled {
   flex-shrink: 0;
   justify-content: flex-end;
   color: #3a5870;
-  font-size: 10px;
+  font-size: 11px;
 }
 .hostfs-col-actions {
   width: 52px;
@@ -1585,7 +1575,7 @@ canvas.crtEnabled {
   color: #4a7090;
 }
 .hostfs-lock-icon {
-  font-size: 9px;
+  font-size: 11px;
   color: #c89030;
   margin-left: 5px;
 }
@@ -1605,7 +1595,6 @@ canvas.crtEnabled {
   color: #1e3855;
   cursor: pointer;
   padding: 2px 4px;
-  font-size: 11px;
   border-radius: 3px;
   transition: color 0.1s, background 0.1s;
   line-height: 1;
@@ -1631,7 +1620,7 @@ canvas.crtEnabled {
   background: #050c18;
   border-top: 1px solid #152840;
   color: #3a5068;
-  font-size: 10px;
+  font-size: 11px;
   flex-shrink: 0;
 }
 .hostfs-stat-sel {
