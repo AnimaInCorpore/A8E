@@ -1,0 +1,8 @@
+# Debug
+
+- Files: `A8E/A8E.c`, `A8E/AtariIo.h`, `A8E/6502.c`, `A8E/AtariIo.c`, `A8E/Antic.c`, `A8E/Pokey.c`, `A8E/Pia.c`, `A8E/README.md`
+- Purpose: document native (`A8E/`) debugging entry points, compile-time log switches, and current runtime limits.
+- Status: verified on 2026-02-23 (`implemented`, with usability limits below).
+- Notes: runtime live disassembly is enabled via `ENABLE_VERBOSE_DEBUGGING` (defined in `AtariIo.h` by default). In `A8E.c`, pressing `F12` sets a latch (`cDisassembleFlag = 1`) that switches the main loop into a per-cycle trace path printing `_6502_Status()` plus `_6502_DisassembleLive()` output. Compile-time trace switches are wired in code and can be set in `AtariIo.h` or via `-D...`: `VERBOSE_REGISTER` (chip register access logs), `VERBOSE_DL` (display-list and DLI timing logs), `VERBOSE_SIO` (SIO command/data + timed request logs), `VERBOSE_IRQ` (IRQEN transition logs), `VERBOSE_NMI` (NMIEN transition logs), `VERBOSE_ROM_SWITCH` (PIA PORTB ROM bank switch logs). `AtariIoStatus()` provides a detailed IRQ/NMI/port snapshot printer but is currently not bound to a runtime key/CLI command.
+- Issues: `F12` disassembly is a one-way runtime latch (restart required to stop). All verbose logging is compile-time and `printf`-based (no runtime filtering); high-volume modes, especially `VERBOSE_REGISTER`, noticeably reduce emulation speed. `AtariIoStatus()` exists but is not reachable through the default UI/event loop.
+- Todo: add a runtime toggle to exit disassembly mode without restart; expose `AtariIoStatus()` behind a debug hotkey/command; consider lightweight runtime log category toggles to avoid rebuilds for common diagnostics.
