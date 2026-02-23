@@ -163,10 +163,10 @@
       });
     }
 
-    // --- Sort buttons ---
-    panel.querySelectorAll(".hostfs-sort-btn").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        const s = btn.dataset.sort;
+    // --- Sort column headers ---
+    panel.querySelectorAll(".hostfs-sort-col[data-sort]").forEach(function (col) {
+      col.addEventListener("click", function () {
+        const s = col.dataset.sort;
         if (sortBy === s) {
           sortAsc = !sortAsc;
         } else {
@@ -181,10 +181,10 @@
     // --- Helpers ---
 
     function _updateSortUI() {
-      panel.querySelectorAll(".hostfs-sort-btn").forEach(function (btn) {
-        const isActive = btn.dataset.sort === sortBy;
-        btn.classList.toggle("active", isActive);
-        const ic = btn.querySelector(".sort-icon");
+      panel.querySelectorAll(".hostfs-sort-col[data-sort]").forEach(function (col) {
+        const isActive = col.dataset.sort === sortBy;
+        col.classList.toggle("active", isActive);
+        const ic = col.querySelector(".sort-icon");
         if (!ic) return;
         if (isActive) {
           ic.className = "sort-icon fa-solid " + (sortAsc ? "fa-sort-up" : "fa-sort-down");

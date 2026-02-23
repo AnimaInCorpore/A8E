@@ -280,7 +280,6 @@
         <div class="hostfs-titlebar">
           <i class="fa-solid fa-hard-drive hostfs-title-icon"></i>
           <span class="hostfs-title-text">H: Files</span>
-          <span class="hostfs-title-path">H:\</span>
           <span class="hostfs-flex"></span>
           <button class="hostfs-upload-btn" title="Upload files to H:">
             <i class="fa-solid fa-upload"></i> Upload
@@ -301,16 +300,11 @@
           </button>
           <span class="hostfs-toolbar-sep"></span>
           <button class="hostfs-btn hostfs-dl-sel-btn" title="Download selected files" disabled>
-            <i class="fa-solid fa-download"></i> DL
+            <i class="fa-solid fa-download"></i> Download
           </button>
           <button class="hostfs-btn hostfs-btn-danger hostfs-del-sel-btn" title="Delete selected files" disabled>
-            <i class="fa-solid fa-trash"></i> Del
+            <i class="fa-solid fa-trash"></i> Delete
           </button>
-          <span class="hostfs-flex"></span>
-          <span class="hostfs-sort-label">Sort:</span>
-          <button class="hostfs-btn hostfs-sort-btn active" data-sort="name">Name <i class="sort-icon fa-solid fa-sort-up"></i></button>
-          <button class="hostfs-btn hostfs-sort-btn" data-sort="size">Size <i class="sort-icon fa-solid fa-sort"></i></button>
-          <button class="hostfs-btn hostfs-sort-btn" data-sort="type">Type <i class="sort-icon fa-solid fa-sort"></i></button>
         </div>
         <!-- File list / drop zone -->
         <div class="hostfs-drop-zone">
@@ -318,9 +312,15 @@
             <span class="hostfs-col hostfs-col-chk">
               <input type="checkbox" class="hostfs-master-chk" title="Select / Deselect all" />
             </span>
-            <span class="hostfs-col hostfs-col-icon"></span>
-            <span class="hostfs-col hostfs-col-name">Name</span>
-            <span class="hostfs-col hostfs-col-size">Size</span>
+            <span class="hostfs-col hostfs-col-icon hostfs-sort-col" data-sort="type" title="Sort by file type">
+              <i class="sort-icon fa-solid fa-sort"></i>
+            </span>
+            <span class="hostfs-col hostfs-col-name hostfs-sort-col active" data-sort="name" title="Sort by name">
+              Name <i class="sort-icon fa-solid fa-sort-up"></i>
+            </span>
+            <span class="hostfs-col hostfs-col-size hostfs-sort-col" data-sort="size" title="Sort by size">
+              Size <i class="sort-icon fa-solid fa-sort"></i>
+            </span>
             <span class="hostfs-col hostfs-col-actions"></span>
           </div>
           <div class="hostfs-list"></div>
