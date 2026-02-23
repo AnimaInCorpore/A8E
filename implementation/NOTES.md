@@ -43,6 +43,7 @@ Process rule: review this file before planning any improvement, and update it af
 - [Debug](jsA8E/DEBUG.md)
 
 ## Recent Improvements
+- 2026-02-23: `jsA8E/version.json` runtime build version updated from `v1.1.1` to `v1.2.0`.
 - 2026-02-23: HostFS directory behavior is now explicitly documented as a design choice: keep a flat filename namespace (no subdirectory hierarchy) for Atari DOS/FMS-style compatibility in the H: workflow.
 - 2026-02-23: `jsA8E/js/app/hostfs_ui.js` status bar now shows DOS-style `FREE SECTORS` in the HostFS panel using the same logical model as H: (`999` sectors, `128` bytes per sector, per-file sector rounding), alongside total byte size.
 - 2026-02-23: `jsA8E/js/core/hdevice.js` now computes H: `FREE SECTORS` from file-size math (128-byte sectors) with a 999-sector logical capacity budget instead of subtracting file count, and returns `disk full` on `CLOSE` when a write would exceed that budget.
