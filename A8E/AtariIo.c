@@ -954,6 +954,7 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
 	u32 lCycle;
 	u8 cMask = 0x00;
+	u8 cPriorMode = SRAM[IO_PRIOR] >> 6;
 
 	if((pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine) == 1)
 		FIXED_ADD(pIoData->sDisplayMemoryAddress, 0x0fff, pIoData->tDrawLineData.lBytesPerLine);
@@ -983,13 +984,13 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 			}
 
 			cData = RAM[((SRAM[IO_CHBASE] << 8) & 0xfc00) + cCharacter * 8 + lVerticalScrollOffset]; 
-			if(cInverse && (SRAM[IO_PRIOR] >> 6) != 0)
+			if(cInverse && cPriorMode != 0)
 				cData ^= 0xff;
 
 			cMask = 0x80;
 		}
 
-		switch(SRAM[IO_PRIOR] >> 6)
+		switch(cPriorMode)
 		{
 		case 0:
 			if(cData & cMask)
@@ -1155,6 +1156,7 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
 	u32 lCycle;
 	u8 cMask = 0x00;
+	u8 cPriorMode = SRAM[IO_PRIOR] >> 6;
 
 	if(lLineDelta == 1)
 		FIXED_ADD(pIoData->sDisplayMemoryAddress, 0x0fff, pIoData->tDrawLineData.lBytesPerLine);
@@ -1199,13 +1201,13 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 				else
 					cData = RAM[sCharacterBaseAddress + cCharacter * 8 + (2 - lLineDelta)];
 			}
-			if(cInverse && (SRAM[IO_PRIOR] >> 6) != 0)
+			if(cInverse && cPriorMode != 0)
 				cData ^= 0xff;
 
 			cMask = 0x80;
 		}
 
-		switch(SRAM[IO_PRIOR] >> 6)
+		switch(cPriorMode)
 		{
 		case 0:
 			if(cData & cMask)

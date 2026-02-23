@@ -41,3 +41,6 @@ Process rule: review this file before planning any improvement, and update it af
 - [UI / Interface](jsA8E/UI.md)
 - [Worker Boundary](jsA8E/WORKER.md)
 - [Debug](jsA8E/DEBUG.md)
+
+## Recent Improvements
+- 2026-02-23: `A8E/AtariIo.c` ANTIC modes 2 and 3 now snapshot `IO_PRIOR` high bits once per scanline draw call and reuse that value for inversion and mode branching. This aligns C behavior with existing JS/C mode F snapshot semantics.
