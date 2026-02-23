@@ -47,9 +47,9 @@ Process rule: review this file before planning any improvement, and update it af
 ### POKEY
 - Files: `A8E/Pokey.c`, `A8E/Pokey.h`
 - Purpose: provide sound generation, timers, keyboard, and serial timing.
-- Notes: digital high-pass filter behavior is implemented (AUDCTL-controlled); volume-only paths can bypass filtering.
-- Issues: none tracked.
-- Todo: track audio balance and filter behavior changes against browser output.
+- Notes: digital high-pass filter behavior is implemented (AUDCTL-controlled); volume-only paths can bypass filtering. Mixer uses a per-channel exponential volume table (`g_pokey_chan_vol`, ~3 dB/step, vol=15 → 8000 units). Unipolar mixer output is DC-blocked via a first-order high-pass filter (~20 Hz cutoff) before int16 output. Soft-clipping compresses sums beyond one channel's maximum (8000) to approximate hardware output-stage saturation.
+- Issues: The exponential volume table (introduced 2026-02-23) creates a large dynamic range between volume settings — vol=15 is ~11× louder than vol=8, vs ~1.9× with the previous linear table. Programs that balance channels using different volume settings will sound more unbalanced than before. Channels in volume-only mode (AUDC bit4) at a constant level are attenuated to silence by the DC block filter within ~50 ms, since they present a pure DC signal. Single-channel absolute output level (~10.7% of int16 max at vol=15) is lower than with the previous bipolar DAC table (~18%), though the old table was producing a DC-offset signal without AC coupling.
+- Todo: consider reducing dB-per-step (e.g. ~1.5 dB instead of 3 dB) or increasing the normalization gain to improve single-channel perceived loudness; verify volume balance against browser (`jsA8E/`) POKEY output and real hardware recordings.
 
 ### PIA
 - Files: `A8E/Pia.c`, `A8E/Pia.h`
@@ -70,7 +70,7 @@ Process rule: review this file before planning any improvement, and update it af
 ### Core Emulation
 - Files: `jsA8E/js/core/cpu.js`, `jsA8E/js/core/cpu_tables.js`, `jsA8E/js/core/antic.js`, `jsA8E/js/core/gtia.js`, `jsA8E/js/core/pokey.js`, `jsA8E/js/core/pokey_sio.js`, `jsA8E/js/core/memory.js`, `jsA8E/js/core/io.js`, `jsA8E/js/core/atari.js`, `jsA8E/js/core/hw.js`, `jsA8E/js/core/playfield.js`, `jsA8E/js/core/state.js`
 - Purpose: mirror Atari hardware behavior in JavaScript with timing-compatible execution.
-- Notes: CPU/ANTIC/GTIA/POKEY flow is coordinated in core modules with shared machine state.
+- Notes: CPU/ANTIC/GTIA/POKEY flow is coordinated in core modules with shared machine state. `playfield.js` implements `drawLineMode2`–`drawLineModeF` for ANTIC display modes 2–F.
 - Issues: none tracked.
 - Todo: keep behavior in sync with native `A8E/` changes.
 
@@ -108,10 +108,3 @@ Process rule: review this file before planning any improvement, and update it af
 - Notes: worker messaging transports frame/audio/control signals between runtime parts.
 - Issues: none tracked.
 - Todo: log protocol changes whenever message schema changes.
-
-## Improvement Log (Keep Current)
-- Format: `YYYY-MM-DD - area - short change summary - touched file(s)/folder(s)`
-- 2026-02-23 - docs - initial notes structure created - `./`
-- 2026-02-23 - docs - switched to folder-only references and added Purpose/Notes/Todo format - `./`
-- 2026-02-23 - docs - re-added per-section files lists for faster agent navigation - `NOTES.md`
-- 2026-02-23 - docs - removed Folder fields and added Issues across all sections - `NOTES.md`
