@@ -276,6 +276,8 @@
     const btnKeyboard = document.getElementById("btnKeyboard");
     const btnKeyboardMap = document.getElementById("btnKeyboardMap");
     const btnOptionOnStart = document.getElementById("btnOptionOnStart");
+    const btnHostFs = document.getElementById("btnHostFs");
+    const btnAssembler = document.getElementById("btnAssembler");
 
     function getKeyboardMappingModeFromUi() {
       if (!btnKeyboardMap) return "translated";
@@ -1609,7 +1611,17 @@
       window.A8EHostFsUI.init({
         app: app,
         panel: document.getElementById("hostfsPanel"),
-        button: document.getElementById("btnHostFs"),
+        button: btnHostFs,
+      });
+    }
+
+    if (window.A8EAssemblerUI && app) {
+      window.A8EAssemblerUI.init({
+        app: app,
+        panel: document.getElementById("assemblerPanel"),
+        button: btnAssembler,
+        onMediaChanged: updateStatus,
+        focusCanvas: focusCanvas,
       });
     }
   }

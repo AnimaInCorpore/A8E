@@ -66,6 +66,7 @@
                   <span class="tt-icon"><i class="fa-solid fa-language"></i> key map</span>
                   <span class="tt-icon"><i class="fa-solid fa-hand-point-down"></i> BASIC off</span>
                   <span class="tt-icon"><i class="fa-solid fa-folder-open"></i> HostFS</span>
+                  <span class="tt-icon"><i class="fa-solid fa-file-code"></i> assembler</span>
                 </div>
               </div>
             </span>
@@ -125,6 +126,9 @@
           </button>
           <button id="btnHostFs" class="toggle-btn" title="Toggle H: device file manager. Upload files here to access them from the emulated Atari via the H: device." aria-label="Toggle H: device file manager.">
             <i class="fa-solid fa-folder-open"></i>
+          </button>
+          <button id="btnAssembler" class="toggle-btn" title="Toggle assembler editor. Read and write source files on HostFS (H:) and assemble executable XEX files to HostFS." aria-label="Toggle assembler editor panel.">
+            <i class="fa-solid fa-file-code"></i>
           </button>
         </div>
       </div>
@@ -337,6 +341,43 @@
           <span class="hostfs-stat-total"></span>
         </div>
       </section>
+      <section id="assemblerPanel" class="assemblerPanel" hidden aria-label="6502 assembler editor">
+        <div class="asm-titlebar">
+          <i class="fa-solid fa-file-code asm-title-icon"></i>
+          <span class="asm-title-text">Assembler Editor</span>
+          <span class="asm-title-path">HostFS (H:)</span>
+        </div>
+        <div class="asm-toolbar">
+          <label class="asm-label" for="asmSourceName">Source</label>
+          <input id="asmSourceName" class="asm-input asm-source-name" type="text" value="PROGRAM.ASM" maxlength="32" spellcheck="false" />
+          <select class="asm-select asm-source-select" aria-label="HostFS source file list"></select>
+          <button class="asm-btn asm-load-btn" title="Load selected source from HostFS">
+            <i class="fa-solid fa-download"></i> Load H:
+          </button>
+          <button class="asm-btn asm-save-btn" title="Save source to HostFS">
+            <i class="fa-solid fa-floppy-disk"></i> Save H:
+          </button>
+          <span class="asm-toolbar-sep"></span>
+          <label class="asm-label" for="asmOutputName">Executable</label>
+          <input id="asmOutputName" class="asm-input asm-output-name" type="text" value="PROGRAM.XEX" maxlength="32" spellcheck="false" />
+          <button class="asm-btn asm-build-btn" title="Assemble current source and write executable XEX to HostFS">
+            <i class="fa-solid fa-gears"></i> Assemble to H:
+          </button>
+          <button class="asm-btn asm-run-btn" title="Assemble source, write executable XEX to HostFS, load it into D1: and start">
+            <i class="fa-solid fa-play"></i> Run
+          </button>
+        </div>
+        <div class="asm-editor-wrap">
+          <pre class="asm-highlight" aria-hidden="true"></pre>
+          <textarea class="asm-editor" spellcheck="false" wrap="off" aria-label="Assembler source code"></textarea>
+        </div>
+        <div class="asm-errors" hidden>
+          <ul class="asm-error-list" aria-label="Assembler errors"></ul>
+        </div>
+        <div class="asm-statusbar">
+          <span class="asm-status">Ready.</span>
+        </div>
+      </section>
     </main>
 
     <script src="js/shared/util.js"></script>
@@ -364,6 +405,7 @@
     <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
     <script src="js/app/ui.js"></script>
     <script src="js/app/hostfs_ui.js"></script>
+    <script src="js/app/assembler_ui.js"></script>
     <script src="js/app/version.js"></script>
     <script src="js/app/a8e.js"></script>
   </body>

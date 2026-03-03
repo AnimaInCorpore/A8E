@@ -1630,3 +1630,281 @@ canvas.crtEnabled {
 .hostfs-stat-total {
   color: #2a4058;
 }
+
+/* ---- Assembler Editor Panel ---- */
+.assemblerPanel {
+  width: min(100%, 1083px);
+  min-height: clamp(340px, 56vh, 760px);
+  border: 1px solid #1e3455;
+  border-radius: 6px;
+  background: #07101e;
+  margin-top: 8px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  align-self: center;
+}
+
+.assemblerPanel[hidden] {
+  display: none;
+}
+
+.asm-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: linear-gradient(135deg, #0d2040 0%, #091828 100%);
+  border-bottom: 1px solid #1e3455;
+  flex-shrink: 0;
+}
+
+.asm-title-icon {
+  color: var(--accent);
+}
+
+.asm-title-text {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.asm-title-path {
+  color: #3a607a;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.asm-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #090e1c;
+  border-bottom: 1px solid #152840;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.asm-label {
+  color: #6f8aa8;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.asm-input,
+.asm-select {
+  background: #061323;
+  border: 1px solid #1b3657;
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 4px 7px;
+  min-height: 28px;
+}
+
+.asm-input:focus,
+.asm-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(92, 200, 255, 0.2);
+}
+
+.asm-source-name {
+  width: 150px;
+}
+
+.asm-source-select {
+  min-width: 180px;
+  max-width: 280px;
+}
+
+.asm-output-name {
+  width: 150px;
+}
+
+.asm-btn {
+  background: transparent;
+  border: 1px solid #152840;
+  color: #607890;
+  border-radius: 3px;
+  padding: 4px 9px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+.asm-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(92, 200, 255, 0.06);
+}
+
+.asm-run-btn {
+  border-color: #1e4f2e;
+  color: #79d995;
+}
+
+.asm-run-btn:hover:not(:disabled) {
+  border-color: #6be48a;
+  color: #b9ffd0;
+  background: rgba(107, 228, 138, 0.12);
+}
+
+.asm-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.asm-toolbar-sep {
+  width: 1px;
+  height: 16px;
+  background: #152840;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.asm-editor-wrap {
+  flex: 1 1 auto;
+  min-height: 240px;
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: #020914;
+}
+
+.asm-highlight {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  border: 0;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: pre;
+  color: #86a3bf;
+  font: 13px/1.5 "Consolas", "Courier New", monospace;
+  tab-size: 2;
+  padding: 10px 12px;
+}
+
+.asm-editor {
+  position: absolute;
+  inset: 0;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: #d2e7ff;
+  font: 13px/1.5 "Consolas", "Courier New", monospace;
+  tab-size: 2;
+  padding: 10px 12px;
+  overflow: auto;
+}
+
+.asm-editor::selection {
+  background: rgba(110, 190, 255, 0.28);
+}
+
+.asm-tok-comment {
+  color: #5f7f99;
+}
+
+.asm-tok-label {
+  color: #f0c26f;
+}
+
+.asm-tok-directive {
+  color: #74c8ff;
+}
+
+.asm-tok-mnemonic {
+  color: #89df8e;
+}
+
+.asm-tok-number {
+  color: #ffb37d;
+}
+
+.asm-tok-string {
+  color: #ffd37d;
+}
+
+.asm-tok-register {
+  color: #7ddfc6;
+}
+
+.asm-errors {
+  border-top: 1px solid #152840;
+  background: #050b15;
+  max-height: 128px;
+  overflow: auto;
+}
+
+.asm-error-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 8px 6px;
+}
+
+.asm-error-item + .asm-error-item {
+  margin-top: 3px;
+}
+
+.asm-error-btn {
+  width: 100%;
+  border: 1px solid #6b2f2f;
+  background: #2a1010;
+  color: #ffb3a8;
+  text-align: left;
+  padding: 4px 6px;
+  border-radius: 3px;
+  font: 12px/1.4 "Consolas", "Courier New", monospace;
+  cursor: pointer;
+}
+
+.asm-error-btn:hover {
+  border-color: #ff8a7a;
+  background: #3a1414;
+}
+
+.asm-statusbar {
+  display: flex;
+  align-items: center;
+  padding: 4px 10px;
+  background: #050c18;
+  border-top: 1px solid #152840;
+  color: #5f7d9b;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.asm-status.error {
+  color: #ff8a7a;
+}
+
+.asm-status.success {
+  color: #79d995;
+}
+
+@media (max-width: 980px) {
+  .assemblerPanel {
+    width: 100%;
+    align-self: stretch;
+  }
+
+  .asm-source-name,
+  .asm-output-name {
+    width: min(44vw, 220px);
+  }
+
+  .asm-source-select {
+    min-width: min(52vw, 240px);
+    max-width: min(70vw, 300px);
+  }
+}

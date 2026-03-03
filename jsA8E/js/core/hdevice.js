@@ -511,9 +511,10 @@
         }
         _writeIocb(ctx.ram, x, IOCB_ICBLL, toRead & 0xff);
         _writeIocb(ctx.ram, x, IOCB_ICBLH, (toRead >> 8) & 0xff);
-
-        const eof = toRead < reqLen;
-        _cioReturn(ctx, x, eof ? STA_EOF : STA_SUCCESS, toRead);
+        // Match common CIO semantics: report SUCCESS when at least one byte
+        // was transferred, even if this also reached EOF. Report EOF only
+        // when zero bytes are returned on a read request.
+        _cioReturn(ctx, x, toRead > 0 ? STA_SUCCESS : STA_EOF, toRead);
       }
 
       function _cmdPutRecord(ctx, x, ch) {
