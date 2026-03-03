@@ -45,6 +45,13 @@
               </div>
 
               <div class="tt-section">
+                <span class="tt-heading">Assembler</span>
+                <div class="tt-row"><span class="tt-key">Ctrl+S</span> Save source</div>
+                <div class="tt-row"><span class="tt-key">Ctrl+Shift+B</span> Assemble</div>
+                <div class="tt-row"><span class="tt-key">Ctrl+Enter</span> Run</div>
+              </div>
+
+              <div class="tt-section">
                 <span class="tt-heading">Status Icons</span>
                 <div class="tt-icons">
                   <span class="tt-icon"><i class="fa-solid fa-circle-xmark"></i> not loaded</span>
@@ -284,18 +291,22 @@
         <div class="hostfs-titlebar">
           <i class="fa-solid fa-hard-drive hostfs-title-icon"></i>
           <span class="hostfs-title-text">HostFS (H:)</span>
-          <span class="hostfs-flex"></span>
-          <button class="hostfs-upload-btn" title="Upload files to H:">
+        </div>
+        <!-- Toolbar -->
+        <div class="hostfs-toolbar">
+          <label class="hostfs-label">Add</label>
+          <button class="hostfs-btn hostfs-upload-btn" title="Upload files to H:">
             <i class="fa-solid fa-upload"></i> Upload
           </button>
-          <button class="hostfs-folder-btn" title="Upload a folder to H:">
+          <button class="hostfs-btn hostfs-folder-btn" title="Upload a folder to H:">
             <i class="fa-solid fa-folder-open"></i> Folder
           </button>
           <input type="file" class="hostfs-upload-input" multiple hidden />
           <input type="file" class="hostfs-folder-input" webkitdirectory multiple hidden />
-        </div>
-        <!-- Toolbar -->
-        <div class="hostfs-toolbar">
+
+          <span class="hostfs-toolbar-sep"></span>
+
+          <label class="hostfs-label">Select</label>
           <button class="hostfs-btn hostfs-sel-all-btn" title="Select all files">
             <i class="fa-solid fa-check-double"></i> All
           </button>
@@ -348,22 +359,23 @@
           <span class="asm-title-path">HostFS (H:)</span>
         </div>
         <div class="asm-toolbar">
-          <label class="asm-label" for="asmSourceName">Source</label>
-          <input id="asmSourceName" class="asm-input asm-source-name" type="text" value="PROGRAM.ASM" maxlength="32" spellcheck="false" />
-          <select class="asm-select asm-source-select" aria-label="HostFS source file list"></select>
+          <label class="asm-label">File</label>
+          <select id="asmSourceSelect" class="asm-select asm-source-select" aria-label="HostFS source file list"></select>
           <button class="asm-btn asm-load-btn" title="Load selected source from HostFS">
-            <i class="fa-solid fa-download"></i> Load H:
+            <i class="fa-solid fa-download"></i> Load
           </button>
-          <button class="asm-btn asm-save-btn" title="Save source to HostFS">
-            <i class="fa-solid fa-floppy-disk"></i> Save H:
+          <input id="asmSourceName" class="asm-input asm-source-name" type="text" value="PROGRAM.ASM" maxlength="32" spellcheck="false" />
+          <button class="asm-btn asm-save-btn" title="Save source to HostFS (Ctrl+S)">
+            <i class="fa-solid fa-floppy-disk"></i> Save
           </button>
+
           <span class="asm-toolbar-sep"></span>
-          <label class="asm-label" for="asmOutputName">Executable</label>
-          <input id="asmOutputName" class="asm-input asm-output-name" type="text" value="PROGRAM.XEX" maxlength="32" spellcheck="false" />
-          <button class="asm-btn asm-build-btn" title="Assemble current source and write executable XEX to HostFS">
-            <i class="fa-solid fa-gears"></i> Assemble to H:
+
+          <label class="asm-label">Build</label>
+          <button class="asm-btn asm-build-btn" title="Assemble and write .XEX to HostFS (Ctrl+Shift+B)">
+            <i class="fa-solid fa-gears"></i> Assemble
           </button>
-          <button class="asm-btn asm-run-btn" title="Assemble source, write executable XEX to HostFS, load it into D1: and start">
+          <button class="asm-btn asm-run-btn" title="Save, assemble, load into D1: and start (Ctrl+Enter)">
             <i class="fa-solid fa-play"></i> Run
           </button>
         </div>
@@ -377,6 +389,7 @@
         <div class="asm-statusbar">
           <span class="asm-status">Ready.</span>
         </div>
+        <div class="asm-resize-handle" title="Drag to resize editor"></div>
       </section>
     </main>
 

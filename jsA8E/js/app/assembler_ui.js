@@ -29,6 +29,9 @@
   ]);
 
   const SOURCE_EXTS = new Set(["ASM", "S", "SRC", "TXT", "INC", "MAC"]);
+  const PANEL_MIN_HEIGHT = 340;
+  const PANEL_MAX_HEIGHT_RATIO = 0.9;
+  const PANEL_DEFAULT_EXTRA_HEIGHT = 120;
   const DEFAULT_SOURCE_TEMPLATE = [
     "; Atari 8-bit 6502 source",
     ".ORG $2000",
@@ -1239,7 +1242,6 @@
 
     const sourceNameInput = panel.querySelector(".asm-source-name");
     const sourceSelect = panel.querySelector(".asm-source-select");
-    const outputNameInput = panel.querySelector(".asm-output-name");
     const loadBtn = panel.querySelector(".asm-load-btn");
     const saveBtn = panel.querySelector(".asm-save-btn");
     const buildBtn = panel.querySelector(".asm-build-btn");
@@ -1253,7 +1255,6 @@
     if (
       !sourceNameInput ||
       !sourceSelect ||
-      !outputNameInput ||
       !loadBtn ||
       !saveBtn ||
       !buildBtn ||
@@ -1281,6 +1282,14 @@
       status.textContent = message;
       status.className = "asm-status";
       if (kind === "error" || kind === "success") status.classList.add(kind);
+    }
+
+    function deriveOutputName() {
+      var srcName = normalizeFsName(sourceNameInput.value, ".ASM");
+      if (!srcName) return "PROGRAM.XEX";
+      var dot = srcName.lastIndexOf(".");
+      var base = dot > 0 ? srcName.substring(0, dot) : srcName;
+      return base + ".XEX";
     }
 
     let highlightQueued = false;
@@ -1439,6 +1448,10 @@
         return;
       }
       editor.value = decodeBytesToText(data);
+      editor.selectionStart = 0;
+      editor.selectionEnd = 0;
+      editor.scrollTop = 0;
+      editor.scrollLeft = 0;
       sourceNameInput.value = selected;
       queueHighlightRefresh();
       clearErrorList();
@@ -1465,11 +1478,7 @@
     }
 
     function assembleAndStoreExecutable() {
-      const outputName = normalizeFsName(outputNameInput.value, ".XEX");
-      if (!outputName) {
-        setStatus("Enter an executable filename.", "error");
-        return null;
-      }
+      var outputName = deriveOutputName();
 
       const result = assembleToXex(editor.value);
       if (!result.ok) {
@@ -1483,7 +1492,6 @@
         return null;
       }
 
-      outputNameInput.value = outputName;
       clearErrorList();
       return {
         outputName: outputName,
@@ -1505,6 +1513,7 @@
     }
 
     function assembleRunExecutable() {
+      saveToHostFs();
       const built = assembleAndStoreExecutable();
       if (!built) return;
 
@@ -1536,6 +1545,24 @@
     }
 
     function onEditorKeyDown(e) {
+      // Ctrl+S  -> Save
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === "s") {
+        e.preventDefault();
+        saveToHostFs();
+        return;
+      }
+      // Ctrl+Shift+B  -> Assemble
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "B" || e.key === "b")) {
+        e.preventDefault();
+        assembleAndWriteExecutable();
+        return;
+      }
+      // Ctrl+Enter  -> Run
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        assembleRunExecutable();
+        return;
+      }
       if (e.key !== "Tab") return;
       e.preventDefault();
       const start = editor.selectionStart | 0;
@@ -1549,13 +1576,40 @@
       queueHighlightRefresh();
     }
 
+    function sizePanelToViewport() {
+      var screenEl = document.querySelector(".screenPanel");
+      var h = screenEl ? screenEl.getBoundingClientRect().height : 0;
+      var clientH = document.documentElement.clientHeight || window.innerHeight || 0;
+      var maxH = Math.floor(clientH * PANEL_MAX_HEIGHT_RATIO);
+      h += PANEL_DEFAULT_EXTRA_HEIGHT;
+      if (maxH > 0 && h > maxH) h = maxH;
+      if (h < PANEL_MIN_HEIGHT) h = PANEL_MIN_HEIGHT;
+      panel.style.height = h + "px";
+    }
+
+    function focusEditorNoScroll() {
+      if (!editor || typeof editor.focus !== "function") return;
+      try {
+        editor.focus({ preventScroll: true });
+      } catch (_) {
+        editor.focus();
+      }
+    }
+
     button.addEventListener("click", function () {
       const active = button.classList.toggle("active");
       panel.hidden = !active;
       if (active) {
         refreshSourceList();
+        /* Auto-load the first ASM file, or clear editor if none exist */
+        if (!editor.value && sourceSelect.value) {
+          loadFromHostFs();
+        } else if (!editor.value) {
+          clearErrorList();
+        }
+        sizePanelToViewport();
         queueHighlightRefresh();
-        editor.focus();
+        focusEditorNoScroll();
       }
     });
 
@@ -1578,6 +1632,44 @@
       const lineNo = parseInt(target.dataset.line || "0", 10);
       if (lineNo > 0) jumpEditorToLine(lineNo);
     });
+
+    /* ---- Resize handle (drag to change panel height) ---- */
+    var resizeHandle = panel.querySelector(".asm-resize-handle");
+    if (resizeHandle) {
+      var dragStartY = 0;
+      var dragStartH = 0;
+
+      function onResizeMove(e) {
+        var dy = (e.clientY || e.touches && e.touches[0].clientY || 0) - dragStartY;
+        var clientH = document.documentElement.clientHeight || window.innerHeight;
+        var newH = Math.max(PANEL_MIN_HEIGHT, Math.min(clientH * PANEL_MAX_HEIGHT_RATIO, dragStartH + dy));
+        panel.style.height = newH + "px";
+      }
+
+      function onResizeEnd() {
+        document.removeEventListener("mousemove", onResizeMove);
+        document.removeEventListener("mouseup", onResizeEnd);
+        document.removeEventListener("touchmove", onResizeMove);
+        document.removeEventListener("touchend", onResizeEnd);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      }
+
+      function onResizeStart(e) {
+        e.preventDefault();
+        dragStartY = e.clientY || e.touches && e.touches[0].clientY || 0;
+        dragStartH = panel.getBoundingClientRect().height;
+        document.body.style.cursor = "ns-resize";
+        document.body.style.userSelect = "none";
+        document.addEventListener("mousemove", onResizeMove);
+        document.addEventListener("mouseup", onResizeEnd);
+        document.addEventListener("touchmove", onResizeMove);
+        document.addEventListener("touchend", onResizeEnd);
+      }
+
+      resizeHandle.addEventListener("mousedown", onResizeStart);
+      resizeHandle.addEventListener("touchstart", onResizeStart, { passive: false });
+    }
 
     if (typeof hostFs.onChange === "function") {
       panel.__a8eAssemblerUnsub = hostFs.onChange(function () {

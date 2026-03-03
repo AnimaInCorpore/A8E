@@ -10,6 +10,19 @@
   --muted: #9db0d3;
   --border: #24324a;
   --accent: #5cc8ff;
+
+  /* Sub-panel palette (HostFS, Assembler, etc.) */
+  --sub-panel-bg: #07101e;
+  --sub-panel-border: #1e3455;
+  --sub-panel-header-start: #0d2040;
+  --sub-panel-header-end: #091828;
+  --sub-panel-toolbar-bg: #090e1c;
+  --sub-panel-inner-border: #152840;
+  --sub-panel-statusbar-bg: #050c18;
+  --sub-panel-btn-idle: #607890;
+  --sub-panel-btn-radius: 4px;
+  --sub-panel-label: #6f8aa8;
+  --sub-panel-dim: #3a5870;
 }
 
 html,
@@ -191,7 +204,7 @@ button {
   border: 1px solid var(--border);
   color: var(--text);
   padding: 7px 10px;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -1267,7 +1280,7 @@ canvas.crtEnabled {
   border: 1px solid var(--border);
   color: var(--text);
   padding: 7px 10px;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 13px;
   transition: border-color 0.15s;
   white-space: nowrap;
@@ -1329,9 +1342,9 @@ canvas.crtEnabled {
 .hostfsPanel {
   width: min(100%, 1083px);
   min-height: clamp(220px, 36vh, 420px);
-  border: 1px solid #1e3455;
+  border: 1px solid var(--sub-panel-border);
   border-radius: 6px;
-  background: #07101e;
+  background: var(--sub-panel-bg);
   margin-top: 8px;
   font-size: 12px;
   display: flex;
@@ -1347,10 +1360,10 @@ canvas.crtEnabled {
 .hostfs-titlebar {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   padding: 6px 10px;
-  background: linear-gradient(135deg, #0d2040 0%, #091828 100%);
-  border-bottom: 1px solid #1e3455;
+  background: linear-gradient(135deg, var(--sub-panel-header-start) 0%, var(--sub-panel-header-end) 100%);
+  border-bottom: 1px solid var(--sub-panel-border);
   flex-shrink: 0;
 }
 .hostfs-title-icon {
@@ -1360,50 +1373,29 @@ canvas.crtEnabled {
   font-weight: 600;
   color: var(--accent);
 }
-.hostfs-title-path {
-  color: #3a607a;
-  font-family: monospace;
-  font-size: 11px;
-}
 .hostfs-flex {
   flex: 1;
-}
-.hostfs-upload-btn,
-.hostfs-folder-btn {
-  background: transparent;
-  border: 1px solid #1e3455;
-  color: var(--muted);
-  border-radius: 3px;
-  padding: 3px 8px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: border-color 0.15s, color 0.15s;
-}
-.hostfs-upload-btn:hover,
-.hostfs-folder-btn:hover {
-  border-color: var(--accent);
-  color: var(--accent);
 }
 /* Toolbar */
 .hostfs-toolbar {
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 4px 8px;
-  background: #090e1c;
-  border-bottom: 1px solid #152840;
+  gap: 5px;
+  padding: 5px 8px;
+  background: var(--sub-panel-toolbar-bg);
+  border-bottom: 1px solid var(--sub-panel-inner-border);
   flex-shrink: 0;
 }
 .hostfs-btn {
   background: transparent;
-  border: 1px solid #152840;
-  color: #607890;
-  border-radius: 3px;
-  padding: 2px 7px;
+  border: 1px solid var(--sub-panel-inner-border);
+  color: var(--sub-panel-btn-idle);
+  border-radius: var(--sub-panel-btn-radius);
+  padding: 3px 8px;
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s, background 0.15s;
   white-space: nowrap;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 .hostfs-btn:hover:not(:disabled) {
   border-color: var(--accent);
@@ -1411,7 +1403,7 @@ canvas.crtEnabled {
   background: rgba(92, 200, 255, 0.06);
 }
 .hostfs-btn:disabled {
-  opacity: 0.3;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 .hostfs-btn.active {
@@ -1426,9 +1418,16 @@ canvas.crtEnabled {
 .hostfs-toolbar-sep {
   width: 1px;
   height: 16px;
-  background: #152840;
-  margin: 0 2px;
+  background: var(--sub-panel-inner-border);
+  margin: 0 3px;
   flex-shrink: 0;
+}
+.hostfs-label {
+  color: var(--sub-panel-label);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 /* Sortable column headers */
 .hostfs-sort-col {
@@ -1464,8 +1463,8 @@ canvas.crtEnabled {
   align-items: center;
   padding: 3px 6px;
   background: #07121e;
-  border-bottom: 1px solid #152840;
-  color: #3a5870;
+  border-bottom: 1px solid var(--sub-panel-inner-border);
+  color: var(--sub-panel-dim);
   font-size: 11px;
   flex-shrink: 0;
 }
@@ -1483,7 +1482,7 @@ canvas.crtEnabled {
   background: transparent;
 }
 .hostfs-list::-webkit-scrollbar-thumb {
-  background: #152840;
+  background: var(--sub-panel-inner-border);
   border-radius: 3px;
 }
 .hostfs-list::-webkit-scrollbar-thumb:hover {
@@ -1535,7 +1534,7 @@ canvas.crtEnabled {
   width: 58px;
   flex-shrink: 0;
   justify-content: flex-end;
-  color: #3a5870;
+  color: var(--sub-panel-dim);
   font-size: 11px;
 }
 .hostfs-col-actions {
@@ -1595,7 +1594,7 @@ canvas.crtEnabled {
   color: #1e3855;
   cursor: pointer;
   padding: 2px 4px;
-  border-radius: 3px;
+  border-radius: var(--sub-panel-btn-radius);
   transition: color 0.1s, background 0.1s;
   line-height: 1;
 }
@@ -1616,10 +1615,10 @@ canvas.crtEnabled {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 10px;
-  background: #050c18;
-  border-top: 1px solid #152840;
-  color: #3a5068;
+  padding: 4px 10px;
+  background: var(--sub-panel-statusbar-bg);
+  border-top: 1px solid var(--sub-panel-inner-border);
+  color: var(--sub-panel-dim);
   font-size: 11px;
   flex-shrink: 0;
 }
@@ -1634,10 +1633,11 @@ canvas.crtEnabled {
 /* ---- Assembler Editor Panel ---- */
 .assemblerPanel {
   width: min(100%, 1083px);
-  min-height: clamp(340px, 56vh, 760px);
-  border: 1px solid #1e3455;
+  min-height: 340px;
+  max-height: 90vh;
+  border: 1px solid var(--sub-panel-border);
   border-radius: 6px;
-  background: #07101e;
+  background: var(--sub-panel-bg);
   margin-top: 8px;
   font-size: 12px;
   display: flex;
@@ -1656,8 +1656,8 @@ canvas.crtEnabled {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: linear-gradient(135deg, #0d2040 0%, #091828 100%);
-  border-bottom: 1px solid #1e3455;
+  background: linear-gradient(135deg, var(--sub-panel-header-start) 0%, var(--sub-panel-header-end) 100%);
+  border-bottom: 1px solid var(--sub-panel-border);
   flex-shrink: 0;
 }
 
@@ -1679,16 +1679,16 @@ canvas.crtEnabled {
 .asm-toolbar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  background: #090e1c;
-  border-bottom: 1px solid #152840;
+  gap: 5px;
+  padding: 5px 8px;
+  background: var(--sub-panel-toolbar-bg);
+  border-bottom: 1px solid var(--sub-panel-inner-border);
   flex-wrap: wrap;
   flex-shrink: 0;
 }
 
 .asm-label {
-  color: #6f8aa8;
+  color: var(--sub-panel-label);
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -1698,8 +1698,8 @@ canvas.crtEnabled {
 .asm-input,
 .asm-select {
   background: #061323;
-  border: 1px solid #1b3657;
-  border-radius: 4px;
+  border: 1px solid var(--sub-panel-inner-border);
+  border-radius: var(--sub-panel-btn-radius);
   color: var(--text);
   font-size: 12px;
   line-height: 1.4;
@@ -1723,16 +1723,12 @@ canvas.crtEnabled {
   max-width: 280px;
 }
 
-.asm-output-name {
-  width: 150px;
-}
-
 .asm-btn {
   background: transparent;
-  border: 1px solid #152840;
-  color: #607890;
-  border-radius: 3px;
-  padding: 4px 9px;
+  border: 1px solid var(--sub-panel-inner-border);
+  color: var(--sub-panel-btn-idle);
+  border-radius: var(--sub-panel-btn-radius);
+  padding: 3px 8px;
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s, background 0.15s;
   white-space: nowrap;
@@ -1764,14 +1760,14 @@ canvas.crtEnabled {
 .asm-toolbar-sep {
   width: 1px;
   height: 16px;
-  background: #152840;
-  margin: 0 2px;
+  background: var(--sub-panel-inner-border);
+  margin: 0 3px;
   flex-shrink: 0;
 }
 
 .asm-editor-wrap {
   flex: 1 1 auto;
-  min-height: 240px;
+  min-height: 0;
   display: block;
   position: relative;
   overflow: hidden;
@@ -1783,13 +1779,22 @@ canvas.crtEnabled {
   inset: 0;
   margin: 0;
   border: 0;
-  overflow: hidden;
+  overflow: auto;
   pointer-events: none;
   white-space: pre;
   color: #86a3bf;
   font: 13px/1.5 "Consolas", "Courier New", monospace;
   tab-size: 2;
   padding: 10px 12px;
+}
+
+/* Hide scrollbars on the highlight layer (scroll is synced by JS) */
+.asm-highlight::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.asm-highlight {
+  scrollbar-width: none; /* Firefox */
 }
 
 .asm-editor {
@@ -1809,6 +1814,26 @@ canvas.crtEnabled {
 
 .asm-editor::selection {
   background: rgba(110, 190, 255, 0.28);
+}
+
+/* Consistent scrollbar styling for assembler editor + error list */
+.asm-editor::-webkit-scrollbar,
+.asm-errors::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.asm-editor::-webkit-scrollbar-track,
+.asm-errors::-webkit-scrollbar-track {
+  background: transparent;
+}
+.asm-editor::-webkit-scrollbar-thumb,
+.asm-errors::-webkit-scrollbar-thumb {
+  background: var(--sub-panel-inner-border);
+  border-radius: 3px;
+}
+.asm-editor::-webkit-scrollbar-thumb:hover,
+.asm-errors::-webkit-scrollbar-thumb:hover {
+  background: #1e3855;
 }
 
 .asm-tok-comment {
@@ -1840,7 +1865,7 @@ canvas.crtEnabled {
 }
 
 .asm-errors {
-  border-top: 1px solid #152840;
+  border-top: 1px solid var(--sub-panel-inner-border);
   background: #050b15;
   max-height: 128px;
   overflow: auto;
@@ -1863,7 +1888,7 @@ canvas.crtEnabled {
   color: #ffb3a8;
   text-align: left;
   padding: 4px 6px;
-  border-radius: 3px;
+  border-radius: var(--sub-panel-btn-radius);
   font: 12px/1.4 "Consolas", "Courier New", monospace;
   cursor: pointer;
 }
@@ -1877,11 +1902,37 @@ canvas.crtEnabled {
   display: flex;
   align-items: center;
   padding: 4px 10px;
-  background: #050c18;
-  border-top: 1px solid #152840;
-  color: #5f7d9b;
+  background: var(--sub-panel-statusbar-bg);
+  border-top: 1px solid var(--sub-panel-inner-border);
+  color: var(--sub-panel-dim);
   font-size: 11px;
   flex-shrink: 0;
+}
+
+.asm-resize-handle {
+  height: 7px;
+  cursor: ns-resize;
+  background: var(--sub-panel-statusbar-bg);
+  border-top: 1px solid var(--sub-panel-inner-border);
+  flex-shrink: 0;
+  position: relative;
+  user-select: none;
+}
+.asm-resize-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--sub-panel-inner-border);
+  transition: background 0.15s;
+}
+.asm-resize-handle:hover::after,
+.asm-resize-handle:active::after {
+  background: var(--sub-panel-btn-idle);
 }
 
 .asm-status.error {
@@ -1898,8 +1949,7 @@ canvas.crtEnabled {
     align-self: stretch;
   }
 
-  .asm-source-name,
-  .asm-output-name {
+  .asm-source-name {
     width: min(44vw, 220px);
   }
 
