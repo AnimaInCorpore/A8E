@@ -3,26 +3,27 @@
 
 :root {
   color-scheme: dark;
-  --bg: #0b0f16;
-  --panel: #101826;
-  --panel2: #0f1622;
+  --bg: #0d1117;
+  --panel: #161d2b;
+  --panel2: #131a26;
   --text: #e6eefc;
   --muted: #9db0d3;
-  --border: #24324a;
+  --border: rgba(255, 255, 255, 0.09);
   --accent: #5cc8ff;
 
   /* Sub-panel palette (HostFS, Assembler, etc.) */
-  --sub-panel-bg: #07101e;
-  --sub-panel-border: #1e3455;
-  --sub-panel-header-start: #0d2040;
-  --sub-panel-header-end: #091828;
-  --sub-panel-toolbar-bg: #090e1c;
-  --sub-panel-inner-border: #152840;
-  --sub-panel-statusbar-bg: #050c18;
-  --sub-panel-btn-idle: #607890;
+  /* Elevation: sub-panels sit above the page, so they must be lighter than --bg */
+  --sub-panel-bg: #141d2c;
+  --sub-panel-border: rgba(255, 255, 255, 0.08);
+  --sub-panel-header-start: #1e2f46;
+  --sub-panel-header-end: #141e30;
+  --sub-panel-toolbar-bg: #101827;
+  --sub-panel-inner-border: rgba(255, 255, 255, 0.07);
+  --sub-panel-statusbar-bg: #0c1422;
+  --sub-panel-btn-idle: #7090aa;
   --sub-panel-btn-radius: 4px;
-  --sub-panel-label: #6f8aa8;
-  --sub-panel-dim: #3a5870;
+  --sub-panel-label: #7a90a8;
+  --sub-panel-dim: #4c6880;
 }
 
 html,
@@ -48,9 +49,10 @@ body {
   justify-content: space-between;
   padding: 12px 14px;
   border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, #0f1622, #0b0f16);
+  background: linear-gradient(180deg, #1a2336, #0d1117);
   gap: 12px;
   flex-shrink: 0;
+  backdrop-filter: blur(8px);
 }
 
 .brand .title {
@@ -221,7 +223,7 @@ button:disabled {
 }
 
 button:hover:not(:disabled) {
-  border-color: #35507a;
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 /* Toggle buttons */
@@ -371,7 +373,7 @@ button:hover:not(:disabled) {
 
 .joystickPanel {
   width: min(100%, 500px);
-  border: 1px solid #262626;
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 12px;
   padding: 10px;
   background: linear-gradient(180deg, #2f2f2f 0%, #272727 100%);
@@ -1287,7 +1289,7 @@ canvas.crtEnabled {
 }
 
 .fileBtn:hover span {
-  border-color: #35507a;
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .fileBtn .status-icon {
@@ -1462,7 +1464,7 @@ canvas.crtEnabled {
   display: flex;
   align-items: center;
   padding: 3px 6px;
-  background: #07121e;
+  background: #0f1828;
   border-bottom: 1px solid var(--sub-panel-inner-border);
   color: var(--sub-panel-dim);
   font-size: 11px;
@@ -1486,12 +1488,12 @@ canvas.crtEnabled {
   border-radius: 3px;
 }
 .hostfs-list::-webkit-scrollbar-thumb:hover {
-  background: #1e3855;
+  background: rgba(255, 255, 255, 0.18);
 }
 /* Drop hint */
 .hostfs-drop-hint {
   text-align: center;
-  color: #1e3050;
+  color: #2e4460;
   font-size: 11px;
   padding: 4px 0 5px;
   pointer-events: none;
@@ -1503,7 +1505,7 @@ canvas.crtEnabled {
 /* Empty state */
 .hostfs-empty {
   text-align: center;
-  color: #2a4060;
+  color: #3a5070;
   padding: 28px 0 20px;
   line-height: 2;
 }
@@ -1591,7 +1593,7 @@ canvas.crtEnabled {
 .hostfs-action-btn {
   background: none;
   border: none;
-  color: #1e3855;
+  color: #2e4c6a;
   cursor: pointer;
   padding: 2px 4px;
   border-radius: var(--sub-panel-btn-radius);
@@ -1627,7 +1629,7 @@ canvas.crtEnabled {
   font-weight: 700;
 }
 .hostfs-stat-total {
-  color: #2a4058;
+  color: #3c5270;
 }
 
 /* ---- Assembler Editor Panel ---- */
@@ -1796,7 +1798,7 @@ canvas.crtEnabled {
   display: block;
   position: relative;
   overflow: hidden;
-  background: #020914;
+  background: #0a1220;
 }
 
 .asm-breakpoints {
@@ -1806,8 +1808,8 @@ canvas.crtEnabled {
   bottom: 0;
   width: var(--asm-gutter-width);
   margin: 0;
-  border-right: 1px solid #0f1f34;
-  background: #030d1b;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+  background: #08111e;
   overflow: auto;
   padding: 10px 0;
 }
@@ -1954,7 +1956,7 @@ canvas.crtEnabled {
 }
 .asm-editor::-webkit-scrollbar-thumb:hover,
 .asm-errors::-webkit-scrollbar-thumb:hover {
-  background: #1e3855;
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .asm-tok-comment {
@@ -1987,7 +1989,7 @@ canvas.crtEnabled {
 
 .asm-errors {
   border-top: 1px solid var(--sub-panel-inner-border);
-  background: #050b15;
+  background: #0c1522;
   max-height: 128px;
   overflow: auto;
 }
