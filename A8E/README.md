@@ -29,7 +29,7 @@ A8E [options] [disk.atr|program.xex]
 
 **Options & Arguments:**
 * `disk.atr` / `program.xex`: Pass an ATR image or Atari executable as the first argument. `.xex` files are converted to a temporary ATR layout at load time. If no argument is passed, the emulator defaults to looking for `d1.atr`.
-* `-f` / `-F`: Launch in fullscreen mode. (Default is windowed at 2× scale: 672×480. Fullscreen scales to 640×480. If 2× is unavailable, it falls back to 1× native resolution).
+* `-f` / `-F`: Launch in fullscreen mode. Uses desktop-resolution fullscreen (`SDL_WINDOW_FULLSCREEN_DESKTOP`) — the display mode is never changed, so the aspect ratio is correct on widescreen monitors and the desktop is never left in a degraded state if the app crashes. The window can be toggled at runtime with **Alt+Enter**.
 * `-b` / `-B`: Boot **with** BASIC enabled. By default, A8E simulates holding the OPTION key to disable BASIC. Passing this flag releases the console buttons.
 
 ## Controls
@@ -39,6 +39,8 @@ For standard keyboard, joystick, and console mappings, please see the [main READ
 **Native-Specific Keys:**
 | Key | Function |
 |-----|----------|
+| **Alt+Enter** | Toggle fullscreen / windowed mode at runtime. |
+| **Alt+F4** | Quit the emulator (standard OS close shortcut). |
 | **F11** | Turbo mode (hold) + attempts to reload `D1.ATR` from the current directory (case-sensitive on UNIX-like systems). |
 | **F12** | Start live CPU disassembly. *Note: This is a one-way latch and requires the `ENABLE_VERBOSE_DEBUGGING` compile flag. Restart the emulator to stop.* |
 
@@ -46,7 +48,7 @@ For standard keyboard, joystick, and console mappings, please see the [main READ
 
 ## Building from Source
 
-Building requires **SDL 1.2** development headers. SDL 1.2 is legacy, so for modern systems we recommend `sdl12-compat`, which preserves SDL 1.2 APIs while keeping this codebase unchanged. CMake 3.16+ is recommended but not strictly required (see the manual compilation section for a direct `clang`/`gcc` build).
+Building requires **SDL 2** development headers. CMake 3.16+ is recommended but not strictly required (see the manual compilation section for a direct `clang`/`gcc` build).
 
 The build process aims to produce **portable standalone binaries** with minimal external runtime dependencies. Where possible, static linking is used to achieve this.
 For local release binaries with single-config generators (Makefiles/Ninja/MinGW Makefiles), pass `-DCMAKE_BUILD_TYPE=Release` during configure.
@@ -61,14 +63,14 @@ This method produces a standalone `.exe` without external DLL dependencies.
 
 #### Prerequisites
 - Install Visual Studio 2022 with the "Desktop development with C++" workload, or the standalone Build Tools.
-- Install vcpkg and SDL:
+- Install vcpkg and SDL2:
   ```powershell
   git clone https://github.com/microsoft/vcpkg C:\dev\vcpkg
   cd C:\dev\vcpkg
   .\bootstrap-vcpkg.bat
-  .\vcpkg install sdl1:x64-windows-static
+  .\vcpkg install sdl2:x64-windows-static
   ```
-  > **Note:** `vcpkg install sdl1:x64-windows-static` builds SDL from source and may take a few minutes.
+  > **Note:** `vcpkg install sdl2:x64-windows-static` builds SDL2 from source and may take a few minutes.
 
 #### Build (PowerShell)
 Run from the repository root:
@@ -94,7 +96,7 @@ Produces a standalone `.exe` (statically linked, no external DLLs required).
 #### Prerequisites
 - Open the [MSYS2](https://www.msys2.org/) MinGW x64 shell and install tools:
   ```sh
-  pacman -S --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make mingw-w64-x86_64-SDL
+  pacman -S --needed mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-make mingw-w64-x86_64-SDL2
   ```
 
 #### Build (MSYS2 MinGW shell)
@@ -110,9 +112,9 @@ cmake --build build/mingw -j
 ### Linux (Ubuntu / Debian / Fedora / RHEL / Arch Linux)
 
 #### Prerequisites
-- **Ubuntu/Debian:** `sudo apt-get install -y build-essential cmake libsdl1.2-dev`
-- **Fedora/RHEL:** `sudo dnf install gcc cmake SDL-devel`
-- **Arch Linux:** `sudo pacman -S gcc cmake sdl12-compat`
+- **Ubuntu/Debian:** `sudo apt-get install -y build-essential cmake libsdl2-dev`
+- **Fedora/RHEL:** `sudo dnf install gcc cmake SDL2-devel`
+- **Arch Linux:** `sudo pacman -S gcc cmake sdl2`
 
 #### Build (Bash/Zsh)
 ```sh
@@ -129,7 +131,7 @@ cmake --build build -j
 #### Prerequisites
 ```sh
 xcode-select --install
-brew install cmake sdl12-compat
+brew install cmake sdl2
 ```
 
 #### Build (Zsh/Bash)
@@ -144,12 +146,12 @@ cmake --build build -j
 
 ### Cross-compiling for Windows (from Linux/macOS)
 
-You can cross-compile a Windows `.exe` from Linux or macOS with MinGW-w64 and Windows-target SDL 1.2 static libraries.
+You can cross-compile a Windows `.exe` from Linux or macOS with MinGW-w64 and Windows-target SDL2 static libraries.
 
 #### Prerequisites
 - Linux: install MinGW-w64 (`sudo apt-get install gcc-mingw-w64` on Ubuntu/Debian, or distro equivalent).
 - macOS: install MinGW-w64 (`brew install mingw-w64`).
-- Obtain Windows SDL 1.2 static libraries (for example from MSYS2 MinGW packages).
+- Obtain Windows SDL2 static libraries (for example from MSYS2 MinGW packages).
 - Replace placeholder paths like `<path-to-mingw>` with real paths on your machine.
 
 #### Build (Bash/Zsh)
@@ -159,9 +161,8 @@ cmake -S . -B build/win64 \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
   -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres \
-  -DSDL_INCLUDE_DIR=<path-to-mingw>/include/SDL \
-  -DSDL_LIBRARY=<path-to-mingw>/lib/libSDL.a \
-  -DSDLMAIN_LIBRARY=<path-to-mingw>/lib/libSDLmain.a \
+  -DSDL2_INCLUDE_DIRS=<path-to-mingw>/include/SDL2 \
+  -DSDL2_LIBRARIES=<path-to-mingw>/lib/libSDL2.a \
   -DCMAKE_EXE_LINKER_FLAGS="-static"
 
 cmake --build build/win64 -j
@@ -177,7 +178,7 @@ You can cross-compile a Linux binary from macOS using a Linux cross-toolchain.
 
 #### Prerequisites
 - Install a Linux cross-toolchain: `brew install x86_64-linux-gnu-gcc` (or similar).
-- Obtain Linux SDL 1.2 static libraries and headers (e.g., build from source or extract from a Linux system).
+- Obtain Linux SDL2 static libraries and headers (e.g., build from source or extract from a Linux system).
 - Replace placeholder paths like `<path-to-linux-sysroot>` with real paths on your machine.
 
 #### Build (Zsh/Bash)
@@ -186,9 +187,8 @@ cmake -S . -B build/linux \
   -DCMAKE_SYSTEM_NAME=Linux \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER=x86_64-linux-gnu-gcc \
-  -DSDL_INCLUDE_DIR=<path-to-linux-sysroot>/include/SDL \
-  -DSDL_LIBRARY=<path-to-linux-sysroot>/lib/libSDL.a \
-  -DSDLMAIN_LIBRARY=<path-to-linux-sysroot>/lib/libSDLmain.a \
+  -DSDL2_INCLUDE_DIRS=<path-to-linux-sysroot>/include/SDL2 \
+  -DSDL2_LIBRARIES=<path-to-linux-sysroot>/lib/libSDL2.a \
   -DCMAKE_EXE_LINKER_FLAGS="-static"
 
 cmake --build build/linux -j
@@ -200,34 +200,32 @@ cmake --build build/linux -j
 
 ### Manual Compilation (Unix/Linux/macOS)
 
-If CMake is unavailable, you can compile all sources directly in a Unix-like shell (`bash`/`zsh`) with `clang` or `gcc`. The `sdl-config` helper (installed by `sdl12-compat`/`libsdl`) prints the correct flags automatically.
+If CMake is unavailable, you can compile all sources directly in a Unix-like shell (`bash`/`zsh`) with `clang` or `gcc`. The `sdl2-config` helper (installed alongside SDL2 development packages) prints the correct flags automatically.
 
 #### Prerequisites
-- Install SDL 1.2 development headers (via `sdl12-compat` or `libsdl`).
+- Install SDL 2 development headers (`libsdl2-dev`, `SDL2-devel`, or `sdl2` depending on your distro).
 
 #### Build (Bash/Zsh)
 ```sh
 # from the A8E source directory
 clang -std=c99 -O2 -Wall \
-      -I. $(sdl-config --cflags) -I$(sdl-config --prefix)/include \
+      -I. $(sdl2-config --cflags) \
       6502.c A8E.c Antic.c AtariIo.c Gtia.c Pia.c Pokey.c \
       -o A8E \
-      $(sdl-config --libs) -lm
+      $(sdl2-config --libs) -lm
 ```
 
-The extra `-I$(sdl-config --prefix)/include` is needed because the source code uses `#include <SDL/SDL.h>` — `sdl-config --cflags` alone only adds the SDL subdirectory.
-
-If `sdl-config` is not on your path, spell the flags out manually (macOS example):
+If `sdl2-config` is not on your path, spell the flags out manually (macOS example):
 
 ```sh
 clang -std=c99 -O2 -Wall \
-      -I. -I/usr/local/include -I/usr/local/include/SDL \
+      -I. -I/usr/local/include -I/usr/local/include/SDL2 \
       6502.c A8E.c Antic.c AtariIo.c Gtia.c Pia.c Pokey.c \
       -o A8E \
-      -L/usr/local/lib -lSDLmain -lSDL -lm -framework Cocoa
+      -L/usr/local/lib -lSDL2main -lSDL2 -lm -framework Cocoa
 ```
 
-On Linux or other Unix systems, drop `-framework Cocoa` and use your platform's SDL linker flags. Replace `/usr/local` with the prefix where SDL is installed (e.g. `/opt/homebrew` on Apple Silicon or `/usr` on many Linux distributions). Substitute `gcc` for `clang` if needed (primarily on Linux/Unix systems, as macOS GCC is deprecated). Add `-DA8E_BUILD_VERSION="…"` to override the version string.
+On Linux or other Unix systems, drop `-framework Cocoa` and use your platform's SDL2 linker flags. Replace `/usr/local` with the prefix where SDL2 is installed (e.g. `/opt/homebrew` on Apple Silicon or `/usr` on many Linux distributions). Substitute `gcc` for `clang` if needed. Add `-DA8E_BUILD_VERSION="…"` to override the version string.
 
 ---
 

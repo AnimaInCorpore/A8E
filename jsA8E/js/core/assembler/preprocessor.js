@@ -270,6 +270,18 @@
       return v ? 1 : 0;
     }
 
+    function isSymbolDefined(name) {
+      const key = String(name || "").toUpperCase();
+      const resolverDefined = state && typeof state.isDefined === "function"
+        ? !!state.isDefined(key)
+        : false;
+      return (
+        Object.prototype.hasOwnProperty.call(state.defines, key) ||
+        Object.prototype.hasOwnProperty.call(state.macros, key) ||
+        resolverDefined
+      );
+    }
+
     function parsePrimary() {
       if (matchOp("*")) {
         if (state && typeof state.currentPc === "number") return state.currentPc | 0;
@@ -287,30 +299,30 @@
         const identUpper = ident.toUpperCase();
 
         if (identUpper === ".DEFINED" || identUpper === ".DEF" || identUpper === ".CONST") {
-          let name = "";
           if (matchOp("(")) {
-            const nameTok = consume();
-            if (nameTok.type !== "ident") {
-              throw makePreError(entry, ident + " expects an identifier.");
+            if (matchOp(")")) return 0;
+            const firstArg = peek();
+            const secondArg = tokens[pos + 1] || { type: "eof", value: "" };
+            if (
+              firstArg.type === "ident" &&
+              secondArg.type === "op" &&
+              secondArg.value === ")"
+            ) {
+              consume();
+              expectOp(")", "after " + ident);
+              return normalizeBool(isSymbolDefined(firstArg.value));
             }
-            name = nameTok.value;
+            const argValue = parseOr();
             expectOp(")", "after " + ident);
-          } else {
-            const nameTok = consume();
-            if (nameTok.type !== "ident") {
-              throw makePreError(entry, ident + " expects an identifier.");
-            }
-            name = nameTok.value;
+            return normalizeBool(argValue);
           }
-          const key = name.toUpperCase();
-          const resolverDefined = state && typeof state.isDefined === "function"
-            ? !!state.isDefined(key)
-            : false;
-          return normalizeBool(
-            Object.prototype.hasOwnProperty.call(state.defines, key) ||
-            Object.prototype.hasOwnProperty.call(state.macros, key) ||
-            resolverDefined,
-          );
+
+          const nameTok = peek();
+          if (nameTok.type === "ident") {
+            consume();
+            return normalizeBool(isSymbolDefined(nameTok.value));
+          }
+          return normalizeBool(parsePrimary());
         }
 
         if (identUpper === ".NOT") {
@@ -562,6 +574,64 @@
     state.defines[name] = value.length ? value : "1";
   }
 
+  function parseInitialDefinePair(rawName, rawValue) {
+    const name = String(rawName || "").trim();
+    if (!name.length) return null;
+    if (!/^[A-Za-z_.@][A-Za-z0-9_.@]*$/.test(name)) {
+      throw new Error("Invalid define name: " + name);
+    }
+    const key = name.toUpperCase();
+    const valueText = rawValue === undefined || rawValue === null
+      ? "1"
+      : String(rawValue).trim();
+    return {
+      key: key,
+      value: valueText.length ? valueText : "1",
+    };
+  }
+
+  function addInitialDefine(target, rawEntry) {
+    if (rawEntry === null || rawEntry === undefined) return;
+    if (typeof rawEntry === "string") {
+      const text = rawEntry.trim();
+      if (!text.length) return;
+      const m = /^([A-Za-z_.@][A-Za-z0-9_.@]*)(?:\s*=\s*(.*))?$/.exec(text);
+      if (!m) {
+        throw new Error("Invalid define entry: " + text);
+      }
+      const pair = parseInitialDefinePair(m[1], m[2] === undefined ? "1" : m[2]);
+      if (pair) target[pair.key] = pair.value;
+      return;
+    }
+
+    if (typeof rawEntry === "object") {
+      if (Array.isArray(rawEntry)) {
+        for (let i = 0; i < rawEntry.length; i++) {
+          addInitialDefine(target, rawEntry[i]);
+        }
+        return;
+      }
+      const keys = Object.keys(rawEntry);
+      for (let i = 0; i < keys.length; i++) {
+        const k = keys[i];
+        const pair = parseInitialDefinePair(k, rawEntry[k]);
+        if (pair) target[pair.key] = pair.value;
+      }
+      return;
+    }
+
+    throw new Error("Unsupported define source.");
+  }
+
+  function buildInitialDefines(options) {
+    const defines = Object.create(null);
+    const opts = options || {};
+    addInitialDefine(defines, opts.defines);
+    addInitialDefine(defines, opts.preprocessorDefines);
+    addInitialDefine(defines, opts.initialDefines);
+    return defines;
+  }
+
   function expandDefineLine(line, state) {
     let out = String(line || "");
     for (let i = 0; i < 16; i++) {
@@ -705,6 +775,14 @@
   }
 
   function preprocessSourceInternal(sourceText, options) {
+    let initialDefines = Object.create(null);
+    try {
+      initialDefines = buildInitialDefines(options || {});
+    } catch (err) {
+      const message = err && err.message ? err.message : "Invalid initial define configuration.";
+      throw new Error("Line 0: " + message);
+    }
+
     const state = {
       includeResolver: options && typeof options.includeResolver === "function"
         ? options.includeResolver
@@ -714,7 +792,7 @@
       maxIncludeDepth: options && options.maxIncludeDepth ? (options.maxIncludeDepth | 0) : 16,
       maxMacroDepth: options && options.maxMacroDepth ? (options.maxMacroDepth | 0) : 64,
       maxOutputLines: options && options.maxOutputLines ? (options.maxOutputLines | 0) : 200000,
-      defines: Object.create(null),
+      defines: initialDefines,
       macros: Object.create(null),
       macroCapture: null,
       macroUnique: 0,

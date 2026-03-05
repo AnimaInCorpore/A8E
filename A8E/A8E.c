@@ -15,11 +15,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <SDL/SDL.h>
+#include <SDL2/SDL.h>
 
 #include "6502.h"
 #include "AtariIo.h"
 #include "Pokey.h"
+
+/* Global window handle — used by Pokey.c to update the title bar. */
+SDL_Window *g_pSdlWindow = NULL;
 
 /********************************************************************
 *
@@ -33,6 +36,9 @@ int main(int argc, char *argv[])
 {
 	_6502_Context_t *pAtariContext;
 	SDL_Event tEvent;
+	SDL_Window *pWindow = NULL;
+	SDL_Renderer *pRenderer = NULL;
+	SDL_Texture *pScreenTexture = NULL;
 	SDL_Surface *pScreenSurface = NULL;
 	u8 cTurboFlag = 0;
 	u32 lLastTicks = 0;
@@ -41,19 +47,17 @@ int main(int argc, char *argv[])
 	u64 llCycles = CYCLES_PER_LINE * LINES_PER_SCREEN_PAL;
 	u32 lMode = 0;
 	char *pDiskFileName = "d1.atr";
-	u32 lAtariScreenWidth = 0;
-	u32 lAtariScreenHeight = 0;
+	u32 lAtariScreenWidth = 336;
+	u32 lAtariScreenHeight = 240;
 	u32 lWindowWidth = 0;
 	u32 lWindowHeight = 0;
 	u32 lWindowScale = 2;
+	u32 lFullscreen = 0;
 	int lIndex;
-	u32 lSdlFlags = 0;
-	
+
 	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0)
 	{
-		if(fprintf(stderr, "SDL_Init() failed: %s\n", SDL_GetError()) < 0)
-		{
-		}
+		fprintf(stderr, "SDL_Init() failed: %s\n", SDL_GetError());
 		return -1;
 	}
 
@@ -66,15 +70,15 @@ int main(int argc, char *argv[])
 			case 'b':
 			case 'B':
 				lMode = 1;
-			
+
 				break;
-				
+
 			case 'f':
 			case 'F':
-				lSdlFlags |= SDL_FULLSCREEN;
-			
+				lFullscreen = 1;
+
 				break;
-				
+
 			default:
 				break;
 			}
@@ -85,46 +89,75 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	lSdlFlags |= SDL_HWSURFACE | SDL_DOUBLEBUF;
-
-	if(lSdlFlags & SDL_FULLSCREEN)
-		lAtariScreenWidth = 320;
-	else
-		lAtariScreenWidth = 336;
-
-	lAtariScreenHeight = 240;
-
 	lWindowWidth = lAtariScreenWidth * lWindowScale;
 	lWindowHeight = lAtariScreenHeight * lWindowScale;
 
-	pScreenSurface = SDL_SetVideoMode(lWindowWidth, lWindowHeight, 32, lSdlFlags);
+	/* SDL_WINDOW_FULLSCREEN_DESKTOP scales to desktop resolution without
+	   changing the video mode, so the aspect ratio is correct on all
+	   monitors and the desktop is never left in a bad resolution if the
+	   app crashes. */
+	pWindow = SDL_CreateWindow(APPLICATION_CAPTION,
+		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+		(int)lWindowWidth, (int)lWindowHeight,
+		lFullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
 
-	if(pScreenSurface == NULL && lWindowScale != 1)
+	if(pWindow == NULL)
 	{
-		/* Fallback: if the scaled mode isn't available, try native size. */
-		lWindowWidth = lAtariScreenWidth;
-		lWindowHeight = lAtariScreenHeight;
-		pScreenSurface = SDL_SetVideoMode(lWindowWidth, lWindowHeight, 32, lSdlFlags);
-	}
-	
-	if(pScreenSurface == NULL)
-	{
-		if(fprintf(stderr, "SDL_SetVideoMode() failed: %s\n", SDL_GetError()) < 0)
-		{
-		}
+		fprintf(stderr, "SDL_CreateWindow() failed: %s\n", SDL_GetError());
 		SDL_Quit();
 		return -1;
 	}
-	
-	SDL_WM_SetCaption(APPLICATION_CAPTION, NULL);
+
+	g_pSdlWindow = pWindow;
+
+	pRenderer = SDL_CreateRenderer(pWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+	if(pRenderer == NULL)
+		pRenderer = SDL_CreateRenderer(pWindow, -1, 0);
+	if(pRenderer == NULL)
+	{
+		fprintf(stderr, "SDL_CreateRenderer() failed: %s\n", SDL_GetError());
+		SDL_DestroyWindow(pWindow);
+		SDL_Quit();
+		return -1;
+	}
+
+	/* Logical size lets the renderer scale the Atari output to fill the
+	   window (or screen in fullscreen) while preserving the aspect ratio. */
+	SDL_RenderSetLogicalSize(pRenderer, (int)lAtariScreenWidth, (int)lAtariScreenHeight);
+
+	pScreenTexture = SDL_CreateTexture(pRenderer, SDL_PIXELFORMAT_ARGB8888,
+		SDL_TEXTUREACCESS_STREAMING, (int)lAtariScreenWidth, (int)lAtariScreenHeight);
+	if(pScreenTexture == NULL)
+	{
+		fprintf(stderr, "SDL_CreateTexture() failed: %s\n", SDL_GetError());
+		SDL_DestroyRenderer(pRenderer);
+		SDL_DestroyWindow(pWindow);
+		SDL_Quit();
+		return -1;
+	}
+
+	/* Software surface — AtariIoDrawScreen draws the Atari output here,
+	   then we upload it to pScreenTexture each frame. */
+	pScreenSurface = SDL_CreateRGBSurface(0,
+		(int)lAtariScreenWidth, (int)lAtariScreenHeight, 32,
+		0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
+	if(pScreenSurface == NULL)
+	{
+		fprintf(stderr, "SDL_CreateRGBSurface() failed: %s\n", SDL_GetError());
+		SDL_DestroyTexture(pScreenTexture);
+		SDL_DestroyRenderer(pRenderer);
+		SDL_DestroyWindow(pWindow);
+		SDL_Quit();
+		return -1;
+	}
 
 	_6502_Init();
-	
+
 	pAtariContext = _6502_Open();
 	AtariIoOpen(pAtariContext, lMode, pDiskFileName);
-	
+
 	_6502_Reset(pAtariContext);
-	
+
 	while(1)
 	{
 		if(cDisassembleFlag)
@@ -145,23 +178,39 @@ int main(int argc, char *argv[])
 		else
 		{
 			_6502_Run(pAtariContext, llCycles);
-			
+
 			llCycles += CYCLES_PER_LINE * LINES_PER_SCREEN_PAL;
 		}
 
 		AtariIoDrawScreen(pAtariContext, pScreenSurface, lAtariScreenWidth, lAtariScreenHeight);
 
-		SDL_Flip(pScreenSurface);
+		SDL_UpdateTexture(pScreenTexture, NULL, pScreenSurface->pixels, pScreenSurface->pitch);
+		SDL_RenderClear(pRenderer);
+		SDL_RenderCopy(pRenderer, pScreenTexture, NULL, NULL);
+		SDL_RenderPresent(pRenderer);
 
 		while(SDL_PollEvent(&tEvent))
         {
             if(tEvent.type == SDL_QUIT)
                 goto Exit;
-        
+
     		if(tEvent.type == SDL_KEYDOWN)
             {
     			if(tEvent.key.keysym.sym == SDLK_F11)
     				cTurboFlag = 1;
+
+				/* Alt+Enter toggles fullscreen at runtime. */
+				if(tEvent.key.keysym.sym == SDLK_RETURN &&
+				   (tEvent.key.keysym.mod & KMOD_ALT) &&
+				   tEvent.key.repeat == 0)
+				{
+					Uint32 flags = SDL_GetWindowFlags(pWindow);
+					SDL_SetWindowFullscreen(pWindow,
+						(flags & SDL_WINDOW_FULLSCREEN_DESKTOP)
+							? 0
+							: SDL_WINDOW_FULLSCREEN_DESKTOP);
+				}
+
 #ifdef ENABLE_VERBOSE_DEBUGGING
 				if(tEvent.key.keysym.sym == SDLK_F12)
 					cDisassembleFlag = 1;
@@ -206,13 +255,17 @@ int main(int argc, char *argv[])
 					SDL_Delay(18 - elapsed);
 			}
 		}
-		
+
 		lLastTicks = SDL_GetTicks();
 	}
 
 Exit:
 	AtariIoClose(pAtariContext);
 	_6502_Close(pAtariContext);
+	SDL_FreeSurface(pScreenSurface);
+	SDL_DestroyTexture(pScreenTexture);
+	SDL_DestroyRenderer(pRenderer);
+	SDL_DestroyWindow(pWindow);
 	SDL_Quit();
 
 	return 0;

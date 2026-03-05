@@ -9,6 +9,9 @@
       assembleToXex: function assembleToXex() {
         return { ok: false, error: "Assembler modules unavailable." };
       },
+      assembleToObject: function assembleToObject() {
+        return { ok: false, error: "Assembler modules unavailable." };
+      },
       mnemonicKeywords: [],
       directiveKeywords: [],
     };
@@ -35,6 +38,12 @@
   root.A8EAssemblerCore = {
     assembleToXex: function assembleToXex(sourceText, options) {
       return ns.assembleToXex(sourceText, context, options || {});
+    },
+    assembleToObject: function assembleToObject(sourceText, options) {
+      if (typeof ns.assembleToObject !== "function") {
+        return { ok: false, error: "Object assembler unavailable." };
+      }
+      return ns.assembleToObject(sourceText, context, options || {});
     },
     mnemonicKeywords: mnemonicKeywords,
     directiveKeywords: directiveKeywords,

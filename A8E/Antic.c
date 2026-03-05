@@ -11,7 +11,7 @@
 *
 ********************************************************************/
 
-#include <SDL/SDL.h>
+#include <SDL2/SDL.h>
 
 #include "6502.h"
 #include "AtariIo.h"

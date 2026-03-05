@@ -26,7 +26,7 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref }}
 
       - name: Install Dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake libsdl1.2-dev
+        run: sudo apt-get update && sudo apt-get install -y cmake libsdl2-dev
 
       - name: Configure and Build
         run: |
@@ -41,13 +41,13 @@ jobs:
           cp build/A8E/A8E "$bundle/A8E"
           chmod +x "$bundle/A8E"
 
-          SDL_SO="$(ldd build/A8E/A8E | awk '/libSDL-1\.2\.so\.0/{print $3; exit}')"
+          SDL_SO="$(ldd build/A8E/A8E | awk '/libSDL2-2\.0\.so\.0/{print $3; exit}')"
           if [ -z "$SDL_SO" ] || [ ! -f "$SDL_SO" ]; then
-            echo "Failed to resolve libSDL-1.2.so.0 dependency from build output"
+            echo "Failed to resolve libSDL2-2.0.so.0 dependency from build output"
             ldd build/A8E/A8E
             exit 1
           fi
-          cp "$SDL_SO" "$bundle/libSDL-1.2.so.0"
+          cp "$SDL_SO" "$bundle/libSDL2-2.0.so.0"
 
           printf '%s\n' \
             '#!/usr/bin/env sh' \
@@ -81,7 +81,7 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref }}
 
       - name: Install Dependencies
-        run: brew install cmake sdl12-compat
+        run: brew install cmake sdl2
 
       - name: Configure and Build
         run: |
@@ -96,22 +96,22 @@ jobs:
           cp build/A8E/A8E "$bundle/A8E"
           chmod +x "$bundle/A8E"
 
-          SDL_DYLIB_PATH="$(otool -L build/A8E/A8E | awk '/libSDL-1\.2\.0\.dylib/{print $1; exit}')"
+          SDL_DYLIB_PATH="$(otool -L build/A8E/A8E | awk '/libSDL2-2\.0\.0\.dylib/{print $1; exit}')"
           if [ -z "$SDL_DYLIB_PATH" ] || [ ! -f "$SDL_DYLIB_PATH" ]; then
-            echo "Failed to resolve libSDL-1.2.0.dylib dependency from build output"
+            echo "Failed to resolve libSDL2-2.0.0.dylib dependency from build output"
             otool -L build/A8E/A8E
             exit 1
           fi
-          cp "$SDL_DYLIB_PATH" "$bundle/libSDL-1.2.0.dylib"
+          cp "$SDL_DYLIB_PATH" "$bundle/libSDL2-2.0.0.dylib"
 
-          install_name_tool -change "$SDL_DYLIB_PATH" "@executable_path/libSDL-1.2.0.dylib" "$bundle/A8E"
+          install_name_tool -change "$SDL_DYLIB_PATH" "@executable_path/libSDL2-2.0.0.dylib" "$bundle/A8E"
 
           otool -L "$bundle/A8E" | tee "$bundle/otool.txt"
-          if ! grep -q "@executable_path/libSDL-1.2.0.dylib" "$bundle/otool.txt"; then
+          if ! grep -q "@executable_path/libSDL2-2.0.0.dylib" "$bundle/otool.txt"; then
             echo "Standalone macOS bundle did not rewrite SDL load path"
             exit 1
           fi
-          if grep -Eq '/opt/homebrew|/usr/local/(opt|Cellar)/sdl12-compat' "$bundle/otool.txt"; then
+          if grep -Eq '/opt/homebrew/opt/sdl2|/usr/local/(opt|Cellar)/sdl2' "$bundle/otool.txt"; then
             echo "Standalone macOS bundle still references Homebrew SDL path"
             exit 1
           fi
@@ -134,7 +134,7 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref }}
 
       - name: Install Dependencies
-        run: brew install cmake sdl12-compat
+        run: brew install cmake sdl2
 
       - name: Configure and Build
         run: |
@@ -149,22 +149,22 @@ jobs:
           cp build/A8E/A8E "$bundle/A8E"
           chmod +x "$bundle/A8E"
 
-          SDL_DYLIB_PATH="$(otool -L build/A8E/A8E | awk '/libSDL-1\.2\.0\.dylib/{print $1; exit}')"
+          SDL_DYLIB_PATH="$(otool -L build/A8E/A8E | awk '/libSDL2-2\.0\.0\.dylib/{print $1; exit}')"
           if [ -z "$SDL_DYLIB_PATH" ] || [ ! -f "$SDL_DYLIB_PATH" ]; then
-            echo "Failed to resolve libSDL-1.2.0.dylib dependency from build output"
+            echo "Failed to resolve libSDL2-2.0.0.dylib dependency from build output"
             otool -L build/A8E/A8E
             exit 1
           fi
-          cp "$SDL_DYLIB_PATH" "$bundle/libSDL-1.2.0.dylib"
+          cp "$SDL_DYLIB_PATH" "$bundle/libSDL2-2.0.0.dylib"
 
-          install_name_tool -change "$SDL_DYLIB_PATH" "@executable_path/libSDL-1.2.0.dylib" "$bundle/A8E"
+          install_name_tool -change "$SDL_DYLIB_PATH" "@executable_path/libSDL2-2.0.0.dylib" "$bundle/A8E"
 
           otool -L "$bundle/A8E" | tee "$bundle/otool.txt"
-          if ! grep -q "@executable_path/libSDL-1.2.0.dylib" "$bundle/otool.txt"; then
+          if ! grep -q "@executable_path/libSDL2-2.0.0.dylib" "$bundle/otool.txt"; then
             echo "Standalone macOS arm64 bundle did not rewrite SDL load path"
             exit 1
           fi
-          if grep -Eq '/opt/homebrew|/usr/local/(opt|Cellar)/sdl12-compat' "$bundle/otool.txt"; then
+          if grep -Eq '/opt/homebrew/opt/sdl2|/usr/local/(opt|Cellar)/sdl2' "$bundle/otool.txt"; then
             echo "Standalone macOS arm64 bundle still references Homebrew SDL path"
             exit 1
           fi
@@ -186,9 +186,9 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_tag || github.ref }}
 
-      - name: Install SDL via vcpkg
+      - name: Install SDL2 via vcpkg
         # Note: vcpkg is pre-installed on GitHub's windows-latest runners!
-        run: vcpkg install sdl1:x64-windows-static
+        run: vcpkg install sdl2:x64-windows-static
 
       - name: Configure CMake
         run: >
@@ -234,7 +234,7 @@ jobs:
             mingw-w64-x86_64-gcc
             mingw-w64-x86_64-cmake
             mingw-w64-x86_64-make
-            mingw-w64-x86_64-SDL
+            mingw-w64-x86_64-SDL2
 
       - name: Configure and Build
         run: |

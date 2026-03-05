@@ -52,6 +52,7 @@ Additional browser-only triggers:
 |-----|----------|
 | Right Alt | TRIG2 |
 | F1 | HELP |
+| **F11** | Toggle fullscreen mode. A brief overlay also shows "Press Escape or F11 to exit fullscreen" when entering. |
 
 ## UI Toggles / Features
 

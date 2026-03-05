@@ -631,6 +631,43 @@
       );
     }
 
+    function showFullscreenHint() {
+      if (!screenViewport) return;
+      const existing = screenViewport.querySelector(".fullscreen-hint");
+      if (existing) existing.remove();
+      const hint = document.createElement("div");
+      hint.className = "fullscreen-hint";
+      hint.textContent = "Press Escape or F11 to exit fullscreen";
+      hint.style.cssText =
+        "position:absolute;bottom:1.5em;left:50%;transform:translateX(-50%);" +
+        "background:rgba(0,0,0,0.65);color:#fff;padding:0.4em 1em;" +
+        "border-radius:4px;font:14px/1.4 sans-serif;pointer-events:none;" +
+        "z-index:9999;opacity:1;transition:opacity 0.5s ease;";
+      screenViewport.appendChild(hint);
+      setTimeout(function () {
+        hint.style.opacity = "0";
+        setTimeout(function () {
+          if (hint.parentNode) hint.parentNode.removeChild(hint);
+        }, 500);
+      }, 2500);
+    }
+
+    function toggleFullscreen() {
+      const op = isViewportFullscreen()
+        ? exitFullscreen()
+        : requestFullscreen(screenViewport);
+      Promise.resolve(op)
+        .then(function () {
+          updateFullscreenButton();
+          resizeCrtCanvas();
+          queueKeyboardScaleConsistencyCheck();
+          focusCanvas(false);
+        })
+        .catch(function () {
+          // Fullscreen error - silently ignore
+        });
+    }
+
     function addButtonLookupEntry(map, key, button) {
       if (!key || !button) return;
       let list = map.get(key);
@@ -1220,19 +1257,7 @@
 
     if (btnFullscreen) {
       btnFullscreen.addEventListener("click", function () {
-        const op = isViewportFullscreen()
-          ? exitFullscreen()
-          : requestFullscreen(screenViewport);
-        Promise.resolve(op)
-          .then(function () {
-            updateFullscreenButton();
-            resizeCrtCanvas();
-            queueKeyboardScaleConsistencyCheck();
-            focusCanvas(false);
-          })
-          .catch(function () {
-            // Fullscreen error - silently ignore
-          });
+        toggleFullscreen();
       });
     }
 
@@ -1240,6 +1265,7 @@
       updateFullscreenButton();
       resizeCrtCanvas();
       queueKeyboardScaleConsistencyCheck();
+      if (isViewportFullscreen()) showFullscreenHint();
     };
     document.addEventListener("fullscreenchange", onFullscreenChange);
     document.addEventListener("webkitfullscreenchange", onFullscreenChange);
@@ -1666,6 +1692,19 @@
     canvas.addEventListener("keyup", onCanvasKeyUp);
     window.addEventListener("keydown", onWindowModifierKeyDown);
     window.addEventListener("keyup", onWindowModifierKeyUp);
+    // F11 toggles emulator fullscreen; capture phase runs before canvas handlers
+    // so the emulator never sees the key and the browser's native F11 is suppressed.
+    window.addEventListener(
+      "keydown",
+      function (e) {
+        if (e.key === "F11") {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleFullscreen();
+        }
+      },
+      true,
+    );
     canvas.addEventListener("blur", releaseInputState);
     window.addEventListener("blur", releaseInputState);
 

@@ -17,7 +17,10 @@
 #include <stdio.h>
 #include <math.h>
 
-#include <SDL/SDL.h>
+#include <SDL2/SDL.h>
+
+/* Window handle defined in A8E.c; used to update the title bar. */
+extern SDL_Window *g_pSdlWindow;
 
 #include "6502.h"
 #include "AtariIo.h"
@@ -1612,7 +1615,7 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 						sSectorIndex = aSioBuffer[2] + (aSioBuffer[3] << 8);
 
 						sprintf(aCaption, APPLICATION_CAPTION "  [%d]", sSectorIndex);
-						SDL_WM_SetCaption(aCaption, NULL);
+						SDL_SetWindowTitle(g_pSdlWindow, aCaption);
 #ifdef VERBOSE_SIO
 						printf("SIO read sector %d\n", sSectorIndex);
 #endif
@@ -1666,7 +1669,7 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 						break;
 
 					case 0x53: /* STATUS */
-						SDL_WM_SetCaption(APPLICATION_CAPTION "  [-]", NULL);
+						SDL_SetWindowTitle(g_pSdlWindow, APPLICATION_CAPTION "  [-]");
 #ifdef VERBOSE_SIO
 						printf("SIO get status\n");
 #endif

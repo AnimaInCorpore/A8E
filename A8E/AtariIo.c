@@ -3351,7 +3351,7 @@ void AtariIoDrawScreen(
 
 		SDL_BlitSurface(pIoData->tVideoData.pSdlAtariSurface, &tRect, pViewportSurface, NULL);
 
-		SDL_SoftStretch(pViewportSurface, NULL, pSdlScreenSurface, NULL);
+		SDL_BlitScaled(pViewportSurface, NULL, pSdlScreenSurface, NULL);
 	}
 }
 
@@ -3571,7 +3571,7 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 
 	AtariIo_CreatePalette();
 
-	SDL_SetPalette(pSdlAtariSurface, SDL_LOGPAL | SDL_PHYSPAL, m_aAtariColors, 0, 256);
+	SDL_SetPaletteColors(pSdlAtariSurface->format->palette, m_aAtariColors, 0, 256);
 
 	pIoData = malloc(sizeof(IoData_t));
 	if(pIoData == NULL)

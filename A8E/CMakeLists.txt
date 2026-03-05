@@ -41,10 +41,8 @@ if(APPLE)
   endif()
 endif()
 
-# 1. SDL (Legacy 1.x)
-# Note: If you port the C code to SDL2, change this to find_package(SDL2 REQUIRED)
-# and update the target_link_libraries below.
-find_package(SDL REQUIRED)
+# 1. SDL2
+find_package(SDL2 REQUIRED)
 
 # --- Source Files ---
 add_executable(A8E
@@ -60,44 +58,52 @@ add_executable(A8E
 target_compile_definitions(A8E PRIVATE A8E_BUILD_VERSION=\"${A8E_BUILD_VERSION}\")
 
 # --- Include Directories ---
-# Add emulator source directory to includes
 target_include_directories(A8E PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 
-# Add SDL includes
-# This logic supports both #include <SDL.h> and #include <SDL/SDL.h>
-target_include_directories(A8E PRIVATE ${SDL_INCLUDE_DIR})
-
-# Attempt to locate the parent dir of SDL to support <SDL/SDL.h> syntax safer
-get_filename_component(SDL_INCLUDE_PARENT "${SDL_INCLUDE_DIR}" DIRECTORY)
-target_include_directories(A8E PRIVATE "${SDL_INCLUDE_PARENT}")
+# SDL2: modern config provides SDL2::SDL2 imported target; old-style provides
+# SDL2_INCLUDE_DIRS / SDL2_LIBRARIES variables.
+if(TARGET SDL2::SDL2)
+  target_include_directories(A8E PRIVATE $<TARGET_PROPERTY:SDL2::SDL2,INTERFACE_INCLUDE_DIRECTORIES>)
+else()
+  target_include_directories(A8E PRIVATE ${SDL2_INCLUDE_DIRS})
+  # Also expose the parent dir so <SDL2/SDL.h> resolves correctly.
+  foreach(_d ${SDL2_INCLUDE_DIRS})
+    get_filename_component(_parent "${_d}" DIRECTORY)
+    target_include_directories(A8E PRIVATE "${_parent}")
+  endforeach()
+endif()
 
 # --- Linking ---
 
 # --- Platform Specifics ---
 
 if(MINGW)
-  # MinGW link order matters: mingw32, SDLmain, then SDL.
-  target_link_libraries(A8E PRIVATE mingw32 ${SDLMAIN_LIBRARY} ${SDL_LIBRARY})
+  # MinGW link order matters: mingw32, SDL2main, then SDL2.
+  if(TARGET SDL2::SDL2main)
+    target_link_libraries(A8E PRIVATE mingw32 SDL2::SDL2main SDL2::SDL2)
+  elseif(TARGET SDL2::SDL2)
+    target_link_libraries(A8E PRIVATE mingw32 SDL2::SDL2)
+  else()
+    target_link_libraries(A8E PRIVATE mingw32 ${SDL2_LIBRARIES})
+  endif()
+elseif(TARGET SDL2::SDL2)
+  if(TARGET SDL2::SDL2main)
+    target_link_libraries(A8E PRIVATE SDL2::SDL2main SDL2::SDL2)
+  else()
+    target_link_libraries(A8E PRIVATE SDL2::SDL2)
+  endif()
 else()
-  # Other platforms can link SDL directly.
-  target_link_libraries(A8E PRIVATE ${SDL_LIBRARY})
+  target_link_libraries(A8E PRIVATE ${SDL2_LIBRARIES})
 endif()
 
 if(MSVC)
-  # SDL 1.2 static builds on MSVC need explicit Win32 system libs.
-  if(SDLMAIN_LIBRARY)
-    target_link_libraries(A8E PRIVATE "${SDLMAIN_LIBRARY}")
-  endif()
-  target_link_libraries(A8E PRIVATE winmm dinput8 dxguid ddraw)
+  # SDL2 static builds on MSVC need explicit Win32 system libs (SDL2's CMake
+  # config usually adds these automatically, but keep them as a fallback).
+  target_link_libraries(A8E PRIVATE winmm version imm32)
 endif()
 
 if(APPLE)
-  # Avoid duplicate link items when FindSDL already returns SDLmain/Cocoa.
-  if(SDLMAIN_LIBRARY AND NOT SDL_LIBRARY MATCHES "SDLmain")
-    target_link_libraries(A8E PRIVATE "${SDLMAIN_LIBRARY}")
-  endif()
-
-  if(NOT SDL_LIBRARY MATCHES "Cocoa")
+  if(NOT TARGET SDL2::SDL2)
     find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
     target_link_libraries(A8E PRIVATE "${COCOA_FRAMEWORK}")
   endif()
