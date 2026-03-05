@@ -69,14 +69,14 @@
 #define IRQ_OTHER_KEY_PRESSED 0x40
 #define IRQ_BREAK_KEY_PRESSED 0x80
 
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
-#define MAX(a,b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 typedef struct
 {
 	u32 lVerticalScrollOffset;
 	u32 lCurrentDisplayLine;
-	
+
 	SDL_Surface *pSdlAtariSurface;
 	u8 *pPriorityData;
 } VideoData_t;
@@ -87,7 +87,7 @@ typedef struct
 	u8 *pPriorityData;
 	u16 sDisplayMemoryAddress;
 	u32 lBytesPerLine;
-} DrawLineData_t;	
+} DrawLineData_t;
 
 typedef struct
 {
@@ -119,9 +119,9 @@ typedef struct
 	/* POKEY pot scan state */
 	u8 cPotScanActive;
 	u64 llPotScanStartCycle;
-	u8 aPotValues[8];    /* target values per pot (set by input layer) */
-	u8 aPotLatched[8];   /* 1 = latched at target */
-	u8 cAllPot;          /* ALLPOT shadow (bits clear when pot latched) */
+	u8 aPotValues[8]; /* target values per pot (set by input layer) */
+	u8 aPotLatched[8]; /* 1 = latched at target */
+	u8 cAllPot; /* ALLPOT shadow (bits clear when pot latched) */
 
 	u8 *pDisk1;
 	u32 lDiskSize;
@@ -139,7 +139,7 @@ void AtariIoCycleTimedEventUpdate(_6502_Context_t *pContext);
 void AtariIoStatus(_6502_Context_t *pContext);
 
 void AtariIoDrawScreen(
-	_6502_Context_t *pContext, 
+	_6502_Context_t *pContext,
 	SDL_Surface *pSdlScreenSurface,
 	u32 lScreenWidth,
 	u32 lScreenHeight);

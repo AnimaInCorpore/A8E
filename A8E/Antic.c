@@ -40,8 +40,8 @@
 
 #define FIXED_ADD(address, bits, value) ((address) = ((address) & ~(bits)) | (((address) + (value)) & (bits)))
 
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
-#define MAX(a,b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 typedef struct
 {
@@ -74,7 +74,7 @@ u8 *Antic_DMACTL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" DMACTL: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_DMACTL];
 }
 
@@ -89,7 +89,7 @@ u8 *Antic_CHACTL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" CHACTL: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_CHACTL];
 }
 
@@ -107,7 +107,7 @@ u8 *Antic_DLISTL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" DLISTL: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_DLISTL];
 }
 
@@ -125,7 +125,7 @@ u8 *Antic_DLISTH(_6502_Context_t *pContext, u8 *pValue)
 		printf(" DLISTH: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_DLISTH];
 }
 
@@ -140,7 +140,7 @@ u8 *Antic_HSCROL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" HSCROL: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_HSCROL];
 }
 
@@ -155,7 +155,7 @@ u8 *Antic_VSCROL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" VSCROL: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_VSCROL];
 }
 
@@ -170,7 +170,7 @@ u8 *Antic_PMBASE(_6502_Context_t *pContext, u8 *pValue)
 		printf(" PMBASE: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_PMBASE];
 }
 
@@ -185,7 +185,7 @@ u8 *Antic_CHBASE(_6502_Context_t *pContext, u8 *pValue)
 		printf(" CHBASE: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_CHBASE];
 }
 
@@ -193,7 +193,7 @@ u8 *Antic_CHBASE(_6502_Context_t *pContext, u8 *pValue)
 u8 *Antic_WSYNC(_6502_Context_t *pContext, u8 *pValue)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	
+
 	if(pValue)
 	{
 		u64 llNextLineCycle = pIoData->llDisplayListFetchCycle;
@@ -202,7 +202,9 @@ u8 *Antic_WSYNC(_6502_Context_t *pContext, u8 *pValue)
 		 * for the next scanline boundary (end of current scanline).
 		 */
 		if(llNextLineCycle <= pContext->llCycleCounter)
+		{
 			llNextLineCycle = ((pContext->llCycleCounter / CYCLES_PER_LINE) + 1) * CYCLES_PER_LINE;
+		}
 
 		pContext->llStallCycleCounter =
 			MAX(llNextLineCycle, pContext->llStallCycleCounter);
@@ -244,31 +246,37 @@ u8 *Antic_NMIEN(_6502_Context_t *pContext, u8 *pValue)
 #ifdef VERBOSE_NMI
 		printf("$%04X: NMIEN ", pContext->tCpu.pc);
 
-        if((*pValue & 0x80) != (SRAM[IO_NMIEN] & 0x80))
-        {
-    		if(*pValue & 0x80)
-                printf("(DLI enabled) ");
-            else
-                printf("(DLI disabled) ");
-        }
+		if((*pValue & 0x80) != (SRAM[IO_NMIEN] & 0x80))
+		{
+			if(*pValue & 0x80)
+			{
+				printf("(DLI enabled) ");
+			}
+			else
+				printf("(DLI disabled) ");
+		}
 
-        if((*pValue & 0x40) != (SRAM[IO_NMIEN] & 0x40))
-        {
-    		if(*pValue & 0x40)
-                printf("(VBI enabled) ");
-            else
-                printf("(VBI disabled) ");
-        }
+		if((*pValue & 0x40) != (SRAM[IO_NMIEN] & 0x40))
+		{
+			if(*pValue & 0x40)
+			{
+				printf("(VBI enabled) ");
+			}
+			else
+				printf("(VBI disabled) ");
+		}
 
-        if((*pValue & 0x20) != (SRAM[IO_NMIEN] & 0x20))
-        {
-    		if(*pValue & 0x20)
-                printf("(RESET enabled)");
-            else
-                printf("(RESET disabled)");
-        }
+		if((*pValue & 0x20) != (SRAM[IO_NMIEN] & 0x20))
+		{
+			if(*pValue & 0x20)
+			{
+				printf("(RESET enabled)");
+			}
+			else
+				printf("(RESET disabled)");
+		}
 
-        printf("\n");
+		printf("\n");
 #endif
 		/* Only bits 7-5 are used (DLI/VBI/RESET). */
 		SRAM[IO_NMIEN] = (*pValue & 0xe0);
@@ -292,6 +300,6 @@ u8 *Antic_NMIRES_NMIST(_6502_Context_t *pContext, u8 *pValue)
 		printf(" NMIRES: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_NMIRES_NMIST];
 }

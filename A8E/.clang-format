@@ -1,0 +1,10 @@
+BasedOnStyle: LLVM
+UseTab: Always
+IndentWidth: 4
+TabWidth: 4
+BreakBeforeBraces: Allman
+SpaceBeforeParens: Never
+ColumnLimit: 0
+SortIncludes: false
+ReflowComments: false
+AlignTrailingComments: false

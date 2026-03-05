@@ -97,9 +97,9 @@ int main(int argc, char *argv[])
 	   monitors and the desktop is never left in a bad resolution if the
 	   app crashes. */
 	pWindow = SDL_CreateWindow(APPLICATION_CAPTION,
-		SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-		(int)lWindowWidth, (int)lWindowHeight,
-		lFullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+							   SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+							   (int)lWindowWidth, (int)lWindowHeight,
+							   lFullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
 
 	if(pWindow == NULL)
 	{
@@ -112,7 +112,9 @@ int main(int argc, char *argv[])
 
 	pRenderer = SDL_CreateRenderer(pWindow, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 	if(pRenderer == NULL)
+	{
 		pRenderer = SDL_CreateRenderer(pWindow, -1, 0);
+	}
 	if(pRenderer == NULL)
 	{
 		fprintf(stderr, "SDL_CreateRenderer() failed: %s\n", SDL_GetError());
@@ -126,7 +128,7 @@ int main(int argc, char *argv[])
 	SDL_RenderSetLogicalSize(pRenderer, (int)lAtariScreenWidth, (int)lAtariScreenHeight);
 
 	pScreenTexture = SDL_CreateTexture(pRenderer, SDL_PIXELFORMAT_ARGB8888,
-		SDL_TEXTUREACCESS_STREAMING, (int)lAtariScreenWidth, (int)lAtariScreenHeight);
+									   SDL_TEXTUREACCESS_STREAMING, (int)lAtariScreenWidth, (int)lAtariScreenHeight);
 	if(pScreenTexture == NULL)
 	{
 		fprintf(stderr, "SDL_CreateTexture() failed: %s\n", SDL_GetError());
@@ -139,8 +141,8 @@ int main(int argc, char *argv[])
 	/* Software surface — AtariIoDrawScreen draws the Atari output here,
 	   then we upload it to pScreenTexture each frame. */
 	pScreenSurface = SDL_CreateRGBSurface(0,
-		(int)lAtariScreenWidth, (int)lAtariScreenHeight, 32,
-		0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
+										  (int)lAtariScreenWidth, (int)lAtariScreenHeight, 32,
+										  0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
 	if(pScreenSurface == NULL)
 	{
 		fprintf(stderr, "SDL_CreateRGBSurface() failed: %s\n", SDL_GetError());
@@ -190,14 +192,18 @@ int main(int argc, char *argv[])
 		SDL_RenderPresent(pRenderer);
 
 		while(SDL_PollEvent(&tEvent))
-        {
-            if(tEvent.type == SDL_QUIT)
-                goto Exit;
+		{
+			if(tEvent.type == SDL_QUIT)
+			{
+				goto Exit;
+			}
 
-    		if(tEvent.type == SDL_KEYDOWN)
-            {
-    			if(tEvent.key.keysym.sym == SDLK_F11)
-    				cTurboFlag = 1;
+			if(tEvent.type == SDL_KEYDOWN)
+			{
+				if(tEvent.key.keysym.sym == SDLK_F11)
+				{
+					cTurboFlag = 1;
+				}
 
 				/* Alt+Enter toggles fullscreen at runtime. */
 				if(tEvent.key.keysym.sym == SDLK_RETURN &&
@@ -206,25 +212,31 @@ int main(int argc, char *argv[])
 				{
 					Uint32 flags = SDL_GetWindowFlags(pWindow);
 					SDL_SetWindowFullscreen(pWindow,
-						(flags & SDL_WINDOW_FULLSCREEN_DESKTOP)
-							? 0
-							: SDL_WINDOW_FULLSCREEN_DESKTOP);
+											(flags & SDL_WINDOW_FULLSCREEN_DESKTOP)
+												? 0
+												: SDL_WINDOW_FULLSCREEN_DESKTOP);
 				}
 
 #ifdef ENABLE_VERBOSE_DEBUGGING
 				if(tEvent.key.keysym.sym == SDLK_F12)
+				{
 					cDisassembleFlag = 1;
+				}
 #endif
-            }
+			}
 
-    		if(tEvent.type == SDL_KEYUP)
-    		{
-    			if(tEvent.key.keysym.sym == SDLK_F11)
-    				cTurboFlag = 0;
-    		}
+			if(tEvent.type == SDL_KEYUP)
+			{
+				if(tEvent.key.keysym.sym == SDLK_F11)
+				{
+					cTurboFlag = 0;
+				}
+			}
 
 			if(tEvent.type == SDL_KEYDOWN || tEvent.type == SDL_KEYUP)
-   				AtariIoKeyboardEvent(pAtariContext, &tEvent.key);
+			{
+				AtariIoKeyboardEvent(pAtariContext, &tEvent.key);
+			}
 		}
 
 		if(!cTurboFlag)
@@ -243,7 +255,9 @@ int main(int argc, char *argv[])
 
 				/* Safety net: never stall the main loop indefinitely. */
 				if((SDL_GetTicks() - throttleStart) > 250)
+				{
 					break;
+				}
 			}
 
 			/* Fallback: if audio throttling didn't engage (audio disabled or buffer very empty),
@@ -251,8 +265,10 @@ int main(int argc, char *argv[])
 			if(!didThrottle)
 			{
 				u32 elapsed = SDL_GetTicks() - lLastTicks;
-				if(elapsed < 18)  /* slightly under 20ms to let buffer build */
+				if(elapsed < 18) /* slightly under 20ms to let buffer build */
+				{
 					SDL_Delay(18 - elapsed);
+				}
 			}
 		}
 

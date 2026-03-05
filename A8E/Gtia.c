@@ -67,7 +67,7 @@ u8 *Gtia_HPOSP1_M1PF(_6502_Context_t *pContext, u8 *pValue)
 		printf(" HPOSP1: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_HPOSP1_M1PF];
 }
 
@@ -82,7 +82,7 @@ u8 *Gtia_HPOSP2_M2PF(_6502_Context_t *pContext, u8 *pValue)
 		printf(" HPOSP2: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_HPOSP2_M2PF];
 }
 
@@ -97,7 +97,7 @@ u8 *Gtia_HPOSP3_M3PF(_6502_Context_t *pContext, u8 *pValue)
 		printf(" HPOSP3: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_HPOSP3_M3PF];
 }
 
@@ -112,7 +112,7 @@ u8 *Gtia_HPOSM0_P0PF(_6502_Context_t *pContext, u8 *pValue)
 		printf(" HPOSM0: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_HPOSM0_P0PF];
 }
 
@@ -127,7 +127,7 @@ u8 *Gtia_HPOSM1_P1PF(_6502_Context_t *pContext, u8 *pValue)
 		printf(" HPOSM1: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_HPOSM1_P1PF];
 }
 
@@ -142,7 +142,7 @@ u8 *Gtia_HPOSM2_P2PF(_6502_Context_t *pContext, u8 *pValue)
 		printf(" HPOSM2: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_HPOSM2_P2PF];
 }
 
@@ -157,7 +157,7 @@ u8 *Gtia_HPOSM3_P3PF(_6502_Context_t *pContext, u8 *pValue)
 		printf(" HPOSM3: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_HPOSM3_P3PF];
 }
 
@@ -172,7 +172,7 @@ u8 *Gtia_SIZEP0_M0PL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" SIZEP0: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_SIZEP0_M0PL];
 }
 
@@ -187,7 +187,7 @@ u8 *Gtia_SIZEP1_M1PL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" SIZEP1: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_SIZEP1_M1PL];
 }
 
@@ -202,7 +202,7 @@ u8 *Gtia_SIZEP2_M2PL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" SIZEP2: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_SIZEP2_M2PL];
 }
 
@@ -232,7 +232,7 @@ u8 *Gtia_SIZEM_P0PL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" SIZEM: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_SIZEM_P0PL];
 }
 
@@ -247,7 +247,7 @@ u8 *Gtia_GRAFP0_P1PL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" GRAFP0: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_GRAFP0_P1PL];
 }
 
@@ -262,7 +262,7 @@ u8 *Gtia_GRAFP1_P2PL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" GRAFP1: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_GRAFP1_P2PL];
 }
 
@@ -277,7 +277,7 @@ u8 *Gtia_GRAFP2_P3PL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" GRAFP2: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_GRAFP2_P3PL];
 }
 
@@ -292,7 +292,7 @@ u8 *Gtia_GRAFP3_TRIG0(_6502_Context_t *pContext, u8 *pValue)
 		printf(" GRAFP3: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_GRAFP3_TRIG0];
 }
 
@@ -307,7 +307,7 @@ u8 *Gtia_GRAFM_TRIG1(_6502_Context_t *pContext, u8 *pValue)
 		printf(" GRAFM: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_GRAFM_TRIG1];
 }
 
@@ -322,7 +322,7 @@ u8 *Gtia_COLPM0_TRIG2(_6502_Context_t *pContext, u8 *pValue)
 		printf(" COLPM0: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_COLPM0_TRIG2];
 }
 
@@ -337,7 +337,7 @@ u8 *Gtia_COLPM1_TRIG3(_6502_Context_t *pContext, u8 *pValue)
 		printf(" COLPM1: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_COLPM1_TRIG3];
 }
 
@@ -352,7 +352,7 @@ u8 *Gtia_COLPM2_PAL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" COLPM2: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_COLPM2_PAL];
 }
 
@@ -367,7 +367,7 @@ u8 *Gtia_COLPM3(_6502_Context_t *pContext, u8 *pValue)
 		printf(" COLPM3: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_COLPM3];
 }
 
@@ -382,7 +382,7 @@ u8 *Gtia_COLPF0(_6502_Context_t *pContext, u8 *pValue)
 		printf(" COLPF0: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_COLPF0];
 }
 
@@ -397,7 +397,7 @@ u8 *Gtia_COLPF1(_6502_Context_t *pContext, u8 *pValue)
 		printf(" COLPF1: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_COLPF1];
 }
 
@@ -412,7 +412,7 @@ u8 *Gtia_COLPF2(_6502_Context_t *pContext, u8 *pValue)
 		printf(" COLPF2: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_COLPF2];
 }
 
@@ -427,7 +427,7 @@ u8 *Gtia_COLPF3(_6502_Context_t *pContext, u8 *pValue)
 		printf(" COLPF3: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_COLPF3];
 }
 
@@ -442,7 +442,7 @@ u8 *Gtia_COLBK(_6502_Context_t *pContext, u8 *pValue)
 		printf(" COLBK: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_COLBK];
 }
 
@@ -457,7 +457,7 @@ u8 *Gtia_PRIOR(_6502_Context_t *pContext, u8 *pValue)
 		printf(" PRIOR: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_PRIOR];
 }
 
@@ -472,7 +472,7 @@ u8 *Gtia_VDELAY(_6502_Context_t *pContext, u8 *pValue)
 		printf(" VDELAY: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_VDELAY];
 }
 
@@ -487,7 +487,7 @@ u8 *Gtia_GRACTL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" GRACTL: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_GRACTL];
 }
 
@@ -496,29 +496,29 @@ u8 *Gtia_HITCLR(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
 	{
-        RAM[IO_HPOSP0_M0PF] = 0x00;
-        RAM[IO_HPOSP1_M1PF] = 0x00;
-        RAM[IO_HPOSP2_M2PF] = 0x00;
-        RAM[IO_HPOSP3_M3PF] = 0x00;
-        RAM[IO_HPOSM0_P0PF] = 0x00;
-        RAM[IO_HPOSM1_P1PF] = 0x00;
-        RAM[IO_HPOSM2_P2PF] = 0x00;
-        RAM[IO_HPOSM3_P3PF] = 0x00;
-        RAM[IO_SIZEP0_M0PL] = 0x00;
-        RAM[IO_SIZEP1_M1PL] = 0x00;
-        RAM[IO_SIZEP2_M2PL] = 0x00;
-        RAM[IO_SIZEP3_M3PL] = 0x00;
-        RAM[IO_SIZEM_P0PL] = 0x00;
-        RAM[IO_GRAFP0_P1PL] = 0x00;
-        RAM[IO_GRAFP1_P2PL] = 0x00;
-        RAM[IO_GRAFP2_P3PL] = 0x00;
+		RAM[IO_HPOSP0_M0PF] = 0x00;
+		RAM[IO_HPOSP1_M1PF] = 0x00;
+		RAM[IO_HPOSP2_M2PF] = 0x00;
+		RAM[IO_HPOSP3_M3PF] = 0x00;
+		RAM[IO_HPOSM0_P0PF] = 0x00;
+		RAM[IO_HPOSM1_P1PF] = 0x00;
+		RAM[IO_HPOSM2_P2PF] = 0x00;
+		RAM[IO_HPOSM3_P3PF] = 0x00;
+		RAM[IO_SIZEP0_M0PL] = 0x00;
+		RAM[IO_SIZEP1_M1PL] = 0x00;
+		RAM[IO_SIZEP2_M2PL] = 0x00;
+		RAM[IO_SIZEP3_M3PL] = 0x00;
+		RAM[IO_SIZEM_P0PL] = 0x00;
+		RAM[IO_GRAFP0_P1PL] = 0x00;
+		RAM[IO_GRAFP1_P2PL] = 0x00;
+		RAM[IO_GRAFP2_P3PL] = 0x00;
 
 		SRAM[IO_HITCLR] = *pValue;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" HITCLR: %02X\n", *pValue);
 #endif
-    }
+	}
 
 	return &RAM[IO_HITCLR];
 }
@@ -528,10 +528,12 @@ u8 *Gtia_CONSOL(_6502_Context_t *pContext, u8 *pValue)
 {
 #ifdef CONSOL_HACK
 	if(pValue == NULL && pContext->tCpu.pc == 0xc49d)
+	{
 		return &m_cConsolHack;
+	}
 #endif
 	if(pValue)
- 	{	
+	{
 		/* Only bit 3 (speaker) is writable; key bits are read-only. */
 		SRAM[IO_CONSOL] = *pValue & 0x08;
 #ifdef VERBOSE_REGISTER
@@ -539,6 +541,6 @@ u8 *Gtia_CONSOL(_6502_Context_t *pContext, u8 *pValue)
 		printf(" CONSOL: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_CONSOL];
 }

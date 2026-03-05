@@ -11,28 +11,6 @@ if(POLICY CMP0074)
   cmake_policy(SET CMP0074 NEW)
 endif()
 
-option(
-  A8E_ENFORCE_BRACES
-  "Require braces around single-line control statements via clang-tidy."
-  ON
-)
-
-if(A8E_ENFORCE_BRACES)
-  find_program(A8E_CLANG_TIDY_EXE NAMES clang-tidy)
-  if(NOT A8E_CLANG_TIDY_EXE)
-    message(FATAL_ERROR
-      "A8E_ENFORCE_BRACES is ON but clang-tidy was not found. "
-      "Install clang-tidy or configure with -DA8E_ENFORCE_BRACES=OFF."
-    )
-  endif()
-
-  set(CMAKE_C_CLANG_TIDY
-    "${A8E_CLANG_TIDY_EXE}"
-    "-checks=-*,readability-braces-around-statements"
-    "-warnings-as-errors=readability-braces-around-statements"
-  )
-endif()
-
 # --- Build Version (shared with jsA8E release tracking) ---
 set(A8E_BUILD_VERSION "dev")
 set(A8E_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../jsA8E/version.json")

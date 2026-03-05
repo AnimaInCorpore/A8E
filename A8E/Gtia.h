@@ -91,4 +91,3 @@ u8 *Gtia_HITCLR(_6502_Context_t *pContext, u8 *pValue);
 u8 *Gtia_CONSOL(_6502_Context_t *pContext, u8 *pValue);
 
 #endif
-

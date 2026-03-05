@@ -37,20 +37,22 @@ u8 *Pia_PORTA(_6502_Context_t *pContext, u8 *pValue)
 	if(!(SRAM[IO_PACTL] & 0x04))
 	{
 		if(pValue)
+		{
 			pIoData->cValuePortA = *pValue;
+		}
 
 		return &pIoData->cValuePortA;
 	}
 
 	if(pValue)
-    {
-        SRAM[IO_PORTA] = *pValue;
+	{
+		SRAM[IO_PORTA] = *pValue;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" PORTA: %02X\n", *pValue);
 #endif
 	}
-	
+
 	return &RAM[IO_PORTA];
 }
 
@@ -62,7 +64,9 @@ u8 *Pia_PORTB(_6502_Context_t *pContext, u8 *pValue)
 	if(!(SRAM[IO_PBCTL] & 0x04))
 	{
 		if(pValue)
+		{
 			pIoData->cValuePortB = *pValue;
+		}
 
 		return &pIoData->cValuePortB;
 	}
@@ -71,14 +75,14 @@ u8 *Pia_PORTB(_6502_Context_t *pContext, u8 *pValue)
 	{
 #ifdef VERBOSE_ROM_SWITCH
 		printf("$%04X: PORTB ", pContext->tCpu.pc);
-#endif	
+#endif
 		if((SRAM[IO_PORTB] & 0x01) != (*pValue & 0x01))
 		{
 			if(*pValue & 0x01) /* OS area */
 			{
 #ifdef VERBOSE_ROM_SWITCH
 				printf("(OS ROM enabled) ");
-#endif		
+#endif
 				memcpy(&SRAM[0xc000], &RAM[0xc000], 0x1000);
 				_6502_SetRom(pContext, 0xc000, 0xcfff);
 				memcpy(&RAM[0xc000], pIoData->pOsRom, 0x1000);
@@ -91,7 +95,7 @@ u8 *Pia_PORTB(_6502_Context_t *pContext, u8 *pValue)
 			{
 #ifdef VERBOSE_ROM_SWITCH
 				printf("(OS ROM disabled) ");
-#endif		
+#endif
 				memcpy(&RAM[0xc000], &SRAM[0xc000], 0x1000);
 				_6502_SetRam(pContext, 0xc000, 0xcfff);
 
@@ -106,7 +110,7 @@ u8 *Pia_PORTB(_6502_Context_t *pContext, u8 *pValue)
 			{
 #ifdef VERBOSE_ROM_SWITCH
 				printf("(BASIC ROM disabled) ");
-#endif		
+#endif
 				memcpy(&RAM[0xa000], &SRAM[0xa000], 0x2000);
 				_6502_SetRam(pContext, 0xa000, 0xbfff);
 			}
@@ -114,7 +118,7 @@ u8 *Pia_PORTB(_6502_Context_t *pContext, u8 *pValue)
 			{
 #ifdef VERBOSE_ROM_SWITCH
 				printf("(BASIC ROM enabled) ");
-#endif		
+#endif
 				memcpy(&SRAM[0xa000], &RAM[0xa000], 0x2000);
 				_6502_SetRom(pContext, 0xa000, 0xbfff);
 				memcpy(&RAM[0xa000], pIoData->pBasicRom, 0x2000);
@@ -127,7 +131,7 @@ u8 *Pia_PORTB(_6502_Context_t *pContext, u8 *pValue)
 			{
 #ifdef VERBOSE_ROM_SWITCH
 				printf("(Self Test ROM disabled)");
-#endif		
+#endif
 				memcpy(&RAM[0x5000], &SRAM[0x5000], 0x0800);
 				_6502_SetRam(pContext, 0x5000, 0x57ff);
 			}
@@ -135,16 +139,16 @@ u8 *Pia_PORTB(_6502_Context_t *pContext, u8 *pValue)
 			{
 #ifdef VERBOSE_ROM_SWITCH
 				printf("(Self Test ROM enabled)");
-#endif			
+#endif
 				memcpy(&SRAM[0x5000], &RAM[0x5000], 0x0800);
 				_6502_SetRom(pContext, 0x5000, 0x57ff);
 				memcpy(&RAM[0x5000], pIoData->pSelfTestRom, 0x0800);
 			}
 		}
-		
+
 #ifdef VERBOSE_ROM_SWITCH
 		printf("\n");
-#endif		
+#endif
 		RAM[IO_PORTB] = SRAM[IO_PORTB] = (*pValue & 0x83) | 0x7c;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
@@ -186,5 +190,3 @@ u8 *Pia_PBCTL(_6502_Context_t *pContext, u8 *pValue)
 
 	return &RAM[IO_PBCTL];
 }
-
-

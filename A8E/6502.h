@@ -29,10 +29,10 @@
 #define SRAM pContext->pShadowMemory
 #define IO pContext->pIoMemory
 
-#define _6502_STALL(cycles) \
-	pContext->llStallCycleCounter = \
+#define _6502_STALL(cycles)                \
+	pContext->llStallCycleCounter =        \
 		MAX(pContext->llStallCycleCounter, \
-		pContext->llCycleCounter + (cycles));
+			pContext->llCycleCounter + (cycles));
 
 typedef char s8;
 typedef unsigned char u8;

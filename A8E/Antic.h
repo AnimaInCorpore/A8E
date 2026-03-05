@@ -59,4 +59,3 @@ u8 *Antic_NMIEN(_6502_Context_t *pContext, u8 *pValue);
 u8 *Antic_NMIRES_NMIST(_6502_Context_t *pContext, u8 *pValue);
 
 #endif
-
