@@ -43,6 +43,7 @@ Process rule: review this file before planning any improvement, and update it af
 - [Debug](jsA8E/DEBUG.md)
 
 ## Recent Improvements
+- 2026-03-05: `jsA8E/js/app/assembler_ui.js`: assembler label parsing now accepts leading labels without a trailing colon (both label-only lines and `label <statement>` forms), while preserving constant-definition parsing (`NAME = expr`, `NAME EQU expr`) and existing mnemonic/directive handling.
 - 2026-03-03: `jsA8E/js/app/assembler_ui.js`, `jsA8E/style.css`: fixed assembler panel stability for long sources by removing conflicting editor minimum sizing (`.asm-editor-wrap` can now flex/shrink), raising panel minimum to `340px`, resetting editor scroll/caret to top on source load, and using focus-without-scroll when opening the panel so the assembler toolbar/menu stays visible.
 - 2026-03-03: `jsA8E/js/app/assembler_ui.js`, `jsA8E/style.css`: assembler panel now opens taller by default (screen height + extra headroom, clamped to viewport), with a larger minimum panel/editor height (`280px` panel minimum, `300px` editor area minimum) for a bigger editing workspace.
 - 2026-03-03: `jsA8E/js/app/assembler_ui.js`: assembler panel initial height now matches the emulator display screen (`.screenViewport`) height, so the editor and screen are visually aligned. Still resizable via the bottom drag handle (min 220px).

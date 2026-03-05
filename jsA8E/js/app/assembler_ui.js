@@ -727,6 +727,53 @@
     return value;
   }
 
+  function isReservedLeadingToken(word) {
+    const upper = String(word || "").toUpperCase();
+    if (!upper.length) return false;
+    if (MNEMONIC_KEYWORDS.has(upper) || DIRECTIVE_KEYWORDS.has(upper)) return true;
+
+    if (upper[0] === ".") {
+      const bare = upper.substring(1);
+      if (MNEMONIC_KEYWORDS.has(bare) || DIRECTIVE_KEYWORDS.has(bare)) return true;
+    }
+    return false;
+  }
+
+  function consumeLeadingLabel(text) {
+    const body = String(text || "").trim();
+    if (!body.length) return null;
+
+    let match = body.match(/^([A-Za-z_.@][A-Za-z0-9_.@]*)\s*:\s*(.*)$/);
+    if (match) {
+      return {
+        label: match[1],
+        rest: (match[2] || "").trim(),
+      };
+    }
+
+    match = body.match(/^([A-Za-z_.@][A-Za-z0-9_.@]*)(?:\s+(.+))?$/);
+    if (!match) return null;
+
+    const label = match[1];
+    if (isReservedLeadingToken(label)) return null;
+
+    const rest = (match[2] || "").trim();
+    if (!rest.length) {
+      return {
+        label: label,
+        rest: "",
+      };
+    }
+
+    // Preserve constant-definition forms like "NAME = expr" and "NAME EQU expr".
+    if (/^(=|EQU\b)/i.test(rest)) return null;
+
+    return {
+      label: label,
+      rest: rest,
+    };
+  }
+
   function buildXex(segments) {
     let total = 0;
     for (let i = 0; i < segments.length; i++) {
@@ -830,11 +877,11 @@
       try {
         let body = raw;
         while (true) {
-          const labelMatch = body.match(/^([A-Za-z_.@][A-Za-z0-9_.@]*)\s*:\s*(.*)$/);
-          if (!labelMatch) break;
-          const name = defineSymbol(symbols, labelMatch[1], pc, lineNo);
+          const labelInfo = consumeLeadingLabel(body);
+          if (!labelInfo) break;
+          const name = defineSymbol(symbols, labelInfo.label, pc, lineNo);
           symbolsAdded.push(name);
-          body = (labelMatch[2] || "").trim();
+          body = labelInfo.rest;
           if (!body.length) break;
         }
         if (!body.length) continue;
