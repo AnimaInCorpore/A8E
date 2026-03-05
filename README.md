@@ -41,6 +41,8 @@ python -m http.server 8000
 
 For an online demo of the jsA8E version, visit https://jsa8e.anides.de/
 
+The latest unreleased development version is available at https://dev.jsa8e.anides.de/
+
 ## Quick Start (Native)
 
 Building requires **SDL 1.2** development headers. See the [A8E README](A8E/README.md) for full build instructions covering Windows (MSVC, MinGW), macOS (Homebrew, legacy macOS without CMake), and Linux.

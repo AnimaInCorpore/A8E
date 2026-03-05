@@ -51,6 +51,7 @@ Additional browser-only triggers:
 | Key | Function |
 |-----|----------|
 | Right Alt | TRIG2 |
+| F1 | HELP |
 
 ## UI Toggles / Features
 
@@ -60,6 +61,42 @@ Additional browser-only triggers:
 - Audio On/Off
 - On-screen joystick panel toggle
 - On-screen Atari keyboard toggle
+- Keyboard map toggle (translated symbol mapping for local keyboard layouts vs. original Atari layout)
 - Option-on-Start toggle (hold OPTION during boot, BASIC-off style boot behavior)
 
 On smaller/mobile layouts, the virtual keyboard starts hidden by default.
+
+## HostFS (H: Device)
+
+The H: device panel exposes a virtual host filesystem to the emulated Atari.
+
+- Upload files or entire folders via the toolbar or drag-and-drop.
+- Files are accessible from the Atari via the `H:` device (e.g. `OPEN #1,4,0,"H:FILE.TXT"`).
+- Select files to download them to the browser or delete them.
+- File list supports sorting by name, type, and size.
+
+## Assembler
+
+The built-in 6502 assembler editor integrates with HostFS.
+
+- Source files are read from and written to HostFS (`H:`).
+- **Assemble** compiles the source and writes a `.XEX` to HostFS.
+- **Run** saves, assembles, loads the resulting XEX into D1:, and starts the emulator.
+
+Keyboard shortcuts:
+
+| Shortcut | Function |
+|----------|----------|
+| Ctrl+S | Save source to HostFS |
+| Ctrl+Shift+B | Assemble |
+| Ctrl+Enter | Run (save → assemble → load → start) |
+
+### Debugger
+
+The assembler panel includes a source-level debugger:
+
+- Set breakpoints by clicking in the gutter.
+- Execution pauses when a breakpoint address is hit.
+- **Step** — execute the next instruction and pause again.
+- **Step Over** — execute a subroutine call without stepping into it.
+- **Continue** — resume execution until the next breakpoint.
