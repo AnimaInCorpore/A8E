@@ -82,6 +82,18 @@
     const text = String(operand || "").trim();
     if (!text.length) throw makePreError(entry, ".include requires a path.");
 
+    if (
+      text.length >= 2 &&
+      (text[0] === "\"" || text[0] === "'") &&
+      text[text.length - 1] === text[0]
+    ) {
+      try {
+        return ns.decodeEscapedString(text, entry.lineNo);
+      } catch (err) {
+        const rawMessage = err && err.message ? err.message : "Invalid .include path.";
+        throw makePreError(entry, String(rawMessage).replace(/^Line\s+\d+:\s*/i, ""));
+      }
+    }
     let m = /^"([^"]+)"$/.exec(text);
     if (m) return m[1];
     m = /^'([^']+)'$/.exec(text);
@@ -167,7 +179,7 @@
 
       const two = src.substring(i, i + 2);
       if (two === "<<" || two === ">>" || two === "&&" || two === "||" ||
-          two === "<=" || two === ">=" || two === "<>") {
+          two === "<=" || two === ">=" || two === "<>" || two === "==" || two === "!=") {
         push("op", two);
         i += 2;
         continue;
@@ -388,8 +400,8 @@
     function parseCompare() {
       let left = parseShift();
       while (true) {
-        if (matchOp("=")) left = normalizeBool(left === parseShift());
-        else if (matchOp("<>")) left = normalizeBool(left !== parseShift());
+        if (matchOp("=") || matchOp("==")) left = normalizeBool(left === parseShift());
+        else if (matchOp("<>") || matchOp("!=")) left = normalizeBool(left !== parseShift());
         else if (matchOp("<")) left = normalizeBool(left < parseShift());
         else if (matchOp("<=")) left = normalizeBool(left <= parseShift());
         else if (matchOp(">")) left = normalizeBool(left > parseShift());

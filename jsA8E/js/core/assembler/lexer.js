@@ -123,7 +123,7 @@
 
   ns.defineSymbol = function defineSymbol(symbols, rawName, value, lineNo) {
     const name = ns.normalizeSymbolName(rawName);
-    if (!/^[A-Z_.@][A-Z0-9_.@]*$/.test(name)) {
+    if (!/^[A-Z_.@?][A-Z0-9_.@?]*$/.test(name)) {
       throw new Error("Line " + lineNo + ": invalid symbol name '" + rawName + "'.");
     }
     if (Object.prototype.hasOwnProperty.call(symbols, name)) {
@@ -133,170 +133,413 @@
     return name;
   };
 
+  function makeExprValue(value, resolved) {
+    return {
+      value: value | 0,
+      resolved: !!resolved,
+    };
+  }
+
+  function tokenizeExpression(exprText, lineNo) {
+    const source = String(exprText || "");
+    const tokens = [];
+    let i = 0;
+
+    function push(type, value) {
+      tokens.push({
+        type: type,
+        value: value,
+      });
+    }
+
+    while (i < source.length) {
+      const ch = source[i];
+      if (/\s/.test(ch)) {
+        i++;
+        continue;
+      }
+
+      const two = source.substring(i, i + 2);
+      if (
+        two === "<<" || two === ">>" ||
+        two === "&&" || two === "||" ||
+        two === "<=" || two === ">=" ||
+        two === "==" || two === "!=" ||
+        two === "<>"
+      ) {
+        push("op", two);
+        i += 2;
+        continue;
+      }
+
+      if ("()[]+-*/&|^!,=<>~".indexOf(ch) >= 0) {
+        push("op", ch);
+        i++;
+        continue;
+      }
+
+      if (ch === "'" || ch === "\"") {
+        const quote = ch;
+        const start = i;
+        i++;
+        while (i < source.length) {
+          if (source[i] === "\\") {
+            i += 2;
+            continue;
+          }
+          if (source[i] === quote) {
+            i++;
+            break;
+          }
+          i++;
+        }
+        if (i > source.length || source[i - 1] !== quote) {
+          throw new Error("Line " + lineNo + ": unterminated string literal in expression.");
+        }
+        push("str", source.substring(start, i));
+        continue;
+      }
+
+      if (ch === "$") {
+        const start = i;
+        i++;
+        while (i < source.length && /[0-9a-fA-F]/.test(source[i])) i++;
+        if (i <= start + 1) {
+          throw new Error("Line " + lineNo + ": invalid hex literal in expression.");
+        }
+        push("num", parseInt(source.substring(start + 1, i), 16));
+        continue;
+      }
+
+      if (ch === "%") {
+        const start = i;
+        i++;
+        while (i < source.length && /[01]/.test(source[i])) i++;
+        if (i <= start + 1) {
+          throw new Error("Line " + lineNo + ": invalid binary literal in expression.");
+        }
+        push("num", parseInt(source.substring(start + 1, i), 2));
+        continue;
+      }
+
+      if (/[0-9]/.test(ch)) {
+        const start = i;
+        if (
+          source[i] === "0" &&
+          i + 1 < source.length &&
+          (source[i + 1] === "x" || source[i + 1] === "X")
+        ) {
+          i += 2;
+          while (i < source.length && /[0-9a-fA-F]/.test(source[i])) i++;
+          if (i <= start + 2) {
+            throw new Error("Line " + lineNo + ": invalid hex literal in expression.");
+          }
+          push("num", parseInt(source.substring(start + 2, i), 16));
+        } else {
+          i++;
+          while (i < source.length && /[0-9]/.test(source[i])) i++;
+          push("num", parseInt(source.substring(start, i), 10));
+        }
+        continue;
+      }
+
+      if (/[A-Za-z_.@?]/.test(ch)) {
+        const start = i;
+        i++;
+        while (i < source.length && /[A-Za-z0-9_.@?]/.test(source[i])) i++;
+        push("ident", source.substring(start, i));
+        continue;
+      }
+
+      throw new Error("Line " + lineNo + ": invalid token '" + ch + "' in expression.");
+    }
+
+    push("eof", "");
+    return tokens;
+  }
+
   ns.evalExpression = function evalExpression(expr, symbols, currentPc, allowUnresolved, lineNo, fallbackSymbols) {
     const source = String(expr || "").trim();
     if (!source.length) {
       throw new Error("Line " + lineNo + ": missing expression.");
     }
 
-    let i = 0;
-    let total = 0;
-    let resolved = true;
-    let nextSign = 1;
-    let expectingTerm = true;
+    const tokens = tokenizeExpression(source, lineNo);
+    let pos = 0;
 
-    while (i < source.length) {
-      while (i < source.length && /\s/.test(source[i])) i++;
-      if (i >= source.length) break;
-
-      const ch = source[i];
-      if ((ch === "+" || ch === "-") && expectingTerm) {
-        if (ch === "-") nextSign = -nextSign;
-        i++;
-        continue;
-      }
-      if ((ch === "+" || ch === "-") && !expectingTerm) {
-        nextSign = ch === "-" ? -1 : 1;
-        expectingTerm = true;
-        i++;
-        continue;
-      }
-
-      const start = i;
-      let quote = "";
-      let depth = 0;
-      while (i < source.length) {
-        const c = source[i];
-        if (quote) {
-          if (c === "\\") {
-            i += 2;
-            continue;
-          }
-          if (c === quote) quote = "";
-          i++;
-          continue;
-        }
-        if (c === "'" || c === "\"") {
-          quote = c;
-          i++;
-          continue;
-        }
-        if (c === "(" || c === "[") {
-          depth++;
-          i++;
-          continue;
-        }
-        if ((c === ")" || c === "]") && depth > 0) {
-          depth--;
-          i++;
-          continue;
-        }
-        if (depth === 0 && (c === "+" || c === "-")) break;
-        i++;
-      }
-
-      const termText = source.substring(start, i).trim();
-      if (!termText.length) {
-        throw new Error("Line " + lineNo + ": invalid expression.");
-      }
-
-      const term = ns.evalTerm(
-        termText,
-        symbols,
-        currentPc,
-        allowUnresolved,
-        lineNo,
-        fallbackSymbols,
-      );
-      if (!term.resolved) resolved = false;
-      total += nextSign * term.value;
-      nextSign = 1;
-      expectingTerm = false;
+    function peek() {
+      return tokens[pos] || { type: "eof", value: "" };
     }
 
-    if (expectingTerm) {
-      throw new Error("Line " + lineNo + ": invalid expression.");
+    function consume() {
+      const token = peek();
+      pos++;
+      return token;
     }
 
-    return { value: total, resolved: resolved };
-  };
-
-  ns.evalTerm = function evalTerm(termText, symbols, currentPc, allowUnresolved, lineNo, fallbackSymbols) {
-    const text = termText.trim();
-    if (!text.length) {
-      throw new Error("Line " + lineNo + ": invalid expression term.");
-    }
-
-    if (text[0] === "<" || text[0] === ">") {
-      const op = text[0];
-      const inner = ns.evalExpression(
-        text.substring(1),
-        symbols,
-        currentPc,
-        allowUnresolved,
-        lineNo,
-        fallbackSymbols,
-      );
-      if (!inner.resolved) return { value: 0, resolved: false };
-      const val = inner.value & 0xffff;
-      return { value: op === "<" ? (val & 0xff) : ((val >> 8) & 0xff), resolved: true };
-    }
-
-    if ((text[0] === "(" && text[text.length - 1] === ")") ||
-        (text[0] === "[" && text[text.length - 1] === "]")) {
-      const open = text[0];
-      const close = open === "(" ? ")" : "]";
-      let depth = 0;
-      let wraps = true;
-      for (let i = 0; i < text.length; i++) {
-        if (text[i] === open) depth++;
-        if (text[i] === close) depth--;
-        if (depth === 0 && i < text.length - 1) {
-          wraps = false;
-          break;
-        }
+    function matchOp(op) {
+      const token = peek();
+      if (token.type === "op" && token.value === op) {
+        pos++;
+        return true;
       }
-      if (wraps) {
-        return ns.evalExpression(
-          text.substring(1, text.length - 1),
-          symbols,
-          currentPc,
-          allowUnresolved,
-          lineNo,
-          fallbackSymbols,
+      return false;
+    }
+
+    function expectOp(op, description) {
+      if (!matchOp(op)) {
+        throw new Error(
+          "Line " + lineNo + ": expected '" + op + "'" +
+          (description ? (" " + description) : "") +
+          " in expression.",
         );
       }
     }
 
-    if (text === "*") return { value: currentPc & 0xffff, resolved: true };
-    if (/^\$[0-9a-fA-F]+$/.test(text))
-      {return { value: parseInt(text.substring(1), 16), resolved: true };}
-    if (/^0x[0-9a-fA-F]+$/i.test(text))
-      {return { value: parseInt(text.substring(2), 16), resolved: true };}
-    if (/^%[01]+$/.test(text))
-      {return { value: parseInt(text.substring(1), 2), resolved: true };}
-    if (/^[0-9]+$/.test(text))
-      {return { value: parseInt(text, 10), resolved: true };}
-    if (/^'(?:[^'\\]|\\.)'$/.test(text)) {
-      const s = ns.decodeEscapedString(text, lineNo);
-      return { value: s.charCodeAt(0) & 0xff, resolved: true };
+    function truthy(value) {
+      return (value | 0) !== 0;
     }
 
-    if (/^[A-Za-z_.@][A-Za-z0-9_.@]*$/.test(text)) {
-      const key = ns.normalizeSymbolName(text);
+    function symbolValue(name) {
+      const key = ns.normalizeSymbolName(name);
       if (Object.prototype.hasOwnProperty.call(symbols, key)) {
-        return { value: symbols[key] | 0, resolved: true };
+        return makeExprValue(symbols[key] | 0, true);
       }
-      if (
-        fallbackSymbols &&
-        Object.prototype.hasOwnProperty.call(fallbackSymbols, key)
-      ) {
-        return { value: fallbackSymbols[key] | 0, resolved: true };
+      if (fallbackSymbols && Object.prototype.hasOwnProperty.call(fallbackSymbols, key)) {
+        return makeExprValue(fallbackSymbols[key] | 0, true);
       }
-      if (allowUnresolved) return { value: 0, resolved: false };
-      throw new Error("Line " + lineNo + ": unknown symbol '" + text + "'.");
+      if (allowUnresolved) return makeExprValue(0, false);
+      throw new Error("Line " + lineNo + ": unknown symbol '" + name + "'.");
     }
 
-    throw new Error("Line " + lineNo + ": invalid term '" + text + "'.");
+    function parsePrimary() {
+      if (matchOp("*")) {
+        return makeExprValue(currentPc & 0xffff, true);
+      }
+
+      const token = peek();
+      if (token.type === "num") {
+        consume();
+        return makeExprValue(token.value | 0, true);
+      }
+
+      if (token.type === "str") {
+        consume();
+        const decoded = ns.decodeEscapedString(token.value, lineNo);
+        if (decoded.length !== 1) {
+          throw new Error("Line " + lineNo + ": character literal must contain exactly one byte.");
+        }
+        return makeExprValue(decoded.charCodeAt(0) & 0xff, true);
+      }
+
+      if (token.type === "ident") {
+        consume();
+        return symbolValue(token.value);
+      }
+
+      if (matchOp("(")) {
+        const value = parseOr();
+        expectOp(")", "to close parenthesized expression");
+        return value;
+      }
+
+      if (matchOp("[")) {
+        const value = parseOr();
+        expectOp("]", "to close bracketed expression");
+        return value;
+      }
+
+      throw new Error("Line " + lineNo + ": invalid expression.");
+    }
+
+    function parseUnary() {
+      if (matchOp("+")) {
+        return parseUnary();
+      }
+      if (matchOp("-")) {
+        const inner = parseUnary();
+        if (!inner.resolved) return makeExprValue(0, false);
+        return makeExprValue(-inner.value, true);
+      }
+      if (matchOp("!")) {
+        const inner = parseUnary();
+        if (!inner.resolved) return makeExprValue(0, false);
+        return makeExprValue(truthy(inner.value) ? 0 : 1, true);
+      }
+      if (matchOp("~")) {
+        const inner = parseUnary();
+        if (!inner.resolved) return makeExprValue(0, false);
+        return makeExprValue(~(inner.value | 0), true);
+      }
+      if (matchOp("<")) {
+        const inner = parseUnary();
+        if (!inner.resolved) return makeExprValue(0, false);
+        return makeExprValue(inner.value & 0xff, true);
+      }
+      if (matchOp(">")) {
+        const inner = parseUnary();
+        if (!inner.resolved) return makeExprValue(0, false);
+        return makeExprValue((inner.value >> 8) & 0xff, true);
+      }
+      return parsePrimary();
+    }
+
+    function parseMul() {
+      let left = parseUnary();
+      while (true) {
+        if (matchOp("*")) {
+          const right = parseUnary();
+          if (!left.resolved || !right.resolved) left = makeExprValue(0, false);
+          else left = makeExprValue((left.value | 0) * (right.value | 0), true);
+          continue;
+        }
+        if (matchOp("/")) {
+          const right = parseUnary();
+          if (!left.resolved || !right.resolved) left = makeExprValue(0, false);
+          else if ((right.value | 0) === 0) left = makeExprValue(0, true);
+          else left = makeExprValue((left.value | 0) / (right.value | 0), true);
+          continue;
+        }
+        break;
+      }
+      return left;
+    }
+
+    function parseAdd() {
+      let left = parseMul();
+      while (true) {
+        if (matchOp("+")) {
+          const right = parseMul();
+          if (!left.resolved || !right.resolved) left = makeExprValue(0, false);
+          else left = makeExprValue((left.value | 0) + (right.value | 0), true);
+          continue;
+        }
+        if (matchOp("-")) {
+          const right = parseMul();
+          if (!left.resolved || !right.resolved) left = makeExprValue(0, false);
+          else left = makeExprValue((left.value | 0) - (right.value | 0), true);
+          continue;
+        }
+        break;
+      }
+      return left;
+    }
+
+    function parseShift() {
+      let left = parseAdd();
+      while (true) {
+        if (matchOp("<<")) {
+          const right = parseAdd();
+          if (!left.resolved || !right.resolved) left = makeExprValue(0, false);
+          else left = makeExprValue((left.value | 0) << (right.value | 0), true);
+          continue;
+        }
+        if (matchOp(">>")) {
+          const right = parseAdd();
+          if (!left.resolved || !right.resolved) left = makeExprValue(0, false);
+          else left = makeExprValue((left.value | 0) >> (right.value | 0), true);
+          continue;
+        }
+        break;
+      }
+      return left;
+    }
+
+    function parseCompare() {
+      let left = parseShift();
+      while (true) {
+        let op = null;
+        if (matchOp("=") || matchOp("==")) op = "eq";
+        else if (matchOp("<>") || matchOp("!=")) op = "ne";
+        else if (matchOp("<")) op = "lt";
+        else if (matchOp("<=")) op = "le";
+        else if (matchOp(">")) op = "gt";
+        else if (matchOp(">=")) op = "ge";
+        if (!op) break;
+
+        const right = parseShift();
+        if (!left.resolved || !right.resolved) {
+          left = makeExprValue(0, false);
+          continue;
+        }
+        if (op === "eq") left = makeExprValue((left.value | 0) === (right.value | 0) ? 1 : 0, true);
+        else if (op === "ne") left = makeExprValue((left.value | 0) !== (right.value | 0) ? 1 : 0, true);
+        else if (op === "lt") left = makeExprValue((left.value | 0) < (right.value | 0) ? 1 : 0, true);
+        else if (op === "le") left = makeExprValue((left.value | 0) <= (right.value | 0) ? 1 : 0, true);
+        else if (op === "gt") left = makeExprValue((left.value | 0) > (right.value | 0) ? 1 : 0, true);
+        else if (op === "ge") left = makeExprValue((left.value | 0) >= (right.value | 0) ? 1 : 0, true);
+      }
+      return left;
+    }
+
+    function parseBitAnd() {
+      let left = parseCompare();
+      while (matchOp("&")) {
+        const right = parseCompare();
+        if (!left.resolved || !right.resolved) left = makeExprValue(0, false);
+        else left = makeExprValue((left.value | 0) & (right.value | 0), true);
+      }
+      return left;
+    }
+
+    function parseBitXor() {
+      let left = parseBitAnd();
+      while (matchOp("^")) {
+        const right = parseBitAnd();
+        if (!left.resolved || !right.resolved) left = makeExprValue(0, false);
+        else left = makeExprValue((left.value | 0) ^ (right.value | 0), true);
+      }
+      return left;
+    }
+
+    function parseBitOr() {
+      let left = parseBitXor();
+      while (matchOp("|")) {
+        const right = parseBitXor();
+        if (!left.resolved || !right.resolved) left = makeExprValue(0, false);
+        else left = makeExprValue((left.value | 0) | (right.value | 0), true);
+      }
+      return left;
+    }
+
+    function parseAnd() {
+      let left = parseBitOr();
+      while (matchOp("&&")) {
+        const right = parseBitOr();
+        if ((left.resolved && !truthy(left.value)) || (right.resolved && !truthy(right.value))) {
+          left = makeExprValue(0, true);
+        } else if (!left.resolved || !right.resolved) {
+          left = makeExprValue(0, false);
+        } else {
+          left = makeExprValue(1, true);
+        }
+      }
+      return left;
+    }
+
+    function parseOr() {
+      let left = parseAnd();
+      while (matchOp("||")) {
+        const right = parseAnd();
+        if ((left.resolved && truthy(left.value)) || (right.resolved && truthy(right.value))) {
+          left = makeExprValue(1, true);
+        } else if (!left.resolved || !right.resolved) {
+          left = makeExprValue(0, false);
+        } else {
+          left = makeExprValue(0, true);
+        }
+      }
+      return left;
+    }
+
+    const result = parseOr();
+    if (peek().type !== "eof") {
+      throw new Error("Line " + lineNo + ": unexpected token after expression.");
+    }
+    return result;
+  };
+
+  ns.evalTerm = function evalTerm(termText, symbols, currentPc, allowUnresolved, lineNo, fallbackSymbols) {
+    return ns.evalExpression(termText, symbols, currentPc, allowUnresolved, lineNo, fallbackSymbols);
   };
 })();
