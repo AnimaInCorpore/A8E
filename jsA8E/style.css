@@ -11,16 +11,24 @@
   --border: rgba(255, 255, 255, 0.09);
   --accent: #5cc8ff;
 
+  /* Semantic state colors */
+  --state-ok: #4ade80;
+  --state-err: #f87171;
+  --danger: #c84030;
+
+  /* Font-size scale */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+
   /* Sub-panel palette (HostFS, Assembler, etc.) */
-  /* Elevation: sub-panels sit above the page, so they must be lighter than --bg */
   --sub-panel-bg: #141d2c;
   --sub-panel-border: rgba(255, 255, 255, 0.08);
-  --sub-panel-header-start: #1e2f46;
-  --sub-panel-header-end: #141e30;
+  --sub-panel-header-bg: #111928;
   --sub-panel-toolbar-bg: #101827;
   --sub-panel-inner-border: rgba(255, 255, 255, 0.07);
   --sub-panel-statusbar-bg: #0c1422;
-  --sub-panel-btn-idle: #7090aa;
+  --sub-panel-btn-idle: var(--muted);
   --sub-panel-btn-radius: 4px;
   --sub-panel-label: #7a90a8;
   --sub-panel-dim: #4c6880;
@@ -98,7 +106,7 @@ body {
   border-radius: 8px;
   background: var(--panel);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.5;
   text-align: left;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
@@ -119,6 +127,11 @@ body {
   opacity: 0.85;
 }
 
+.brandTooltip .tt-meta {
+  font-size: var(--fs-xs);
+  opacity: 0.75;
+}
+
 .brandTooltip .tt-section {
   margin-top: 10px;
   padding-top: 8px;
@@ -128,7 +141,7 @@ body {
 .brandTooltip .tt-heading {
   display: block;
   margin-bottom: 4px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -162,7 +175,7 @@ body {
 
 @media (max-width: 600px) {
   .brandTooltip {
-    font-size: 13px;
+    font-size: var(--fs-base);
     line-height: 1.6;
     padding: 16px;
     max-width: 92vw;
@@ -178,7 +191,7 @@ body {
 }
 
 .brand .subtitle {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--muted);
   margin-top: 2px;
 }
@@ -309,7 +322,7 @@ button:hover:not(:disabled) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--muted);
 }
 
@@ -1256,7 +1269,7 @@ canvas.crtEnabled {
 }
 
 .hint {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--muted);
   text-align: center;
   width: 100%;
@@ -1283,7 +1296,7 @@ canvas.crtEnabled {
   color: var(--text);
   padding: 7px 10px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   transition: border-color 0.15s;
   white-space: nowrap;
 }
@@ -1298,12 +1311,12 @@ canvas.crtEnabled {
 }
 
 .fileBtn .status-icon.fa-circle-check {
-  color: #4ade80;
+  color: var(--state-ok);
 }
 
 .fileBtn .status-icon.fa-circle-xmark {
-  color: #f87171;
-  opacity: 0.6;
+  color: var(--state-err);
+  opacity: 0.55;
 }
 
 
@@ -1348,7 +1361,7 @@ canvas.crtEnabled {
   border-radius: 6px;
   background: var(--sub-panel-bg);
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1364,16 +1377,18 @@ canvas.crtEnabled {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: linear-gradient(135deg, var(--sub-panel-header-start) 0%, var(--sub-panel-header-end) 100%);
+  background: var(--sub-panel-header-bg);
   border-bottom: 1px solid var(--sub-panel-border);
   flex-shrink: 0;
 }
 .hostfs-title-icon {
   color: var(--accent);
+  font-size: var(--fs-base);
 }
 .hostfs-title-text {
+  font-size: var(--fs-sm);
   font-weight: 600;
-  color: var(--accent);
+  color: var(--text);
 }
 .hostfs-flex {
   flex: 1;
@@ -1413,8 +1428,8 @@ canvas.crtEnabled {
   color: var(--accent);
 }
 .hostfs-btn-danger:hover:not(:disabled) {
-  border-color: #c84030;
-  color: #c84030;
+  border-color: var(--danger);
+  color: var(--danger);
   background: rgba(200, 64, 48, 0.08);
 }
 .hostfs-toolbar-sep {
@@ -1426,8 +1441,8 @@ canvas.crtEnabled {
 }
 .hostfs-label {
   color: var(--sub-panel-label);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--fs-xs);
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -1464,10 +1479,10 @@ canvas.crtEnabled {
   display: flex;
   align-items: center;
   padding: 3px 6px;
-  background: #0f1828;
+  background: var(--sub-panel-statusbar-bg);
   border-bottom: 1px solid var(--sub-panel-inner-border);
   color: var(--sub-panel-dim);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   flex-shrink: 0;
 }
 /* File list */
@@ -1493,8 +1508,8 @@ canvas.crtEnabled {
 /* Drop hint */
 .hostfs-drop-hint {
   text-align: center;
-  color: #2e4460;
-  font-size: 11px;
+  color: var(--sub-panel-dim);
+  font-size: var(--fs-xs);
   padding: 4px 0 5px;
   pointer-events: none;
   transition: color 0.15s;
@@ -1505,7 +1520,7 @@ canvas.crtEnabled {
 /* Empty state */
 .hostfs-empty {
   text-align: center;
-  color: #3a5070;
+  color: var(--sub-panel-dim);
   padding: 28px 0 20px;
   line-height: 2;
 }
@@ -1537,7 +1552,7 @@ canvas.crtEnabled {
   flex-shrink: 0;
   justify-content: flex-end;
   color: var(--sub-panel-dim);
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 .hostfs-col-actions {
   width: 52px;
@@ -1561,29 +1576,29 @@ canvas.crtEnabled {
   background: rgba(255, 255, 255, 0.013);
 }
 .hostfs-row.selected {
-  background: rgba(210, 100, 0, 0.14);
-  border-left-color: #c86000;
+  background: rgba(92, 200, 255, 0.08);
+  border-left-color: var(--accent);
 }
 .hostfs-row.selected:hover,
 .hostfs-row.selected:nth-child(even) {
-  background: rgba(210, 100, 0, 0.2);
+  background: rgba(92, 200, 255, 0.13);
 }
 /* File name parts */
 .hostfs-fname-base {
   color: var(--text);
 }
 .hostfs-fname-ext {
-  color: #4a7090;
+  color: var(--sub-panel-dim);
 }
 .hostfs-lock-icon {
-  font-size: 11px;
-  color: #c89030;
+  font-size: var(--fs-xs);
+  color: var(--muted);
   margin-left: 5px;
 }
 /* Checkboxes */
 .hostfs-master-chk,
 .hostfs-row-chk {
-  accent-color: #c86000;
+  accent-color: var(--accent);
   cursor: pointer;
   width: 12px;
   height: 12px;
@@ -1593,7 +1608,7 @@ canvas.crtEnabled {
 .hostfs-action-btn {
   background: none;
   border: none;
-  color: #2e4c6a;
+  color: var(--sub-panel-dim);
   cursor: pointer;
   padding: 2px 4px;
   border-radius: var(--sub-panel-btn-radius);
@@ -1605,11 +1620,11 @@ canvas.crtEnabled {
   background: rgba(92, 200, 255, 0.1);
 }
 .hostfs-action-del:hover:not(:disabled) {
-  color: #c84030;
+  color: var(--danger);
   background: rgba(200, 64, 48, 0.1);
 }
 .hostfs-action-btn:disabled {
-  opacity: 0.2;
+  opacity: 0.25;
   cursor: not-allowed;
 }
 /* Status bar */
@@ -1621,15 +1636,15 @@ canvas.crtEnabled {
   background: var(--sub-panel-statusbar-bg);
   border-top: 1px solid var(--sub-panel-inner-border);
   color: var(--sub-panel-dim);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   flex-shrink: 0;
 }
 .hostfs-stat-sel {
-  color: #c86000;
-  font-weight: 700;
+  color: var(--accent);
+  font-weight: 600;
 }
 .hostfs-stat-total {
-  color: #3c5270;
+  color: var(--sub-panel-dim);
 }
 
 /* ---- Assembler Editor Panel ---- */
@@ -1641,7 +1656,7 @@ canvas.crtEnabled {
   border-radius: 6px;
   background: var(--sub-panel-bg);
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--fs-sm);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1658,24 +1673,26 @@ canvas.crtEnabled {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: linear-gradient(135deg, var(--sub-panel-header-start) 0%, var(--sub-panel-header-end) 100%);
+  background: var(--sub-panel-header-bg);
   border-bottom: 1px solid var(--sub-panel-border);
   flex-shrink: 0;
 }
 
 .asm-title-icon {
   color: var(--accent);
+  font-size: var(--fs-base);
 }
 
 .asm-title-text {
+  font-size: var(--fs-sm);
   font-weight: 600;
-  color: var(--accent);
+  color: var(--text);
 }
 
 .asm-title-path {
-  color: #3a607a;
+  color: var(--sub-panel-dim);
   font-family: monospace;
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 
 .asm-toolbar {
@@ -1691,8 +1708,8 @@ canvas.crtEnabled {
 
 .asm-label {
   color: var(--sub-panel-label);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: var(--fs-xs);
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -1703,7 +1720,7 @@ canvas.crtEnabled {
   border: 1px solid var(--sub-panel-inner-border);
   border-radius: var(--sub-panel-btn-radius);
   color: var(--text);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.4;
   padding: 4px 7px;
   min-height: 28px;
@@ -1743,40 +1760,8 @@ canvas.crtEnabled {
   background: rgba(92, 200, 255, 0.06);
 }
 
-.asm-run-btn {
-  border-color: #1e4f2e;
-  color: #79d995;
-}
-
-.asm-run-btn:hover:not(:disabled) {
-  border-color: #6be48a;
-  color: #b9ffd0;
-  background: rgba(107, 228, 138, 0.12);
-}
-
-.asm-step-btn,
-.asm-step-over-btn {
-  border-color: #315376;
-  color: #98c4f0;
-}
-
-.asm-step-btn:hover:not(:disabled),
-.asm-step-over-btn:hover:not(:disabled) {
-  border-color: #6faef0;
-  color: #d2e9ff;
-  background: rgba(111, 174, 240, 0.12);
-}
-
-.asm-continue-btn {
-  border-color: #1e4f2e;
-  color: #79d995;
-}
-
-.asm-continue-btn:hover:not(:disabled) {
-  border-color: #6be48a;
-  color: #b9ffd0;
-  background: rgba(107, 228, 138, 0.12);
-}
+/* Run/Continue use the standard .asm-btn style — the play icon is sufficient visual cue */
+/* Step/StepOver use the standard .asm-btn style */
 
 .asm-btn:disabled {
   opacity: 0.35;
@@ -1792,7 +1777,7 @@ canvas.crtEnabled {
 }
 
 .asm-editor-wrap {
-  --asm-gutter-width: clamp(120px, 24vw, 210px);
+  --asm-gutter-width: clamp(160px, 28vw, 260px);
   flex: 1 1 auto;
   min-height: 0;
   display: block;
@@ -1810,16 +1795,8 @@ canvas.crtEnabled {
   margin: 0;
   border-right: 1px solid rgba(255, 255, 255, 0.07);
   background: #08111e;
-  overflow: auto;
+  overflow: hidden;
   padding: 10px 0;
-}
-
-.asm-breakpoints::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-.asm-breakpoints {
-  scrollbar-width: none;
 }
 
 .asm-highlight {
@@ -1874,16 +1851,30 @@ canvas.crtEnabled {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 0;
   border: 0;
   border-radius: 0;
   margin: 0;
-  padding: 0 6px;
+  padding: 0;
   background: transparent;
-  color: #31506d;
-  font: 11px/1 "Consolas", "Courier New", monospace;
+  color: var(--sub-panel-dim);
+  font: var(--fs-xs)/1 "Consolas", "Courier New", monospace;
   justify-content: flex-start;
   cursor: pointer;
+}
+
+/* column cell padding */
+.asm-bp-num,
+.asm-bp-addr,
+.asm-bp-bytes {
+  padding: 0 5px;
+}
+
+/* column dividers (left-border on every non-dot column) */
+.asm-bp-num,
+.asm-bp-addr,
+.asm-bp-bytes {
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .asm-bp-row:hover {
@@ -1891,7 +1882,8 @@ canvas.crtEnabled {
 }
 
 .asm-bp-row.no-addr {
-  opacity: 0.45;
+  opacity: 0.35;
+  cursor: default;
 }
 
 .asm-bp-row.no-addr:hover {
@@ -1902,71 +1894,109 @@ canvas.crtEnabled {
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  border: 1px solid #28435f;
+  border: 1px solid transparent;
   background: transparent;
   flex: 0 0 auto;
+  margin: 0 5px;
+  transition: border-color 0.1s, background 0.1s;
 }
 
+/* Enabled: line has an address — the dot becomes a visible "empty slot" */
 .asm-bp-row.has-addr .asm-bp-dot {
-  border-color: #3a6488;
+  border-color: var(--sub-panel-dim);
 }
 
-.asm-breakpoints.has-build .asm-bp-row.has-addr .asm-bp-dot {
-  border-color: #7fc4f1;
-  background: rgba(127, 196, 241, 0.24);
+/* Hover on an enabled row: accent tint signals "click to set breakpoint" */
+.asm-bp-row.has-addr:hover .asm-bp-dot {
+  border-color: var(--accent);
+  background: rgba(92, 200, 255, 0.15);
 }
 
+/* Active: breakpoint is set — filled red circle */
 .asm-bp-row.active .asm-bp-dot {
-  border-color: #ff9f92;
-  background: #f05f52;
-  box-shadow: 0 0 6px rgba(240, 95, 82, 0.65);
+  border-color: var(--state-err);
+  background: var(--state-err);
+  box-shadow: 0 0 5px rgba(248, 113, 113, 0.5);
 }
 
 .asm-bp-num {
-  min-width: 24px;
+  min-width: 18px;
   text-align: right;
-  color: #3e6080;
   flex: 0 0 auto;
+  color: var(--sub-panel-dim);
+  font-size: 10px;
+  opacity: 0.55;
+}
+
+.asm-bp-addr {
+  min-width: 36px;
+  text-align: right;
+  flex: 0 0 auto;
+  color: var(--sub-panel-dim);
+  font-size: var(--fs-xs);
+  opacity: 0.7;
+  letter-spacing: 0.02em;
 }
 
 .asm-bp-bytes {
   min-width: 0;
   flex: 1 1 auto;
   text-align: left;
-  color: #466585;
-  font-size: 10px;
+  color: var(--sub-panel-dim);
+  font-size: var(--fs-xs);
   letter-spacing: 0.02em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.asm-bp-row.has-bytes .asm-bp-bytes {
-  color: #7c9cba;
+.asm-bp-row.has-addr .asm-bp-num {
+  color: var(--muted);
 }
 
-.asm-bp-row.active .asm-bp-num {
-  color: #ffd5cf;
+.asm-bp-row.has-addr .asm-bp-addr {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.asm-bp-row.has-bytes .asm-bp-bytes {
+  color: var(--muted);
 }
 
 .asm-breakpoints.has-build .asm-bp-row.has-addr .asm-bp-num {
-  color: #8ab6dc;
+  color: var(--accent);
+}
+
+.asm-breakpoints.has-build .asm-bp-row.has-addr .asm-bp-addr {
+  color: var(--text);
+}
+
+.asm-bp-row.active .asm-bp-num {
+  color: var(--state-err);
+}
+
+.asm-bp-row.active .asm-bp-addr {
+  color: var(--state-err);
 }
 
 .asm-bp-row.active .asm-bp-bytes {
-  color: #ffd0ca;
+  color: var(--state-err);
 }
 
 .asm-bp-row.current {
-  background: rgba(92, 200, 255, 0.14);
+  background: rgba(92, 200, 255, 0.12);
 }
 
 .asm-bp-row.current .asm-bp-num {
-  color: #a5e3ff;
+  color: var(--accent);
+}
+
+.asm-bp-row.current .asm-bp-addr {
+  color: var(--accent);
 }
 
 .asm-bp-row.current .asm-bp-bytes {
-  color: #9cdcff;
+  color: var(--accent);
 }
 
 .asm-breakpoints.unsupported .asm-bp-row {
@@ -2040,19 +2070,19 @@ canvas.crtEnabled {
 
 .asm-error-btn {
   width: 100%;
-  border: 1px solid #6b2f2f;
-  background: #2a1010;
-  color: #ffb3a8;
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.06);
+  color: var(--state-err);
   text-align: left;
   padding: 4px 6px;
   border-radius: var(--sub-panel-btn-radius);
-  font: 12px/1.4 "Consolas", "Courier New", monospace;
+  font: var(--fs-sm)/1.4 "Consolas", "Courier New", monospace;
   cursor: pointer;
 }
 
 .asm-error-btn:hover {
-  border-color: #ff8a7a;
-  background: #3a1414;
+  border-color: rgba(248, 113, 113, 0.5);
+  background: rgba(248, 113, 113, 0.1);
 }
 
 .asm-statusbar {
@@ -2062,7 +2092,7 @@ canvas.crtEnabled {
   background: var(--sub-panel-statusbar-bg);
   border-top: 1px solid var(--sub-panel-inner-border);
   color: var(--sub-panel-dim);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   flex-shrink: 0;
 }
 
@@ -2093,11 +2123,11 @@ canvas.crtEnabled {
 }
 
 .asm-status.error {
-  color: #ff8a7a;
+  color: var(--state-err);
 }
 
 .asm-status.success {
-  color: #79d995;
+  color: var(--state-ok);
 }
 
 @media (max-width: 980px) {

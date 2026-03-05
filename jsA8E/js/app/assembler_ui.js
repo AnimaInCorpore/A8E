@@ -1543,8 +1543,12 @@
           bytes.textContent = "";
         }
 
+        const addrSpan = document.createElement("span");
+        addrSpan.className = "asm-bp-addr";
+
         row.appendChild(dot);
         row.appendChild(num);
+        row.appendChild(addrSpan);
         row.appendChild(bytes);
 
         const addr = getLineAddress(lineNo);
@@ -1553,6 +1557,7 @@
           row.title = "Line " + lineNo + ": no assembled instruction address";
         } else {
           row.classList.add("has-addr");
+          addrSpan.textContent = "$" + toHex4(addr);
           row.title = "Line " + lineNo + " -> $" + toHex4(addr) + " (toggle breakpoint)";
         }
         if (bytesText) row.title += " | bytes: " + bytesText;
