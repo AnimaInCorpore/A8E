@@ -45,7 +45,7 @@ The latest unreleased development version is available at https://dev.jsa8e.anid
 
 ## Quick Start (Native)
 
-Building requires **SDL 1.2** development headers. See the [A8E README](A8E/README.md) for full build instructions covering Windows (MSVC, MinGW), macOS (Homebrew, legacy macOS without CMake), and Linux.
+Building requires **SDL 2** development headers. See the [A8E README](A8E/README.md) for full build instructions covering Windows (MSVC, MinGW), macOS (Homebrew), and Linux.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
