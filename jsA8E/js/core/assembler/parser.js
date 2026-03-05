@@ -504,6 +504,14 @@
           continue;
         }
 
+        if (directive === "END") {
+          if (operand.length) {
+            statements.push({ type: "run", lineNo: lineNo, expr: operand });
+          }
+          statements.push({ type: "end", lineNo: lineNo });
+          break;
+        }
+
         const mnemonic = upper.replace(/^\./, "");
         const parsed = ns.parseInstructionStatement(ctx.opcodes, mnemonic, operand, lineNo);
         const preferredMode = modeHints[instructionModes.length] || null;

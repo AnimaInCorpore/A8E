@@ -64,6 +64,7 @@
     "ENDIF",
     "ASSERT",
     "ERROR",
+    "END",
   ];
 
   ns.buildOpcodeMap = function buildOpcodeMap() {

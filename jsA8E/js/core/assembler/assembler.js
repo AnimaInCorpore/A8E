@@ -73,7 +73,9 @@
       }
 
       function writeByte(value, lineNo) {
-        const v = ns.requireRange("byte", value | 0, 0, 255, lineNo);
+        const raw = value | 0;
+        ns.requireRange("byte", raw, -128, 255, lineNo);
+        const v = raw & 0xff;
         if (outPc > 0xffff) {
           throw new Error("Line " + lineNo + ": write beyond $FFFF.");
         }
@@ -90,7 +92,9 @@
       }
 
       function writeWord(value, lineNo) {
-        const v = ns.requireRange("word", value | 0, 0, 0xffff, lineNo);
+        const raw = value | 0;
+        ns.requireRange("word", raw, -32768, 0xffff, lineNo);
+        const v = raw & 0xffff;
         writeByte(v & 0xff, lineNo);
         writeByte((v >> 8) & 0xff, lineNo);
       }
@@ -229,6 +233,10 @@
         if (st.type === "error") {
           const detail = decodeDirectiveMessage(st.message, st.lineNo, ".error");
           throw new Error("Line " + st.lineNo + ": " + detail + ".");
+        }
+
+        if (st.type === "end") {
+          continue;
         }
 
         if (st.type === "ins") {
