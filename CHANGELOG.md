@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - Browser rendering now requests `desynchronized` WebGL contexts and hints `canvas` transforms for smoother presentation.
 
 ### Fixed
+- Native `A8E` now ignores out-of-range SDL keysyms (e.g. macOS Command/LGUI) when mapping to Atari key codes; previously hitting ⌘ would index past the key table and crash the emulator.
 - Hardened `jsA8E` SIO disk sector access checks across read/write/verify paths to reject invalid offsets consistently.
 
 ## v1.1.1 - 2026-02-17

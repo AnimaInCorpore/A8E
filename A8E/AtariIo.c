@@ -3904,21 +3904,28 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
             break;
     	
         default:
-    		{
-    			u8 cKeyCode = m_aKeyCodeTable[pKeyboardEvent->keysym.sym];
+            {
+                /* guard against out-of-range SDL keysyms such as the
+                   macOS Command/LGUI key which would previously index
+                   our fixed-size lookup table and crash the emulator. */
+                int sym = pKeyboardEvent->keysym.sym;
+                u8 cKeyCode = 255;
 
-    			if(cKeyCode != 255)
-    			{
-    				if(pKeyboardEvent->keysym.mod & KMOD_CTRL)
-    					cKeyCode |= 0x80;
+                if(sym >= 0 && sym < (int)sizeof(m_aKeyCodeTable))
+                    cKeyCode = m_aKeyCodeTable[sym];
 
-    				if(pKeyboardEvent->keysym.mod & KMOD_SHIFT)
-    					cKeyCode |= 0x40;
+                if(cKeyCode != 255)
+                {
+                    if(pKeyboardEvent->keysym.mod & KMOD_CTRL)
+                        cKeyCode |= 0x80;
 
-				AtariIoQueueKeyCode(pContext, pIoData, cKeyCode);
+                    if(pKeyboardEvent->keysym.mod & KMOD_SHIFT)
+                        cKeyCode |= 0x40;
+
+                    AtariIoQueueKeyCode(pContext, pIoData, cKeyCode);
                 }
             }
-            
+
             break;
         }
 	}
@@ -3979,22 +3986,25 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
             RAM[IO_SKCTL_SKSTAT] |= 0x08;
         
             break;
-    	
         default:
-    		{
-    			u8 cKeyCode = m_aKeyCodeTable[pKeyboardEvent->keysym.sym];
-
-    			if(cKeyCode != 255)
+            {
+                int sym = pKeyboardEvent->keysym.sym;
+                if(sym >= 0 && sym < (int)sizeof(m_aKeyCodeTable))
                 {
-                    if(pIoData->lKeyPressCounter > 0)
-                        pIoData->lKeyPressCounter--;
+                    u8 cKeyCode = m_aKeyCodeTable[sym];
 
-                    if(pIoData->lKeyPressCounter == 0)
-                        RAM[IO_SKCTL_SKSTAT] |= 0x04;
+                    if(cKeyCode != 255)
+                    {
+                        if(pIoData->lKeyPressCounter > 0)
+                            pIoData->lKeyPressCounter--;
+
+                        if(pIoData->lKeyPressCounter == 0)
+                            RAM[IO_SKCTL_SKSTAT] |= 0x04;
+                    }
                 }
             }
-            
+
             break;
-        }
-	}
+}
+    }
 }
