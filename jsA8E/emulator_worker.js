@@ -34,6 +34,10 @@
   let initDone = false;
   let hostFsUnsubscribe = null;
   const pendingCommands = [];
+  const DEBUG_STATE_MIN_INTERVAL_MS = 80;
+  let debugFlushTimer = 0;
+  let pendingDebugState = null;
+  let lastDebugStatePostTs = 0;
 
   let audioBridgePort = null;
   let activeAudioNodePort = null;
@@ -63,6 +67,61 @@
     } catch {
       // ignore
     }
+  }
+
+  function cloneDebugState(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    return {
+      reason: raw.reason || "update",
+      running: !!raw.running,
+      pc: (raw.pc | 0) & 0xffff,
+      a: (raw.a | 0) & 0xff,
+      x: (raw.x | 0) & 0xff,
+      y: (raw.y | 0) & 0xff,
+      sp: (raw.sp | 0) & 0xff,
+      p: (raw.p | 0) & 0xff,
+      breakpointHit:
+        typeof raw.breakpointHit === "number"
+          ? (raw.breakpointHit | 0) & 0xffff
+          : undefined,
+    };
+  }
+
+  function postDebugState(snapshot) {
+    if (!snapshot) return;
+    lastDebugStatePostTs = Date.now();
+    try {
+      self.postMessage({
+        type: "debugState",
+        debug: snapshot,
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  function flushPendingDebugState(force) {
+    if (!pendingDebugState) return;
+    const now = Date.now();
+    const elapsed = now - lastDebugStatePostTs;
+    if (!force && elapsed < DEBUG_STATE_MIN_INTERVAL_MS) {
+      if (!debugFlushTimer) {
+        const delay = Math.max(1, DEBUG_STATE_MIN_INTERVAL_MS - elapsed);
+        debugFlushTimer = setTimeout(function () {
+          debugFlushTimer = 0;
+          flushPendingDebugState(true);
+        }, delay);
+      }
+      return;
+    }
+    postDebugState(pendingDebugState);
+    pendingDebugState = null;
+  }
+
+  function queueDebugState(raw, force) {
+    pendingDebugState = cloneDebugState(raw);
+    if (!pendingDebugState) return;
+    flushPendingDebugState(!!force);
   }
 
   function WorkerNodePort() {
@@ -253,6 +312,8 @@
       hasBasicRom: !!(app.hasBasicRom && app.hasBasicRom()),
       mounted: mounted,
       rendererBackend: rendererBackend,
+      debug:
+        typeof app.getDebugState === "function" ? app.getDebugState() : null,
     });
   }
 
@@ -326,6 +387,10 @@
         turbo: !!msg.turbo,
         sioTurbo: msg.sioTurbo !== false,
         optionOnStart: !!msg.optionOnStart,
+        onDebugState: function (state) {
+          const force = !state || state.reason !== "frame";
+          queueDebugState(state, force);
+        },
         keyboardMappingMode:
           msg.keyboardMappingMode === "original" ? "original" : "translated",
       });
@@ -342,6 +407,10 @@
         turbo: !!msg.turbo,
         sioTurbo: msg.sioTurbo !== false,
         optionOnStart: !!msg.optionOnStart,
+        onDebugState: function (state) {
+          const force = !state || state.reason !== "frame";
+          queueDebugState(state, force);
+        },
         keyboardMappingMode:
           msg.keyboardMappingMode === "original" ? "original" : "translated",
       });
@@ -359,6 +428,9 @@
     attachHostFsListener();
     postHostFsSnapshot();
     postState();
+    if (typeof app.getDebugState === "function") {
+      queueDebugState(app.getDebugState(), true);
+    }
 
     initDone = true;
     self.postMessage({
@@ -441,6 +513,22 @@
         }
         shouldPostState = false;
         break;
+      case "setBreakpoints":
+        if (app.setBreakpoints) {
+          app.setBreakpoints(
+            Array.isArray(data.addresses) ? data.addresses : [],
+          );
+        }
+        shouldPostState = false;
+        break;
+      case "stepInstruction":
+        if (app.stepInstruction) app.stepInstruction();
+        shouldPostState = false;
+        break;
+      case "stepOver":
+        if (app.stepOver) app.stepOver();
+        shouldPostState = false;
+        break;
       case "loadOsRom":
         app.loadOsRom(data.buffer || new ArrayBuffer(0));
         break;
@@ -504,6 +592,11 @@
           hostFsUnsubscribe();
           hostFsUnsubscribe = null;
         }
+        if (debugFlushTimer) {
+          clearTimeout(debugFlushTimer);
+          debugFlushTimer = 0;
+        }
+        pendingDebugState = null;
         app = null;
         break;
       default:

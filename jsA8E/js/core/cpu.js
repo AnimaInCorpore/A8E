@@ -67,6 +67,8 @@
       ioCycleTimedEventCycle: Infinity,
       ioCycleTimedEventFunction: null,
       irqPending: 0,
+      breakRun: false,
+      instructionCounter: 0,
       // Set by outside modules (Atari IO).
       ioData: null,
       // PC hooks: address -> function(ctx).  Return true to skip normal execution.
@@ -870,6 +872,10 @@
     const pcHooks = ctx.pcHooks;
     let cycles = ctx.cycleCounter;
     while (cycles < cycleTarget) {
+      if (ctx.breakRun) {
+        ctx.breakRun = false;
+        break;
+      }
       if (
         ctx.ioCycleTimedEventFunction &&
         ctx.cycleCounter >= ctx.ioCycleTimedEventCycle
@@ -881,7 +887,14 @@
         if (ctx.irqPending && !hasFlag(cpu.ps, FLAG_I)) irq(ctx);
 
         const hook = pcHooks[cpu.pc];
-        if (hook && hook(ctx)) { cycles = ctx.cycleCounter; continue; }
+        if (hook && hook(ctx)) {
+          if (ctx.breakRun) {
+            ctx.breakRun = false;
+            break;
+          }
+          cycles = ctx.cycleCounter;
+          continue;
+        }
 
         const opcode = ram[cpu.pc & 0xffff] & 0xff;
         cpu.pc = (cpu.pc + 1) & 0xffff;
@@ -910,6 +923,7 @@
         OPCODE_EXEC_FUNCS[opcode](ctx);
 
         ctx.cycleCounter += OPCODE_BASE_CYCLES[opcode];
+        ctx.instructionCounter = (ctx.instructionCounter + 1) >>> 0;
         cycles = ctx.cycleCounter;
       } else {
         let stallTarget = ctx.stallCycleCounter;

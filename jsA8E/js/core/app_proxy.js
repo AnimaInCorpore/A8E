@@ -617,6 +617,7 @@
     let disposed = false;
     let ready = false;
     const pending = [];
+    const debugListeners = new Set();
     let keyboardMappingMode =
       opts && opts.keyboardMappingMode === "original"
         ? "original"
@@ -629,7 +630,40 @@
       hasBasicRom: false,
       mounted: [false, false, false, false, false, false, false, false],
       rendererBackend: "unknown",
+      debugState: null,
     };
+
+    function cloneDebugState(raw) {
+      if (!raw || typeof raw !== "object") return null;
+      return {
+        reason: raw.reason || "update",
+        running: !!raw.running,
+        pc: (raw.pc | 0) & 0xffff,
+        a: (raw.a | 0) & 0xff,
+        x: (raw.x | 0) & 0xff,
+        y: (raw.y | 0) & 0xff,
+        sp: (raw.sp | 0) & 0xff,
+        p: (raw.p | 0) & 0xff,
+        breakpointHit:
+          typeof raw.breakpointHit === "number"
+            ? (raw.breakpointHit | 0) & 0xffff
+            : undefined,
+      };
+    }
+
+    function emitDebugState(raw) {
+      const next = cloneDebugState(raw);
+      if (!next) return;
+      state.debugState = next;
+      state.running = !!next.running;
+      debugListeners.forEach(function (fn) {
+        try {
+          fn(next);
+        } catch {
+          // ignore listener errors
+        }
+      });
+    }
 
     function syncReadyFlag() {
       state.ready = !!(state.hasOsRom && state.hasBasicRom);
@@ -686,7 +720,13 @@
             state.mounted[i] = !!data.mounted[i];
           }
         }
+        if (data.debug) emitDebugState(data.debug);
         syncReadyFlag();
+        return;
+      }
+
+      if (data.type === "debugState") {
+        emitDebugState(data.debug || null);
         return;
       }
 
@@ -759,6 +799,29 @@
       setKeyboardMappingMode: function (mode) {
         keyboardMappingMode = mode === "original" ? "original" : "translated";
         sendCommand("setKeyboardMappingMode", { mode: keyboardMappingMode });
+      },
+      setBreakpoints: function (addresses) {
+        sendCommand("setBreakpoints", {
+          addresses: Array.isArray(addresses) ? addresses.slice(0) : [],
+        });
+      },
+      stepInstruction: function () {
+        sendCommand("stepInstruction");
+        return true;
+      },
+      stepOver: function () {
+        sendCommand("stepOver");
+        return true;
+      },
+      getDebugState: function () {
+        return state.debugState ? Object.assign({}, state.debugState) : null;
+      },
+      onDebugStateChange: function (fn) {
+        if (typeof fn !== "function") return function () {};
+        debugListeners.add(fn);
+        return function () {
+          debugListeners.delete(fn);
+        };
       },
       loadOsRom: function (arrayBuffer) {
         state.hasOsRom = true;
@@ -869,6 +932,16 @@
       {app.setRenderSize = function () {};}
     if (app && typeof app.setKeyboardMappingMode !== "function")
       {app.setKeyboardMappingMode = function () {};}
+    if (app && typeof app.setBreakpoints !== "function")
+      {app.setBreakpoints = function () {};}
+    if (app && typeof app.stepInstruction !== "function")
+      {app.stepInstruction = function () { return false; };}
+    if (app && typeof app.stepOver !== "function")
+      {app.stepOver = function () { return false; };}
+    if (app && typeof app.getDebugState !== "function")
+      {app.getDebugState = function () { return null; };}
+    if (app && typeof app.onDebugStateChange !== "function")
+      {app.onDebugStateChange = function () { return function () {}; };}
     return app;
   }
 

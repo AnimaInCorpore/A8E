@@ -378,8 +378,18 @@
           <button class="asm-btn asm-run-btn" title="Save, assemble, load into D1: and start (Ctrl+Enter)">
             <i class="fa-solid fa-play"></i> Run
           </button>
+          <button class="asm-btn asm-step-btn" title="Execute the next instruction and pause again" hidden>
+            <i class="fa-solid fa-forward-step"></i> Step
+          </button>
+          <button class="asm-btn asm-step-over-btn" title="Execute subroutine calls without entering them" hidden>
+            <i class="fa-solid fa-share-from-square"></i> Step Over
+          </button>
+          <button class="asm-btn asm-continue-btn" title="Continue execution until the next breakpoint" hidden>
+            <i class="fa-solid fa-play"></i> Continue
+          </button>
         </div>
         <div class="asm-editor-wrap">
+          <div class="asm-breakpoints" aria-label="Assembler breakpoint lines"></div>
           <pre class="asm-highlight" aria-hidden="true"></pre>
           <textarea class="asm-editor" spellcheck="false" wrap="off" aria-label="Assembler source code"></textarea>
         </div>

@@ -1080,6 +1080,8 @@
       let firstEmitPc = null;
       let runAddr = null;
       let explicitRun = false;
+      const lineAddressMap = Object.create(null);
+      const addressLineMap = Object.create(null);
 
       function beginSegmentIfNeeded(addr) {
         if (addr < 0 || addr > 0xffff) {
@@ -1158,6 +1160,10 @@
             );
           }
           const instPc = outPc;
+          if (!Object.prototype.hasOwnProperty.call(lineAddressMap, st.lineNo))
+            {lineAddressMap[st.lineNo] = instPc & 0xffff;}
+          if (!Object.prototype.hasOwnProperty.call(addressLineMap, instPc))
+            {addressLineMap[instPc] = st.lineNo;}
           writeByte(opcode, st.lineNo);
 
           if (st.mode === "IMM" || st.mode === "ZP" || st.mode === "ZPX" ||
@@ -1198,6 +1204,8 @@
         bytes: xex,
         runAddr: runAddr,
         symbols: symbols,
+        lineAddressMap: lineAddressMap,
+        addressLineMap: addressLineMap,
       };
     } catch (err) {
       const primaryError = toAssembleError(err, null);
@@ -1263,6 +1271,14 @@
     return raw + ext;
   }
 
+  function toHex2(value) {
+    return (value & 0xff).toString(16).toUpperCase().padStart(2, "0");
+  }
+
+  function toHex4(value) {
+    return (value & 0xffff).toString(16).toUpperCase().padStart(4, "0");
+  }
+
   function uint8ArrayToArrayBuffer(bytes) {
     return bytes.buffer.slice(
       bytes.byteOffset,
@@ -1293,6 +1309,10 @@
     const saveBtn = panel.querySelector(".asm-save-btn");
     const buildBtn = panel.querySelector(".asm-build-btn");
     const runBtn = panel.querySelector(".asm-run-btn");
+    const stepBtn = panel.querySelector(".asm-step-btn");
+    const stepOverBtn = panel.querySelector(".asm-step-over-btn");
+    const continueBtn = panel.querySelector(".asm-continue-btn");
+    const breakpointGutter = panel.querySelector(".asm-breakpoints");
     const highlight = panel.querySelector(".asm-highlight");
     const editor = panel.querySelector(".asm-editor");
     const errorsWrap = panel.querySelector(".asm-errors");
@@ -1306,6 +1326,10 @@
       !saveBtn ||
       !buildBtn ||
       !runBtn ||
+      !stepBtn ||
+      !stepOverBtn ||
+      !continueBtn ||
+      !breakpointGutter ||
       !highlight ||
       !editor ||
       !errorsWrap ||
@@ -1325,30 +1349,326 @@
       return name.toUpperCase();
     }
 
-    function setStatus(message, kind) {
-      status.textContent = message;
+    const supportsBreakpoints = typeof app.setBreakpoints === "function";
+    const supportsSingleStep = typeof app.stepInstruction === "function";
+    const supportsStepOver = typeof app.stepOver === "function";
+    const supportsDebugControls =
+      supportsBreakpoints && supportsSingleStep && supportsStepOver;
+    let statusMessage = "Ready.";
+    let statusKind = "";
+    let debugStatusMessage = "";
+    let highlightQueued = false;
+    let gutterQueued = false;
+    let sourceLineAddressMap = Object.create(null);
+    let addressLineMap = Object.create(null);
+    let hasResolvedLineAddresses = false;
+    const activeBreakpointLines = new Set();
+    let lastDebugState = null;
+    let currentDebugAddress = null;
+    let currentDebugLine = null;
+    let debugControlsVisible = false;
+
+    function setDebugControlsVisible(visible) {
+      const next = !!visible;
+      if (debugControlsVisible === next) return;
+      debugControlsVisible = next;
+      stepBtn.hidden = !next;
+      stepOverBtn.hidden = !next;
+      continueBtn.hidden = !next;
+      runBtn.hidden = next;
+    }
+
+    function renderStatusText() {
+      const msg = String(statusMessage || "");
+      const dbg = String(debugStatusMessage || "");
+      status.textContent = dbg ? msg + " | " + dbg : msg;
       status.className = "asm-status";
-      if (kind === "error" || kind === "success") status.classList.add(kind);
+      if (statusKind === "error" || statusKind === "success")
+        {status.classList.add(statusKind);}
+    }
+
+    function setStatus(message, kind) {
+      statusMessage = String(message || "");
+      statusKind = kind === "error" || kind === "success" ? kind : "";
+      renderStatusText();
+    }
+
+    function setDebugStatus(message) {
+      debugStatusMessage = String(message || "");
+      renderStatusText();
     }
 
     function deriveOutputName() {
-      var srcName = normalizeFsName(sourceNameInput.value, ".ASM");
+      const srcName = normalizeFsName(sourceNameInput.value, ".ASM");
       if (!srcName) return "PROGRAM.XEX";
-      var dot = srcName.lastIndexOf(".");
-      var base = dot > 0 ? srcName.substring(0, dot) : srcName;
+      const dot = srcName.lastIndexOf(".");
+      const base = dot > 0 ? srcName.substring(0, dot) : srcName;
       return base + ".XEX";
     }
 
-    let highlightQueued = false;
+    function countEditorLines() {
+      const text = String(editor.value || "");
+      if (!text.length) return 1;
+      let count = 1;
+      for (let i = 0; i < text.length; i++) {
+        if (text.charCodeAt(i) === 10) count++;
+      }
+      return count;
+    }
+
+    function getEditorLineHeightPx() {
+      const style = window.getComputedStyle(editor);
+      const value = parseFloat(style.lineHeight || "16");
+      if (!isFinite(value) || value <= 0) return 16;
+      return value;
+    }
+
+    function getLineAddress(lineNo) {
+      const key = String(lineNo | 0);
+      if (!Object.prototype.hasOwnProperty.call(sourceLineAddressMap, key))
+        {return null;}
+      return sourceLineAddressMap[key] & 0xffff;
+    }
+
+    function updateCurrentDebugLine() {
+      if (currentDebugAddress === null) {
+        currentDebugLine = null;
+        return;
+      }
+      const key = String(currentDebugAddress & 0xffff);
+      if (!Object.prototype.hasOwnProperty.call(addressLineMap, key)) {
+        currentDebugLine = null;
+        return;
+      }
+      currentDebugLine = addressLineMap[key] | 0;
+    }
+
+    function applyBreakpointAddressesToRuntime() {
+      if (!supportsBreakpoints) return;
+      const map = Object.create(null);
+      const addresses = [];
+      activeBreakpointLines.forEach(function (lineNo) {
+        const addr = getLineAddress(lineNo);
+        if (addr === null) return;
+        const key = String(addr & 0xffff);
+        if (map[key]) return;
+        map[key] = true;
+        addresses.push(addr & 0xffff);
+      });
+      addresses.sort(function (a, b) { return a - b; });
+      app.setBreakpoints(addresses);
+    }
+
+    function refreshBreakpointGutterNow() {
+      const lineCount = countEditorLines();
+      const lineHeight = getEditorLineHeightPx();
+      const frag = document.createDocumentFragment();
+
+      for (let lineNo = 1; lineNo <= lineCount; lineNo++) {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.className = "asm-bp-row";
+        row.dataset.line = String(lineNo);
+        row.style.height = lineHeight + "px";
+
+        const dot = document.createElement("span");
+        dot.className = "asm-bp-dot";
+        const num = document.createElement("span");
+        num.className = "asm-bp-num";
+        num.textContent = String(lineNo);
+
+        row.appendChild(dot);
+        row.appendChild(num);
+
+        const addr = getLineAddress(lineNo);
+        if (addr === null) {
+          row.classList.add("no-addr");
+          row.title = "Line " + lineNo + ": no assembled instruction address";
+        } else {
+          row.classList.add("has-addr");
+          row.title = "Line " + lineNo + " -> $" + toHex4(addr) + " (toggle breakpoint)";
+        }
+        if (activeBreakpointLines.has(lineNo)) row.classList.add("active");
+        if (currentDebugLine === lineNo) row.classList.add("current");
+        frag.appendChild(row);
+      }
+
+      breakpointGutter.innerHTML = "";
+      breakpointGutter.appendChild(frag);
+      syncHighlightScroll();
+    }
+
+    function queueBreakpointGutterRefresh() {
+      if (gutterQueued) return;
+      gutterQueued = true;
+      const run = function () {
+        gutterQueued = false;
+        refreshBreakpointGutterNow();
+      };
+      if (typeof window.requestAnimationFrame === "function")
+        {window.requestAnimationFrame(run);}
+      else setTimeout(run, 0);
+    }
+
+    function setLineAddressMaps(lineMap, reverseMap, preserveBreakpoints) {
+      const nextLineMap = Object.create(null);
+      const nextAddrMap = Object.create(null);
+
+      if (lineMap && typeof lineMap === "object") {
+        const lineKeys = Object.keys(lineMap);
+        for (let i = 0; i < lineKeys.length; i++) {
+          const lineNo = parseInt(lineKeys[i], 10);
+          const addr = lineMap[lineKeys[i]] | 0;
+          if (!isFinite(lineNo) || lineNo <= 0) continue;
+          if (addr < 0 || addr > 0xffff) continue;
+          nextLineMap[String(lineNo)] = addr & 0xffff;
+        }
+      }
+
+      if (reverseMap && typeof reverseMap === "object") {
+        const addrKeys = Object.keys(reverseMap);
+        for (let i = 0; i < addrKeys.length; i++) {
+          const addr = parseInt(addrKeys[i], 10);
+          const lineNo = reverseMap[addrKeys[i]] | 0;
+          if (!isFinite(addr)) continue;
+          if (addr < 0 || addr > 0xffff) continue;
+          if (!isFinite(lineNo) || lineNo <= 0) continue;
+          nextAddrMap[String(addr & 0xffff)] = lineNo;
+        }
+      } else {
+        const lineKeys = Object.keys(nextLineMap);
+        for (let i = 0; i < lineKeys.length; i++) {
+          const lineNo = lineKeys[i] | 0;
+          const addr = nextLineMap[lineKeys[i]] | 0;
+          if (!Object.prototype.hasOwnProperty.call(nextAddrMap, String(addr)))
+            {nextAddrMap[String(addr)] = lineNo;}
+        }
+      }
+
+      sourceLineAddressMap = nextLineMap;
+      addressLineMap = nextAddrMap;
+      hasResolvedLineAddresses = Object.keys(sourceLineAddressMap).length > 0;
+
+      if (!preserveBreakpoints) {
+        activeBreakpointLines.clear();
+      } else {
+        Array.from(activeBreakpointLines).forEach(function (lineNo) {
+          if (getLineAddress(lineNo) === null) activeBreakpointLines.delete(lineNo);
+        });
+      }
+
+      updateCurrentDebugLine();
+      applyBreakpointAddressesToRuntime();
+      queueBreakpointGutterRefresh();
+    }
+
+    function clearLineAddressMaps() {
+      setLineAddressMaps(null, null, false);
+    }
+
+    function invalidateLineAddressMaps() {
+      if (!hasResolvedLineAddresses && activeBreakpointLines.size === 0) return;
+      clearLineAddressMaps();
+    }
+
+    function toggleBreakpointForLine(lineNo) {
+      if (!supportsBreakpoints) {
+        setStatus("Breakpoints are unavailable in this runtime.", "error");
+        return;
+      }
+      const addr = getLineAddress(lineNo);
+      if (addr === null) {
+        setStatus(
+          "Line " + lineNo + " has no assembled instruction address. Assemble first.",
+          "error",
+        );
+        return;
+      }
+      if (activeBreakpointLines.has(lineNo)) {
+        activeBreakpointLines.delete(lineNo);
+        setStatus("Breakpoint disabled at line " + lineNo + " ($" + toHex4(addr) + ").");
+      } else {
+        activeBreakpointLines.add(lineNo);
+        setStatus("Breakpoint enabled at line " + lineNo + " ($" + toHex4(addr) + ").", "success");
+      }
+      applyBreakpointAddressesToRuntime();
+      queueBreakpointGutterRefresh();
+    }
+
+    function formatDebugStatus(debugState) {
+      if (!debugState || typeof debugState !== "object") return "";
+      const pc = (debugState.pc | 0) & 0xffff;
+      const a = (debugState.a | 0) & 0xff;
+      const x = (debugState.x | 0) & 0xff;
+      const y = (debugState.y | 0) & 0xff;
+      const sp = (debugState.sp | 0) & 0xff;
+      const p = (debugState.p | 0) & 0xff;
+      const runState = debugState.running ? "RUN" : "PAUSE";
+      let out =
+        runState +
+        " PC=$" + toHex4(pc) +
+        " A=$" + toHex2(a) +
+        " X=$" + toHex2(x) +
+        " Y=$" + toHex2(y) +
+        " SP=$" + toHex2(sp) +
+        " P=$" + toHex2(p);
+      if (typeof debugState.breakpointHit === "number") {
+        out += " BRK=$" + toHex4(debugState.breakpointHit | 0);
+      }
+      return out;
+    }
+
+    function applyDebugState(debugState) {
+      if (!debugState || typeof debugState !== "object") return;
+      lastDebugState = debugState;
+      if (typeof debugState.pc === "number")
+        {currentDebugAddress = debugState.pc & 0xffff;}
+      else currentDebugAddress = null;
+      updateCurrentDebugLine();
+      setDebugStatus(formatDebugStatus(debugState));
+      queueBreakpointGutterRefresh();
+
+      if (supportsDebugControls) {
+        const reason = String(debugState.reason || "").toLowerCase();
+        if (debugState.running) {
+          setDebugControlsVisible(false);
+        } else if (
+          reason === "breakpoint" ||
+          reason === "step" ||
+          reason === "stepover"
+        ) {
+          setDebugControlsVisible(true);
+        } else if (reason !== "breakpoints") {
+          setDebugControlsVisible(false);
+        }
+      } else {
+        setDebugControlsVisible(false);
+      }
+
+      if (
+        debugState.reason === "breakpoint" &&
+        typeof debugState.breakpointHit === "number"
+      ) {
+        const hitAddr = debugState.breakpointHit & 0xffff;
+        const key = String(hitAddr);
+        const lineNo = Object.prototype.hasOwnProperty.call(addressLineMap, key)
+          ? (addressLineMap[key] | 0)
+          : 0;
+        const lineText = lineNo > 0 ? " (line " + lineNo + ")" : "";
+        setStatus("Paused at breakpoint $" + toHex4(hitAddr) + lineText + ".", "success");
+      }
+    }
 
     function syncHighlightScroll() {
       highlight.scrollTop = editor.scrollTop;
       highlight.scrollLeft = editor.scrollLeft;
+      breakpointGutter.scrollTop = editor.scrollTop;
     }
 
     function refreshHighlightNow() {
       highlight.innerHTML = highlightAssemblerSource(editor.value);
       syncHighlightScroll();
+      queueBreakpointGutterRefresh();
     }
 
     function queueHighlightRefresh() {
@@ -1500,6 +1820,7 @@
       editor.scrollTop = 0;
       editor.scrollLeft = 0;
       sourceNameInput.value = selected;
+      clearLineAddressMaps();
       queueHighlightRefresh();
       clearErrorList();
       setStatus("Loaded " + selected + " from HostFS.", "success");
@@ -1525,7 +1846,7 @@
     }
 
     function assembleAndStoreExecutable() {
-      var outputName = deriveOutputName();
+      const outputName = deriveOutputName();
 
       const result = assembleToXex(editor.value);
       if (!result.ok) {
@@ -1539,6 +1860,8 @@
         return null;
       }
 
+      setLineAddressMaps(result.lineAddressMap, result.addressLineMap, true);
+      if (lastDebugState) applyDebugState(lastDebugState);
       clearErrorList();
       return {
         outputName: outputName,
@@ -1607,7 +1930,8 @@
       // Ctrl+Enter  -> Run
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
-        assembleRunExecutable();
+        if (debugControlsVisible) onContinueClicked();
+        else assembleRunExecutable();
         return;
       }
       if (e.key !== "Tab") return;
@@ -1621,13 +1945,56 @@
       editor.selectionStart = nextPos;
       editor.selectionEnd = nextPos;
       queueHighlightRefresh();
+      invalidateLineAddressMaps();
+    }
+
+    function onEditorInput() {
+      queueHighlightRefresh();
+      invalidateLineAddressMaps();
+    }
+
+    function onStepClicked() {
+      if (!supportsDebugControls) {
+        setStatus("Stepping is unavailable in this runtime.", "error");
+        return;
+      }
+      const ok = app.stepInstruction();
+      if (!ok) {
+        setStatus("Unable to step. Pause at a breakpoint first.", "error");
+        return;
+      }
+      setStatus("Single-step executed.", "success");
+    }
+
+    function onStepOverClicked() {
+      if (!supportsDebugControls) {
+        setStatus("Step-over is unavailable in this runtime.", "error");
+        return;
+      }
+      const ok = app.stepOver();
+      if (!ok) {
+        setStatus("Unable to step over. Pause at a breakpoint first.", "error");
+        return;
+      }
+      setDebugControlsVisible(false);
+      setStatus("Step-over running.", "success");
+    }
+
+    function onContinueClicked() {
+      if (!supportsDebugControls) {
+        setStatus("Continue is unavailable in this runtime.", "error");
+        return;
+      }
+      setDebugControlsVisible(false);
+      if (typeof app.start === "function") app.start();
+      setStatus("Continuing execution.", "success");
     }
 
     function sizePanelToViewport() {
-      var screenEl = document.querySelector(".screenPanel");
-      var h = screenEl ? screenEl.getBoundingClientRect().height : 0;
-      var clientH = document.documentElement.clientHeight || window.innerHeight || 0;
-      var maxH = Math.floor(clientH * PANEL_MAX_HEIGHT_RATIO);
+      const screenEl = document.querySelector(".screenPanel");
+      let h = screenEl ? screenEl.getBoundingClientRect().height : 0;
+      const clientH = document.documentElement.clientHeight || window.innerHeight || 0;
+      const maxH = Math.floor(clientH * PANEL_MAX_HEIGHT_RATIO);
       h += PANEL_DEFAULT_EXTRA_HEIGHT;
       if (maxH > 0 && h > maxH) h = maxH;
       if (h < PANEL_MIN_HEIGHT) h = PANEL_MIN_HEIGHT;
@@ -1638,7 +2005,7 @@
       if (!editor || typeof editor.focus !== "function") return;
       try {
         editor.focus({ preventScroll: true });
-      } catch (_) {
+      } catch {
         editor.focus();
       }
     }
@@ -1656,6 +2023,7 @@
         }
         sizePanelToViewport();
         queueHighlightRefresh();
+        queueBreakpointGutterRefresh();
         focusEditorNoScroll();
       }
     });
@@ -1668,9 +2036,21 @@
     saveBtn.addEventListener("click", saveToHostFs);
     buildBtn.addEventListener("click", assembleAndWriteExecutable);
     runBtn.addEventListener("click", assembleRunExecutable);
+    stepBtn.addEventListener("click", onStepClicked);
+    stepOverBtn.addEventListener("click", onStepOverClicked);
+    continueBtn.addEventListener("click", onContinueClicked);
     editor.addEventListener("keydown", onEditorKeyDown);
-    editor.addEventListener("input", queueHighlightRefresh);
+    editor.addEventListener("input", onEditorInput);
     editor.addEventListener("scroll", syncHighlightScroll);
+    breakpointGutter.addEventListener("click", function (e) {
+      const row = e.target && e.target.closest
+        ? e.target.closest(".asm-bp-row")
+        : null;
+      if (!row) return;
+      const lineNo = parseInt(row.dataset.line || "0", 10);
+      if (lineNo > 0) toggleBreakpointForLine(lineNo);
+      focusEditorNoScroll();
+    });
     errorList.addEventListener("click", function (e) {
       const target = e.target && e.target.closest
         ? e.target.closest(".asm-error-btn")
@@ -1681,15 +2061,15 @@
     });
 
     /* ---- Resize handle (drag to change panel height) ---- */
-    var resizeHandle = panel.querySelector(".asm-resize-handle");
+    const resizeHandle = panel.querySelector(".asm-resize-handle");
     if (resizeHandle) {
-      var dragStartY = 0;
-      var dragStartH = 0;
+      let dragStartY = 0;
+      let dragStartH = 0;
 
       function onResizeMove(e) {
-        var dy = (e.clientY || e.touches && e.touches[0].clientY || 0) - dragStartY;
-        var clientH = document.documentElement.clientHeight || window.innerHeight;
-        var newH = Math.max(PANEL_MIN_HEIGHT, Math.min(clientH * PANEL_MAX_HEIGHT_RATIO, dragStartH + dy));
+        const dy = (e.clientY || e.touches && e.touches[0].clientY || 0) - dragStartY;
+        const clientH = document.documentElement.clientHeight || window.innerHeight;
+        const newH = Math.max(PANEL_MIN_HEIGHT, Math.min(clientH * PANEL_MAX_HEIGHT_RATIO, dragStartH + dy));
         panel.style.height = newH + "px";
       }
 
@@ -1724,19 +2104,50 @@
       });
     }
 
+    if (typeof app.onDebugStateChange === "function") {
+      panel.__a8eAssemblerDebugUnsub = app.onDebugStateChange(function (state) {
+        applyDebugState(state);
+      });
+    }
+    if (typeof app.getDebugState === "function") {
+      applyDebugState(app.getDebugState());
+    }
+
     window.addEventListener("beforeunload", function () {
       if (panel.__a8eAssemblerUnsub) {
         panel.__a8eAssemblerUnsub();
         panel.__a8eAssemblerUnsub = null;
       }
+      if (panel.__a8eAssemblerDebugUnsub) {
+        panel.__a8eAssemblerDebugUnsub();
+        panel.__a8eAssemblerDebugUnsub = null;
+      }
     });
 
     if (!editor.value.trim().length) editor.value = DEFAULT_SOURCE_TEMPLATE;
+    clearLineAddressMaps();
     refreshHighlightNow();
+    setDebugControlsVisible(false);
+    if (!supportsBreakpoints) {
+      breakpointGutter.classList.add("unsupported");
+      stepBtn.disabled = true;
+      stepOverBtn.disabled = true;
+      continueBtn.disabled = true;
+      setStatus("Ready. Breakpoints are unavailable in this runtime.");
+    } else if (!supportsDebugControls) {
+      stepBtn.disabled = true;
+      stepOverBtn.disabled = true;
+      continueBtn.disabled = true;
+      applyBreakpointAddressesToRuntime();
+      setStatus("Ready. Breakpoints available; stepping controls unavailable in this runtime.");
+    } else {
+      applyBreakpointAddressesToRuntime();
+      setStatus("Ready.");
+    }
+    if (lastDebugState) applyDebugState(lastDebugState);
     panel.hidden = true;
     button.classList.remove("active");
     clearErrorList();
-    setStatus("Ready.");
   }
 
   window.A8EAssemblerUI = {

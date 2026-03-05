@@ -1752,6 +1752,30 @@ canvas.crtEnabled {
   background: rgba(107, 228, 138, 0.12);
 }
 
+.asm-step-btn,
+.asm-step-over-btn {
+  border-color: #315376;
+  color: #98c4f0;
+}
+
+.asm-step-btn:hover:not(:disabled),
+.asm-step-over-btn:hover:not(:disabled) {
+  border-color: #6faef0;
+  color: #d2e9ff;
+  background: rgba(111, 174, 240, 0.12);
+}
+
+.asm-continue-btn {
+  border-color: #1e4f2e;
+  color: #79d995;
+}
+
+.asm-continue-btn:hover:not(:disabled) {
+  border-color: #6be48a;
+  color: #b9ffd0;
+  background: rgba(107, 228, 138, 0.12);
+}
+
 .asm-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
@@ -1766,6 +1790,7 @@ canvas.crtEnabled {
 }
 
 .asm-editor-wrap {
+  --asm-gutter-width: 62px;
   flex: 1 1 auto;
   min-height: 0;
   display: block;
@@ -1774,9 +1799,33 @@ canvas.crtEnabled {
   background: #020914;
 }
 
+.asm-breakpoints {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--asm-gutter-width);
+  margin: 0;
+  border-right: 1px solid #0f1f34;
+  background: #030d1b;
+  overflow: auto;
+  padding: 10px 0;
+}
+
+.asm-breakpoints::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+.asm-breakpoints {
+  scrollbar-width: none;
+}
+
 .asm-highlight {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--asm-gutter-width);
   margin: 0;
   border: 0;
   overflow: auto;
@@ -1799,7 +1848,10 @@ canvas.crtEnabled {
 
 .asm-editor {
   position: absolute;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: var(--asm-gutter-width);
   resize: none;
   border: 0;
   outline: none;
@@ -1814,6 +1866,75 @@ canvas.crtEnabled {
 
 .asm-editor::selection {
   background: rgba(110, 190, 255, 0.28);
+}
+
+.asm-bp-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  padding: 0 8px;
+  background: transparent;
+  color: #31506d;
+  font: 11px/1 "Consolas", "Courier New", monospace;
+  justify-content: flex-start;
+  cursor: pointer;
+}
+
+.asm-bp-row:hover {
+  background: rgba(92, 200, 255, 0.1);
+}
+
+.asm-bp-row.no-addr {
+  opacity: 0.45;
+}
+
+.asm-bp-row.no-addr:hover {
+  background: transparent;
+}
+
+.asm-bp-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid #28435f;
+  background: transparent;
+  flex: 0 0 auto;
+}
+
+.asm-bp-row.has-addr .asm-bp-dot {
+  border-color: #3a6488;
+}
+
+.asm-bp-row.active .asm-bp-dot {
+  border-color: #ff9f92;
+  background: #f05f52;
+  box-shadow: 0 0 6px rgba(240, 95, 82, 0.65);
+}
+
+.asm-bp-num {
+  min-width: 28px;
+  text-align: right;
+  color: #3e6080;
+}
+
+.asm-bp-row.active .asm-bp-num {
+  color: #ffd5cf;
+}
+
+.asm-bp-row.current {
+  background: rgba(92, 200, 255, 0.14);
+}
+
+.asm-bp-row.current .asm-bp-num {
+  color: #a5e3ff;
+}
+
+.asm-breakpoints.unsupported .asm-bp-row {
+  cursor: not-allowed;
 }
 
 /* Consistent scrollbar styling for assembler editor + error list */

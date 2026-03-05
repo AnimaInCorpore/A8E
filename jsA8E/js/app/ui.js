@@ -584,6 +584,13 @@
       btnReset.disabled = !app.isReady();
     }
 
+    if (app && typeof app.onDebugStateChange === "function") {
+      app.onDebugStateChange(function (state) {
+        if (!state || typeof state.running !== "boolean") return;
+        setButtons(!!state.running);
+      });
+    }
+
     function focusCanvas(preventScroll) {
       if (!canvas || typeof canvas.focus !== "function") return;
       if (!preventScroll) {
