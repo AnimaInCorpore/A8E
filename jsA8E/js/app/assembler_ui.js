@@ -1366,16 +1366,35 @@
     let lastDebugState = null;
     let currentDebugAddress = null;
     let currentDebugLine = null;
-    let debugControlsVisible = false;
+    let debugControlsMode = "hidden";
 
-    function setDebugControlsVisible(visible) {
-      const next = !!visible;
-      if (debugControlsVisible === next) return;
-      debugControlsVisible = next;
-      stepBtn.hidden = !next;
-      stepOverBtn.hidden = !next;
-      continueBtn.hidden = !next;
-      runBtn.hidden = next;
+    function setContinueButtonPauseMode(pauseMode) {
+      const pause = !!pauseMode;
+      continueBtn.title = pause
+        ? "Pause execution and keep current state for debugging"
+        : "Continue execution until the next breakpoint";
+      continueBtn.innerHTML = pause
+        ? "<i class=\"fa-solid fa-pause\"></i> Pause"
+        : "<i class=\"fa-solid fa-play\"></i> Continue";
+    }
+
+    function setDebugControlsMode(mode) {
+      const next =
+        mode === "paused" || mode === "running" ? mode : "hidden";
+      if (debugControlsMode === next) return;
+      debugControlsMode = next;
+
+      const paused = next === "paused";
+      const running = next === "running";
+      stepBtn.hidden = !paused;
+      stepOverBtn.hidden = !paused;
+      continueBtn.hidden = !(paused || running);
+      runBtn.hidden = paused || running;
+      setContinueButtonPauseMode(running);
+    }
+
+    function isDebugControlsActive() {
+      return debugControlsMode !== "hidden";
     }
 
     function renderStatusText() {
@@ -1441,6 +1460,19 @@
         return;
       }
       currentDebugLine = addressLineMap[key] | 0;
+    }
+
+    function ensureEditorLineVisible(lineNo) {
+      if (!lineNo || lineNo < 1) return;
+      const lineHeight = getEditorLineHeightPx();
+      const targetTop = Math.max(0, (lineNo - 1) * lineHeight);
+      const viewTop = editor.scrollTop | 0;
+      const viewBottom = viewTop + (editor.clientHeight | 0);
+      const lineBottom = targetTop + lineHeight;
+      if (targetTop >= viewTop && lineBottom <= viewBottom) return;
+      const nextTop = Math.max(0, Math.round(targetTop - editor.clientHeight * 0.35));
+      editor.scrollTop = nextTop;
+      syncHighlightScroll();
     }
 
     function applyBreakpointAddressesToRuntime() {
@@ -1621,6 +1653,7 @@
     function applyDebugState(debugState) {
       if (!debugState || typeof debugState !== "object") return;
       lastDebugState = debugState;
+      const previousDebugLine = currentDebugLine;
       if (typeof debugState.pc === "number")
         {currentDebugAddress = debugState.pc & 0xffff;}
       else currentDebugAddress = null;
@@ -1628,21 +1661,32 @@
       setDebugStatus(formatDebugStatus(debugState));
       queueBreakpointGutterRefresh();
 
+      const debugReason = String(debugState.reason || "").toLowerCase();
+      if (
+        !debugState.running &&
+        debugReason === "step" &&
+        currentDebugLine &&
+        currentDebugLine > 0 &&
+        currentDebugLine !== previousDebugLine
+      ) {
+        ensureEditorLineVisible(currentDebugLine);
+      }
+
       if (supportsDebugControls) {
-        const reason = String(debugState.reason || "").toLowerCase();
         if (debugState.running) {
-          setDebugControlsVisible(false);
+          setDebugControlsMode("running");
         } else if (
-          reason === "breakpoint" ||
-          reason === "step" ||
-          reason === "stepover"
+          debugReason === "breakpoint" ||
+          debugReason === "step" ||
+          debugReason === "stepover" ||
+          debugReason === "pause"
         ) {
-          setDebugControlsVisible(true);
-        } else if (reason !== "breakpoints") {
-          setDebugControlsVisible(false);
+          setDebugControlsMode("paused");
+        } else if (debugReason !== "breakpoints") {
+          setDebugControlsMode("hidden");
         }
       } else {
-        setDebugControlsVisible(false);
+        setDebugControlsMode("hidden");
       }
 
       if (
@@ -1654,6 +1698,9 @@
         const lineNo = Object.prototype.hasOwnProperty.call(addressLineMap, key)
           ? (addressLineMap[key] | 0)
           : 0;
+        if (lineNo > 0) {
+          jumpEditorToLine(lineNo);
+        }
         const lineText = lineNo > 0 ? " (line " + lineNo + ")" : "";
         setStatus("Paused at breakpoint $" + toHex4(hitAddr) + lineText + ".", "success");
       }
@@ -1930,7 +1977,7 @@
       // Ctrl+Enter  -> Run
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
-        if (debugControlsVisible) onContinueClicked();
+        if (isDebugControlsActive()) onContinueClicked();
         else assembleRunExecutable();
         return;
       }
@@ -1976,8 +2023,9 @@
         setStatus("Unable to step over. Pause at a breakpoint first.", "error");
         return;
       }
-      setDebugControlsVisible(false);
-      setStatus("Step-over running.", "success");
+      const runningNow = typeof app.isRunning === "function" && app.isRunning();
+      setDebugControlsMode(runningNow ? "running" : "paused");
+      setStatus(runningNow ? "Step-over running." : "Step-over executed.", "success");
     }
 
     function onContinueClicked() {
@@ -1985,7 +2033,13 @@
         setStatus("Continue is unavailable in this runtime.", "error");
         return;
       }
-      setDebugControlsVisible(false);
+      if (debugControlsMode === "running") {
+        if (typeof app.pause === "function") app.pause();
+        setDebugControlsMode("paused");
+        setStatus("Execution paused.", "success");
+        return;
+      }
+      setDebugControlsMode("running");
       if (typeof app.start === "function") app.start();
       setStatus("Continuing execution.", "success");
     }
@@ -2127,7 +2181,7 @@
     if (!editor.value.trim().length) editor.value = DEFAULT_SOURCE_TEMPLATE;
     clearLineAddressMaps();
     refreshHighlightNow();
-    setDebugControlsVisible(false);
+    setDebugControlsMode("hidden");
     if (!supportsBreakpoints) {
       breakpointGutter.classList.add("unsupported");
       stepBtn.disabled = true;

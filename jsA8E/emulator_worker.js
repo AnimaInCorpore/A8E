@@ -242,6 +242,7 @@
       "js/core/gtia.js",
       "js/core/hostfs.js",
       "js/core/hdevice.js",
+      "js/core/debugger.js",
       "js/core/atari.js",
     );
     coreLoaded = true;
