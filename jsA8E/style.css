@@ -360,6 +360,15 @@ button:hover:not(:disabled) {
   background: transparent;
 }
 
+.screenViewport.drag-over {
+  outline: 3px dashed var(--accent);
+  outline-offset: -3px;
+}
+
+.screenViewport.drag-over canvas {
+  opacity: 0.6;
+}
+
 .screenViewport:fullscreen,
 .screenViewport:-webkit-full-screen {
   width: 100vw;

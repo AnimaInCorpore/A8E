@@ -1536,6 +1536,88 @@
       resolveDiskInputFile,
     );
 
+    // Drag-and-drop ATR/XEX/ZIP onto the screen area.
+    function isDiskFileName(name) {
+      const ext = getLowercaseExtension(name);
+      return ext === ".atr" || ext === ".xex" || ext === ".zip";
+    }
+
+    function autoStartAfterDiskLoad() {
+      if (app.isRunning()) {
+        app.reset();
+      } else if (app.isReady()) {
+        app.start();
+        setButtons(true);
+        focusCanvas(false);
+      }
+    }
+
+    async function handleScreenDrop(dataTransfer) {
+      // Prefer actual File objects (from OS file manager or browser download bar).
+      const files = dataTransfer.files;
+      if (files && files.length > 0) {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (isDiskFileName(file.name)) {
+            const resolved = await resolveDiskInputFile(file);
+            app.loadDiskToDeviceSlot(resolved.buffer, resolved.name || file.name, 0);
+            updateStatus();
+            autoStartAfterDiskLoad();
+            return;
+          }
+        }
+      }
+
+      // Fallback: URL dragged from another browser window (text/uri-list).
+      // Note: this requires the remote server to send CORS headers.
+      const uriList =
+        dataTransfer.getData("text/uri-list") ||
+        dataTransfer.getData("text/plain");
+      if (uriList) {
+        const url = uriList
+          .split(/\r?\n/)
+          .map(function (l) { return l.trim(); })
+          .find(function (l) { return l.length > 0 && !l.startsWith("#"); });
+        if (url && isDiskFileName(url)) {
+          try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error("HTTP " + response.status);
+            const buffer = await response.arrayBuffer();
+            const name = decodeURIComponent(url.split("/").pop()) || "disk.atr";
+            app.loadDiskToDeviceSlot(buffer, name, 0);
+            updateStatus();
+            autoStartAfterDiskLoad();
+          } catch (e) {
+            console.error("Drop: failed to fetch URL (CORS?): " + url, e);
+          }
+        }
+      }
+    }
+
+    if (screenViewport) {
+      screenViewport.addEventListener("dragover", function (e) {
+        if (!e.dataTransfer) return;
+        e.preventDefault();
+        e.stopPropagation();
+        screenViewport.classList.add("drag-over");
+      });
+      screenViewport.addEventListener("dragleave", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!screenViewport.contains(e.relatedTarget)) {
+          screenViewport.classList.remove("drag-over");
+        }
+      });
+      screenViewport.addEventListener("drop", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        screenViewport.classList.remove("drag-over");
+        handleScreenDrop(e.dataTransfer).catch(function (err) {
+          console.error("Drop error:", err);
+        });
+      });
+    }
+
     // Keyboard input forwarded to emulator.
     function isMetaKeyEvent(e) {
       return !!e && (e.key === "Meta" || !!e.metaKey);
