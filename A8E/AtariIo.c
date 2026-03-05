@@ -3552,20 +3552,21 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 	if(lMode & 0x1)
 		m_cConsolHack = 0x07;
 
+	/* create an 8-bit indexed surface; masks must be zero or SDL will
+	   refuse the format.  the previous masks were intended for a
+	   32-bit surface and caused SDL_CreateRGBSurface to fail with ""
+	   errors on macOS.  also print the SDL error text to help diagnose
+	   problems in future. */
 	pSdlAtariSurface = SDL_CreateRGBSurface(
-		SDL_SWSURFACE, 
-		PIXELS_PER_LINE, 
-		312, 
-		8, 
-		0x000000ff, 
-		0x0000ff00, 
-		0x00ff0000, 
-		0);
-	
+		SDL_SWSURFACE,
+		PIXELS_PER_LINE,
+		312,
+		8,
+		0, 0, 0, 0);
+
 	if(pSdlAtariSurface == NULL)
 	{
-		printf("SDL_CreateRGBSurface() failed!\n");
-
+		fprintf(stderr, "SDL_CreateRGBSurface() failed: %s\n", SDL_GetError());
 		exit(-1);
 	}
 

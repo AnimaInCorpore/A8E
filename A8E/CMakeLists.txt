@@ -63,7 +63,17 @@ target_include_directories(A8E PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 # SDL2: modern config provides SDL2::SDL2 imported target; old-style provides
 # SDL2_INCLUDE_DIRS / SDL2_LIBRARIES variables.
 if(TARGET SDL2::SDL2)
-  target_include_directories(A8E PRIVATE $<TARGET_PROPERTY:SDL2::SDL2,INTERFACE_INCLUDE_DIRECTORIES>)
+  # Imported target typically sets INTERFACE_INCLUDE_DIRECTORIES to
+  # "${prefix}/include/SDL2" which is too specific for our
+  # #include <SDL2/SDL.h>.  Add both that path and its parent so the
+  # headers can be included in the same way as the old SDL2_INCLUDE_DIRS
+  # behaviour.
+  get_property(_sdl_includes TARGET SDL2::SDL2 PROPERTY INTERFACE_INCLUDE_DIRECTORIES)
+  foreach(_d ${_sdl_includes})
+    target_include_directories(A8E PRIVATE "${_d}")
+    get_filename_component(_parent "${_d}" DIRECTORY)
+    target_include_directories(A8E PRIVATE "${_parent}")
+  endforeach()
 else()
   target_include_directories(A8E PRIVATE ${SDL2_INCLUDE_DIRS})
   # Also expose the parent dir so <SDL2/SDL.h> resolves correctly.
