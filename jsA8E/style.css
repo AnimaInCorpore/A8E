@@ -1792,7 +1792,7 @@ canvas.crtEnabled {
 }
 
 .asm-editor-wrap {
-  --asm-gutter-width: 62px;
+  --asm-gutter-width: clamp(120px, 24vw, 210px);
   flex: 1 1 auto;
   min-height: 0;
   display: block;
@@ -1874,11 +1874,11 @@ canvas.crtEnabled {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   border: 0;
   border-radius: 0;
   margin: 0;
-  padding: 0 8px;
+  padding: 0 6px;
   background: transparent;
   color: #31506d;
   font: 11px/1 "Consolas", "Courier New", monospace;
@@ -1911,6 +1911,11 @@ canvas.crtEnabled {
   border-color: #3a6488;
 }
 
+.asm-breakpoints.has-build .asm-bp-row.has-addr .asm-bp-dot {
+  border-color: #7fc4f1;
+  background: rgba(127, 196, 241, 0.24);
+}
+
 .asm-bp-row.active .asm-bp-dot {
   border-color: #ff9f92;
   background: #f05f52;
@@ -1918,13 +1923,38 @@ canvas.crtEnabled {
 }
 
 .asm-bp-num {
-  min-width: 28px;
+  min-width: 24px;
   text-align: right;
   color: #3e6080;
+  flex: 0 0 auto;
+}
+
+.asm-bp-bytes {
+  min-width: 0;
+  flex: 1 1 auto;
+  text-align: left;
+  color: #466585;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.asm-bp-row.has-bytes .asm-bp-bytes {
+  color: #7c9cba;
 }
 
 .asm-bp-row.active .asm-bp-num {
   color: #ffd5cf;
+}
+
+.asm-breakpoints.has-build .asm-bp-row.has-addr .asm-bp-num {
+  color: #8ab6dc;
+}
+
+.asm-bp-row.active .asm-bp-bytes {
+  color: #ffd0ca;
 }
 
 .asm-bp-row.current {
@@ -1933,6 +1963,10 @@ canvas.crtEnabled {
 
 .asm-bp-row.current .asm-bp-num {
   color: #a5e3ff;
+}
+
+.asm-bp-row.current .asm-bp-bytes {
+  color: #9cdcff;
 }
 
 .asm-breakpoints.unsupported .asm-bp-row {

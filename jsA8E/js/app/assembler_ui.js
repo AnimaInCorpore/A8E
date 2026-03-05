@@ -1082,6 +1082,7 @@
       let explicitRun = false;
       const lineAddressMap = Object.create(null);
       const addressLineMap = Object.create(null);
+      const lineBytesMap = Object.create(null);
 
       function beginSegmentIfNeeded(addr) {
         if (addr < 0 || addr > 0xffff) {
@@ -1105,6 +1106,12 @@
         beginSegmentIfNeeded(outPc);
         if (firstEmitPc === null) firstEmitPc = outPc;
         currentSegment.data.push(v & 0xff);
+        if (lineNo > 0) {
+          const key = String(lineNo | 0);
+          if (!Object.prototype.hasOwnProperty.call(lineBytesMap, key))
+            {lineBytesMap[key] = [];}
+          lineBytesMap[key].push(v & 0xff);
+        }
         outPc++;
       }
 
@@ -1206,6 +1213,7 @@
         symbols: symbols,
         lineAddressMap: lineAddressMap,
         addressLineMap: addressLineMap,
+        lineBytesMap: lineBytesMap,
       };
     } catch (err) {
       const primaryError = toAssembleError(err, null);
@@ -1361,7 +1369,9 @@
     let gutterQueued = false;
     let sourceLineAddressMap = Object.create(null);
     let addressLineMap = Object.create(null);
+    let sourceLineBytesMap = Object.create(null);
     let hasResolvedLineAddresses = false;
+    let hasResolvedLineBytes = false;
     const activeBreakpointLines = new Set();
     let lastDebugState = null;
     let currentDebugAddress = null;
@@ -1380,21 +1390,28 @@
 
     function setDebugControlsMode(mode) {
       const next =
-        mode === "paused" || mode === "running" ? mode : "hidden";
+        mode === "paused" || mode === "running" || mode === "armed" ? mode : "hidden";
       if (debugControlsMode === next) return;
       debugControlsMode = next;
 
       const paused = next === "paused";
       const running = next === "running";
-      stepBtn.hidden = !paused;
-      stepOverBtn.hidden = !paused;
-      continueBtn.hidden = !(paused || running);
+      const armed = next === "armed";
+      stepBtn.hidden = !(paused || armed);
+      stepOverBtn.hidden = !(paused || armed);
+      continueBtn.hidden = !(paused || running || armed);
       runBtn.hidden = paused || running;
       setContinueButtonPauseMode(running);
     }
 
     function isDebugControlsActive() {
-      return debugControlsMode !== "hidden";
+      return debugControlsMode === "paused" || debugControlsMode === "running";
+    }
+
+    function activateDebugControlsFromAssembly() {
+      if (!supportsDebugControls) return;
+      const runningNow = typeof app.isRunning === "function" && app.isRunning();
+      setDebugControlsMode(runningNow ? "running" : "armed");
     }
 
     function renderStatusText() {
@@ -1447,6 +1464,13 @@
       if (!Object.prototype.hasOwnProperty.call(sourceLineAddressMap, key))
         {return null;}
       return sourceLineAddressMap[key] & 0xffff;
+    }
+
+    function getLineBytesText(lineNo) {
+      const key = String(lineNo | 0);
+      if (!Object.prototype.hasOwnProperty.call(sourceLineBytesMap, key))
+        {return "";}
+      return sourceLineBytesMap[key] || "";
     }
 
     function updateCurrentDebugLine() {
@@ -1508,9 +1532,20 @@
         const num = document.createElement("span");
         num.className = "asm-bp-num";
         num.textContent = String(lineNo);
+        const bytes = document.createElement("span");
+        bytes.className = "asm-bp-bytes";
+        const bytesText = getLineBytesText(lineNo);
+        if (bytesText) {
+          bytes.textContent = bytesText;
+          row.classList.add("has-bytes");
+        } else {
+          row.classList.add("no-bytes");
+          bytes.textContent = "";
+        }
 
         row.appendChild(dot);
         row.appendChild(num);
+        row.appendChild(bytes);
 
         const addr = getLineAddress(lineNo);
         if (addr === null) {
@@ -1520,6 +1555,7 @@
           row.classList.add("has-addr");
           row.title = "Line " + lineNo + " -> $" + toHex4(addr) + " (toggle breakpoint)";
         }
+        if (bytesText) row.title += " | bytes: " + bytesText;
         if (activeBreakpointLines.has(lineNo)) row.classList.add("active");
         if (currentDebugLine === lineNo) row.classList.add("current");
         frag.appendChild(row);
@@ -1542,9 +1578,10 @@
       else setTimeout(run, 0);
     }
 
-    function setLineAddressMaps(lineMap, reverseMap, preserveBreakpoints) {
+    function setLineAddressMaps(lineMap, reverseMap, lineBytesMap, preserveBreakpoints) {
       const nextLineMap = Object.create(null);
       const nextAddrMap = Object.create(null);
+      const nextLineBytesMap = Object.create(null);
 
       if (lineMap && typeof lineMap === "object") {
         const lineKeys = Object.keys(lineMap);
@@ -1577,9 +1614,31 @@
         }
       }
 
+      if (lineBytesMap && typeof lineBytesMap === "object") {
+        const lineKeys = Object.keys(lineBytesMap);
+        for (let i = 0; i < lineKeys.length; i++) {
+          const lineNo = parseInt(lineKeys[i], 10);
+          if (!isFinite(lineNo) || lineNo <= 0) continue;
+          const rawBytes = lineBytesMap[lineKeys[i]];
+          if (!Array.isArray(rawBytes) || !rawBytes.length) continue;
+          const parts = [];
+          for (let bi = 0; bi < rawBytes.length; bi++) {
+            const byteValue = rawBytes[bi] | 0;
+            if (byteValue < 0 || byteValue > 0xff) continue;
+            parts.push(toHex2(byteValue));
+          }
+          if (!parts.length) continue;
+          nextLineBytesMap[String(lineNo)] = parts.join(" ");
+        }
+      }
+
       sourceLineAddressMap = nextLineMap;
       addressLineMap = nextAddrMap;
+      sourceLineBytesMap = nextLineBytesMap;
       hasResolvedLineAddresses = Object.keys(sourceLineAddressMap).length > 0;
+      hasResolvedLineBytes = Object.keys(sourceLineBytesMap).length > 0;
+      const hasBuiltOutput = hasResolvedLineAddresses || hasResolvedLineBytes;
+      breakpointGutter.classList.toggle("has-build", hasBuiltOutput);
 
       if (!preserveBreakpoints) {
         activeBreakpointLines.clear();
@@ -1595,11 +1654,17 @@
     }
 
     function clearLineAddressMaps() {
-      setLineAddressMaps(null, null, false);
+      setLineAddressMaps(null, null, null, false);
     }
 
     function invalidateLineAddressMaps() {
-      if (!hasResolvedLineAddresses && activeBreakpointLines.size === 0) return;
+      if (
+        !hasResolvedLineAddresses &&
+        !hasResolvedLineBytes &&
+        activeBreakpointLines.size === 0
+      ) {
+        return;
+      }
       clearLineAddressMaps();
     }
 
@@ -1907,8 +1972,14 @@
         return null;
       }
 
-      setLineAddressMaps(result.lineAddressMap, result.addressLineMap, true);
+      setLineAddressMaps(
+        result.lineAddressMap,
+        result.addressLineMap,
+        result.lineBytesMap,
+        true,
+      );
       if (lastDebugState) applyDebugState(lastDebugState);
+      activateDebugControlsFromAssembly();
       clearErrorList();
       return {
         outputName: outputName,
