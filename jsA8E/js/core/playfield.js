@@ -1155,17 +1155,23 @@
         } else if (pfWidth === 0x02) {
           renderStartX = (16 + 12 + 6 + 14) * 2;
         } else if (pfWidth === 0x03) {
-          renderStartX = (16 + 12 + 6 + 10) * 2;
+          // Wide playfield renders 24px left of the left-border edge (screen 64
+          // vs lLeftBorderSize 88); the border fill covers [0,88) afterward.
+          renderStartX = (16 + 12 + 4) * 2;
         }
 
         const ppb = ANTIC_MODE_INFO[mode].ppb || 8;
         let bytesPerLine = (playfieldPixels / ppb) | 0;
 
         if (cmd & 0x10) {
-          // HSCROL
-          const h = sram[IO_HSCROL] & 0xff;
-          renderStartX -= 32 - h * 2;
-          bytesPerLine += 8;
+          const h = sram[IO_HSCROL] & 0x0f;
+          if (pfWidth === 0x03) {
+            // Wide HSCROL shifts the render start right (no extra DMA bytes).
+            renderStartX += h * 2;
+          } else {
+            renderStartX -= 32 - h * 2;
+            bytesPerLine += 8;
+          }
         }
 
         const scratchWidth = video.playfieldScratchWidth | 0;
@@ -1236,6 +1242,35 @@
             }
             break;
         }
+        // Mirror C's two AtariIo_FillRect border calls applied after mode draw.
+        // For wide (pfWidth=3): render starts at screen 64, left border is 88,
+        // so clear priority/pixels in [0, max(88,renderStartX)) to prevent
+        // stale playfield priority from affecting player overlap checks.
+        // For non-wide with HSCROL: renderStartX may fall left of lLeftBorderSize.
+        {
+          const lLeftBorderFill =
+            pfWidth === 0x03
+              ? Math.max((16 + 12 + 6 + 10) * 2, renderStartX)
+              : pfWidth === 0x01
+                ? (16 + 12 + 6 + 30) * 2
+                : (16 + 12 + 6 + 14) * 2;
+          const lRightBorderX =
+            pfWidth === 0x03
+              ? Math.min(renderStartX + playfieldPixels, PIXELS_PER_LINE)
+              : lLeftBorderFill + playfieldPixels;
+          const base = y * scratchWidth + PLAYFIELD_SCRATCH_VIEW_X;
+          const dst = video.playfieldScratchPixels;
+          const prio = video.playfieldScratchPriority;
+          for (let i = 0; i < lLeftBorderFill; i++) {
+            dst[base + i] = bkg;
+            prio[base + i] = PRIO_BKG;
+          }
+          for (let i = lRightBorderX; i < PIXELS_PER_LINE; i++) {
+            dst[base + i] = bkg;
+            prio[base + i] = PRIO_BKG;
+          }
+        }
+
         copyScratchLine(
           video,
           y,
