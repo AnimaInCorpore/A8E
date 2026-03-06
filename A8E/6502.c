@@ -1055,46 +1055,47 @@ void _6502_Irq(_6502_Context_t *pContext)
 	}
 }
 
-u64 _6502_Run(_6502_Context_t *pContext, u64 llCycles)
+void _6502_Execute(_6502_Context_t *pContext)
 {
 	u8 cCode;
-	u64 llCycleCounter = pContext->llCycleCounter;
 
-	while(llCycleCounter < llCycles)
+	if(pContext->llCycleCounter < pContext->llStallCycleCounter)
+	{
+		pContext->llCycleCounter++;
+		return;
+	}
+
+	if(pContext->cIrqPendingFlag && !PS.i)
+	{
+		_6502_Irq(pContext);
+	}
+
+	cCode = RAM[CPU.pc++];
+
+	pContext->AccessFunction = NULL;
+	pContext->cPageCrossed = 0;
+	m_a6502AddressTypeFunctionList[m_a6502CodeTable[cCode].cAddressType](pContext);
+
+	if(pContext->AccessFunction == NULL)
+	{
+		pContext->AccessFunction = pContext->pAccessFunctionList[pContext->sAccessAddress];
+	}
+
+	m_a6502OpcodeFunctionList[m_a6502CodeTable[cCode].cOpcodeId](pContext);
+
+	pContext->llCycleCounter += m_a6502CodeTable[cCode].cCycles;
+}
+
+u64 _6502_Run(_6502_Context_t *pContext, u64 llCycles)
+{
+	while(pContext->llCycleCounter < llCycles)
 	{
 		if(pContext->llCycleCounter >= pContext->llIoCycleTimedEventCycle)
 		{
 			pContext->IoCycleTimedEventFunction(pContext);
 		}
 
-		if(pContext->llCycleCounter >= pContext->llStallCycleCounter)
-		{
-			if(pContext->cIrqPendingFlag && !PS.i)
-			{
-				_6502_Irq(pContext);
-			}
-
-			cCode = RAM[CPU.pc++];
-
-			pContext->AccessFunction = NULL;
-			pContext->cPageCrossed = 0;
-			m_a6502AddressTypeFunctionList[m_a6502CodeTable[cCode].cAddressType](pContext);
-
-			if(pContext->AccessFunction == NULL)
-			{
-				pContext->AccessFunction = pContext->pAccessFunctionList[pContext->sAccessAddress];
-			}
-
-			m_a6502OpcodeFunctionList[m_a6502CodeTable[cCode].cOpcodeId](pContext);
-
-			pContext->llCycleCounter += m_a6502CodeTable[cCode].cCycles;
-			llCycleCounter = pContext->llCycleCounter;
-		}
-		else
-		{
-			pContext->llCycleCounter++;
-			llCycleCounter = pContext->llCycleCounter;
-		}
+		_6502_Execute(pContext);
 	}
 
 	return pContext->llCycleCounter;

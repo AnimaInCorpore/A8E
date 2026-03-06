@@ -17,6 +17,7 @@
         },
         drawLineCycle: CYCLES_PER_LINE + 16,
         displayListFetchCycle: CYCLES_PER_LINE,
+        clock: 0,
         dliCycle: CYCLE_NEVER,
         serialOutputNeedDataCycle: CYCLE_NEVER,
         serialOutputTransmissionDoneCycle: CYCLE_NEVER,

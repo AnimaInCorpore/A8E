@@ -865,6 +865,52 @@
     OPCODE_BASE_CYCLES[i] = meta.cycles & 0xff;
   }
 
+  function executeOne(ctx) {
+    if (ctx.cycleCounter < ctx.stallCycleCounter) {
+      ctx.cycleCounter++;
+      return;
+    }
+
+    const cpu = ctx.cpu;
+    const ram = ctx.ram;
+
+    if (ctx.irqPending && !hasFlag(cpu.ps, FLAG_I)) irq(ctx);
+
+    const hook = ctx.pcHooks[cpu.pc];
+    if (hook && hook(ctx)) {
+      return;
+    }
+
+    const opcode = ram[cpu.pc & 0xffff] & 0xff;
+    cpu.pc = (cpu.pc + 1) & 0xffff;
+
+    ctx.accessFunctionOverride = null;
+    ctx.accessFunction = null;
+    ctx.accessMode = ACCESS_MODE_FN;
+    ctx.pageCrossed = 0;
+
+    OPCODE_ADDRESS_FUNCS[opcode](ctx);
+
+    if (ctx.accessFunctionOverride) {
+      ctx.accessFunction = ctx.accessFunctionOverride;
+    } else {
+      const addr = ctx.accessAddress & 0xffff;
+      const accessFn = ctx.accessFunctionList[addr];
+      if (accessFn === ramAccess) {
+        ctx.accessMode = ACCESS_MODE_RAM;
+      } else if (accessFn === romAccess) {
+        ctx.accessMode = ACCESS_MODE_ROM;
+      } else {
+        ctx.accessFunction = accessFn;
+      }
+    }
+
+    OPCODE_EXEC_FUNCS[opcode](ctx);
+
+    ctx.cycleCounter += OPCODE_BASE_CYCLES[opcode];
+    ctx.instructionCounter = (ctx.instructionCounter + 1) >>> 0;
+  }
+
   function run(ctx, cycleTarget) {
     const cpu = ctx.cpu;
     const ram = ctx.ram;
@@ -975,6 +1021,7 @@
     reset: reset,
     irq: irq,
     run: run,
+    executeOne: executeOne,
     stall: stall,
     setPcHook: setPcHook,
     clearPcHook: clearPcHook,

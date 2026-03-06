@@ -97,6 +97,7 @@ u16 _6502_DisassembleLive(_6502_Context_t *pContext, u16 sAddress);
 void _6502_Nmi(_6502_Context_t *pContext);
 void _6502_Reset(_6502_Context_t *pContext);
 void _6502_Irq(_6502_Context_t *pContext);
+void _6502_Execute(_6502_Context_t *pContext);
 u64 _6502_Run(_6502_Context_t *pContext, u64 llCycles);
 
 #endif

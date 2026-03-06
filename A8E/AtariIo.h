@@ -91,6 +91,7 @@ typedef struct
 
 typedef struct
 {
+	u64 llCycle;
 	u64 llDrawLineCycle;
 	u64 llDisplayListFetchCycle;
 	u64 llDliCycle;

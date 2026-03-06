@@ -65,6 +65,7 @@
             CPU: CPU,
             Util: Util,
             PIXELS_PER_LINE: PIXELS_PER_LINE,
+            CYCLES_PER_LINE: CYCLES_PER_LINE,
             FIRST_VISIBLE_LINE: FIRST_VISIBLE_LINE,
             LAST_VISIBLE_LINE: LAST_VISIBLE_LINE,
             IO_CHACTL: IO_CHACTL,
@@ -94,9 +95,11 @@
             fillBkgPf012ColorTable: fillBkgPf012ColorTable,
             decodeTextModeCharacter: decodeTextModeCharacter,
             fillLine: fillLine,
-          })
-        : null;
-    if (!playfieldApi) throw new Error("A8EPlayfield is not loaded");
+            ioCycleTimedEvent: function (c) {
+              ioCycleTimedEvent(c);
+            },
+            })
+            : null;    if (!playfieldApi) throw new Error("A8EPlayfield is not loaded");
     const drawLine = playfieldApi.drawLine;
 
     function fetchLine(ctx) {
@@ -201,6 +204,9 @@
       const sram = ctx.sram;
 
       if (ctx.cycleCounter >= io.displayListFetchCycle) {
+        if (io.video.currentDisplayLine === 0) {
+          io.clock = io.displayListFetchCycle - CYCLES_PER_LINE;
+        }
         io.video.currentDisplayLine++;
         if (io.video.currentDisplayLine >= LINES_PER_SCREEN_PAL) {
           io.video.currentDisplayLine = 0;
@@ -208,6 +214,11 @@
         }
         ram[IO_VCOUNT] = (io.video.currentDisplayLine >> 1) & 0xff;
         fetchLine(ctx);
+
+        if (io.video.currentDisplayLine === 1) io.videoOut.priority.fill(0);
+        drawLine(ctx);
+        drawPlayerMissiles(ctx);
+
         io.displayListFetchCycle += CYCLES_PER_LINE;
       }
 
@@ -216,13 +227,6 @@
         ram[IO_NMIRES_NMIST] |= NMI_DLI;
         if (sram[IO_NMIEN] & NMI_DLI) CPU.nmi(ctx);
         io.dliCycle = CYCLE_NEVER;
-      }
-
-      if (ctx.cycleCounter >= io.drawLineCycle) {
-        if (io.video.currentDisplayLine === 0) io.videoOut.priority.fill(0);
-        drawLine(ctx);
-        drawPlayerMissiles(ctx);
-        io.drawLineCycle += CYCLES_PER_LINE;
       }
 
       if (ctx.cycleCounter >= io.serialOutputTransmissionDoneCycle) {

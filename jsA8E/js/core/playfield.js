@@ -6,6 +6,7 @@
     const Util = cfg.Util;
 
     const PIXELS_PER_LINE = cfg.PIXELS_PER_LINE;
+    const CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
     const FIRST_VISIBLE_LINE = cfg.FIRST_VISIBLE_LINE;
     const LAST_VISIBLE_LINE = cfg.LAST_VISIBLE_LINE;
 
@@ -39,7 +40,15 @@
     const fillBkgPf012ColorTable = cfg.fillBkgPf012ColorTable;
     const decodeTextModeCharacter = cfg.decodeTextModeCharacter;
     const fillLine = cfg.fillLine;
+    const ioCycleTimedEvent = cfg.ioCycleTimedEvent;
     const PLAYFIELD_SCRATCH_VIEW_X = 64;
+
+    function clockAction(ctx) {
+      const io = ctx.ioData;
+      if (ctx.ioCycleTimedEventCycle <= io.clock) ioCycleTimedEvent(ctx);
+      if (ctx.cycleCounter < io.clock) CPU.executeOne(ctx);
+      io.clock++;
+    }
 
     function fillScratchLine(video, y, width, color, priority) {
       const base = y * width;
@@ -77,6 +86,7 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
+      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       const vScrollOffset = 8 - lineDelta - (io.video.verticalScrollOffset | 0);
       if (lineDelta === 1) {
@@ -93,17 +103,7 @@
       const prio = io.videoOut.priority;
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
-      const chactl = sram[IO_CHACTL] & 0x03;
-      const priorMode = (sram[IO_PRIOR] >> 6) & 3;
       const colorTable = SCRATCH_GTIA_COLOR_TABLE;
-      fillGtiaColorTable(sram, colorTable);
-      const colPf1 = sram[IO_COLPF1] & 0xff;
-      const colPf2 = sram[IO_COLPF2] & 0xff;
-      const colBk = sram[IO_COLBK] & 0xff;
-      const c0Inverse = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
-      const c1Inverse = colPf2 & 0xff;
-      const c0Normal = colPf2 & 0xff;
-      const c1Normal = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
 
       const chBase = (sram[IO_CHBASE] << 8) & 0xfc00 & 0xffff;
 
@@ -113,16 +113,33 @@
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (mask === 0x00) {
+          const chactl = sram[IO_CHACTL] & 0x03;
           const decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
           const ch = decoded & 0xff;
           inverse = (decoded & 0x100) !== 0;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
+          ctx.cycleCounter++; // DMA steal: pattern
+
+          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+            ctx.cycleCounter++; // DMA steal: name (only on first line of row)
+          }
 
           data =
             ram[(chBase + ch * 8 + (vScrollOffset & 0xff)) & 0xffff] & 0xff;
-          if (priorMode !== 0 && inverse) data ^= 0xff;
           mask = 0x80;
         }
+
+        const priorMode = (sram[IO_PRIOR] >> 6) & 3;
+        if (priorMode !== 0 && inverse) data ^= 0xff;
+
+        fillGtiaColorTable(sram, colorTable);
+        const colPf1 = sram[IO_COLPF1] & 0xff;
+        const colPf2 = sram[IO_COLPF2] & 0xff;
+        const colBk = sram[IO_COLBK] & 0xff;
+        const c0Inverse = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
+        const c1Inverse = colPf2 & 0xff;
+        const c0Normal = colPf2 & 0xff;
+        const c1Normal = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
 
         if (priorMode === 0) {
           const c0 = inverse ? c0Inverse : c0Normal;
@@ -130,45 +147,17 @@
           const p0 = inverse ? PRIO_PF1 : PRIO_PF2;
           const p1 = inverse ? PRIO_PF2 : PRIO_PF1;
 
-          if (data & mask) {
-            dst[dstIndex] = c1;
-            prio[dstIndex] = p1;
-          } else {
-            dst[dstIndex] = c0;
-            prio[dstIndex] = p0;
+          for (let k = 0; k < 4; k++) {
+            if (data & mask) {
+              dst[dstIndex] = c1;
+              prio[dstIndex] = p1;
+            } else {
+              dst[dstIndex] = c0;
+              prio[dstIndex] = p0;
+            }
+            dstIndex++;
+            mask >>= 1;
           }
-          dstIndex++;
-          mask >>= 1;
-
-          if (data & mask) {
-            dst[dstIndex] = c1;
-            prio[dstIndex] = p1;
-          } else {
-            dst[dstIndex] = c0;
-            prio[dstIndex] = p0;
-          }
-          dstIndex++;
-          mask >>= 1;
-
-          if (data & mask) {
-            dst[dstIndex] = c1;
-            prio[dstIndex] = p1;
-          } else {
-            dst[dstIndex] = c0;
-            prio[dstIndex] = p0;
-          }
-          dstIndex++;
-          mask >>= 1;
-
-          if (data & mask) {
-            dst[dstIndex] = c1;
-            prio[dstIndex] = p1;
-          } else {
-            dst[dstIndex] = c0;
-            prio[dstIndex] = p0;
-          }
-          dstIndex++;
-          mask >>= 1;
         } else if (priorMode === 1) {
           if (mask > 0x08) {
             const hi = (colBk | (data >> 4)) & 0xff;
@@ -215,6 +204,7 @@
           }
           mask >>= 4;
         }
+        clockAction(ctx);
       }
 
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
@@ -1125,7 +1115,15 @@
       const screenPriority = video.priority;
 
       const y = io.video.currentDisplayLine | 0;
-      if (y < FIRST_VISIBLE_LINE || y > LAST_VISIBLE_LINE) return;
+
+      // Sync clock to start of line draw window
+      const lineStartClock = io.displayListFetchCycle - CYCLES_PER_LINE;
+      if (io.clock < lineStartClock) io.clock = lineStartClock;
+
+      if (y < FIRST_VISIBLE_LINE || y > LAST_VISIBLE_LINE) {
+        for (let i = 0; i < 114; i++) clockAction(ctx);
+        return;
+      }
 
       const prior = sram[IO_PRIOR] & 0xff;
       SCRATCH_BACKGROUND_TABLE[0] = sram[IO_COLBK] & 0xff;
@@ -1144,6 +1142,7 @@
 
         if (mode < 2) {
           fillLine(video, y, 0, PIXELS_PER_LINE, bkg, PRIO_BKG);
+          for (let i = 0; i < 114; i++) clockAction(ctx);
           return;
         }
 
@@ -1155,8 +1154,6 @@
         } else if (pfWidth === 0x02) {
           renderStartX = (16 + 12 + 6 + 14) * 2;
         } else if (pfWidth === 0x03) {
-          // Wide playfield renders 24px left of the left-border edge (screen 64
-          // vs lLeftBorderSize 88); the border fill covers [0,88) afterward.
           renderStartX = (16 + 12 + 4) * 2;
         }
 
@@ -1166,7 +1163,6 @@
         if (cmd & 0x10) {
           const h = sram[IO_HSCROL] & 0x0f;
           if (pfWidth === 0x03) {
-            // Wide HSCROL shifts the render start right (no extra DMA bytes).
             renderStartX += h * 2;
           } else {
             renderStartX -= 32 - h * 2;
@@ -1180,54 +1176,28 @@
         video.priority = video.playfieldScratchPriority;
 
         io.drawLine.bytesPerLine = bytesPerLine;
-        CPU.stall(ctx, bytesPerLine);
         io.drawLine.destIndex =
           y * scratchWidth + PLAYFIELD_SCRATCH_VIEW_X + renderStartX;
         io.drawLine.displayMemoryAddress = io.displayMemoryAddress & 0xffff;
 
+        const preCycles = 16 + ((renderStartX / 4) | 0);
+        for (let i = 0; i < preCycles; i++) clockAction(ctx);
+
         switch (mode) {
-          case 2:
-            drawLineMode2(ctx);
-            break;
-          case 3:
-            drawLineMode3(ctx);
-            break;
-          case 4:
-            drawLineMode4(ctx);
-            break;
-          case 5:
-            drawLineMode5(ctx);
-            break;
-          case 6:
-            drawLineMode6(ctx);
-            break;
-          case 7:
-            drawLineMode7(ctx);
-            break;
-          case 8:
-            drawLineMode8(ctx);
-            break;
-          case 9:
-            drawLineMode9(ctx);
-            break;
-          case 0x0a:
-            drawLineModeA(ctx);
-            break;
-          case 0x0b:
-            drawLineModeB(ctx);
-            break;
-          case 0x0c:
-            drawLineModeC(ctx);
-            break;
-          case 0x0d:
-            drawLineModeD(ctx);
-            break;
-          case 0x0e:
-            drawLineModeE(ctx);
-            break;
-          case 0x0f:
-            drawLineModeF(ctx);
-            break;
+          case 2: drawLineMode2(ctx); break;
+          case 3: drawLineMode3(ctx); break;
+          case 4: drawLineMode4(ctx); break;
+          case 5: drawLineMode5(ctx); break;
+          case 6: drawLineMode6(ctx); break;
+          case 7: drawLineMode7(ctx); break;
+          case 8: drawLineMode8(ctx); break;
+          case 9: drawLineMode9(ctx); break;
+          case 0x0a: drawLineModeA(ctx); break;
+          case 0x0b: drawLineModeB(ctx); break;
+          case 0x0c: drawLineModeC(ctx); break;
+          case 0x0d: drawLineModeD(ctx); break;
+          case 0x0e: drawLineModeE(ctx); break;
+          case 0x0f: drawLineModeF(ctx); break;
           default:
             {
               const start =
@@ -1239,14 +1209,17 @@
                 dst[start + i] = bkg;
                 prio[start + i] = PRIO_BKG;
               }
+              const pfCycles = (pixelsToFill / 4) | 0;
+              for (let i = 0; i < pfCycles; i++) clockAction(ctx);
             }
             break;
         }
+
+        while (io.clock < lineStartClock + 114) {
+          clockAction(ctx);
+        }
+
         // Mirror C's two AtariIo_FillRect border calls applied after mode draw.
-        // For wide (pfWidth=3): render starts at screen 64, left border is 88,
-        // so clear priority/pixels in [0, max(88,renderStartX)) to prevent
-        // stale playfield priority from affecting player overlap checks.
-        // For non-wide with HSCROL: renderStartX may fall left of lLeftBorderSize.
         {
           const lLeftBorderFill =
             pfWidth === 0x03
@@ -1282,6 +1255,7 @@
         video.priority = screenPriority;
       } else {
         fillLine(video, y, 0, PIXELS_PER_LINE, bkg, PRIO_BKG);
+        for (let i = 0; i < 114; i++) clockAction(ctx);
       }
     }
 
