@@ -159,7 +159,7 @@
           if (cmd & 0x80) {
             io.dliCycle =
               ctx.cycleCounter +
-              (io.nextDisplayListLine - io.video.currentDisplayLine) *
+              (io.nextDisplayListLine - io.video.currentDisplayLine - 1) *
                 CYCLES_PER_LINE;
             cycleTimedEventUpdate(ctx);
           }

@@ -2535,7 +2535,7 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			if(pIoData->cCurrentDisplayListCommand & 0x80)
 			{
 				pIoData->llDliCycle = pContext->llCycleCounter +
-									  (pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine) * CYCLES_PER_LINE;
+									  (pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine - 1) * CYCLES_PER_LINE;
 
 				AtariIoCycleTimedEventUpdate(pContext);
 			}
