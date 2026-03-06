@@ -2695,6 +2695,28 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 				}
 			}
 
+			// Wide playfield: recalculate border extents from actual render start.
+			// The nominal leftBorder (88) can be less than renderStart when HSCROL > 12,
+			// and the right edge of the playfield can exceed PIXELS_PER_LINE (456).
+			u32 lRightBorderX = lPlayfieldPixelsPerLine + lLeftBorderSize;
+			if((SRAM[IO_DMACTL] & 0x03) == 0x03)
+			{
+				u32 lRenderStart = (16 + 12 + 4) * 2;
+				if(pIoData->cCurrentDisplayListCommand & 0x10)
+					lRenderStart += (SRAM[IO_HSCROL] & 0x0f) * 2;
+				if(lRenderStart > lLeftBorderSize) lLeftBorderSize = lRenderStart;
+				lRightBorderX = lRenderStart + lPlayfieldPixelsPerLine;
+				if(lRightBorderX >= PIXELS_PER_LINE)
+				{
+					lRightBorderX = PIXELS_PER_LINE;
+					lRightBorderSize = 0;
+				}
+				else
+				{
+					lRightBorderSize = PIXELS_PER_LINE - lRightBorderX;
+				}
+			}
+
 			pIoData->tDrawLineData.sDisplayMemoryAddress = pIoData->sDisplayMemoryAddress;
 
 			m_aAnticModeInfoTable[pIoData->cCurrentDisplayListCommand & 0x0f].DrawFunction(pContext);
@@ -2709,7 +2731,7 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 
 			AtariIo_FillRect(
 				pIoData->tVideoData.pSdlAtariSurface,
-				lPlayfieldPixelsPerLine + lLeftBorderSize,
+				lRightBorderX,
 				pIoData->tVideoData.lCurrentDisplayLine,
 				lRightBorderSize,
 				1,
