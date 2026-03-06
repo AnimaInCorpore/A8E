@@ -1147,6 +1147,18 @@
           }
         }
 
+        // For wide playfield (pfWidth=3), recompute border extents from the
+        // actual render start position, which can exceed leftBorder when HSCROL
+        // is large, and whose right edge can exceed PIXELS_PER_LINE.
+        let rightBorderX = playfieldPixels + leftBorder;
+        if (pfWidth === 0x03) {
+          const renderStart = destIndex - y * PIXELS_PER_LINE;
+          if (renderStart > leftBorder) leftBorder = renderStart;
+          rightBorderX = renderStart + playfieldPixels;
+          if (rightBorderX > PIXELS_PER_LINE) rightBorderX = PIXELS_PER_LINE;
+          rightBorder = PIXELS_PER_LINE - rightBorderX;
+        }
+
         io.drawLine.bytesPerLine = bytesPerLine;
         CPU.stall(ctx, bytesPerLine);
         io.drawLine.destIndex = destIndex;
@@ -1212,7 +1224,7 @@
           {fillLine(
             video,
             y,
-            playfieldPixels + leftBorder,
+            rightBorderX,
             rightBorder,
             bkg,
             PRIO_BKG,
