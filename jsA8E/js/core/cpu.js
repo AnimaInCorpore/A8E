@@ -897,6 +897,22 @@
         }
 
         const opcode = ram[cpu.pc & 0xffff] & 0xff;
+        let nextEvent = cycleTarget;
+        if (
+          ctx.ioCycleTimedEventFunction &&
+          ctx.ioCycleTimedEventCycle < nextEvent
+        ) {
+          nextEvent = ctx.ioCycleTimedEventCycle;
+        }
+        if (ctx.stallCycleCounter < nextEvent) nextEvent = ctx.stallCycleCounter;
+        if (
+          nextEvent > ctx.cycleCounter &&
+          ctx.cycleCounter + OPCODE_BASE_CYCLES[opcode] > nextEvent
+        ) {
+          ctx.cycleCounter = nextEvent;
+          cycles = nextEvent;
+          continue;
+        }
         cpu.pc = (cpu.pc + 1) & 0xffff;
 
         ctx.accessFunctionOverride = null;

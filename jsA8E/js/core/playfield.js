@@ -39,6 +39,38 @@
     const fillBkgPf012ColorTable = cfg.fillBkgPf012ColorTable;
     const decodeTextModeCharacter = cfg.decodeTextModeCharacter;
     const fillLine = cfg.fillLine;
+    const PLAYFIELD_SCRATCH_VIEW_X = 64;
+
+    function fillScratchLine(video, y, width, color, priority) {
+      const base = y * width;
+      const pixels = video.playfieldScratchPixels;
+      const prio = video.playfieldScratchPriority;
+      const c = color & 0xff;
+      const p = priority & 0xff;
+      for (let i = 0; i < width; i++) {
+        pixels[base + i] = c;
+        prio[base + i] = p;
+      }
+    }
+
+    function copyScratchLine(video, y, width, dstPixels, dstPriority) {
+      const srcBase = y * width + PLAYFIELD_SCRATCH_VIEW_X;
+      const dstBase = y * PIXELS_PER_LINE;
+      dstPixels.set(
+        video.playfieldScratchPixels.subarray(
+          srcBase,
+          srcBase + PIXELS_PER_LINE,
+        ),
+        dstBase,
+      );
+      dstPriority.set(
+        video.playfieldScratchPriority.subarray(
+          srcBase,
+          srcBase + PIXELS_PER_LINE,
+        ),
+        dstBase,
+      );
+    }
 
     function drawLineMode2(ctx) {
       const io = ctx.ioData;
@@ -1089,6 +1121,8 @@
       const io = ctx.ioData;
       const sram = ctx.sram;
       const video = io.videoOut;
+      const screenPixels = video.pixels;
+      const screenPriority = video.priority;
 
       const y = io.video.currentDisplayLine | 0;
       if (y < FIRST_VISIBLE_LINE || y > LAST_VISIBLE_LINE) return;
@@ -1114,23 +1148,14 @@
         }
 
         const playfieldPixels = 192 + pfWidth * 64;
-        let leftBorder = 0;
-        let rightBorder = 0;
-        let destIndex = y * PIXELS_PER_LINE;
+        let renderStartX = 0;
 
         if (pfWidth === 0x01) {
-          leftBorder = (16 + 12 + 6 + 30) * 2;
-          rightBorder = (30 + 6) * 2;
-          destIndex += (16 + 12 + 6 + 30) * 2;
+          renderStartX = (16 + 12 + 6 + 30) * 2;
         } else if (pfWidth === 0x02) {
-          leftBorder = (16 + 12 + 6 + 14) * 2;
-          rightBorder = (14 + 6) * 2;
-          destIndex += (16 + 12 + 6 + 14) * 2;
+          renderStartX = (16 + 12 + 6 + 14) * 2;
         } else if (pfWidth === 0x03) {
-          leftBorder = (16 + 12 + 6 + 10) * 2;
-          rightBorder = (2 + 6) * 2;
-          // Matches the original emulator: start earlier for horizontal scrolling.
-          destIndex += (16 + 12 + 4) * 2;
+          renderStartX = (16 + 12 + 6 + 10) * 2;
         }
 
         const ppb = ANTIC_MODE_INFO[mode].ppb || 8;
@@ -1139,29 +1164,19 @@
         if (cmd & 0x10) {
           // HSCROL
           const h = sram[IO_HSCROL] & 0xff;
-          if (pfWidth !== 0x03) {
-            destIndex -= 32 - h * 2;
-            bytesPerLine += 8;
-          } else {
-            destIndex += h * 2;
-          }
+          renderStartX -= 32 - h * 2;
+          bytesPerLine += 8;
         }
 
-        // For wide playfield (pfWidth=3), recompute border extents from the
-        // actual render start position, which can exceed leftBorder when HSCROL
-        // is large, and whose right edge can exceed PIXELS_PER_LINE.
-        let rightBorderX = playfieldPixels + leftBorder;
-        if (pfWidth === 0x03) {
-          const renderStart = destIndex - y * PIXELS_PER_LINE;
-          if (renderStart > leftBorder) leftBorder = renderStart;
-          rightBorderX = renderStart + playfieldPixels;
-          if (rightBorderX > PIXELS_PER_LINE) rightBorderX = PIXELS_PER_LINE;
-          rightBorder = PIXELS_PER_LINE - rightBorderX;
-        }
+        const scratchWidth = video.playfieldScratchWidth | 0;
+        fillScratchLine(video, y, scratchWidth, bkg, PRIO_BKG);
+        video.pixels = video.playfieldScratchPixels;
+        video.priority = video.playfieldScratchPriority;
 
         io.drawLine.bytesPerLine = bytesPerLine;
         CPU.stall(ctx, bytesPerLine);
-        io.drawLine.destIndex = destIndex;
+        io.drawLine.destIndex =
+          y * scratchWidth + PLAYFIELD_SCRATCH_VIEW_X + renderStartX;
         io.drawLine.displayMemoryAddress = io.displayMemoryAddress & 0xffff;
 
         switch (mode) {
@@ -1208,27 +1223,28 @@
             drawLineModeF(ctx);
             break;
           default:
-            fillLine(
-              video,
-              y,
-              destIndex - y * PIXELS_PER_LINE,
-              bytesPerLine * ppb,
-              bkg,
-              PRIO_BKG,
-            );
+            {
+              const start =
+                y * scratchWidth + PLAYFIELD_SCRATCH_VIEW_X + renderStartX;
+              const pixelsToFill = bytesPerLine * ppb;
+              const dst = video.playfieldScratchPixels;
+              const prio = video.playfieldScratchPriority;
+              for (let i = 0; i < pixelsToFill; i++) {
+                dst[start + i] = bkg;
+                prio[start + i] = PRIO_BKG;
+              }
+            }
             break;
         }
-
-        if (leftBorder) fillLine(video, y, 0, leftBorder, bkg, PRIO_BKG);
-        if (rightBorder)
-          {fillLine(
-            video,
-            y,
-            rightBorderX,
-            rightBorder,
-            bkg,
-            PRIO_BKG,
-          );}
+        copyScratchLine(
+          video,
+          y,
+          scratchWidth,
+          screenPixels,
+          screenPriority,
+        );
+        video.pixels = screenPixels;
+        video.priority = screenPriority;
       } else {
         fillLine(video, y, 0, PIXELS_PER_LINE, bkg, PRIO_BKG);
       }
