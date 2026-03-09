@@ -1,247 +1,175 @@
-# Color-Clock Accuracy for Playfield Rendering
+# Color-Clock Accuracy
 
-## Background
+Reference implementation: `legacy/A8E_experimental/Atari.c`
 
-The Atari 8-bit hardware outputs one pixel per color clock. ANTIC performs DMA during
-the active display portion of each scanline, fetching one byte every few color clocks
-(depending on mode). While ANTIC is doing DMA, the 6502 is stalled. Registers written
-by the CPU during the HBlank period of a scanline can therefore affect pixels on that
-same scanline if they are written before ANTIC starts outputting those pixels.
+This document tracks compliance of `A8E/AtariIo.c` and `jsA8E/js/core/` with
+the legacy per-color-clock scanline renderer. It is intentionally short and
+status-focused.
 
-The project contains three relevant implementations at different levels of accuracy:
+## Legacy Rules
 
-| Implementation | Location | Cycle accuracy |
-|---|---|---|
-| Legacy experimental | `legacy/A8E_experimental/Atari.c` | Per-color-clock (reference) |
-| C emulator | `A8E/AtariIo.c` | Scanline-granular |
-| JS emulator | `jsA8E/js/core/playfield.js` + `antic.js` | Scanline-granular |
+The legacy renderer is the behavioral target. The important rules are:
 
----
+- One active scanline owns its full 114 color clocks before the next scanline
+  can begin.
+- Each color clock interleaves timed events, CPU progress, and visible output.
+- The scanline timeline is `color burst -> left border -> playfield -> right
+  border`.
+- Visible output reads live hardware state while pixels are emitted.
+- DMA steals happen at the actual fetch points, not as a bulk stall.
+- Player/missile rendering is interleaved at color-clock granularity with the
+  playfield path, not applied as a later whole-line overlay.
 
-## Reference Architecture: `legacy/A8E_experimental`
+Key legacy references:
 
-`legacy/A8E_experimental/Atari.c` is the cycle-accurate reference implementation.
-Its core model is two macros that run at every color clock of every scanline:
+- `ATARI_LINE_ACTION()`
+- `ATARI_CLOCK_ACTION()`
+- `Atari_DrawBlank()`
+- `Atari_DrawMode2()`
+- `Atari_DrawModeF()`
+- `AtariExecuteOneFrame()`
 
-```c
-#define ATARI_CLOCK_ACTION() \
-{ \
-    if(pAtariData->llEventCycle <= pAtariData->llCycle) \
-        Atari_TimedEvent(pContext); \
-    if(pContext->llCycleCounter < pAtariData->llCycle) \
-        _6502_Execute(pContext); \
-    pAtariData->llCycle++; \
-}
+## What Matches Today
 
-#define ATARI_LINE_ACTION() \
-{ \
-    pAtariData->lDisplayLine++; \
-    RAM[IO_VCOUNT] = pAtariData->lDisplayLine >> 1; \
-    RAM[IO_NMIRES_NMIST] &= ~NMI_DLI; \
-    pContext->llCycleCounter += 9; \
-}
-```
+These items are implemented in both modern ports:
 
-Every draw function (`Atari_DrawMode2`, `Atari_DrawModeF`, etc.) iterates one
-color clock at a time through three regions of each scanline: left border,
-playfield, right border. At the end of each color clock `ATARI_CLOCK_ACTION()`
-is called, giving the CPU a chance to execute. Hardware registers are read
-**live** at each pixel directly from `SRAM[]` — there is no snapshotting:
+- Active scanlines are owned by the draw path; next-line recursion is blocked.
+- DLI / timer / serial events are allowed during rendering instead of being
+  globally suppressed.
+- ANTIC modes `2-F` now use per-clock playfield loops with inline DMA steals.
+- Blank lines and active-line background borders use live background color
+  reads instead of a single scanline snapshot.
 
-```c
-// Inside Atari_DrawMode2, playfield region — per-cycle loop:
-if(cData & cMask)
-    *pPixel++ = (SRAM[IO_COLPF2] & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
-else
-    *pPixel++ = SRAM[IO_COLPF2];
-// ...
-ATARI_CLOCK_ACTION();   // CPU may execute here; registers may change
-```
+That is meaningful progress, but it is not yet full legacy compliance.
 
-DMA steal cycles are modeled by directly incrementing `pContext->llCycleCounter`
-during the character/data fetch inside the playfield loop, which prevents the CPU
-from executing during those cycles:
+## Current Non-Compliance
 
-```c
-cCharacter = RAM[sDisplayMemoryAddress];
-pContext->llCycleCounter++;   // DMA steal: CPU cannot execute this cycle
-```
+The review baseline is the current tree versus `legacy/A8E_experimental`.
 
-This means any register write the CPU makes lands in `SRAM[]` and is immediately
-visible to the very next pixel output — full color-clock accuracy with no queuing
-mechanism needed.
+### 1. Scanline geometry is still not legacy-accurate
 
----
+Severity: high
 
-## What Is Already Cycle-Accurate (C and JS)
+Legacy computes the visible scanline budget as:
 
-Both the C emulator and the JS emulator implement scanline-granular accuracy,
-which correctly models:
+- `color burst`
+- `left border cycles`
+- `playfield cycles`
+- `right border cycles`
 
-| Aspect | C (`AtariIo.c`) | JS (`antic.js` / `playfield.js`) | Status |
-|---|---|---|---|
-| `drawLineCycle` init | `CYCLES_PER_LINE + 16` | `CYCLES_PER_LINE + 16` | Identical |
-| `displayListFetchCycle` init | `CYCLES_PER_LINE` | `CYCLES_PER_LINE` | Identical |
-| Per-scanline cycle advance | `+= CYCLES_PER_LINE` | `+= CYCLES_PER_LINE` | Identical |
-| CPU stall for DMA | `_6502_STALL(bytesPerLine)` | `CPU.stall(ctx, bytesPerLine)` | Equivalent |
-| WSYNC target cycle | `llDisplayListFetchCycle` | `io.displayListFetchCycle` | Equivalent |
-| DLI scheduling | `cycleCounter + lineDelta * CPL` | `cycleCounter + lineDelta * CPL` | Identical |
-| Mode draw functions 2..F | Full per-byte loop | Full per-byte loop (port) | Equivalent |
-| Border fill after draw | Two `AtariIo_FillRect` calls | Two explicit fill loops | Equivalent |
+with the destination pointer already positioned after the fixed HSYNC offset.
+See `legacy/A8E_experimental/Atari.c` around the playfield geometry setup and
+draw call.
 
-Note: the JS implementation applies `CHACTL` more uniformly than the C source —
-all text modes use `decodeTextModeCharacter`, whereas C Mode 2 uses a raw bit-7
-check. The JS behaviour is more hardware-correct.
+Current C and JS instead derive a `renderStartX` in pixels and then spend
+`16 + renderStartX / 4` clocks before entering the mode renderer.
 
----
+Files:
 
-## What Is Missing: Sub-Scanline Register Sensitivity
+- `legacy/A8E_experimental/Atari.c`
+- `A8E/AtariIo.c`
+- `jsA8E/js/core/playfield.js`
 
-Both the C and JS emulators snapshot all hardware registers at `drawLineCycle`
-time and hold them constant for the entire scanline. The legacy experimental
-source reads `SRAM[]` live at every pixel. The gap enables:
+Effect:
 
-- Horizontal color splits within a single scanline (COLPFx, COLBK)
-- Per-line PRIOR / GTIA-mode changes without a DLI
-- Fine-grained HSCROL adjustments timed to the pixel clock
+- Normal-width and wide lines do not consume the same border/playfield clock
+  breakdown as legacy.
+- The timeline can still total 114 clocks, but the clock ownership of border
+  versus playfield segments is different from the reference.
 
----
+### 2. Non-wide HSCROL still changes playfield DMA timing incorrectly
 
-## Implementation Plan
+Severity: high
 
-The goal is to bring the C emulator and the JS emulator up to the per-color-clock
-model established by `legacy/A8E_experimental/Atari.c`. The approach for each is
-described below.
+Legacy HSCROL changes left-border timing and scroll pixel offset, but it does
+not add an extra eight display bytes for narrow/normal playfields.
 
-### Step 1 — Introduce a per-color-clock render loop
+Current C and JS both still do that for non-wide HSCROL lines.
 
-Replace the current scanline-atomic model with the experimental source's
-interleaved model: iterate one color clock at a time through HBlank, left border,
-playfield, and right border, and give the CPU an opportunity to execute after each
-clock.
+Files:
 
-**C — `A8E/AtariIo.c`:**
+- `legacy/A8E_experimental/Atari.c`
+- `A8E/AtariIo.c`
+- `jsA8E/js/core/playfield.js`
 
-Introduce a `DRAW_CLOCK_ACTION()` macro equivalent to `ATARI_CLOCK_ACTION()` from
-the experimental source. Restructure `AtariIoDrawLine` to call the mode-specific
-draw function in a per-clock loop rather than a batch. The existing
-`_6502_STALL(bytesPerLine)` bulk stall is replaced by incremental
-`pContext->llCycleCounter++` steps during DMA fetch, matching the experimental
-source's approach.
+Effect:
 
-**JS — `jsA8E/js/core/playfield.js` + `jsA8E/js/core/cpu.js`:**
+- Extra playfield bytes are fetched where legacy keeps the playfield cycle
+  count fixed.
+- This changes DMA timing and can shift when mid-scanline writes become
+  visible.
 
-Introduce a `clockAction(ctx)` helper equivalent to `ATARI_CLOCK_ACTION()`:
+### 3. Player/missile interleaving is implemented on visible scanlines
 
-```js
-function clockAction(ctx) {
-  const io = ctx.ioData;
-  if (ctx.ioCycleTimedEventCycle <= io.clock) ioCycleTimedEvent(ctx);
-  if (ctx.cycleCounter < io.clock) CPU.executeOne(ctx);
-  io.clock++;
-}
-```
+Severity: verification
 
-This requires a `CPU.executeOne` entry point that runs a single instruction and
-returns (the current `CPU.execute` runs a full time-slice). Add `io.clock` as the
-running per-color-clock counter, initialised to `drawLineCycle - CYCLES_PER_LINE`
-at the start of each frame.
+Legacy interleaves playfield and player/missile work on every color clock from
+the main frame loop.
 
-### Step 2 — Read registers live in mode functions
+Current native C and JS both resolve player/missile output from the per-color-
+clock scanline draw path on visible lines.
 
-Remove register snapshots from all mode functions. Replace pre-computed color
-locals with direct `sram[IO_COLPFx]` reads at each pixel output, matching the
-experimental source. For example in Mode 2 (normal PRIOR mode):
+Files:
 
-```js
-// Before (snapshotted):
-const c1 = inverse ? c1Inverse : c1Normal;
-dst[dstIndex] = c1;
+- `legacy/A8E_experimental/Atari.c`
+- `A8E/AtariIo.c`
+- `jsA8E/js/core/antic.js`
+- `jsA8E/js/core/playfield.js`
+- `jsA8E/js/core/gtia.js`
 
-// After (live read):
-dst[dstIndex] = (data & mask)
-  ? (sram[IO_COLPF2] & 0xf0) | (sram[IO_COLPF1] & 0x0f)
-  : sram[IO_COLPF2];
-```
+Effect:
 
-The live reads are only slightly more expensive than local variable accesses —
-typed array indexing in JS is fast. The same change applies to all modes in both
-the C and JS implementations.
+- Mid-scanline register writes can now affect PMG output on visible scanlines
+  in both modern ports.
+- Remaining work is verification against real raster content and any still-
+  localized title-specific PMG differences.
 
-### Step 3 — Model DMA steals as cycle-counter increments
+### 4. Blank-line handling still does not match legacy color-burst behavior
 
-Replace the bulk `CPU.stall(ctx, bytesPerLine)` / `_6502_STALL(bytesPerLine)`
-with per-fetch-cycle `ctx.cycleCounter++` / `pContext->llCycleCounter++` at the
-point where each display byte is read from RAM, matching lines 883 and 895 of
-the experimental source. The `clockAction` / `DRAW_CLOCK_ACTION` call at the end
-of each color clock then naturally prevents CPU execution during stolen cycles.
+Severity: medium
 
-### Step 4 — Left and right border regions
+Legacy blank lines spend the color-burst clocks without painting visible
+background pixels, then render the remainder of the line.
 
-The HBlank and border regions also run through `clockAction` one cycle at a time,
-outputting background color live from `sram[IO_COLBK]` and `sram[IO_PRIOR]` at
-each clock. This is required for PRIOR mid-scanline splits that extend into the
-border area. Reference: `Atari_DrawBlank` and the left/right border loops inside
-each mode function in the experimental source.
+Current C and JS now spend the color-burst clocks without painting visible
+background, but their remaining blank-line geometry is still not a literal
+legacy match.
 
-### Step 5 — HSCROL
+Files:
 
-HSCROL is latched by ANTIC at the very start of the DMA window for the current
-scanline. Reading it once at the start of the playfield region (not per clock)
-correctly models this. No change from the current behavior is needed here; verify
-only.
+- `legacy/A8E_experimental/Atari.c`
+- `A8E/AtariIo.c`
+- `jsA8E/js/core/playfield.js`
 
-### Step 6 — `CPU.executeOne` prerequisite (JS only)
+Effect:
 
-The interleaved model requires the ability to execute exactly one CPU instruction
-per call. The current `CPU.execute` runs until a cycle budget is exhausted. A
-`CPU.executeOne(ctx)` variant that runs one instruction and returns is needed
-before Step 1 can be completed in the JS emulator.
+- Blank lines are now live-read and per-clock, which is better than the old
+  snapshot fill, but they are still not a literal legacy match.
 
----
+## Compliance Summary
 
-## Priority Order
+Status: partial, not compliant yet.
 
-1. Step 6 (JS) — `CPU.executeOne` — prerequisite for everything else in JS
-2. Step 1 — Per-clock loop structure in both C and JS
-3. Step 3 — DMA steal modeled as incremental counter increments
-4. Step 2, Mode 2 — live register reads; most common text mode
-5. Step 2, Mode F — live register reads; high-res bitmap
-6. Step 2, remaining modes — repeat the same pattern
-7. Step 4 — Border regions with live register reads
-8. Step 5 — HSCROL latch verification (expected: no change needed)
+Both modern ports now satisfy the scanline-ownership part of the port, but they
+still diverge from legacy in two material timing areas:
 
----
+- border/playfield clock geometry
+- HSCROL fetch timing
 
-## Progress
+Blank-line color-burst handling is a smaller but still real mismatch.
 
-### Legacy experimental (`legacy/A8E_experimental/Atari.c`)
+## Exit Criteria
 
-- [x] Per-color-clock render loop (`ATARI_CLOCK_ACTION`)
-- [x] Live register reads at every pixel
-- [x] DMA steals modeled as `llCycleCounter++`
-- [x] Left/right border regions run through clock loop
-- [x] CPU interleaved with rendering
+This work is complete only when both `A8E` and `jsA8E` satisfy all of the
+following against the legacy source:
 
-### C emulator (`A8E/AtariIo.c`)
-
-- [ ] **Step 1** — Per-color-clock render loop introduced; `DRAW_CLOCK_ACTION`
-  macro added; scanline-atomic batch replaced
-- [ ] **Step 2** — Live `SRAM[]` reads replace snapshotted color locals in all
-  `AtariIo_DrawLineModeX` functions
-- [ ] **Step 3** — DMA steals modeled as `llCycleCounter++` per fetch; bulk
-  `_6502_STALL` removed
-- [ ] **Step 4** — Left/right border regions iterate per clock with live reads
-- [ ] **Step 5** — HSCROL latch behavior verified (expected: no change needed)
-
-### JS emulator (`jsA8E/js/core/`)
-
-- [ ] **Step 6** — `CPU.executeOne(ctx)` added to `cpu.js`
-- [ ] **Step 1** — `clockAction` helper added; per-clock loop replaces
-  scanline-atomic dispatch in `playfield.js`; `io.clock` counter introduced
-- [ ] **Step 2** — Live `sram[]` reads replace snapshotted color locals in all
-  `drawLineModeX` functions
-- [ ] **Step 3** — DMA steals modeled as `ctx.cycleCounter++` per fetch;
-  `CPU.stall` bulk call removed
-- [ ] **Step 4** — Left/right border regions iterate per clock with live reads
-- [ ] **Step 5** — HSCROL latch behavior verified (expected: no change needed)
+- Active lines use the same color-burst, left-border, playfield, and
+  right-border clock breakdown.
+- HSCROL changes border timing and pixel alignment without introducing the
+  current extra-byte fetch behavior on narrow/normal playfields.
+- Player/missile rendering is interleaved on the active color-clock timeline,
+  not applied after the scanline draw returns.
+- Blank lines follow the legacy color-burst behavior as well as the live-read
+  background behavior.
+- Real-content regression checks confirm the expected DLI, HSCROL, PMG, and
+  audio behavior.

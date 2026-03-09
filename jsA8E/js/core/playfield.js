@@ -38,6 +38,7 @@
     const fillGtiaColorTable = cfg.fillGtiaColorTable;
     const fillBkgPf012ColorTable = cfg.fillBkgPf012ColorTable;
     const decodeTextModeCharacter = cfg.decodeTextModeCharacter;
+    const drawPlayerMissilesClock = cfg.drawPlayerMissilesClock;
     const ioCycleTimedEvent = cfg.ioCycleTimedEvent;
     const PLAYFIELD_SCRATCH_VIEW_X = 64;
     const ACTIVE_LINE_HSYNC_PIXELS = 32;
@@ -46,6 +47,13 @@
     function clockAction(ctx) {
       const io = ctx.ioData;
       if (ctx.ioCycleTimedEventCycle <= io.clock) ioCycleTimedEvent(ctx);
+      if (drawPlayerMissilesClock && io.drawLine.playerMissileClockActive) {
+        drawPlayerMissilesClock(
+          ctx,
+          ACTIVE_LINE_HSYNC_PIXELS +
+            ((io.clock - (io.displayListFetchCycle - CYCLES_PER_LINE)) * 4),
+        );
+      }
       if (ctx.cycleCounter < io.clock) CPU.executeOne(ctx);
       io.clock++;
     }
@@ -80,22 +88,6 @@
       return sram[IO_COLBK] & 0xf0;
     }
 
-    function drawBackgroundLine(ctx, dst, prio, dstIndex, cycles) {
-      const sram = ctx.sram;
-      for (let i = 0; i < cycles; i++) {
-        const color = currentBackgroundColor(sram);
-        dst[dstIndex] = color;
-        prio[dstIndex++] = PRIO_BKG;
-        dst[dstIndex] = color;
-        prio[dstIndex++] = PRIO_BKG;
-        dst[dstIndex] = color;
-        prio[dstIndex++] = PRIO_BKG;
-        dst[dstIndex] = color;
-        prio[dstIndex++] = PRIO_BKG;
-        clockAction(ctx);
-      }
-    }
-
     function drawBackgroundClipped(ctx, dst, prio, dstIndex, startX, cycles) {
       const sram = ctx.sram;
       let x = startX | 0;
@@ -109,6 +101,29 @@
           }
         }
         clockAction(ctx);
+      }
+    }
+
+    function drawVisibleBlankLine(ctx, dst, prio, dstIndex) {
+      stepClockActions(ctx, ACTIVE_LINE_COLOR_BURST_CYCLES);
+      drawBackgroundClipped(
+        ctx,
+        dst,
+        prio,
+        dstIndex,
+        ACTIVE_LINE_HSYNC_PIXELS + ACTIVE_LINE_COLOR_BURST_CYCLES * 4,
+        CYCLES_PER_LINE - ACTIVE_LINE_COLOR_BURST_CYCLES,
+      );
+    }
+
+    function drawInterleavedVisibleBlankLine(ctx, dst, prio, dstIndex) {
+      const io = ctx.ioData;
+      io.drawLine.playerMissileClockActive = true;
+      io.drawLine.playerMissileInterleaved = true;
+      try {
+        drawVisibleBlankLine(ctx, dst, prio, dstIndex);
+      } finally {
+        io.drawLine.playerMissileClockActive = false;
       }
     }
 
@@ -1276,6 +1291,8 @@
       // Sync clock to start of line draw window
       const lineStartClock = io.displayListFetchCycle - CYCLES_PER_LINE;
       if (io.clock < lineStartClock) io.clock = lineStartClock;
+      io.drawLine.playerMissileClockActive = false;
+      io.drawLine.playerMissileInterleaved = false;
 
       if (y < FIRST_VISIBLE_LINE || y > LAST_VISIBLE_LINE) {
         for (let i = 0; i < 114; i++) clockAction(ctx);
@@ -1291,12 +1308,11 @@
         const mode = cmd & 0x0f;
 
         if (mode < 2) {
-          drawBackgroundLine(
+          drawInterleavedVisibleBlankLine(
             ctx,
             screenPixels,
             screenPriority,
             y * PIXELS_PER_LINE,
-            114,
           );
           return;
         }
@@ -1309,12 +1325,11 @@
           sram[IO_HSCROL] & 0x0f,
         );
         if (!geometry) {
-          drawBackgroundLine(
+          drawInterleavedVisibleBlankLine(
             ctx,
             screenPixels,
             screenPriority,
             y * PIXELS_PER_LINE,
-            114,
           );
           return;
         }
@@ -1322,6 +1337,8 @@
         const scratchWidth = video.playfieldScratchWidth | 0;
         video.pixels = video.playfieldScratchPixels;
         video.priority = video.playfieldScratchPriority;
+        io.drawLine.playerMissileClockActive = true;
+        io.drawLine.playerMissileInterleaved = true;
 
         const lineBase = y * scratchWidth + PLAYFIELD_SCRATCH_VIEW_X;
         const baseColor = currentBackgroundColor(sram);
@@ -1394,15 +1411,15 @@
           screenPixels,
           screenPriority,
         );
+        io.drawLine.playerMissileClockActive = false;
         video.pixels = screenPixels;
         video.priority = screenPriority;
       } else {
-        drawBackgroundLine(
+        drawInterleavedVisibleBlankLine(
           ctx,
           screenPixels,
           screenPriority,
           y * PIXELS_PER_LINE,
-          114,
         );
       }
     }

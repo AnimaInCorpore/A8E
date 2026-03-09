@@ -41,6 +41,7 @@
     const IO_HSCROL = cfg.IO_HSCROL;
 
     const ANTIC_MODE_INFO = cfg.ANTIC_MODE_INFO;
+    const drawPlayerMissilesClock = cfg.drawPlayerMissilesClock;
     const drawPlayerMissiles = cfg.drawPlayerMissiles;
     const pokeyTimerPeriodCpuCycles = cfg.pokeyTimerPeriodCpuCycles;
     const cycleTimedEventUpdate = cfg.cycleTimedEventUpdate;
@@ -95,6 +96,7 @@
             fillBkgPf012ColorTable: fillBkgPf012ColorTable,
             decodeTextModeCharacter: decodeTextModeCharacter,
             fillLine: fillLine,
+            drawPlayerMissilesClock: drawPlayerMissilesClock,
             ioCycleTimedEvent: function (c) {
               ioCycleTimedEvent(c);
             },
@@ -222,7 +224,7 @@
 
         try {
           drawLine(ctx);
-          drawPlayerMissiles(ctx);
+          if (!io.drawLine.playerMissileInterleaved) drawPlayerMissiles(ctx);
         } finally {
           io.inDrawLine = false;
         }

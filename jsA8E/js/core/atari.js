@@ -123,6 +123,7 @@
   const SCRATCH_BACKGROUND_TABLE = hwApi.SCRATCH_BACKGROUND_TABLE;
   const ANTIC_MODE_INFO = hwApi.ANTIC_MODE_INFO;
   const IO_INIT_VALUES = hwApi.IO_INIT_VALUES;
+  const PLAYFIELD_SCRATCH_VIEW_X = 64;
 
   function fillGtiaColorTable(sram, out) {
     out[0] = sram[IO_COLPM0_TRIG2] & 0xff;
@@ -410,6 +411,7 @@
           IO_SIZEP2_M2PL: IO_SIZEP2_M2PL,
           IO_SIZEP3_M3PL: IO_SIZEP3_M3PL,
           IO_VDELAY: IO_VDELAY,
+          PLAYFIELD_SCRATCH_VIEW_X: PLAYFIELD_SCRATCH_VIEW_X,
           PRIO_PF0: PRIO_PF0,
           PRIO_PF1: PRIO_PF1,
           PRIO_PF2: PRIO_PF2,
@@ -421,6 +423,7 @@
         })
       : null;
   if (!gtiaApi) throw new Error("A8EGtia is not loaded");
+  const drawPlayerMissilesClock = gtiaApi.drawPlayerMissilesClock;
   const drawPlayerMissiles = gtiaApi.drawPlayerMissiles;
 
   const anticApi =
@@ -460,6 +463,7 @@
           IO_PRIOR: IO_PRIOR,
           IO_HSCROL: IO_HSCROL,
           ANTIC_MODE_INFO: ANTIC_MODE_INFO,
+          drawPlayerMissilesClock: drawPlayerMissilesClock,
           drawPlayerMissiles: drawPlayerMissiles,
           pokeyTimerPeriodCpuCycles: pokeyTimerPeriodCpuCycles,
           cycleTimedEventUpdate: cycleTimedEventUpdate,

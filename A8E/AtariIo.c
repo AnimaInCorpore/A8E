@@ -848,6 +848,7 @@ static void AtariIo_DrawLineModeD(_6502_Context_t *pContext);
 static void AtariIo_DrawLineModeE(_6502_Context_t *pContext);
 static void AtariIo_DrawLineModeF(_6502_Context_t *pContext);
 static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext);
+static void AtariIo_DrawPlayerMissilesClock(_6502_Context_t *pContext);
 
 #define ACTIVE_LINE_HSYNC_PIXELS 32u
 #define ACTIVE_LINE_COLOR_BURST_CYCLES 6u
@@ -870,6 +871,10 @@ static void AtariIo_DrawClockAction(_6502_Context_t *pContext)
 	if(pContext->llIoCycleTimedEventCycle <= pIoData->llCycle)
 	{
 		AtariIo_CycleTimedEvent(pContext);
+	}
+	if(pIoData->bInDrawLine)
+	{
+		AtariIo_DrawPlayerMissilesClock(pContext);
 	}
 	if(pContext->llCycleCounter < pIoData->llCycle)
 	{
@@ -1528,6 +1533,20 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 
 		AtariIo_DrawClockAction(pContext);
 	}
+}
+
+static void AtariIo_DrawVisibleBlankLine(
+	_6502_Context_t *pContext,
+	u8 *pDestination,
+	u8 *pPriorityData)
+{
+	AtariIo_StepClockActions(pContext, ACTIVE_LINE_COLOR_BURST_CYCLES);
+	AtariIo_DrawBackgroundClipped(
+		pContext,
+		pDestination,
+		pPriorityData,
+		ACTIVE_LINE_COLOR_BURST_CYCLES * 4,
+		CYCLES_PER_LINE - ACTIVE_LINE_COLOR_BURST_CYCLES);
 }
 
 static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
@@ -2828,7 +2847,7 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 	{
 		if((pIoData->cCurrentDisplayListCommand & 0x0f) < 2)
 		{
-			AtariIo_DrawBackgroundLine(pContext, pLineDestination, pLinePriorityData, 114);
+			AtariIo_DrawVisibleBlankLine(pContext, pLineDestination, pLinePriorityData);
 		}
 		else
 		{
@@ -2846,7 +2865,7 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 				m_aAnticModeInfoTable[cMode].lPixelsPerByte,
 				&tGeometry))
 			{
-				AtariIo_DrawBackgroundLine(pContext, pLineDestination, pLinePriorityData, 114);
+				AtariIo_DrawVisibleBlankLine(pContext, pLineDestination, pLinePriorityData);
 				return;
 			}
 
@@ -2893,7 +2912,7 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 	}
 	else
 	{
-		AtariIo_DrawBackgroundLine(pContext, pLineDestination, pLinePriorityData, 114);
+		AtariIo_DrawVisibleBlankLine(pContext, pLineDestination, pLinePriorityData);
 	}
 }
 
@@ -3150,6 +3169,665 @@ static u8 AtariIo_DrawMissile(
 	}
 
 	return cCollision;
+}
+
+static u32 AtariIo_PlayerStep(u8 cSize)
+{
+	if((cSize & 0x03) == 0x01)
+	{
+		return 4;
+	}
+
+	if((cSize & 0x03) == 0x03)
+	{
+		return 8;
+	}
+
+	return 2;
+}
+
+static u32 AtariIo_MissileWidth(u8 cNumber, u8 cSize)
+{
+	u8 cShift = (cNumber & 0x03) << 1;
+
+	if((cSize & (0x03 << cShift)) == (0x01 << cShift))
+	{
+		return 4;
+	}
+
+	if((cSize & (0x03 << cShift)) == (0x03 << cShift))
+	{
+		return 8;
+	}
+
+	return 2;
+}
+
+static u8 AtariIo_PlayerPriorityMask(u8 cPrior, u8 cNumber)
+{
+	switch(cNumber)
+	{
+	case 3:
+		if(cPrior & 0x01)
+		{
+			return PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
+		}
+		if(cPrior & 0x02)
+		{
+			return PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM2;
+		}
+		if(cPrior & 0x04)
+		{
+			return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
+		}
+		if(cPrior & 0x08)
+		{
+			return PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
+		}
+		return 0x00;
+
+	case 2:
+		if(cPrior & 0x01)
+		{
+			return PRIO_PM0 | PRIO_PM1;
+		}
+		if(cPrior & 0x02)
+		{
+			return PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
+		}
+		if(cPrior & 0x04)
+		{
+			return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1;
+		}
+		if(cPrior & 0x08)
+		{
+			return PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1;
+		}
+		return 0x00;
+
+	case 1:
+		if(cPrior & (0x01 | 0x02))
+		{
+			return PRIO_PM0;
+		}
+		if(cPrior & 0x04)
+		{
+			return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0;
+		}
+		if(cPrior & 0x08)
+		{
+			return PRIO_PF0 | PRIO_PF1 | PRIO_PM0;
+		}
+		return 0x00;
+
+	default:
+		if(cPrior & 0x04)
+		{
+			return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
+		}
+		if(cPrior & 0x08)
+		{
+			return PRIO_PF0 | PRIO_PF1;
+		}
+		return 0x00;
+	}
+}
+
+static u8 AtariIo_MissilePriorityMask(u8 cPrior, u8 cNumber)
+{
+	switch(cNumber)
+	{
+	case 3:
+		if(cPrior & 0x01)
+		{
+			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
+		}
+		if(cPrior & 0x02)
+		{
+			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 : PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM2;
+		}
+		if(cPrior & 0x04)
+		{
+			return cPrior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
+		}
+		if(cPrior & 0x08)
+		{
+			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
+		}
+		return 0x00;
+
+	case 2:
+		if(cPrior & 0x01)
+		{
+			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PM0 | PRIO_PM1;
+		}
+		if(cPrior & 0x02)
+		{
+			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 : PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
+		}
+		if(cPrior & 0x04)
+		{
+			return cPrior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1;
+		}
+		if(cPrior & 0x08)
+		{
+			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1;
+		}
+		return 0x00;
+
+	case 1:
+		if(cPrior & 0x01)
+		{
+			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PM0;
+		}
+		if(cPrior & 0x02)
+		{
+			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 : PRIO_PM0;
+		}
+		if(cPrior & 0x04)
+		{
+			return cPrior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0;
+		}
+		if(cPrior & 0x08)
+		{
+			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PF0 | PRIO_PF1 | PRIO_PM0;
+		}
+		return 0x00;
+
+	default:
+		if(cPrior & 0x01)
+		{
+			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : 0x00;
+		}
+		if(cPrior & 0x02)
+		{
+			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 : 0x00;
+		}
+		if(cPrior & 0x04)
+		{
+			return cPrior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
+		}
+		if(cPrior & 0x08)
+		{
+			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PF0 | PRIO_PF1;
+		}
+		return 0x00;
+	}
+}
+
+static u8 AtariIo_DrawPlayerSpan(
+	u8 cColor,
+	u8 cSize,
+	u8 cData,
+	u8 cPriorityMask,
+	u8 cPriority,
+	u8 *pLinePriorityData,
+	u8 *pLineDestination,
+	u32 lStartX,
+	u32 lSpanStartX,
+	u32 lSpanEndX,
+	u8 cSpecial,
+	u8 cOverlap)
+{
+	u8 cCollision = 0;
+	u8 cMask = 0x80;
+	u32 lStep = AtariIo_PlayerStep(cSize);
+	u32 lPixelStart = lStartX;
+
+	while(cMask)
+	{
+		if(cData & cMask)
+		{
+			u32 lSegmentEnd = lPixelStart + lStep;
+			u32 lDrawStart = MAX(lPixelStart, lSpanStartX);
+			u32 lDrawEnd = MIN(lSegmentEnd, lSpanEndX);
+			u32 lPixel;
+
+			for(lPixel = lDrawStart; lPixel < lDrawEnd; lPixel++)
+			{
+				u8 cPixelPriority = pLinePriorityData[lPixel];
+
+				if(cOverlap && (cPixelPriority & cOverlap))
+				{
+					if(cSpecial && (cPixelPriority & PRIO_PF1))
+					{
+						pLineDestination[lPixel] |= cColor & 0xf0;
+					}
+					else if(!(cPixelPriority & cPriorityMask))
+					{
+						pLineDestination[lPixel] |= cColor;
+					}
+				}
+				else
+				{
+					if(cSpecial && (cPixelPriority & PRIO_PF1))
+					{
+						pLineDestination[lPixel] = (pLineDestination[lPixel] & 0x0f) | (cColor & 0xf0);
+					}
+					else if(!(cPixelPriority & cPriorityMask))
+					{
+						pLineDestination[lPixel] = cColor;
+					}
+				}
+
+				pLinePriorityData[lPixel] = cPixelPriority | cPriority;
+				cCollision |= pLinePriorityData[lPixel];
+			}
+		}
+
+		lPixelStart += lStep;
+		cMask >>= 1;
+	}
+
+	if(cSpecial)
+	{
+		cCollision = (cCollision & ~(PRIO_PF1 | PRIO_PF2)) | (cCollision & PRIO_PF1 ? PRIO_PF2 : 0);
+	}
+
+	return cCollision;
+}
+
+static u8 AtariIo_DrawMissileSpan(
+	u8 cNumber,
+	u8 cColor,
+	u8 cSize,
+	u8 cData,
+	u8 cPriorityMask,
+	u8 *pLinePriorityData,
+	u8 *pLineDestination,
+	u32 lStartX,
+	u32 lSpanStartX,
+	u32 lSpanEndX,
+	u8 cSpecial)
+{
+	u8 cCollision = 0;
+	u8 cShift = (cNumber & 0x03) << 1;
+	u8 cMask = 0x02 << cShift;
+	u32 lWidth = AtariIo_MissileWidth(cNumber, cSize);
+	u32 lPixelStart = lStartX;
+	u32 i;
+
+	for(i = 0; i < 2; i++)
+	{
+		if(cData & cMask)
+		{
+			u32 lSegmentEnd = lPixelStart + lWidth;
+			u32 lDrawStart = MAX(lPixelStart, lSpanStartX);
+			u32 lDrawEnd = MIN(lSegmentEnd, lSpanEndX);
+			u32 lPixel;
+
+			for(lPixel = lDrawStart; lPixel < lDrawEnd; lPixel++)
+			{
+				u8 cPixelPriority = pLinePriorityData[lPixel];
+
+				if(cSpecial && (cPixelPriority & PRIO_PF1))
+				{
+					pLineDestination[lPixel] = (pLineDestination[lPixel] & 0x0f) | (cColor & 0xf0);
+				}
+				else if(!(cPixelPriority & cPriorityMask))
+				{
+					pLineDestination[lPixel] = cColor;
+				}
+
+				cCollision |= cPixelPriority;
+			}
+		}
+
+		lPixelStart += lWidth;
+		cMask >>= 1;
+	}
+
+	if(cSpecial)
+	{
+		cCollision = (cCollision & ~(PRIO_PF1 | PRIO_PF2)) | (cCollision & PRIO_PF1 ? PRIO_PF2 : 0);
+	}
+
+	return cCollision;
+}
+
+static void AtariIo_DrawPlayerMissilesClock(_6502_Context_t *pContext)
+{
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+	u64 llLineStartCycle = pIoData->llDisplayListFetchCycle - CYCLES_PER_LINE;
+	u32 lSpanStartX;
+	u32 lSpanEndX;
+	u32 lDisplayLine = pIoData->tVideoData.lCurrentDisplayLine;
+	u8 *pLineDestination;
+	u8 *pLinePriorityData;
+	u8 cPrior;
+	u8 cData;
+	u8 cHpos;
+	u8 cCollision;
+	u8 cSpecial;
+	u8 cDmactl;
+
+	if(lDisplayLine >= 248 || pIoData->llCycle < llLineStartCycle)
+	{
+		return;
+	}
+
+	lSpanStartX = ACTIVE_LINE_HSYNC_PIXELS + (u32)(pIoData->llCycle - llLineStartCycle) * 4;
+	if(lSpanStartX >= PIXELS_PER_LINE)
+	{
+		return;
+	}
+
+	lSpanEndX = MIN(lSpanStartX + 4, PIXELS_PER_LINE);
+	pLineDestination =
+		(u8 *)pIoData->tVideoData.pSdlAtariSurface->pixels +
+		lDisplayLine * PIXELS_PER_LINE;
+	pLinePriorityData =
+		pIoData->tVideoData.pPriorityData +
+		lDisplayLine * PIXELS_PER_LINE;
+
+	cPrior = SRAM[IO_PRIOR];
+	cSpecial =
+		((pIoData->cCurrentDisplayListCommand & 0x0f) == 0x02 ||
+		 (pIoData->cCurrentDisplayListCommand & 0x0f) == 0x03 ||
+		 (pIoData->cCurrentDisplayListCommand & 0x0f) == 0x0f) &&
+		(cPrior & 0xc0) == 0;
+	cDmactl = SRAM[IO_DMACTL];
+
+	// Keep the order of the players being drawn!
+
+	if((cDmactl & 0x08) && (SRAM[IO_GRACTL] & 0x02))
+	{
+		if(cDmactl & 0x10)
+		{
+			cData = RAM[((SRAM[IO_PMBASE] << 8) & 0xf800) + 1792 + lDisplayLine];
+		}
+		else
+		{
+			cData = RAM[((SRAM[IO_PMBASE] << 8) & 0xfc00) + 896 +
+						lDisplayLine / 2 - ((SRAM[IO_VDELAY] & 0x80) ? 1 : 0)];
+		}
+
+		SRAM[IO_GRAFP3_TRIG0] = cData;
+	}
+	else
+	{
+		cData = SRAM[IO_GRAFP3_TRIG0];
+	}
+
+	cHpos = SRAM[IO_HPOSP3_M3PF];
+	if(cData && cHpos)
+	{
+		cCollision = AtariIo_DrawPlayerSpan(
+			SRAM[IO_COLPM3],
+			SRAM[IO_SIZEP3_M3PL],
+			cData,
+			AtariIo_PlayerPriorityMask(cPrior, 3),
+			PRIO_PM3,
+			pLinePriorityData,
+			pLineDestination,
+			cHpos * 2,
+			lSpanStartX,
+			lSpanEndX,
+			cSpecial,
+			0);
+#ifndef DISABLE_COLLISIONS
+		RAM[IO_HPOSM3_P3PF] |= cCollision & 0x0f;
+#endif
+	}
+
+	if((cDmactl & 0x08) && (SRAM[IO_GRACTL] & 0x02))
+	{
+		if(cDmactl & 0x10)
+		{
+			cData = RAM[((SRAM[IO_PMBASE] << 8) & 0xf800) + 1536 + lDisplayLine];
+		}
+		else
+		{
+			cData = RAM[((SRAM[IO_PMBASE] << 8) & 0xfc00) + 768 +
+						lDisplayLine / 2 - ((SRAM[IO_VDELAY] & 0x40) ? 1 : 0)];
+		}
+
+		SRAM[IO_GRAFP2_P3PL] = cData;
+	}
+	else
+	{
+		cData = SRAM[IO_GRAFP2_P3PL];
+	}
+
+	cHpos = SRAM[IO_HPOSP2_M2PF];
+	if(cData && cHpos)
+	{
+		cCollision = AtariIo_DrawPlayerSpan(
+			SRAM[IO_COLPM2_PAL],
+			SRAM[IO_SIZEP2_M2PL],
+			cData,
+			AtariIo_PlayerPriorityMask(cPrior, 2),
+			PRIO_PM2,
+			pLinePriorityData,
+			pLineDestination,
+			cHpos * 2,
+			lSpanStartX,
+			lSpanEndX,
+			cSpecial,
+			(cPrior & 0x20) ? PRIO_PM3 : 0);
+#ifndef DISABLE_COLLISIONS
+		RAM[IO_HPOSM2_P2PF] |= cCollision & 0x0f;
+
+		if(cCollision & PRIO_PM3)
+		{
+			RAM[IO_GRAFP2_P3PL] |= 0x04;
+		}
+
+		RAM[IO_GRAFP1_P2PL] |= (cCollision >> 4) & ~0x04;
+#endif
+	}
+
+	if((cDmactl & 0x08) && (SRAM[IO_GRACTL] & 0x02))
+	{
+		if(cDmactl & 0x10)
+		{
+			cData = RAM[((SRAM[IO_PMBASE] << 8) & 0xf800) + 1280 + lDisplayLine];
+		}
+		else
+		{
+			cData = RAM[((SRAM[IO_PMBASE] << 8) & 0xfc00) + 640 +
+						lDisplayLine / 2 - ((SRAM[IO_VDELAY] & 0x20) ? 1 : 0)];
+		}
+
+		SRAM[IO_GRAFP1_P2PL] = cData;
+	}
+	else
+	{
+		cData = SRAM[IO_GRAFP1_P2PL];
+	}
+
+	cHpos = SRAM[IO_HPOSP1_M1PF];
+	if(cData && cHpos)
+	{
+		cCollision = AtariIo_DrawPlayerSpan(
+			SRAM[IO_COLPM1_TRIG3],
+			SRAM[IO_SIZEP1_M1PL],
+			cData,
+			AtariIo_PlayerPriorityMask(cPrior, 1),
+			PRIO_PM1,
+			pLinePriorityData,
+			pLineDestination,
+			cHpos * 2,
+			lSpanStartX,
+			lSpanEndX,
+			cSpecial,
+			0);
+#ifndef DISABLE_COLLISIONS
+		RAM[IO_HPOSM1_P1PF] |= cCollision & 0x0f;
+
+		if(cCollision & PRIO_PM3)
+		{
+			RAM[IO_GRAFP2_P3PL] |= 0x02;
+		}
+
+		if(cCollision & PRIO_PM2)
+		{
+			RAM[IO_GRAFP1_P2PL] |= 0x02;
+		}
+
+		RAM[IO_GRAFP0_P1PL] |= (cCollision >> 4) & ~0x02;
+#endif
+	}
+
+	if((cDmactl & 0x08) && (SRAM[IO_GRACTL] & 0x02))
+	{
+		if(cDmactl & 0x10)
+		{
+			cData = RAM[((SRAM[IO_PMBASE] << 8) & 0xf800) + 1024 + lDisplayLine];
+		}
+		else
+		{
+			cData = RAM[((SRAM[IO_PMBASE] << 8) & 0xfc00) + 512 +
+						lDisplayLine / 2 - ((SRAM[IO_VDELAY] & 0x10) ? 1 : 0)];
+		}
+
+		SRAM[IO_GRAFP0_P1PL] = cData;
+	}
+	else
+	{
+		cData = SRAM[IO_GRAFP0_P1PL];
+	}
+
+	cHpos = SRAM[IO_HPOSP0_M0PF];
+	if(cData && cHpos)
+	{
+		cCollision = AtariIo_DrawPlayerSpan(
+			SRAM[IO_COLPM0_TRIG2],
+			SRAM[IO_SIZEP0_M0PL],
+			cData,
+			AtariIo_PlayerPriorityMask(cPrior, 0),
+			PRIO_PM0,
+			pLinePriorityData,
+			pLineDestination,
+			cHpos * 2,
+			lSpanStartX,
+			lSpanEndX,
+			cSpecial,
+			(cPrior & 0x20) ? PRIO_PM1 : 0);
+#ifndef DISABLE_COLLISIONS
+		RAM[IO_HPOSM0_P0PF] |= cCollision & 0x0f;
+
+		if(cCollision & PRIO_PM3)
+		{
+			RAM[IO_GRAFP2_P3PL] |= 0x01;
+		}
+
+		if(cCollision & PRIO_PM2)
+		{
+			RAM[IO_GRAFP1_P2PL] |= 0x01;
+		}
+
+		if(cCollision & PRIO_PM1)
+		{
+			RAM[IO_GRAFP0_P1PL] |= 0x01;
+		}
+
+		RAM[IO_SIZEM_P0PL] |= (cCollision >> 4) & ~0x01;
+#endif
+	}
+
+	if((cDmactl & 0x04) && (SRAM[IO_GRACTL] & 0x01))
+	{
+		if(cDmactl & 0x10)
+		{
+			cData = RAM[((SRAM[IO_PMBASE] << 8) & 0xf800) + 768 + lDisplayLine];
+		}
+		else
+		{
+			cData = RAM[((SRAM[IO_PMBASE] << 8) & 0xfc00) + 384 +
+						lDisplayLine / 2 - ((SRAM[IO_VDELAY] & 0x08) ? 1 : 0)];
+		}
+
+		SRAM[IO_GRAFM_TRIG1] = cData;
+	}
+	else
+	{
+		cData = SRAM[IO_GRAFM_TRIG1];
+	}
+
+	cHpos = SRAM[IO_HPOSM3_P3PF];
+	if((cData & 0xc0) && cHpos)
+	{
+		cCollision = AtariIo_DrawMissileSpan(
+			3,
+			cPrior & 0x10 ? SRAM[IO_COLPF3] : SRAM[IO_COLPM3],
+			SRAM[IO_SIZEM_P0PL],
+			cData,
+			AtariIo_MissilePriorityMask(cPrior, 3),
+			pLinePriorityData,
+			pLineDestination,
+			cHpos * 2,
+			lSpanStartX,
+			lSpanEndX,
+			cSpecial);
+#ifndef DISABLE_COLLISIONS
+		RAM[IO_HPOSP3_M3PF] |= cCollision & 0x0f;
+		RAM[IO_SIZEP3_M3PL] |= cCollision >> 4;
+#endif
+	}
+
+	cHpos = SRAM[IO_HPOSM2_P2PF];
+	if((cData & 0x30) && cHpos)
+	{
+		cCollision = AtariIo_DrawMissileSpan(
+			2,
+			cPrior & 0x10 ? SRAM[IO_COLPF3] : SRAM[IO_COLPM2_PAL],
+			SRAM[IO_SIZEM_P0PL],
+			cData,
+			AtariIo_MissilePriorityMask(cPrior, 2),
+			pLinePriorityData,
+			pLineDestination,
+			cHpos * 2,
+			lSpanStartX,
+			lSpanEndX,
+			cSpecial);
+#ifndef DISABLE_COLLISIONS
+		RAM[IO_HPOSP2_M2PF] |= cCollision & 0x0f;
+		RAM[IO_SIZEP2_M2PL] |= cCollision >> 4;
+#endif
+	}
+
+	cHpos = SRAM[IO_HPOSM1_P1PF];
+	if((cData & 0x0c) && cHpos)
+	{
+		cCollision = AtariIo_DrawMissileSpan(
+			1,
+			cPrior & 0x10 ? SRAM[IO_COLPF3] : SRAM[IO_COLPM1_TRIG3],
+			SRAM[IO_SIZEM_P0PL],
+			cData,
+			AtariIo_MissilePriorityMask(cPrior, 1),
+			pLinePriorityData,
+			pLineDestination,
+			cHpos * 2,
+			lSpanStartX,
+			lSpanEndX,
+			cSpecial);
+#ifndef DISABLE_COLLISIONS
+		RAM[IO_HPOSP1_M1PF] |= cCollision & 0x0f;
+		RAM[IO_SIZEP1_M1PL] |= cCollision >> 4;
+#endif
+	}
+
+	cHpos = SRAM[IO_HPOSM0_P0PF];
+	if((cData & 0x03) && cHpos)
+	{
+		cCollision = AtariIo_DrawMissileSpan(
+			0,
+			cPrior & 0x10 ? SRAM[IO_COLPF3] : SRAM[IO_COLPM0_TRIG2],
+			SRAM[IO_SIZEM_P0PL],
+			cData,
+			AtariIo_MissilePriorityMask(cPrior, 0),
+			pLinePriorityData,
+			pLineDestination,
+			cHpos * 2,
+			lSpanStartX,
+			lSpanEndX,
+			cSpecial);
+#ifndef DISABLE_COLLISIONS
+		RAM[IO_HPOSP0_M0PF] |= cCollision & 0x0f;
+		RAM[IO_SIZEP0_M0PL] |= cCollision >> 4;
+#endif
+	}
 }
 
 void AtariIoDrawPlayerMissiles(_6502_Context_t *pContext)
@@ -3931,7 +4609,6 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		AtariIoCycleTimedEventUpdate(pContext);
 
 		AtariIoDrawLine(pContext);
-		AtariIoDrawPlayerMissiles(pContext);
 		pIoData->bInDrawLine = 0;
 	}
 
