@@ -15,9 +15,9 @@
           verticalScrollOffset: 0,
           currentDisplayLine: 0,
         },
-        drawLineCycle: CYCLES_PER_LINE + 16,
         displayListFetchCycle: CYCLES_PER_LINE,
         clock: 0,
+        inDrawLine: false,
         dliCycle: CYCLE_NEVER,
         serialOutputNeedDataCycle: CYCLE_NEVER,
         serialOutputTransmissionDoneCycle: CYCLE_NEVER,
@@ -79,8 +79,9 @@
     function cycleTimedEventUpdate(ctx) {
       const io = ctx.ioData;
       let next = CYCLE_NEVER;
-      if (io.drawLineCycle < next) next = io.drawLineCycle;
-      if (io.displayListFetchCycle < next) next = io.displayListFetchCycle;
+
+      if (!io.inDrawLine && io.displayListFetchCycle < next)
+        {next = io.displayListFetchCycle;}
       if (io.dliCycle < next) next = io.dliCycle;
       if (io.serialOutputTransmissionDoneCycle < next)
         {next = io.serialOutputTransmissionDoneCycle;}

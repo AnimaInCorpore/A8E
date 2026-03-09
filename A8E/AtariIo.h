@@ -92,7 +92,6 @@ typedef struct
 typedef struct
 {
 	u64 llCycle;
-	u64 llDrawLineCycle;
 	u64 llDisplayListFetchCycle;
 	u64 llDliCycle;
 	u64 llSerialOutputNeedDataCycle;
@@ -101,6 +100,7 @@ typedef struct
 	u64 llTimer1Cycle;
 	u64 llTimer2Cycle;
 	u64 llTimer4Cycle;
+	u8 bInDrawLine;
 
 	void *pPokey;
 

@@ -34,14 +34,14 @@
     const SCRATCH_GTIA_COLOR_TABLE = cfg.SCRATCH_GTIA_COLOR_TABLE;
     const SCRATCH_COLOR_TABLE_A = cfg.SCRATCH_COLOR_TABLE_A;
     const SCRATCH_COLOR_TABLE_B = cfg.SCRATCH_COLOR_TABLE_B;
-    const SCRATCH_BACKGROUND_TABLE = cfg.SCRATCH_BACKGROUND_TABLE;
 
     const fillGtiaColorTable = cfg.fillGtiaColorTable;
     const fillBkgPf012ColorTable = cfg.fillBkgPf012ColorTable;
     const decodeTextModeCharacter = cfg.decodeTextModeCharacter;
-    const fillLine = cfg.fillLine;
     const ioCycleTimedEvent = cfg.ioCycleTimedEvent;
     const PLAYFIELD_SCRATCH_VIEW_X = 64;
+    const ACTIVE_LINE_HSYNC_PIXELS = 32;
+    const ACTIVE_LINE_COLOR_BURST_CYCLES = 6;
 
     function clockAction(ctx) {
       const io = ctx.ioData;
@@ -50,16 +50,8 @@
       io.clock++;
     }
 
-    function fillScratchLine(video, y, width, color, priority) {
-      const base = y * width;
-      const pixels = video.playfieldScratchPixels;
-      const prio = video.playfieldScratchPriority;
-      const c = color & 0xff;
-      const p = priority & 0xff;
-      for (let i = 0; i < width; i++) {
-        pixels[base + i] = c;
-        prio[base + i] = p;
-      }
+    function stepClockActions(ctx, cycles) {
+      for (let i = 0; i < cycles; i++) clockAction(ctx);
     }
 
     function copyScratchLine(video, y, width, dstPixels, dstPriority) {
@@ -79,6 +71,114 @@
         ),
         dstBase,
       );
+    }
+
+    function currentBackgroundColor(sram) {
+      const priorMode = (sram[IO_PRIOR] >> 6) & 3;
+      if (priorMode < 2) return sram[IO_COLBK] & 0xff;
+      if (priorMode === 2) return sram[IO_COLPM0_TRIG2] & 0xff;
+      return sram[IO_COLBK] & 0xf0;
+    }
+
+    function drawBackgroundLine(ctx, dst, prio, dstIndex, cycles) {
+      const sram = ctx.sram;
+      for (let i = 0; i < cycles; i++) {
+        const color = currentBackgroundColor(sram);
+        dst[dstIndex] = color;
+        prio[dstIndex++] = PRIO_BKG;
+        dst[dstIndex] = color;
+        prio[dstIndex++] = PRIO_BKG;
+        dst[dstIndex] = color;
+        prio[dstIndex++] = PRIO_BKG;
+        dst[dstIndex] = color;
+        prio[dstIndex++] = PRIO_BKG;
+        clockAction(ctx);
+      }
+    }
+
+    function drawBackgroundClipped(ctx, dst, prio, dstIndex, startX, cycles) {
+      const sram = ctx.sram;
+      let x = startX | 0;
+      for (let i = 0; i < cycles; i++) {
+        const color = currentBackgroundColor(sram);
+        for (let pixel = 0; pixel < 4; pixel++, x++) {
+          if (x >= 0 && x < PIXELS_PER_LINE) {
+            const index = dstIndex + x;
+            dst[index] = color;
+            prio[index] = PRIO_BKG;
+          }
+        }
+        clockAction(ctx);
+      }
+    }
+
+    function computeActiveLineGeometry(cmd, pfWidth, ppb, hscroll) {
+      let leftBorderCycles = 0;
+      let playfieldCycles = 0;
+      let scrollPixelOffset = 0;
+
+      if (cmd & 0x10) {
+        scrollPixelOffset = ((hscroll & 0x0f) & 0x01) << 1;
+      }
+
+      switch (pfWidth & 0x03) {
+        case 0x01:
+          if (cmd & 0x10) {
+            leftBorderCycles = (20 + (hscroll & 0x0f)) >> 1;
+            playfieldCycles = 80;
+          } else {
+            leftBorderCycles = 18;
+            playfieldCycles = 64;
+          }
+          break;
+        case 0x02:
+          if (cmd & 0x10) {
+            leftBorderCycles = (4 + (hscroll & 0x0f)) >> 1;
+            playfieldCycles = 96;
+          } else {
+            leftBorderCycles = 10;
+            playfieldCycles = 80;
+          }
+          break;
+        case 0x03:
+          if (cmd & 0x10) {
+            leftBorderCycles = (4 + (hscroll & 0x0f)) >> 1;
+          } else {
+            leftBorderCycles = 2;
+          }
+          playfieldCycles = 96;
+          break;
+        default:
+          return null;
+      }
+
+      const rightBorderCycles =
+        CYCLES_PER_LINE -
+        ACTIVE_LINE_COLOR_BURST_CYCLES -
+        leftBorderCycles -
+        playfieldCycles;
+      const cyclesPerByte = ((ppb | 0) / 4) | 0;
+      const bytesPerLine =
+        cyclesPerByte > 0 ? ((playfieldCycles / cyclesPerByte) | 0) : 0;
+      const playfieldStartX =
+        ACTIVE_LINE_HSYNC_PIXELS +
+        scrollPixelOffset +
+        (ACTIVE_LINE_COLOR_BURST_CYCLES + leftBorderCycles) * 4;
+
+      return {
+        leftBorderCycles: leftBorderCycles | 0,
+        playfieldCycles: playfieldCycles | 0,
+        rightBorderCycles: rightBorderCycles | 0,
+        scrollPixelOffset: scrollPixelOffset | 0,
+        bytesPerLine: bytesPerLine | 0,
+        playfieldPixelWidth: (playfieldCycles * 4) | 0,
+        leftBorderStartX:
+          (ACTIVE_LINE_HSYNC_PIXELS +
+            scrollPixelOffset +
+            ACTIVE_LINE_COLOR_BURST_CYCLES * 4) |
+          0,
+        playfieldStartX: playfieldStartX | 0,
+      };
     }
 
     function drawLineMode2(ctx) {
@@ -112,6 +212,8 @@
       let inverse = false;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
+        const priorMode = (sram[IO_PRIOR] >> 6) & 3;
+
         if (mask === 0x00) {
           const chactl = sram[IO_CHACTL] & 0x03;
           const decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
@@ -129,8 +231,7 @@
           mask = 0x80;
         }
 
-        const priorMode = (sram[IO_PRIOR] >> 6) & 3;
-        if (priorMode !== 0 && inverse) data ^= 0xff;
+        const outputData = priorMode !== 0 && inverse ? (data ^ 0xff) : data;
 
         fillGtiaColorTable(sram, colorTable);
         const colPf1 = sram[IO_COLPF1] & 0xff;
@@ -148,7 +249,7 @@
           const p1 = inverse ? PRIO_PF2 : PRIO_PF1;
 
           for (let k = 0; k < 4; k++) {
-            if (data & mask) {
+            if (outputData & mask) {
               dst[dstIndex] = c1;
               prio[dstIndex] = p1;
             } else {
@@ -160,13 +261,13 @@
           }
         } else if (priorMode === 1) {
           if (mask > 0x08) {
-            const hi = (colBk | (data >> 4)) & 0xff;
+            const hi = (colBk | (outputData >> 4)) & 0xff;
             dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
           } else {
-            const lo = (colBk | (data & 0x0f)) & 0xff;
+            const lo = (colBk | (outputData & 0x0f)) & 0xff;
             dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
@@ -175,13 +276,13 @@
           mask >>= 4;
         } else if (priorMode === 2) {
           if (mask > 0x08) {
-            const hi2 = colorTable[data >> 4] & 0xff;
+            const hi2 = colorTable[outputData >> 4] & 0xff;
             dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
           } else {
-            const lo2 = colorTable[data & 0x0f] & 0xff;
+            const lo2 = colorTable[outputData & 0x0f] & 0xff;
             dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
@@ -190,13 +291,17 @@
           mask >>= 4;
         } else {
           if (mask > 0x08) {
-            const hi3 = data & 0xf0 ? colBk | (data & 0xf0) : colBk & 0xf0;
+            const hi3 = outputData & 0xf0
+              ? colBk | (outputData & 0xf0)
+              : colBk & 0xf0;
             dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
           } else {
-            const lo3 = data & 0x0f ? colBk | ((data << 4) & 0xf0) : colBk & 0xf0;
+            const lo3 = outputData & 0x0f
+              ? colBk | ((outputData << 4) & 0xf0)
+              : colBk & 0xf0;
             dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
@@ -215,6 +320,7 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
+      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       if (lineDelta === 1) {
         io.displayMemoryAddress = Util.fixedAdd(
@@ -230,29 +336,27 @@
       const prio = io.videoOut.priority;
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
-      const chactl = sram[IO_CHACTL] & 0x03;
-      const priorMode = (sram[IO_PRIOR] >> 6) & 3;
-      const colPf1 = sram[IO_COLPF1] & 0xff;
-      const colPf2 = sram[IO_COLPF2] & 0xff;
-      const colBk = sram[IO_COLBK] & 0xff;
       const colorTable = SCRATCH_GTIA_COLOR_TABLE;
-      fillGtiaColorTable(sram, colorTable);
-      const c0Inverse = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
-      const c1Inverse = colPf2 & 0xff;
-      const c0Normal = colPf2 & 0xff;
-      const c1Normal = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
-      const chBase = (((sram[IO_CHBASE] & 0xff) << 8) & 0xfc00) & 0xffff;
 
       let mask = 0x00;
       let data = 0;
       let inverse = false;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
+        const priorMode = (sram[IO_PRIOR] >> 6) & 3;
+
         if (mask === 0x00) {
+          const chactl = sram[IO_CHACTL] & 0x03;
+          const chBase = (((sram[IO_CHBASE] & 0xff) << 8) & 0xfc00) & 0xffff;
           const decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
           const ch = decoded & 0xff;
           inverse = (decoded & 0x100) !== 0;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
+          ctx.cycleCounter++; // DMA steal: pattern
+
+          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+            ctx.cycleCounter++; // DMA steal: name
+          }
 
           if (ch < 0x60) {
             if (lineDelta > 2) {
@@ -271,17 +375,24 @@
               data = ram[(chBase + ch * 8 + (2 - lineDelta)) & 0xffff] & 0xff;
             }
           }
-          if (priorMode !== 0 && inverse) data ^= 0xff;
           mask = 0x80;
         }
 
+        const outputData = priorMode !== 0 && inverse ? (data ^ 0xff) : data;
+
         if (priorMode === 0) {
+          const colPf1 = sram[IO_COLPF1] & 0xff;
+          const colPf2 = sram[IO_COLPF2] & 0xff;
+          const c0Inverse = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
+          const c1Inverse = colPf2 & 0xff;
+          const c0Normal = colPf2 & 0xff;
+          const c1Normal = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
           const c0 = inverse ? c0Inverse : c0Normal;
           const c1 = inverse ? c1Inverse : c1Normal;
           const p0 = inverse ? PRIO_PF1 : PRIO_PF2;
           const p1 = inverse ? PRIO_PF2 : PRIO_PF1;
-          
-          if (data & mask) {
+
+          if (outputData & mask) {
             dst[dstIndex] = c1;
             prio[dstIndex] = p1;
           } else {
@@ -291,7 +402,7 @@
           dstIndex++;
           mask >>= 1;
 
-          if (data & mask) {
+          if (outputData & mask) {
             dst[dstIndex] = c1;
             prio[dstIndex] = p1;
           } else {
@@ -301,7 +412,7 @@
           dstIndex++;
           mask >>= 1;
 
-          if (data & mask) {
+          if (outputData & mask) {
             dst[dstIndex] = c1;
             prio[dstIndex] = p1;
           } else {
@@ -311,7 +422,7 @@
           dstIndex++;
           mask >>= 1;
 
-          if (data & mask) {
+          if (outputData & mask) {
             dst[dstIndex] = c1;
             prio[dstIndex] = p1;
           } else {
@@ -321,14 +432,15 @@
           dstIndex++;
           mask >>= 1;
         } else if (priorMode === 1) {
+          const colBk = sram[IO_COLBK] & 0xff;
           if (mask > 0x08) {
-            const hi = (colBk | (data >> 4)) & 0xff;
+            const hi = (colBk | (outputData >> 4)) & 0xff;
             dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
           } else {
-            const lo = (colBk | (data & 0x0f)) & 0xff;
+            const lo = (colBk | (outputData & 0x0f)) & 0xff;
             dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
@@ -336,14 +448,15 @@
           }
           mask >>= 4;
         } else if (priorMode === 2) {
+          fillGtiaColorTable(sram, colorTable);
           if (mask > 0x08) {
-            const hi2 = colorTable[data >> 4] & 0xff;
+            const hi2 = colorTable[outputData >> 4] & 0xff;
             dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
           } else {
-            const lo2 = colorTable[data & 0x0f] & 0xff;
+            const lo2 = colorTable[outputData & 0x0f] & 0xff;
             dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
@@ -351,14 +464,17 @@
           }
           mask >>= 4;
         } else {
+          const colBk = sram[IO_COLBK] & 0xff;
           if (mask > 0x08) {
-            const hi3 = data & 0xf0 ? colBk | (data & 0xf0) : colBk & 0xf0;
+            const hi3 = outputData & 0xf0 ? colBk | (outputData & 0xf0) : colBk & 0xf0;
             dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
           } else {
-            const lo3 = data & 0x0f ? colBk | ((data << 4) & 0xf0) : colBk & 0xf0;
+            const lo3 = outputData & 0x0f
+              ? colBk | ((outputData << 4) & 0xf0)
+              : colBk & 0xf0;
             dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
             dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
@@ -366,6 +482,8 @@
           }
           mask >>= 4;
         }
+
+        clockAction(ctx);
       }
 
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
@@ -376,6 +494,7 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
+      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       const vScrollOffset = 8 - lineDelta - (io.video.verticalScrollOffset | 0);
       if (lineDelta === 1) {
@@ -405,28 +524,34 @@
 
       let mask = 0x00;
       let data = 0;
-      let colorTable = aColorTable0;
-      let prioTable = PRIORITY_TABLE_BKG_PF012;
+      let inverse = false;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (mask === 0x00) {
           const decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
           const ch = decoded & 0xff;
-          const inverse = (decoded & 0x100) !== 0;
+          inverse = (decoded & 0x100) !== 0;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
+          ctx.cycleCounter++; // DMA steal: pattern
 
-          if (inverse) {
-            colorTable = aColorTable1;
-            prioTable = PRIORITY_TABLE_BKG_PF013;
-          } else {
-            colorTable = aColorTable0;
-            prioTable = PRIORITY_TABLE_BKG_PF012;
+          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+            ctx.cycleCounter++; // DMA steal: name
           }
 
           data =
             ram[(chBase + ch * 8 + (vScrollOffset & 0xff)) & 0xffff] & 0xff;
           mask = 0x02;
         }
+
+        fillBkgPf012ColorTable(sram, aColorTable0);
+        aColorTable1[0] = sram[IO_COLBK] & 0xff;
+        aColorTable1[1] = sram[IO_COLPF0] & 0xff;
+        aColorTable1[2] = sram[IO_COLPF1] & 0xff;
+        aColorTable1[3] = sram[IO_COLPF3] & 0xff;
+        const colorTable = inverse ? aColorTable1 : aColorTable0;
+        const prioTable = inverse
+          ? PRIORITY_TABLE_BKG_PF013
+          : PRIORITY_TABLE_BKG_PF012;
 
         let c = colorTable[(data >> 6) & 0x3] & 0xff;
         let p = prioTable[(data >> 6) & 0x3] & 0xff;
@@ -448,6 +573,7 @@
 
         data = (data << 2) & 0xff;
         mask >>= 1;
+        clockAction(ctx);
       }
 
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
@@ -458,9 +584,10 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
+      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      const vScrollOffset =
-        ((16 - lineDelta - (io.video.verticalScrollOffset | 0)) >> 1) & 0xff;
+      const vScrollLine = 16 - lineDelta - (io.video.verticalScrollOffset | 0);
+      const vScrollOffset = (vScrollLine >> 1) & 0xff;
       if (lineDelta === 1) {
         io.displayMemoryAddress = Util.fixedAdd(
           io.displayMemoryAddress,
@@ -488,27 +615,35 @@
 
       let mask = 0x00;
       let data = 0;
-      let colorTable = aColorTable0;
-      let prioTable = PRIORITY_TABLE_BKG_PF012;
+      let inverse = false;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (mask === 0x00) {
           const decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
           const ch = decoded & 0xff;
-          const inverse = (decoded & 0x100) !== 0;
+          inverse = (decoded & 0x100) !== 0;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
+          if ((vScrollLine & 1) === 0) {
+            ctx.cycleCounter++; // DMA steal: pattern
+          }
 
-          if (inverse) {
-            colorTable = aColorTable1;
-            prioTable = PRIORITY_TABLE_BKG_PF013;
-          } else {
-            colorTable = aColorTable0;
-            prioTable = PRIORITY_TABLE_BKG_PF012;
+          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+            ctx.cycleCounter++; // DMA steal: name
           }
 
           data = ram[(chBase + ch * 8 + vScrollOffset) & 0xffff] & 0xff;
           mask = 0x02;
         }
+
+        fillBkgPf012ColorTable(sram, aColorTable0);
+        aColorTable1[0] = sram[IO_COLBK] & 0xff;
+        aColorTable1[1] = sram[IO_COLPF0] & 0xff;
+        aColorTable1[2] = sram[IO_COLPF1] & 0xff;
+        aColorTable1[3] = sram[IO_COLPF3] & 0xff;
+        const colorTable = inverse ? aColorTable1 : aColorTable0;
+        const prioTable = inverse
+          ? PRIORITY_TABLE_BKG_PF013
+          : PRIORITY_TABLE_BKG_PF012;
 
         let c = colorTable[(data >> 6) & 0x3] & 0xff;
         let p = prioTable[(data >> 6) & 0x3] & 0xff;
@@ -530,6 +665,7 @@
 
         data = (data << 2) & 0xff;
         mask >>= 1;
+        clockAction(ctx);
       }
 
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
@@ -540,6 +676,7 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
+      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       const vScrollOffset = 8 - lineDelta - (io.video.verticalScrollOffset | 0);
       if (lineDelta === 1) {
@@ -555,7 +692,6 @@
       aColorTable[1] = sram[IO_COLPF1] & 0xff;
       aColorTable[2] = sram[IO_COLPF2] & 0xff;
       aColorTable[3] = sram[IO_COLPF3] & 0xff;
-      const cColor0 = sram[IO_COLBK] & 0xff;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 4;
@@ -567,16 +703,21 @@
 
       let mask = 0x00;
       let data = 0;
-      let cColor1 = 0;
+      let colorIndex = 0;
       let p = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (mask === 0x00) {
           let ch = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
+          ctx.cycleCounter++; // DMA steal: pattern
 
-          cColor1 = aColorTable[ch >> 6] & 0xff;
-          p = PRIORITY_TABLE_PF0123[ch >> 6] & 0xff;
+          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+            ctx.cycleCounter++; // DMA steal: name
+          }
+
+          colorIndex = ch >> 6;
+          p = PRIORITY_TABLE_PF0123[colorIndex] & 0xff;
           ch &= 0x3f;
 
           data =
@@ -584,6 +725,13 @@
           mask = 0x80;
         }
 
+        aColorTable[0] = sram[IO_COLPF0] & 0xff;
+        aColorTable[1] = sram[IO_COLPF1] & 0xff;
+        aColorTable[2] = sram[IO_COLPF2] & 0xff;
+        aColorTable[3] = sram[IO_COLPF3] & 0xff;
+        const cColor0 = sram[IO_COLBK] & 0xff;
+        const cColor1 = aColorTable[colorIndex] & 0xff;
+
         if (data & mask) {
           dst[dstIndex] = cColor1;
           prio[dstIndex] = p;
@@ -611,6 +759,7 @@
         }
         dstIndex += 2;
         mask >>= 1;
+        clockAction(ctx);
       }
 
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
@@ -621,9 +770,10 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
+      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      const vScrollOffset =
-        ((16 - lineDelta - (io.video.verticalScrollOffset | 0)) >> 1) & 0xff;
+      const vScrollLine = 16 - lineDelta - (io.video.verticalScrollOffset | 0);
+      const vScrollOffset = (vScrollLine >> 1) & 0xff;
       if (lineDelta === 1) {
         io.displayMemoryAddress = Util.fixedAdd(
           io.displayMemoryAddress,
@@ -637,7 +787,6 @@
       aColorTable[1] = sram[IO_COLPF1] & 0xff;
       aColorTable[2] = sram[IO_COLPF2] & 0xff;
       aColorTable[3] = sram[IO_COLPF3] & 0xff;
-      const cColor0 = sram[IO_COLBK] & 0xff;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 4;
@@ -649,22 +798,36 @@
 
       let mask = 0x00;
       let data = 0;
-      let cColor1 = 0;
+      let colorIndex = 0;
       let p = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (mask === 0x00) {
           let ch = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
+          if ((vScrollLine & 1) === 0) {
+            ctx.cycleCounter++; // DMA steal: pattern
+          }
 
-          cColor1 = aColorTable[ch >> 6] & 0xff;
-          p = PRIORITY_TABLE_PF0123[ch >> 6] & 0xff;
+          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+            ctx.cycleCounter++; // DMA steal: name
+          }
+
+          colorIndex = ch >> 6;
+          p = PRIORITY_TABLE_PF0123[colorIndex] & 0xff;
           ch &= 0x3f;
 
           data = ram[(chBase + ch * 8 + vScrollOffset) & 0xffff] & 0xff;
           mask = 0x80;
         }
 
+        aColorTable[0] = sram[IO_COLPF0] & 0xff;
+        aColorTable[1] = sram[IO_COLPF1] & 0xff;
+        aColorTable[2] = sram[IO_COLPF2] & 0xff;
+        aColorTable[3] = sram[IO_COLPF3] & 0xff;
+        const cColor0 = sram[IO_COLBK] & 0xff;
+        const cColor1 = aColorTable[colorIndex] & 0xff;
+
         if (data & mask) {
           dst[dstIndex] = cColor1;
           prio[dstIndex] = p;
@@ -692,6 +855,7 @@
         }
         dstIndex += 2;
         mask >>= 1;
+        clockAction(ctx);
       }
 
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
@@ -702,6 +866,7 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
+      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       if (lineDelta === 1) {
         io.displayMemoryAddress = Util.fixedAdd(
@@ -712,7 +877,6 @@
       }
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
-      fillBkgPf012ColorTable(sram, aColorTable);
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 8;
@@ -728,9 +892,13 @@
         if (phase === 8) {
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
+          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+            ctx.cycleCounter++; // DMA steal: display
+          }
           phase = 0;
         }
 
+        fillBkgPf012ColorTable(sram, aColorTable);
         const idx = (data >> (6 - ((phase >> 1) * 2))) & 0x03;
         const c = aColorTable[idx] & 0xff;
         const p = PRIORITY_TABLE_BKG_PF012[idx] & 0xff;
@@ -741,6 +909,7 @@
         }
 
         phase++;
+        clockAction(ctx);
       }
 
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
@@ -751,6 +920,7 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
+      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       if (lineDelta === 1) {
         io.displayMemoryAddress = Util.fixedAdd(
@@ -767,9 +937,6 @@
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
 
-      const pf0 = sram[IO_COLPF0] & 0xff;
-      const bkg = sram[IO_COLBK] & 0xff;
-
       let mask = 0x00;
       let data = 0;
 
@@ -777,10 +944,13 @@
         if (mask === 0x00) {
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
+          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+            ctx.cycleCounter++; // DMA steal: display
+          }
           mask = 0x80;
         }
 
-        const c = data & mask ? pf0 : bkg;
+        const c = data & mask ? (sram[IO_COLPF0] & 0xff) : (sram[IO_COLBK] & 0xff);
         const p = data & mask ? PRIO_PF0 : PRIO_BKG;
         dst[dstIndex] = c;
         prio[dstIndex] = p;
@@ -792,6 +962,7 @@
         prio[dstIndex + 3] = p;
         dstIndex += 4;
         mask >>= 1;
+        clockAction(ctx);
       }
 
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
@@ -802,6 +973,7 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
+      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       if (lineDelta === 1) {
         io.displayMemoryAddress = Util.fixedAdd(
@@ -812,7 +984,6 @@
       }
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
-      fillBkgPf012ColorTable(sram, aColorTable);
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 4;
@@ -821,17 +992,21 @@
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
 
-      let mask = 0x00;
+      let phase = 4;
       let data = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
-        if (mask === 0x00) {
+        if (phase === 4) {
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          mask = 0xc0;
+          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+            ctx.cycleCounter++; // DMA steal: display
+          }
+          phase = 0;
         }
 
-        const idx = (data & mask) >> (6 - ((cycle & 3) * 2));
+        fillBkgPf012ColorTable(sram, aColorTable);
+        const idx = (data >> (6 - (phase * 2))) & 0x03;
         const c = aColorTable[idx] & 0xff;
         const p = PRIORITY_TABLE_BKG_PF012[idx] & 0xff;
         dst[dstIndex] = c;
@@ -844,7 +1019,8 @@
         prio[dstIndex + 3] = p;
         dstIndex += 4;
 
-        mask >>= 2;
+        phase++;
+        clockAction(ctx);
       }
 
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
@@ -855,6 +1031,7 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
+      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       if (lineDelta === 1) {
         io.displayMemoryAddress = Util.fixedAdd(
@@ -871,9 +1048,6 @@
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
 
-      const pf0 = sram[IO_COLPF0] & 0xff;
-      const bkg = sram[IO_COLBK] & 0xff;
-
       let mask = 0x00;
       let data = 0;
 
@@ -881,10 +1055,13 @@
         if (mask === 0x00) {
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
+          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+            ctx.cycleCounter++; // DMA steal: display
+          }
           mask = 0x80;
         }
 
-        let c = data & mask ? pf0 : bkg;
+        let c = data & mask ? (sram[IO_COLPF0] & 0xff) : (sram[IO_COLBK] & 0xff);
         let p = data & mask ? PRIO_PF0 : PRIO_BKG;
         dst[dstIndex] = c;
         prio[dstIndex] = p;
@@ -893,7 +1070,7 @@
         dstIndex += 2;
         mask >>= 1;
 
-        c = data & mask ? pf0 : bkg;
+        c = data & mask ? (sram[IO_COLPF0] & 0xff) : (sram[IO_COLBK] & 0xff);
         p = data & mask ? PRIO_PF0 : PRIO_BKG;
         dst[dstIndex] = c;
         prio[dstIndex] = p;
@@ -901,6 +1078,7 @@
         prio[dstIndex + 1] = p;
         dstIndex += 2;
         mask >>= 1;
+        clockAction(ctx);
       }
 
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
@@ -916,6 +1094,7 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
+      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       if (lineDelta === 1) {
         io.displayMemoryAddress = Util.fixedAdd(
@@ -926,7 +1105,6 @@
       }
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
-      fillBkgPf012ColorTable(sram, aColorTable);
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 2;
@@ -935,16 +1113,20 @@
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
 
-      let mask = 0x00;
+      let phase = 2;
       let data = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
-        if (mask === 0x00) {
+        if (phase === 2) {
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          mask = 0x02;
+          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+            ctx.cycleCounter++; // DMA steal: display
+          }
+          phase = 0;
         }
 
+        fillBkgPf012ColorTable(sram, aColorTable);
         let c = aColorTable[(data >> 6) & 0x3] & 0xff;
         let p = PRIORITY_TABLE_BKG_PF012[(data >> 6) & 0x3] & 0xff;
         dst[dstIndex] = c;
@@ -964,7 +1146,8 @@
         dstIndex += 2;
 
         data = (data << 2) & 0xff;
-        mask >>= 1;
+        phase++;
+        clockAction(ctx);
       }
 
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
@@ -995,68 +1178,38 @@
       const prio = io.videoOut.priority;
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
-
-      const cColor0 = sram[IO_COLPF2] & 0xff;
-      const cColor1 =
-        ((sram[IO_COLPF2] & 0xf0) | (sram[IO_COLPF1] & 0x0f)) & 0xff;
-
       const colorTable = SCRATCH_GTIA_COLOR_TABLE;
-      fillGtiaColorTable(sram, colorTable);
-      const colBk = sram[IO_COLBK] & 0xff;
-
-      const priorMode = (sram[IO_PRIOR] >> 6) & 3;
-
       let mask = 0x00;
       let data = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
+        const priorMode = (sram[IO_PRIOR] >> 6) & 3;
+
         if (mask === 0x00) {
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
+          ctx.cycleCounter++; // DMA steal: display
           mask = 0x80;
         }
 
         if (priorMode === 0) {
-          if (data & mask) {
-            dst[dstIndex] = cColor1;
-            prio[dstIndex] = PRIO_PF1;
-          } else {
-            dst[dstIndex] = cColor0;
-            prio[dstIndex] = PRIO_PF2;
-          }
-          dstIndex++;
-          mask >>= 1;
+          const cColor0 = sram[IO_COLPF2] & 0xff;
+          const cColor1 =
+            ((sram[IO_COLPF2] & 0xf0) | (sram[IO_COLPF1] & 0x0f)) & 0xff;
 
-          if (data & mask) {
-            dst[dstIndex] = cColor1;
-            prio[dstIndex] = PRIO_PF1;
-          } else {
-            dst[dstIndex] = cColor0;
-            prio[dstIndex] = PRIO_PF2;
+          for (let k = 0; k < 4; k++) {
+            if (data & mask) {
+              dst[dstIndex] = cColor1;
+              prio[dstIndex] = PRIO_PF1;
+            } else {
+              dst[dstIndex] = cColor0;
+              prio[dstIndex] = PRIO_PF2;
+            }
+            dstIndex++;
+            mask >>= 1;
           }
-          dstIndex++;
-          mask >>= 1;
-
-          if (data & mask) {
-            dst[dstIndex] = cColor1;
-            prio[dstIndex] = PRIO_PF1;
-          } else {
-            dst[dstIndex] = cColor0;
-            prio[dstIndex] = PRIO_PF2;
-          }
-          dstIndex++;
-          mask >>= 1;
-
-          if (data & mask) {
-            dst[dstIndex] = cColor1;
-            prio[dstIndex] = PRIO_PF1;
-          } else {
-            dst[dstIndex] = cColor0;
-            prio[dstIndex] = PRIO_PF2;
-          }
-          dstIndex++;
-          mask >>= 1;
         } else if (priorMode === 1) {
+          const colBk = sram[IO_COLBK] & 0xff;
           if (mask > 0x08) {
             const hi = (colBk | (data >> 4)) & 0xff;
             dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
@@ -1072,6 +1225,7 @@
           }
           mask >>= 4;
         } else if (priorMode === 2) {
+          fillGtiaColorTable(sram, colorTable);
           if (mask > 0x08) {
             const hi2 = colorTable[data >> 4] & 0xff;
             dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
@@ -1087,6 +1241,7 @@
           }
           mask >>= 4;
         } else {
+          const colBk = sram[IO_COLBK] & 0xff;
           if (mask > 0x08) {
             const hi3 = data & 0xf0 ? colBk | (data & 0xf0) : colBk & 0xf0;
             dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
@@ -1102,6 +1257,8 @@
           }
           mask >>= 4;
         }
+
+        clockAction(ctx);
       }
 
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
@@ -1125,13 +1282,6 @@
         return;
       }
 
-      const prior = sram[IO_PRIOR] & 0xff;
-      SCRATCH_BACKGROUND_TABLE[0] = sram[IO_COLBK] & 0xff;
-      SCRATCH_BACKGROUND_TABLE[1] = sram[IO_COLBK] & 0xff;
-      SCRATCH_BACKGROUND_TABLE[2] = sram[IO_COLPM0_TRIG2] & 0xff;
-      SCRATCH_BACKGROUND_TABLE[3] = sram[IO_COLBK] & 0xf0;
-      const bkg = SCRATCH_BACKGROUND_TABLE[(prior >> 6) & 3] & 0xff;
-
       const dmactl = sram[IO_DMACTL] & 0xff;
       const pfWidth = dmactl & 0x03;
       const pfDma = dmactl & 0x20;
@@ -1141,47 +1291,57 @@
         const mode = cmd & 0x0f;
 
         if (mode < 2) {
-          fillLine(video, y, 0, PIXELS_PER_LINE, bkg, PRIO_BKG);
-          for (let i = 0; i < 114; i++) clockAction(ctx);
+          drawBackgroundLine(
+            ctx,
+            screenPixels,
+            screenPriority,
+            y * PIXELS_PER_LINE,
+            114,
+          );
           return;
         }
 
-        const playfieldPixels = 192 + pfWidth * 64;
-        let renderStartX = 0;
-
-        if (pfWidth === 0x01) {
-          renderStartX = (16 + 12 + 6 + 30) * 2;
-        } else if (pfWidth === 0x02) {
-          renderStartX = (16 + 12 + 6 + 14) * 2;
-        } else if (pfWidth === 0x03) {
-          renderStartX = (16 + 12 + 4) * 2;
-        }
-
         const ppb = ANTIC_MODE_INFO[mode].ppb || 8;
-        let bytesPerLine = (playfieldPixels / ppb) | 0;
-
-        if (cmd & 0x10) {
-          const h = sram[IO_HSCROL] & 0x0f;
-          if (pfWidth === 0x03) {
-            renderStartX += h * 2;
-          } else {
-            renderStartX -= 32 - h * 2;
-            bytesPerLine += 8;
-          }
+        const geometry = computeActiveLineGeometry(
+          cmd,
+          pfWidth,
+          ppb,
+          sram[IO_HSCROL] & 0x0f,
+        );
+        if (!geometry) {
+          drawBackgroundLine(
+            ctx,
+            screenPixels,
+            screenPriority,
+            y * PIXELS_PER_LINE,
+            114,
+          );
+          return;
         }
 
         const scratchWidth = video.playfieldScratchWidth | 0;
-        fillScratchLine(video, y, scratchWidth, bkg, PRIO_BKG);
         video.pixels = video.playfieldScratchPixels;
         video.priority = video.playfieldScratchPriority;
 
-        io.drawLine.bytesPerLine = bytesPerLine;
+        const lineBase = y * scratchWidth + PLAYFIELD_SCRATCH_VIEW_X;
+        const baseColor = currentBackgroundColor(sram);
+        video.playfieldScratchPixels.fill(baseColor, lineBase, lineBase + PIXELS_PER_LINE);
+        video.playfieldScratchPriority.fill(PRIO_BKG, lineBase, lineBase + PIXELS_PER_LINE);
+
+        io.drawLine.bytesPerLine = geometry.bytesPerLine;
         io.drawLine.destIndex =
-          y * scratchWidth + PLAYFIELD_SCRATCH_VIEW_X + renderStartX;
+          lineBase + geometry.playfieldStartX;
         io.drawLine.displayMemoryAddress = io.displayMemoryAddress & 0xffff;
 
-        const preCycles = 16 + ((renderStartX / 4) | 0);
-        for (let i = 0; i < preCycles; i++) clockAction(ctx);
+        stepClockActions(ctx, ACTIVE_LINE_COLOR_BURST_CYCLES);
+        drawBackgroundClipped(
+          ctx,
+          video.playfieldScratchPixels,
+          video.playfieldScratchPriority,
+          lineBase,
+          geometry.leftBorderStartX,
+          geometry.leftBorderCycles,
+        );
 
         switch (mode) {
           case 2: drawLineMode2(ctx); break;
@@ -1201,47 +1361,30 @@
           default:
             {
               const start =
-                y * scratchWidth + PLAYFIELD_SCRATCH_VIEW_X + renderStartX;
-              const pixelsToFill = bytesPerLine * ppb;
+                lineBase + geometry.playfieldStartX;
+              const pixelsToFill = geometry.playfieldPixelWidth;
               const dst = video.playfieldScratchPixels;
               const prio = video.playfieldScratchPriority;
+              const color = currentBackgroundColor(sram);
               for (let i = 0; i < pixelsToFill; i++) {
-                dst[start + i] = bkg;
+                dst[start + i] = color;
                 prio[start + i] = PRIO_BKG;
               }
-              const pfCycles = (pixelsToFill / 4) | 0;
+              const pfCycles = geometry.playfieldCycles;
               for (let i = 0; i < pfCycles; i++) clockAction(ctx);
             }
             break;
         }
 
-        while (io.clock < lineStartClock + 114) {
-          clockAction(ctx);
-        }
-
-        // Mirror C's two AtariIo_FillRect border calls applied after mode draw.
-        {
-          const lLeftBorderFill =
-            pfWidth === 0x03
-              ? Math.max((16 + 12 + 6 + 10) * 2, renderStartX)
-              : pfWidth === 0x01
-                ? (16 + 12 + 6 + 30) * 2
-                : (16 + 12 + 6 + 14) * 2;
-          const lRightBorderX =
-            pfWidth === 0x03
-              ? Math.min(renderStartX + playfieldPixels, PIXELS_PER_LINE)
-              : lLeftBorderFill + playfieldPixels;
-          const base = y * scratchWidth + PLAYFIELD_SCRATCH_VIEW_X;
-          const dst = video.playfieldScratchPixels;
-          const prio = video.playfieldScratchPriority;
-          for (let i = 0; i < lLeftBorderFill; i++) {
-            dst[base + i] = bkg;
-            prio[base + i] = PRIO_BKG;
-          }
-          for (let i = lRightBorderX; i < PIXELS_PER_LINE; i++) {
-            dst[base + i] = bkg;
-            prio[base + i] = PRIO_BKG;
-          }
+        if (io.clock < lineStartClock + 114) {
+          drawBackgroundClipped(
+            ctx,
+            video.playfieldScratchPixels,
+            video.playfieldScratchPriority,
+            lineBase,
+            geometry.playfieldStartX + geometry.playfieldPixelWidth,
+            lineStartClock + 114 - io.clock,
+          );
         }
 
         copyScratchLine(
@@ -1254,8 +1397,13 @@
         video.pixels = screenPixels;
         video.priority = screenPriority;
       } else {
-        fillLine(video, y, 0, PIXELS_PER_LINE, bkg, PRIO_BKG);
-        for (let i = 0; i < 114; i++) clockAction(ctx);
+        drawBackgroundLine(
+          ctx,
+          screenPixels,
+          screenPriority,
+          y * PIXELS_PER_LINE,
+          114,
+        );
       }
     }
 

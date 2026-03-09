@@ -203,7 +203,7 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
-      if (ctx.cycleCounter >= io.displayListFetchCycle) {
+      if (!io.inDrawLine && ctx.cycleCounter >= io.displayListFetchCycle) {
         if (io.video.currentDisplayLine === 0) {
           io.clock = io.displayListFetchCycle - CYCLES_PER_LINE;
         }
@@ -216,10 +216,16 @@
         fetchLine(ctx);
 
         if (io.video.currentDisplayLine === 1) io.videoOut.priority.fill(0);
-        drawLine(ctx);
-        drawPlayerMissiles(ctx);
-
+        io.inDrawLine = true;
         io.displayListFetchCycle += CYCLES_PER_LINE;
+        cycleTimedEventUpdate(ctx);
+
+        try {
+          drawLine(ctx);
+          drawPlayerMissiles(ctx);
+        } finally {
+          io.inDrawLine = false;
+        }
       }
 
       if (ctx.cycleCounter >= io.dliCycle) {

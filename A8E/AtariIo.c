@@ -849,6 +849,21 @@ static void AtariIo_DrawLineModeE(_6502_Context_t *pContext);
 static void AtariIo_DrawLineModeF(_6502_Context_t *pContext);
 static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext);
 
+#define ACTIVE_LINE_HSYNC_PIXELS 32u
+#define ACTIVE_LINE_COLOR_BURST_CYCLES 6u
+
+typedef struct
+{
+	u32 lLeftBorderCycles;
+	u32 lPlayfieldCycles;
+	u32 lRightBorderCycles;
+	u32 lScrollPixelOffset;
+	u32 lBytesPerLine;
+	u32 lPlayfieldPixelWidth;
+	u32 lLeftBorderStartX;
+	u32 lPlayfieldStartX;
+} ActiveLineGeometry_t;
+
 static void AtariIo_DrawClockAction(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
@@ -1107,23 +1122,178 @@ static void AtariIo_CreatePalette()
 	}
 }
 
-static void AtariIo_FillRect(
-	SDL_Surface *pSurface, u32 lX, u32 lY, u32 lW, u32 lH, u8 cColor)
+static u8 AtariIo_GetCurrentBackgroundColor(_6502_Context_t *pContext)
 {
-	u32 lOldW = lW;
-	u8 *pScreen = (u8 *)pSurface->pixels + lY * PIXELS_PER_LINE + lX;
-
-	while(lH--)
+	switch(SRAM[IO_PRIOR] >> 6)
 	{
-		while(lW--)
+	case 0:
+	case 1:
+		return SRAM[IO_COLBK];
+
+	case 2:
+		return SRAM[IO_COLPM0_TRIG2];
+
+	default:
+		return SRAM[IO_COLBK] & 0xf0;
+	}
+}
+
+static void AtariIo_DrawBackgroundLine(
+	_6502_Context_t *pContext,
+	u8 *pDestination,
+	u8 *pPriorityData,
+	u32 lCycles)
+{
+	u32 i;
+
+	for(i = 0; i < lCycles; i++)
+	{
+		u8 cColor = AtariIo_GetCurrentBackgroundColor(pContext);
+
+		*pDestination++ = cColor;
+		*pDestination++ = cColor;
+		*pDestination++ = cColor;
+		*pDestination++ = cColor;
+
+		*pPriorityData++ = PRIO_BKG;
+		*pPriorityData++ = PRIO_BKG;
+		*pPriorityData++ = PRIO_BKG;
+		*pPriorityData++ = PRIO_BKG;
+
+		AtariIo_DrawClockAction(pContext);
+	}
+}
+
+static void AtariIo_StepClockActions(_6502_Context_t *pContext, u32 lCycles)
+{
+	u32 i;
+
+	for(i = 0; i < lCycles; i++)
+	{
+		AtariIo_DrawClockAction(pContext);
+	}
+}
+
+static void AtariIo_DrawBackgroundClipped(
+	_6502_Context_t *pContext,
+	u8 *pDestination,
+	u8 *pPriorityData,
+	u32 lStartX,
+	u32 lCycles)
+{
+	u32 lX = lStartX;
+	u32 i;
+
+	for(i = 0; i < lCycles; i++)
+	{
+		u32 lPixel;
+		u8 cColor = AtariIo_GetCurrentBackgroundColor(pContext);
+
+		for(lPixel = 0; lPixel < 4; lPixel++, lX++)
 		{
-			*pScreen++ = cColor;
+			if(lX < PIXELS_PER_LINE)
+			{
+				pDestination[lX] = cColor;
+				pPriorityData[lX] = PRIO_BKG;
+			}
 		}
 
-		lW = lOldW;
-
-		pScreen += PIXELS_PER_LINE - lW;
+			AtariIo_DrawClockAction(pContext);
+		}
 	}
+
+static u8 AtariIo_ComputeActiveLineGeometry(
+	u8 cDisplayListCommand,
+	u8 cPlayfieldWidth,
+	u8 cHScroll,
+	u32 lPixelsPerByte,
+	ActiveLineGeometry_t *pGeometry)
+{
+	u32 lLeftBorderCycles = 0;
+	u32 lPlayfieldCycles = 0;
+	u32 lScrollPixelOffset = 0;
+	u32 lCyclesPerByte;
+
+	if(pGeometry == NULL || lPixelsPerByte == 0)
+	{
+		return 0;
+	}
+
+	if(cDisplayListCommand & 0x10)
+	{
+		lScrollPixelOffset = (cHScroll & 0x01) << 1;
+	}
+
+	switch(cPlayfieldWidth & 0x03)
+	{
+	case 0x01:
+		if(cDisplayListCommand & 0x10)
+		{
+			lLeftBorderCycles = (20 + cHScroll) >> 1;
+			lPlayfieldCycles = 80;
+		}
+		else
+		{
+			lLeftBorderCycles = 18;
+			lPlayfieldCycles = 64;
+		}
+		break;
+
+	case 0x02:
+		if(cDisplayListCommand & 0x10)
+		{
+			lLeftBorderCycles = (4 + cHScroll) >> 1;
+			lPlayfieldCycles = 96;
+		}
+		else
+		{
+			lLeftBorderCycles = 10;
+			lPlayfieldCycles = 80;
+		}
+		break;
+
+	case 0x03:
+		if(cDisplayListCommand & 0x10)
+		{
+			lLeftBorderCycles = (4 + cHScroll) >> 1;
+		}
+		else
+		{
+			lLeftBorderCycles = 2;
+		}
+		lPlayfieldCycles = 96;
+		break;
+
+	default:
+		return 0;
+	}
+
+	lCyclesPerByte = lPixelsPerByte / 4;
+	if(lCyclesPerByte == 0)
+	{
+		return 0;
+	}
+
+	pGeometry->lLeftBorderCycles = lLeftBorderCycles;
+	pGeometry->lPlayfieldCycles = lPlayfieldCycles;
+	pGeometry->lRightBorderCycles =
+		CYCLES_PER_LINE -
+		ACTIVE_LINE_COLOR_BURST_CYCLES -
+		lLeftBorderCycles -
+		lPlayfieldCycles;
+	pGeometry->lScrollPixelOffset = lScrollPixelOffset;
+	pGeometry->lBytesPerLine = lPlayfieldCycles / lCyclesPerByte;
+	pGeometry->lPlayfieldPixelWidth = lPlayfieldCycles * 4;
+	pGeometry->lLeftBorderStartX =
+		ACTIVE_LINE_HSYNC_PIXELS +
+		lScrollPixelOffset +
+		ACTIVE_LINE_COLOR_BURST_CYCLES * 4;
+	pGeometry->lPlayfieldStartX =
+		ACTIVE_LINE_HSYNC_PIXELS +
+		lScrollPixelOffset +
+		(ACTIVE_LINE_COLOR_BURST_CYCLES + lLeftBorderCycles) * 4;
+
+	return 1;
 }
 
 static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
@@ -1153,6 +1323,7 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
 	{
 		u8 cPriorMode = SRAM[IO_PRIOR] >> 6;
+		u8 cOutputData;
 
 		if(cMask == 0x00)
 		{
@@ -1169,12 +1340,14 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 			cCharacter &= 0x7f;
 
 			cData = RAM[((SRAM[IO_CHBASE] << 8) & 0xfc00) + cCharacter * 8 + lVerticalScrollOffset];
-			if(cInverse && cPriorMode != 0)
-			{
-				cData ^= 0xff;
-			}
 
 			cMask = 0x80;
+		}
+
+		cOutputData = cData;
+		if(cInverse && cPriorMode != 0)
+		{
+			cOutputData ^= 0xff;
 		}
 
 		if(cPriorMode == 0)
@@ -1198,7 +1371,7 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 		switch(cPriorMode)
 		{
 		case 0:
-			if(cData & cMask)
+			if(cOutputData & cMask)
 			{
 				*(pIoData->tDrawLineData.pDestination)++ = cColor1;
 				*(pIoData->tDrawLineData.pPriorityData)++ = cPriority1;
@@ -1210,7 +1383,7 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 			}
 			cMask >>= 1;
 
-			if(cData & cMask)
+			if(cOutputData & cMask)
 			{
 				*(pIoData->tDrawLineData.pDestination)++ = cColor1;
 				*(pIoData->tDrawLineData.pPriorityData)++ = cPriority1;
@@ -1222,7 +1395,7 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 			}
 			cMask >>= 1;
 
-			if(cData & cMask)
+			if(cOutputData & cMask)
 			{
 				*(pIoData->tDrawLineData.pDestination)++ = cColor1;
 				*(pIoData->tDrawLineData.pPriorityData)++ = cPriority1;
@@ -1234,7 +1407,7 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 			}
 			cMask >>= 1;
 
-			if(cData & cMask)
+			if(cOutputData & cMask)
 			{
 				*(pIoData->tDrawLineData.pDestination)++ = cColor1;
 				*(pIoData->tDrawLineData.pPriorityData)++ = cPriority1;
@@ -1250,7 +1423,7 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 		case 1:
 			if(cMask > 0x08)
 			{
-				cColor = SRAM[IO_COLBK] | (cData >> 4);
+				cColor = SRAM[IO_COLBK] | (cOutputData >> 4);
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -1262,7 +1435,7 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 			}
 			else
 			{
-				cColor = SRAM[IO_COLBK] | (cData & 0x0f);
+				cColor = SRAM[IO_COLBK] | (cOutputData & 0x0f);
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -1298,7 +1471,7 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 					};
 				if(cMask > 0x08)
 				{
-					cColor = aColorTable[cData >> 4];
+					cColor = aColorTable[cOutputData >> 4];
 					*(pIoData->tDrawLineData.pDestination)++ = cColor;
 					*(pIoData->tDrawLineData.pDestination)++ = cColor;
 					*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -1310,7 +1483,7 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 				}
 				else
 				{
-					cColor = aColorTable[cData & 0x0f];
+					cColor = aColorTable[cOutputData & 0x0f];
 					*(pIoData->tDrawLineData.pDestination)++ = cColor;
 					*(pIoData->tDrawLineData.pDestination)++ = cColor;
 					*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -1327,7 +1500,7 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 		case 3:
 			if(cMask > 0x08)
 			{
-				cColor = (cData & 0xf0) ? (SRAM[IO_COLBK] | (cData & 0xf0)) : (SRAM[IO_COLBK] & 0xf0);
+				cColor = (cOutputData & 0xf0) ? (SRAM[IO_COLBK] | (cOutputData & 0xf0)) : (SRAM[IO_COLBK] & 0xf0);
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -1339,7 +1512,7 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 			}
 			else
 			{
-				cColor = (cData & 0x0f) ? (SRAM[IO_COLBK] | (cData << 4)) : (SRAM[IO_COLBK] & 0xf0);
+				cColor = (cOutputData & 0x0f) ? (SRAM[IO_COLBK] | (cOutputData << 4)) : (SRAM[IO_COLBK] & 0xf0);
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -1360,7 +1533,6 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u32 lX;
 	u8 cCharacter;
 	u8 cData;
 	u8 cInverse;
@@ -1371,32 +1543,9 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 	u8 cPriority1;
 
 	u32 lLineDelta = pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine;
-	u16 sCharacterBaseAddress = (SRAM[IO_CHBASE] << 8) & 0xfc00;
-
-	u8 aColorTable[16] =
-		{
-			SRAM[IO_COLPM0_TRIG2],
-			SRAM[IO_COLPM1_TRIG3],
-			SRAM[IO_COLPM2_PAL],
-			SRAM[IO_COLPM3],
-			SRAM[IO_COLPF0],
-			SRAM[IO_COLPF1],
-			SRAM[IO_COLPF2],
-			SRAM[IO_COLPF3],
-			SRAM[IO_COLBK],
-			SRAM[IO_COLBK],
-			SRAM[IO_COLBK],
-			SRAM[IO_COLBK],
-			SRAM[IO_COLPF0],
-			SRAM[IO_COLPF1],
-			SRAM[IO_COLPF2],
-			SRAM[IO_COLPF3],
-		};
-
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
 	u32 lCycle;
 	u8 cMask = 0x00;
-	u8 cPriorMode = SRAM[IO_PRIOR] >> 6;
 
 	if(lLineDelta == 1)
 	{
@@ -1405,27 +1554,24 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 
 	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
 	{
+		u8 cPriorMode = SRAM[IO_PRIOR] >> 6;
+		u8 cOutputData;
+
 		if(cMask == 0x00)
 		{
+			u16 sCharacterBaseAddress = (SRAM[IO_CHBASE] << 8) & 0xfc00;
+
 			cCharacter = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
+			pContext->llCycleCounter++; /* DMA steal: pattern */
+
+			if(lLineDelta == m_aAnticModeInfoTable[pIoData->cCurrentDisplayListCommand & 0x0f].lNumberOfLines)
+			{
+				pContext->llCycleCounter++; /* DMA steal: name */
+			}
+
 			cInverse = cCharacter & 0x80;
 			cCharacter &= 0x7f;
-
-			if(cInverse)
-			{
-				cColor0 = (SRAM[IO_COLPF2] & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
-				cColor1 = SRAM[IO_COLPF2];
-				cPriority0 = PRIO_PF1;
-				cPriority1 = PRIO_PF2;
-			}
-			else
-			{
-				cColor0 = SRAM[IO_COLPF2];
-				cColor1 = (SRAM[IO_COLPF2] & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
-				cPriority0 = PRIO_PF2;
-				cPriority1 = PRIO_PF1;
-			}
 
 			if(cCharacter < 0x60)
 			{
@@ -1449,18 +1595,38 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 				else
 					cData = RAM[sCharacterBaseAddress + cCharacter * 8 + (2 - lLineDelta)];
 			}
-			if(cInverse && cPriorMode != 0)
-			{
-				cData ^= 0xff;
-			}
 
 			cMask = 0x80;
+		}
+
+		cOutputData = cData;
+		if(cInverse && cPriorMode != 0)
+		{
+			cOutputData ^= 0xff;
+		}
+
+		if(cPriorMode == 0)
+		{
+			if(cInverse)
+			{
+				cColor0 = (SRAM[IO_COLPF2] & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
+				cColor1 = SRAM[IO_COLPF2];
+				cPriority0 = PRIO_PF1;
+				cPriority1 = PRIO_PF2;
+			}
+			else
+			{
+				cColor0 = SRAM[IO_COLPF2];
+				cColor1 = (SRAM[IO_COLPF2] & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
+				cPriority0 = PRIO_PF2;
+				cPriority1 = PRIO_PF1;
+			}
 		}
 
 		switch(cPriorMode)
 		{
 		case 0:
-			if(cData & cMask)
+			if(cOutputData & cMask)
 			{
 				*(pIoData->tDrawLineData.pDestination)++ = cColor1;
 				*(pIoData->tDrawLineData.pPriorityData)++ = cPriority1;
@@ -1472,7 +1638,7 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 			}
 			cMask >>= 1;
 
-			if(cData & cMask)
+			if(cOutputData & cMask)
 			{
 				*(pIoData->tDrawLineData.pDestination)++ = cColor1;
 				*(pIoData->tDrawLineData.pPriorityData)++ = cPriority1;
@@ -1484,7 +1650,7 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 			}
 			cMask >>= 1;
 
-			if(cData & cMask)
+			if(cOutputData & cMask)
 			{
 				*(pIoData->tDrawLineData.pDestination)++ = cColor1;
 				*(pIoData->tDrawLineData.pPriorityData)++ = cPriority1;
@@ -1496,7 +1662,7 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 			}
 			cMask >>= 1;
 
-			if(cData & cMask)
+			if(cOutputData & cMask)
 			{
 				*(pIoData->tDrawLineData.pDestination)++ = cColor1;
 				*(pIoData->tDrawLineData.pPriorityData)++ = cPriority1;
@@ -1512,7 +1678,7 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 		case 1:
 			if(cMask > 0x08)
 			{
-				cColor = SRAM[IO_COLBK] | (cData >> 4);
+				cColor = SRAM[IO_COLBK] | (cOutputData >> 4);
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -1524,7 +1690,7 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 			}
 			else
 			{
-				cColor = SRAM[IO_COLBK] | (cData & 0x0f);
+				cColor = SRAM[IO_COLBK] | (cOutputData & 0x0f);
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -1538,21 +1704,36 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 			break;
 
 		case 2:
-			if(cMask > 0x08)
 			{
-				cColor = aColorTable[cData >> 4];
-				*(pIoData->tDrawLineData.pDestination)++ = cColor;
-				*(pIoData->tDrawLineData.pDestination)++ = cColor;
-				*(pIoData->tDrawLineData.pDestination)++ = cColor;
-				*(pIoData->tDrawLineData.pDestination)++ = cColor;
-				*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_BKG;
-				*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_BKG;
-				*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_BKG;
-				*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_BKG;
-			}
-			else
-			{
-				cColor = aColorTable[cData & 0x0f];
+				u8 aColorTable[16] =
+					{
+						SRAM[IO_COLPM0_TRIG2],
+						SRAM[IO_COLPM1_TRIG3],
+						SRAM[IO_COLPM2_PAL],
+						SRAM[IO_COLPM3],
+						SRAM[IO_COLPF0],
+						SRAM[IO_COLPF1],
+						SRAM[IO_COLPF2],
+						SRAM[IO_COLPF3],
+						SRAM[IO_COLBK],
+						SRAM[IO_COLBK],
+						SRAM[IO_COLBK],
+						SRAM[IO_COLBK],
+						SRAM[IO_COLPF0],
+						SRAM[IO_COLPF1],
+						SRAM[IO_COLPF2],
+						SRAM[IO_COLPF3],
+					};
+
+				if(cMask > 0x08)
+				{
+					cColor = aColorTable[cOutputData >> 4];
+				}
+				else
+				{
+					cColor = aColorTable[cOutputData & 0x0f];
+				}
+
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -1568,7 +1749,7 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 		case 3:
 			if(cMask > 0x08)
 			{
-				cColor = (cData & 0xf0) ? (SRAM[IO_COLBK] | (cData & 0xf0)) : (SRAM[IO_COLBK] & 0xf0);
+				cColor = (cOutputData & 0xf0) ? (SRAM[IO_COLBK] | (cOutputData & 0xf0)) : (SRAM[IO_COLBK] & 0xf0);
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -1580,7 +1761,7 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 			}
 			else
 			{
-				cColor = (cData & 0x0f) ? (SRAM[IO_COLBK] | (cData << 4)) : (SRAM[IO_COLBK] & 0xf0);
+				cColor = (cOutputData & 0x0f) ? (SRAM[IO_COLBK] | (cOutputData << 4)) : (SRAM[IO_COLBK] & 0xf0);
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
 				*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -1593,23 +1774,19 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 			cMask >>= 4;
 			break;
 		}
+
+		AtariIo_DrawClockAction(pContext);
 	}
 }
 
 static void AtariIo_DrawLineMode4(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u32 lX;
 	u8 cCharacter;
 	u8 cData;
-	u8 aColorTable0[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF2]};
-	u8 aColorTable1[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF3]};
-	u8 aPriorityTable0[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2};
-	u8 aPriorityTable1[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF3};
-	u8 *pColorTable;
-	u8 *pPriorityTable;
 	u8 cColor;
 	u8 cPriority;
+	u8 cInverse;
 
 	u32 lVerticalScrollOffset = (8 - (pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine)) -
 								pIoData->tVideoData.lVerticalScrollOffset;
@@ -1629,68 +1806,85 @@ static void AtariIo_DrawLineMode4(_6502_Context_t *pContext)
 		{
 			cCharacter = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
+			pContext->llCycleCounter++; /* DMA steal: pattern */
 
-			if(cCharacter & 0x80)
+			if((pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine) ==
+			   m_aAnticModeInfoTable[pIoData->cCurrentDisplayListCommand & 0x0f].lNumberOfLines)
 			{
-				cCharacter &= 0x7f;
-				pColorTable = aColorTable1;
-				pPriorityTable = aPriorityTable1;
+				pContext->llCycleCounter++; /* DMA steal: name */
 			}
-			else
-			{
-				pColorTable = aColorTable0;
-				pPriorityTable = aPriorityTable0;
-			}
+
+			cInverse = cCharacter & 0x80;
+			cCharacter &= 0x7f;
 
 			cData = RAM[((SRAM[IO_CHBASE] << 8) & 0xfc00) + cCharacter * 8 + lVerticalScrollOffset];
 			cMask = 0x02;
 		}
 
-		cColor = pColorTable[(cData >> 6) & 0x3];
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
+		if(cInverse)
+		{
+			u8 aColorTable[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF3]};
+			u8 aPriorityTable[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF3};
+			cColor = aColorTable[(cData >> 6) & 0x3];
+			cPriority = aPriorityTable[(cData >> 6) & 0x3];
+		}
+		else
+		{
+			u8 aColorTable[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF2]};
+			u8 aPriorityTable[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2};
+			cColor = aColorTable[(cData >> 6) & 0x3];
+			cPriority = aPriorityTable[(cData >> 6) & 0x3];
+		}
 
-		cPriority = pPriorityTable[(cData >> 6) & 0x3];
+		*(pIoData->tDrawLineData.pDestination)++ = cColor;
+		*(pIoData->tDrawLineData.pDestination)++ = cColor;
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 
 		cData <<= 2;
 
-		cColor = pColorTable[(cData >> 6) & 0x3];
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
+		if(cInverse)
+		{
+			u8 aColorTable[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF3]};
+			u8 aPriorityTable[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF3};
+			cColor = aColorTable[(cData >> 6) & 0x3];
+			cPriority = aPriorityTable[(cData >> 6) & 0x3];
+		}
+		else
+		{
+			u8 aColorTable[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF2]};
+			u8 aPriorityTable[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2};
+			cColor = aColorTable[(cData >> 6) & 0x3];
+			cPriority = aPriorityTable[(cData >> 6) & 0x3];
+		}
 
-		cPriority = pPriorityTable[(cData >> 6) & 0x3];
+		*(pIoData->tDrawLineData.pDestination)++ = cColor;
+		*(pIoData->tDrawLineData.pDestination)++ = cColor;
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 
 		cData <<= 2;
 		cMask >>= 1;
+		AtariIo_DrawClockAction(pContext);
 	}
 }
 
 static void AtariIo_DrawLineMode5(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u32 lX;
 	u8 cCharacter;
 	u8 cData;
-	u8 aColorTable0[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF2]};
-	u8 aColorTable1[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF3]};
-	u8 aPriorityTable0[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2};
-	u8 aPriorityTable1[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF3};
-	u8 *pColorTable;
-	u8 *pPriorityTable;
 	u8 cColor;
 	u8 cPriority;
+	u8 cInverse;
+	u32 lLineDelta = pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine;
+	u32 lVerticalScrollLine = (16 - lLineDelta) - pIoData->tVideoData.lVerticalScrollOffset;
 
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
 	u32 lCycle;
 	u8 cMask = 0x00;
 
-	u32 lVerticalScrollOffset = ((16 - (pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine)) -
-								 pIoData->tVideoData.lVerticalScrollOffset) >>
-								1;
+	u32 lVerticalScrollOffset = lVerticalScrollLine >> 1;
 
 	if((pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine) == 1)
 	{
@@ -1703,43 +1897,68 @@ static void AtariIo_DrawLineMode5(_6502_Context_t *pContext)
 		{
 			cCharacter = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
+			if((lVerticalScrollLine & 1) == 0)
+			{
+				pContext->llCycleCounter++; /* DMA steal: pattern */
+			}
 
-			if(cCharacter & 0x80)
+			if(lLineDelta == m_aAnticModeInfoTable[pIoData->cCurrentDisplayListCommand & 0x0f].lNumberOfLines)
 			{
-				cCharacter &= 0x7f;
-				pColorTable = aColorTable1;
-				pPriorityTable = aPriorityTable1;
+				pContext->llCycleCounter++; /* DMA steal: name */
 			}
-			else
-			{
-				pColorTable = aColorTable0;
-				pPriorityTable = aPriorityTable0;
-			}
+
+			cInverse = cCharacter & 0x80;
+			cCharacter &= 0x7f;
 
 			cData = RAM[((SRAM[IO_CHBASE] << 8) & 0xfe00) + cCharacter * 8 + lVerticalScrollOffset];
 			cMask = 0x02;
 		}
 
-		cColor = pColorTable[(cData >> 6) & 0x3];
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
+		if(cInverse)
+		{
+			u8 aColorTable[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF3]};
+			u8 aPriorityTable[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF3};
+			cColor = aColorTable[(cData >> 6) & 0x3];
+			cPriority = aPriorityTable[(cData >> 6) & 0x3];
+		}
+		else
+		{
+			u8 aColorTable[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF2]};
+			u8 aPriorityTable[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2};
+			cColor = aColorTable[(cData >> 6) & 0x3];
+			cPriority = aPriorityTable[(cData >> 6) & 0x3];
+		}
 
-		cPriority = pPriorityTable[(cData >> 6) & 0x3];
+		*(pIoData->tDrawLineData.pDestination)++ = cColor;
+		*(pIoData->tDrawLineData.pDestination)++ = cColor;
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 
 		cData <<= 2;
 
-		cColor = pColorTable[(cData >> 6) & 0x3];
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
+		if(cInverse)
+		{
+			u8 aColorTable[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF3]};
+			u8 aPriorityTable[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF3};
+			cColor = aColorTable[(cData >> 6) & 0x3];
+			cPriority = aPriorityTable[(cData >> 6) & 0x3];
+		}
+		else
+		{
+			u8 aColorTable[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF2]};
+			u8 aPriorityTable[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2};
+			cColor = aColorTable[(cData >> 6) & 0x3];
+			cPriority = aPriorityTable[(cData >> 6) & 0x3];
+		}
 
-		cPriority = pPriorityTable[(cData >> 6) & 0x3];
+		*(pIoData->tDrawLineData.pDestination)++ = cColor;
+		*(pIoData->tDrawLineData.pDestination)++ = cColor;
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 
 		cData <<= 2;
 		cMask >>= 1;
+		AtariIo_DrawClockAction(pContext);
 	}
 }
 
@@ -1748,10 +1967,7 @@ static void AtariIo_DrawLineMode6(_6502_Context_t *pContext)
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
 	u8 cCharacter;
 	u8 cData;
-	u8 aColorTable[4] = {SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF2], SRAM[IO_COLPF3]};
-	u8 aPriorityTable[4] = {PRIO_PF0, PRIO_PF1, PRIO_PF2, PRIO_PF3};
-	u8 cColor0 = SRAM[IO_COLBK];
-	u8 cColor1;
+	u8 cColorIndex;
 	u8 cPriority;
 
 	u32 lVerticalScrollOffset = (8 - (pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine)) -
@@ -1772,13 +1988,27 @@ static void AtariIo_DrawLineMode6(_6502_Context_t *pContext)
 		{
 			cCharacter = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-			cColor1 = aColorTable[cCharacter >> 6];
-			cPriority = aPriorityTable[cCharacter >> 6];
+			pContext->llCycleCounter++; /* DMA steal: pattern */
+
+			if((pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine) ==
+			   m_aAnticModeInfoTable[pIoData->cCurrentDisplayListCommand & 0x0f].lNumberOfLines)
+			{
+				pContext->llCycleCounter++; /* DMA steal: name */
+			}
+
+			cColorIndex = cCharacter >> 6;
+			cPriority = PRIO_PF0 << cColorIndex;
 			cCharacter &= 0x3f;
 
 			cData = RAM[((SRAM[IO_CHBASE] << 8) & 0xfe00) + cCharacter * 8 + lVerticalScrollOffset];
 			cMask = 0x08;
 		}
+
+		u8 cColor0 = SRAM[IO_COLBK];
+		u8 cColor1 = cColorIndex == 0 ? SRAM[IO_COLPF0] :
+					 cColorIndex == 1 ? SRAM[IO_COLPF1] :
+					 cColorIndex == 2 ? SRAM[IO_COLPF2] :
+										SRAM[IO_COLPF3];
 
 		if(cData & 0x80)
 		{
@@ -1818,6 +2048,7 @@ static void AtariIo_DrawLineMode6(_6502_Context_t *pContext)
 
 		cData <<= 1;
 		cMask >>= 1;
+		AtariIo_DrawClockAction(pContext);
 	}
 }
 
@@ -1826,15 +2057,12 @@ static void AtariIo_DrawLineMode7(_6502_Context_t *pContext)
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
 	u8 cCharacter;
 	u8 cData;
-	u8 aColorTable[4] = {SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF2], SRAM[IO_COLPF3]};
-	u8 aPriorityTable[4] = {PRIO_PF0, PRIO_PF1, PRIO_PF2, PRIO_PF3};
-	u8 cColor0 = SRAM[IO_COLBK];
-	u8 cColor1;
+	u8 cColorIndex;
 	u8 cPriority;
+	u32 lLineDelta = pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine;
+	u32 lVerticalScrollLine = (16 - lLineDelta) - pIoData->tVideoData.lVerticalScrollOffset;
 
-	u32 lVerticalScrollOffset = ((16 - (pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine)) -
-								 pIoData->tVideoData.lVerticalScrollOffset) >>
-								1;
+	u32 lVerticalScrollOffset = lVerticalScrollLine >> 1;
 
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 4;
 	u32 lCycle;
@@ -1851,13 +2079,30 @@ static void AtariIo_DrawLineMode7(_6502_Context_t *pContext)
 		{
 			cCharacter = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-			cColor1 = aColorTable[cCharacter >> 6];
-			cPriority = aPriorityTable[cCharacter >> 6];
+			if((lVerticalScrollLine & 1) == 0)
+			{
+				pContext->llCycleCounter++; /* DMA steal: pattern */
+			}
+
+			if(lLineDelta ==
+			   m_aAnticModeInfoTable[pIoData->cCurrentDisplayListCommand & 0x0f].lNumberOfLines)
+			{
+				pContext->llCycleCounter++; /* DMA steal: name */
+			}
+
+			cColorIndex = cCharacter >> 6;
+			cPriority = PRIO_PF0 << cColorIndex;
 			cCharacter &= 0x3f;
 
 			cData = RAM[((SRAM[IO_CHBASE] << 8) & 0xfe00) + cCharacter * 8 + lVerticalScrollOffset];
 			cMask = 0x08;
 		}
+
+		u8 cColor0 = SRAM[IO_COLBK];
+		u8 cColor1 = cColorIndex == 0 ? SRAM[IO_COLPF0] :
+					 cColorIndex == 1 ? SRAM[IO_COLPF1] :
+					 cColorIndex == 2 ? SRAM[IO_COLPF2] :
+										SRAM[IO_COLPF3];
 
 		if(cData & 0x80)
 		{
@@ -1897,15 +2142,16 @@ static void AtariIo_DrawLineMode7(_6502_Context_t *pContext)
 
 		cData <<= 1;
 		cMask >>= 1;
+		AtariIo_DrawClockAction(pContext);
 	}
 }
 
 static void AtariIo_DrawLineMode8(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u8 cData;
-	u8 aColorTable[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF2]};
-	u8 aPriorityTable[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2};
+	u32 lLineDelta = pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine;
+	u8 cMode = pIoData->cCurrentDisplayListCommand & 0x0f;
+	u8 cData = 0x00;
 	u8 cIndex;
 	u8 cColor;
 	u8 cPriority;
@@ -1914,7 +2160,7 @@ static void AtariIo_DrawLineMode8(_6502_Context_t *pContext)
 	u32 lCycle;
 	u8 cPhase = 0x08;
 
-	if((pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine) == 1)
+	if(lLineDelta == 1)
 	{
 		FIXED_ADD(pIoData->sDisplayMemoryAddress, 0x0fff, pIoData->tDrawLineData.lBytesPerLine);
 	}
@@ -1925,12 +2171,22 @@ static void AtariIo_DrawLineMode8(_6502_Context_t *pContext)
 		{
 			cData = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
+			if(lLineDelta == m_aAnticModeInfoTable[cMode].lNumberOfLines)
+			{
+				pContext->llCycleCounter++; /* DMA steal: display */
+			}
 			cPhase = 0x00;
 		}
 
 		cIndex = (cData >> (6 - ((cPhase >> 1) * 2))) & 0x03;
-		cColor = aColorTable[cIndex];
-		cPriority = aPriorityTable[cIndex];
+		cColor = cIndex == 0 ? SRAM[IO_COLBK] :
+				 cIndex == 1 ? SRAM[IO_COLPF0] :
+				 cIndex == 2 ? SRAM[IO_COLPF1] :
+							  SRAM[IO_COLPF2];
+		cPriority = cIndex == 0 ? PRIO_BKG :
+					 cIndex == 1 ? PRIO_PF0 :
+					 cIndex == 2 ? PRIO_PF1 :
+								  PRIO_PF2;
 
 		*(pIoData->tDrawLineData.pDestination)++ = cColor;
 		*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -1943,13 +2199,16 @@ static void AtariIo_DrawLineMode8(_6502_Context_t *pContext)
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 
 		cPhase++;
+		AtariIo_DrawClockAction(pContext);
 	}
 }
 
 static void AtariIo_DrawLineMode9(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u8 cData;
+	u32 lLineDelta = pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine;
+	u8 cMode = pIoData->cCurrentDisplayListCommand & 0x0f;
+	u8 cData = 0x00;
 	u8 cColor;
 	u8 cPriority;
 
@@ -1957,7 +2216,7 @@ static void AtariIo_DrawLineMode9(_6502_Context_t *pContext)
 	u32 lCycle;
 	u8 cMask = 0x00;
 
-	if((pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine) == 1)
+	if(lLineDelta == 1)
 	{
 		FIXED_ADD(pIoData->sDisplayMemoryAddress, 0x0fff, pIoData->tDrawLineData.lBytesPerLine);
 	}
@@ -1968,6 +2227,10 @@ static void AtariIo_DrawLineMode9(_6502_Context_t *pContext)
 		{
 			cData = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
+			if(lLineDelta == m_aAnticModeInfoTable[cMode].lNumberOfLines)
+			{
+				pContext->llCycleCounter++; /* DMA steal: display */
+			}
 			cMask = 0x80;
 		}
 
@@ -1993,38 +2256,51 @@ static void AtariIo_DrawLineMode9(_6502_Context_t *pContext)
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 
 		cMask >>= 1;
+		AtariIo_DrawClockAction(pContext);
 	}
 }
 
 static void AtariIo_DrawLineModeA(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u8 cData;
-	u8 aColorTable[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF2]};
-	u8 aPriorityTable[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2};
+	u32 lLineDelta = pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine;
+	u8 cMode = pIoData->cCurrentDisplayListCommand & 0x0f;
+	u8 cData = 0x00;
+	u8 cIndex;
 	u8 cColor;
 	u8 cPriority;
 
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 4;
 	u32 lCycle;
-	u8 cMask = 0x00;
+	u8 cPhase = 0x04;
 
-	if((pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine) == 1)
+	if(lLineDelta == 1)
 	{
 		FIXED_ADD(pIoData->sDisplayMemoryAddress, 0x0fff, pIoData->tDrawLineData.lBytesPerLine);
 	}
 
 	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
 	{
-		if(cMask == 0x00)
+		if(cPhase == 0x04)
 		{
 			cData = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-			cMask = 0x02;
+			if(lLineDelta == m_aAnticModeInfoTable[cMode].lNumberOfLines)
+			{
+				pContext->llCycleCounter++; /* DMA steal: display */
+			}
+			cPhase = 0x00;
 		}
 
-		cColor = aColorTable[(cData & cMask) >> (6 - ((lCycle & 3) * 2))];
-		cPriority = aPriorityTable[(cData & cMask) >> (6 - ((lCycle & 3) * 2))];
+		cIndex = (cData >> (6 - (cPhase * 2))) & 0x03;
+		cColor = cIndex == 0 ? SRAM[IO_COLBK] :
+				 cIndex == 1 ? SRAM[IO_COLPF0] :
+				 cIndex == 2 ? SRAM[IO_COLPF1] :
+							  SRAM[IO_COLPF2];
+		cPriority = cIndex == 0 ? PRIO_BKG :
+					 cIndex == 1 ? PRIO_PF0 :
+					 cIndex == 2 ? PRIO_PF1 :
+								  PRIO_PF2;
 		*(pIoData->tDrawLineData.pDestination)++ = cColor;
 		*(pIoData->tDrawLineData.pDestination)++ = cColor;
 		*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -2035,14 +2311,17 @@ static void AtariIo_DrawLineModeA(_6502_Context_t *pContext)
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 
-		cMask >>= 2;
+		cPhase++;
+		AtariIo_DrawClockAction(pContext);
 	}
 }
 
 static void AtariIo_DrawLineModeB(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u8 cData;
+	u32 lLineDelta = pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine;
+	u8 cMode = pIoData->cCurrentDisplayListCommand & 0x0f;
+	u8 cData = 0x00;
 	u8 cColor;
 	u8 cPriority;
 
@@ -2050,7 +2329,7 @@ static void AtariIo_DrawLineModeB(_6502_Context_t *pContext)
 	u32 lCycle;
 	u8 cMask = 0x00;
 
-	if((pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine) == 1)
+	if(lLineDelta == 1)
 	{
 		FIXED_ADD(pIoData->sDisplayMemoryAddress, 0x0fff, pIoData->tDrawLineData.lBytesPerLine);
 	}
@@ -2061,6 +2340,10 @@ static void AtariIo_DrawLineModeB(_6502_Context_t *pContext)
 		{
 			cData = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
+			if(lLineDelta == m_aAnticModeInfoTable[cMode].lNumberOfLines)
+			{
+				pContext->llCycleCounter++; /* DMA steal: display */
+			}
 			cMask = 0x80;
 		}
 
@@ -2101,103 +2384,54 @@ static void AtariIo_DrawLineModeB(_6502_Context_t *pContext)
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 
 		cMask >>= 1;
+		AtariIo_DrawClockAction(pContext);
 	}
 }
 
 static void AtariIo_DrawLineModeC(_6502_Context_t *pContext)
 {
-	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u8 cData;
-	u8 cColor;
-	u8 cPriority;
-
-	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 4;
-	u32 lCycle;
-	u8 cMask = 0x00;
-
-	if((pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine) == 1)
-	{
-		FIXED_ADD(pIoData->sDisplayMemoryAddress, 0x0fff, pIoData->tDrawLineData.lBytesPerLine);
-	}
-
-	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
-	{
-		if(cMask == 0x00)
-		{
-			cData = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
-			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-			cMask = 0x80;
-		}
-
-		if(cData & cMask)
-		{
-			cColor = SRAM[IO_COLPF0];
-			cPriority = PRIO_PF0;
-		}
-		else
-		{
-			cColor = SRAM[IO_COLBK];
-			cPriority = PRIO_BKG;
-		}
-
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
-
-		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
-		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
-
-		cMask >>= 1;
-
-		if(cData & cMask)
-		{
-			cColor = SRAM[IO_COLPF0];
-			cPriority = PRIO_PF0;
-		}
-		else
-		{
-			cColor = SRAM[IO_COLBK];
-			cPriority = PRIO_BKG;
-		}
-
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
-
-		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
-		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
-
-		cMask >>= 1;
-	}
+	AtariIo_DrawLineModeB(pContext);
 }
 
 static void AtariIo_DrawLineModeD(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u8 cData;
-	u8 aColorTable[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF2]};
-	u8 aPriorityTable[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2};
+	u32 lLineDelta = pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine;
+	u8 cMode = pIoData->cCurrentDisplayListCommand & 0x0f;
+	u8 cData = 0x00;
 	u8 cColor;
 	u8 cPriority;
 
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
 	u32 lCycle;
-	u8 cMask = 0x00;
+	u8 cPhase = 0x02;
 
-	if((pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine) == 1)
+	if(lLineDelta == 1)
 	{
 		FIXED_ADD(pIoData->sDisplayMemoryAddress, 0x0fff, pIoData->tDrawLineData.lBytesPerLine);
 	}
 
 	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
 	{
-		if(cMask == 0x00)
+		if(cPhase == 0x02)
 		{
 			cData = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-			cMask = 0x02;
+			if(lLineDelta == m_aAnticModeInfoTable[cMode].lNumberOfLines)
+			{
+				pContext->llCycleCounter++; /* DMA steal: display */
+			}
+			cPhase = 0x00;
 		}
 
-		cColor = aColorTable[(cData >> 6) & 0x03];
-		cPriority = aPriorityTable[(cData >> 6) & 0x03];
+		cColor = ((cData >> 6) & 0x03) == 0 ? SRAM[IO_COLBK] :
+				 ((cData >> 6) & 0x03) == 1 ? SRAM[IO_COLPF0] :
+				 ((cData >> 6) & 0x03) == 2 ? SRAM[IO_COLPF1] :
+											  SRAM[IO_COLPF2];
+		cPriority = ((cData >> 6) & 0x03) == 0 ? PRIO_BKG :
+					 ((cData >> 6) & 0x03) == 1 ? PRIO_PF0 :
+					 ((cData >> 6) & 0x03) == 2 ? PRIO_PF1 :
+												  PRIO_PF2;
 		*(pIoData->tDrawLineData.pDestination)++ = cColor;
 		*(pIoData->tDrawLineData.pDestination)++ = cColor;
 
@@ -2206,65 +2440,28 @@ static void AtariIo_DrawLineModeD(_6502_Context_t *pContext)
 
 		cData <<= 2;
 
-		cColor = aColorTable[(cData >> 6) & 0x03];
-		cPriority = aPriorityTable[(cData >> 6) & 0x03];
+		cColor = ((cData >> 6) & 0x03) == 0 ? SRAM[IO_COLBK] :
+				 ((cData >> 6) & 0x03) == 1 ? SRAM[IO_COLPF0] :
+				 ((cData >> 6) & 0x03) == 2 ? SRAM[IO_COLPF1] :
+											  SRAM[IO_COLPF2];
+		cPriority = ((cData >> 6) & 0x03) == 0 ? PRIO_BKG :
+					 ((cData >> 6) & 0x03) == 1 ? PRIO_PF0 :
+					 ((cData >> 6) & 0x03) == 2 ? PRIO_PF1 :
+												  PRIO_PF2;
 		*(pIoData->tDrawLineData.pDestination)++ = cColor;
 		*(pIoData->tDrawLineData.pDestination)++ = cColor;
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
 
 		cData <<= 2;
-		cMask >>= 1;
+		cPhase++;
+		AtariIo_DrawClockAction(pContext);
 	}
 }
 
 static void AtariIo_DrawLineModeE(_6502_Context_t *pContext)
 {
-	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u8 cData;
-	u8 aColorTable[4] = {SRAM[IO_COLBK], SRAM[IO_COLPF0], SRAM[IO_COLPF1], SRAM[IO_COLPF2]};
-	u8 aPriorityTable[4] = {PRIO_BKG, PRIO_PF0, PRIO_PF1, PRIO_PF2};
-	u8 cColor;
-	u8 cPriority;
-
-	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
-	u32 lCycle;
-	u8 cMask = 0x00;
-
-	if((pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine) == 1)
-	{
-		FIXED_ADD(pIoData->sDisplayMemoryAddress, 0x0fff, pIoData->tDrawLineData.lBytesPerLine);
-	}
-
-	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
-	{
-		if(cMask == 0x00)
-		{
-			cData = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
-			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-			cMask = 0x02;
-		}
-
-		cColor = aColorTable[(cData >> 6) & 0x03];
-		cPriority = aPriorityTable[(cData >> 6) & 0x03];
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
-
-		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
-		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
-
-		cData <<= 2;
-
-		cColor = aColorTable[(cData >> 6) & 0x03];
-		cPriority = aPriorityTable[(cData >> 6) & 0x03];
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
-		*(pIoData->tDrawLineData.pDestination)++ = cColor;
-		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
-		*(pIoData->tDrawLineData.pPriorityData)++ = cPriority;
-
-		cData <<= 2;
-		cMask >>= 1;
-	}
+	AtariIo_DrawLineModeD(pContext);
 }
 
 static void AtariIo_DrawLineModeF(_6502_Context_t *pContext)
@@ -2272,29 +2469,6 @@ static void AtariIo_DrawLineModeF(_6502_Context_t *pContext)
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
 	u8 cData;
 	u8 cColor;
-	u8 cColor0 = SRAM[IO_COLPF2];
-	u8 cColor1 = (SRAM[IO_COLPF2] & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
-
-	u8 aColorTable[16] =
-		{
-			SRAM[IO_COLPM0_TRIG2],
-			SRAM[IO_COLPM1_TRIG3],
-			SRAM[IO_COLPM2_PAL],
-			SRAM[IO_COLPM3],
-			SRAM[IO_COLPF0],
-			SRAM[IO_COLPF1],
-			SRAM[IO_COLPF2],
-			SRAM[IO_COLPF3],
-			SRAM[IO_COLBK],
-			SRAM[IO_COLBK],
-			SRAM[IO_COLBK],
-			SRAM[IO_COLBK],
-			SRAM[IO_COLPF0],
-			SRAM[IO_COLPF1],
-			SRAM[IO_COLPF2],
-			SRAM[IO_COLPF3],
-		};
-
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
 	u32 lCycle;
 	u8 cMask = 0x00;
@@ -2304,83 +2478,80 @@ static void AtariIo_DrawLineModeF(_6502_Context_t *pContext)
 		FIXED_ADD(pIoData->sDisplayMemoryAddress, 0x0fff, pIoData->tDrawLineData.lBytesPerLine);
 	}
 
-	switch(SRAM[IO_PRIOR] >> 6)
+	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
 	{
-	case 0:
-		for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
+		u8 cPriorMode = SRAM[IO_PRIOR] >> 6;
+
+		if(cMask == 0x00)
 		{
-			if(cMask == 0x00)
-			{
-				cData = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
-				FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-				cMask = 0x80;
-			}
-
-			if(cData & cMask)
-			{
-				*(pIoData->tDrawLineData.pDestination)++ = cColor1;
-				*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF1;
-			}
-			else
-			{
-				*(pIoData->tDrawLineData.pDestination)++ = cColor0;
-				*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF2;
-			}
-
-			cMask >>= 1;
-
-			if(cData & cMask)
-			{
-				*(pIoData->tDrawLineData.pDestination)++ = cColor1;
-				*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF1;
-			}
-			else
-			{
-				*(pIoData->tDrawLineData.pDestination)++ = cColor0;
-				*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF2;
-			}
-
-			cMask >>= 1;
-
-			if(cData & cMask)
-			{
-				*(pIoData->tDrawLineData.pDestination)++ = cColor1;
-				*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF1;
-			}
-			else
-			{
-				*(pIoData->tDrawLineData.pDestination)++ = cColor0;
-				*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF2;
-			}
-
-			cMask >>= 1;
-
-			if(cData & cMask)
-			{
-				*(pIoData->tDrawLineData.pDestination)++ = cColor1;
-				*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF1;
-			}
-			else
-			{
-				*(pIoData->tDrawLineData.pDestination)++ = cColor0;
-				*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF2;
-			}
-
-			cMask >>= 1;
+			cData = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
+			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
+			pContext->llCycleCounter++; /* DMA steal: display */
+			cMask = 0x80;
 		}
 
-		break;
-
-	case 1:
-		for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
+		switch(cPriorMode)
 		{
-			if(cMask == 0x00)
+		case 0:
 			{
-				cData = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
-				FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-				cMask = 0xf0;
-			}
+				u8 cColor0 = SRAM[IO_COLPF2];
+				u8 cColor1 = (SRAM[IO_COLPF2] & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
 
+				if(cData & cMask)
+				{
+					*(pIoData->tDrawLineData.pDestination)++ = cColor1;
+					*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF1;
+				}
+				else
+				{
+					*(pIoData->tDrawLineData.pDestination)++ = cColor0;
+					*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF2;
+				}
+
+				cMask >>= 1;
+
+				if(cData & cMask)
+				{
+					*(pIoData->tDrawLineData.pDestination)++ = cColor1;
+					*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF1;
+				}
+				else
+				{
+					*(pIoData->tDrawLineData.pDestination)++ = cColor0;
+					*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF2;
+				}
+
+				cMask >>= 1;
+
+				if(cData & cMask)
+				{
+					*(pIoData->tDrawLineData.pDestination)++ = cColor1;
+					*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF1;
+				}
+				else
+				{
+					*(pIoData->tDrawLineData.pDestination)++ = cColor0;
+					*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF2;
+				}
+
+				cMask >>= 1;
+
+				if(cData & cMask)
+				{
+					*(pIoData->tDrawLineData.pDestination)++ = cColor1;
+					*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF1;
+				}
+				else
+				{
+					*(pIoData->tDrawLineData.pDestination)++ = cColor0;
+					*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_PF2;
+				}
+
+				cMask >>= 1;
+			}
+			break;
+
+		case 1:
 			if(cMask > 0x08)
 			{
 				cColor = SRAM[IO_COLBK] | (cData >> 4);
@@ -2401,27 +2572,38 @@ static void AtariIo_DrawLineModeF(_6502_Context_t *pContext)
 			*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_BKG;
 
 			cMask >>= 4;
-		}
+			break;
 
-		break;
+		case 2:
+			{
+				u8 aColorTable[16] =
+					{
+						SRAM[IO_COLPM0_TRIG2],
+						SRAM[IO_COLPM1_TRIG3],
+						SRAM[IO_COLPM2_PAL],
+						SRAM[IO_COLPM3],
+						SRAM[IO_COLPF0],
+						SRAM[IO_COLPF1],
+						SRAM[IO_COLPF2],
+						SRAM[IO_COLPF3],
+						SRAM[IO_COLBK],
+						SRAM[IO_COLBK],
+						SRAM[IO_COLBK],
+						SRAM[IO_COLBK],
+						SRAM[IO_COLPF0],
+						SRAM[IO_COLPF1],
+						SRAM[IO_COLPF2],
+						SRAM[IO_COLPF3],
+					};
 
-	case 2:
-		for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
-		{
-			if(cMask == 0x00)
-			{
-				cData = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
-				FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-				cMask = 0xf0;
-			}
-
-			if(cMask > 0x08)
-			{
-				cColor = aColorTable[cData >> 4];
-			}
-			else
-			{
-				cColor = aColorTable[cData & 0x0f];
+				if(cMask > 0x08)
+				{
+					cColor = aColorTable[cData >> 4];
+				}
+				else
+				{
+					cColor = aColorTable[cData & 0x0f];
+				}
 			}
 
 			*(pIoData->tDrawLineData.pDestination)++ = cColor;
@@ -2435,20 +2617,9 @@ static void AtariIo_DrawLineModeF(_6502_Context_t *pContext)
 			*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_BKG;
 
 			cMask >>= 4;
-		}
+			break;
 
-		break;
-
-	case 3:
-		for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
-		{
-			if(cMask == 0x00)
-			{
-				cData = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
-				FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-				cMask = 0xf0;
-			}
-
+		case 3:
 			if(cMask > 0x08)
 			{
 				cColor = (cData & 0xf0) ? (SRAM[IO_COLBK] | (cData & 0xf0)) : (SRAM[IO_COLBK] & 0xf0);
@@ -2469,11 +2640,10 @@ static void AtariIo_DrawLineModeF(_6502_Context_t *pContext)
 			*(pIoData->tDrawLineData.pPriorityData)++ = PRIO_BKG;
 
 			cMask >>= 4;
+			break;
 		}
 
-		break;
-	default:
-		break;
+		AtariIo_DrawClockAction(pContext);
 	}
 }
 
@@ -2633,13 +2803,12 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 void AtariIoDrawLine(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u32 lPlayfieldPixelsPerLine = 192 + (SRAM[IO_DMACTL] & 0x03) * 64;
-
-	u8 aBackgroundColorTable[4] =
-		{
-			SRAM[IO_COLBK], SRAM[IO_COLBK], SRAM[IO_COLPM0_TRIG2], (SRAM[IO_COLBK] & 0xf0)};
-
-	u8 cBackgroundColor = aBackgroundColorTable[SRAM[IO_PRIOR] >> 6];
+	u8 *pLineDestination =
+		(u8 *)pIoData->tVideoData.pSdlAtariSurface->pixels +
+		pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
+	u8 *pLinePriorityData =
+		pIoData->tVideoData.pPriorityData +
+		pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
 
 	u64 llLineStartCycle = pIoData->llDisplayListFetchCycle - CYCLES_PER_LINE;
 	if(pIoData->llCycle < llLineStartCycle) pIoData->llCycle = llLineStartCycle;
@@ -2659,140 +2828,72 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 	{
 		if((pIoData->cCurrentDisplayListCommand & 0x0f) < 2)
 		{
-			AtariIo_FillRect(
-				pIoData->tVideoData.pSdlAtariSurface,
-				0,
-				pIoData->tVideoData.lCurrentDisplayLine,
-				PIXELS_PER_LINE,
-				1,
-				cBackgroundColor);
-			u32 i;
-			for(i = 0; i < 114; i++)
-			{
-				AtariIo_DrawClockAction(pContext);
-			}
+			AtariIo_DrawBackgroundLine(pContext, pLineDestination, pLinePriorityData, 114);
 		}
 		else
 		{
-			u32 lLeftBorderSize = 0;
-			u32 lRightBorderSize = 0;
+			ActiveLineGeometry_t tGeometry;
+			u8 cMode = pIoData->cCurrentDisplayListCommand & 0x0f;
+			u32 lLineBaseOffset =
+				pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
+			u8 cBaseColor;
+			u32 i;
+
+			if(!AtariIo_ComputeActiveLineGeometry(
+				pIoData->cCurrentDisplayListCommand,
+				SRAM[IO_DMACTL] & 0x03,
+				SRAM[IO_HSCROL] & 0x0f,
+				m_aAnticModeInfoTable[cMode].lPixelsPerByte,
+				&tGeometry))
+			{
+				AtariIo_DrawBackgroundLine(pContext, pLineDestination, pLinePriorityData, 114);
+				return;
+			}
+
+			cBaseColor = AtariIo_GetCurrentBackgroundColor(pContext);
+			for(i = 0; i < PIXELS_PER_LINE; i++)
+			{
+				pLineDestination[i] = cBaseColor;
+				pLinePriorityData[i] = PRIO_BKG;
+			}
 
 			pIoData->tDrawLineData.pDestination =
 				(u8 *)pIoData->tVideoData.pSdlAtariSurface->pixels +
-				pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
+				lLineBaseOffset +
+				tGeometry.lPlayfieldStartX;
 
 			pIoData->tDrawLineData.pPriorityData =
 				pIoData->tVideoData.pPriorityData +
-				pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
+				lLineBaseOffset +
+				tGeometry.lPlayfieldStartX;
+			pIoData->tDrawLineData.lBytesPerLine = tGeometry.lBytesPerLine;
 
-			u32 lRenderStartX = 0;
-
-			switch(SRAM[IO_DMACTL] & 0x03)
-			{
-			case 0x01:
-				lRenderStartX = (16 + 12 + 6 + 30) * 2;
-				break;
-
-			case 0x02:
-				lRenderStartX = (16 + 12 + 6 + 14) * 2;
-				break;
-
-			case 0x03:
-				lRenderStartX = (16 + 12 + 4) * 2;
-				break;
-
-			default:
-				break;
-			}
-
-			pIoData->tDrawLineData.lBytesPerLine =
-				lPlayfieldPixelsPerLine /
-				m_aAnticModeInfoTable[pIoData->cCurrentDisplayListCommand & 0x0f].lPixelsPerByte;
-
-			if(pIoData->cCurrentDisplayListCommand & 0x10)
-			{
-				if((SRAM[IO_DMACTL] & 0x03) != 0x03)
-				{
-					lRenderStartX -= 32 - (SRAM[IO_HSCROL] * 2);
-					pIoData->tDrawLineData.lBytesPerLine += 8;
-				}
-				else
-				{
-					lRenderStartX += SRAM[IO_HSCROL] * 2;
-				}
-			}
-
-			pIoData->tDrawLineData.pDestination += lRenderStartX;
-			pIoData->tDrawLineData.pPriorityData += lRenderStartX;
-
-			u32 lPreCycles = 16 + (lRenderStartX / 4);
-			u32 i;
-			for(i = 0; i < lPreCycles; i++)
-			{
-				AtariIo_DrawClockAction(pContext);
-			}
+			AtariIo_StepClockActions(pContext, ACTIVE_LINE_COLOR_BURST_CYCLES);
+			AtariIo_DrawBackgroundClipped(
+				pContext,
+				pLineDestination,
+				pLinePriorityData,
+				tGeometry.lLeftBorderStartX,
+				tGeometry.lLeftBorderCycles);
 
 			pIoData->tDrawLineData.sDisplayMemoryAddress = pIoData->sDisplayMemoryAddress;
 
-			m_aAnticModeInfoTable[pIoData->cCurrentDisplayListCommand & 0x0f].DrawFunction(pContext);
+			m_aAnticModeInfoTable[cMode].DrawFunction(pContext);
 
-			while(pIoData->llCycle < llLineStartCycle + 114)
+			if(pIoData->llCycle < llLineStartCycle + 114)
 			{
-				AtariIo_DrawClockAction(pContext);
+				AtariIo_DrawBackgroundClipped(
+					pContext,
+					pLineDestination,
+					pLinePriorityData,
+					tGeometry.lPlayfieldStartX + tGeometry.lPlayfieldPixelWidth,
+					(u32)((llLineStartCycle + 114) - pIoData->llCycle));
 			}
-
-			// Post-rendering border logic from original
-			u32 lLeftBorderExtents = 0;
-			u32 lRightBorderX = lPlayfieldPixelsPerLine + lRenderStartX;
-
-			switch(SRAM[IO_DMACTL] & 0x03)
-			{
-			case 0x01:
-				lLeftBorderExtents = (16 + 12 + 6 + 30) * 2;
-				lRightBorderX = lLeftBorderExtents + lPlayfieldPixelsPerLine;
-				break;
-			case 0x02:
-				lLeftBorderExtents = (16 + 12 + 6 + 14) * 2;
-				lRightBorderX = lLeftBorderExtents + lPlayfieldPixelsPerLine;
-				break;
-			case 0x03:
-				lLeftBorderExtents = MAX((16 + 12 + 6 + 10) * 2, lRenderStartX);
-				lRightBorderX = lRenderStartX + lPlayfieldPixelsPerLine;
-				if(lRightBorderX > PIXELS_PER_LINE) lRightBorderX = PIXELS_PER_LINE;
-				break;
-			}
-
-			AtariIo_FillRect(
-				pIoData->tVideoData.pSdlAtariSurface,
-				0,
-				pIoData->tVideoData.lCurrentDisplayLine,
-				lLeftBorderExtents,
-				1,
-				cBackgroundColor);
-
-			AtariIo_FillRect(
-				pIoData->tVideoData.pSdlAtariSurface,
-				lRightBorderX,
-				pIoData->tVideoData.lCurrentDisplayLine,
-				PIXELS_PER_LINE - lRightBorderX,
-				1,
-				cBackgroundColor);
 		}
 	}
 	else
 	{
-		AtariIo_FillRect(
-			pIoData->tVideoData.pSdlAtariSurface,
-			0,
-			pIoData->tVideoData.lCurrentDisplayLine,
-			PIXELS_PER_LINE,
-			1,
-			cBackgroundColor);
-		u32 i;
-		for(i = 0; i < 114; i++)
-		{
-			AtariIo_DrawClockAction(pContext);
-		}
+		AtariIo_DrawBackgroundLine(pContext, pLineDestination, pLinePriorityData, 114);
 	}
 }
 
@@ -3768,11 +3869,11 @@ void AtariIoCycleTimedEventUpdate(_6502_Context_t *pContext)
 
 	pContext->llIoCycleTimedEventCycle = CYCLE_NEVER;
 
-	pContext->llIoCycleTimedEventCycle =
-		MIN(pIoData->llDrawLineCycle, pContext->llIoCycleTimedEventCycle);
-
-	pContext->llIoCycleTimedEventCycle =
-		MIN(pIoData->llDisplayListFetchCycle, pContext->llIoCycleTimedEventCycle);
+	if(!pIoData->bInDrawLine)
+	{
+		pContext->llIoCycleTimedEventCycle =
+			MIN(pIoData->llDisplayListFetchCycle, pContext->llIoCycleTimedEventCycle);
+	}
 
 	pContext->llIoCycleTimedEventCycle =
 		MIN(pIoData->llDliCycle, pContext->llIoCycleTimedEventCycle);
@@ -3800,7 +3901,8 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
 
-	if(pContext->llCycleCounter >= pIoData->llDisplayListFetchCycle)
+	if(!pIoData->bInDrawLine &&
+	   pContext->llCycleCounter >= pIoData->llDisplayListFetchCycle)
 	{
 		if(pIoData->tVideoData.lCurrentDisplayLine == 0)
 		{
@@ -3824,10 +3926,13 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 			memset(pIoData->tVideoData.pPriorityData, 0, PIXELS_PER_LINE * LINES_PER_SCREEN_PAL);
 		}
 
+		pIoData->bInDrawLine = 1;
+		pIoData->llDisplayListFetchCycle += CYCLES_PER_LINE;
+		AtariIoCycleTimedEventUpdate(pContext);
+
 		AtariIoDrawLine(pContext);
 		AtariIoDrawPlayerMissiles(pContext);
-
-		pIoData->llDisplayListFetchCycle += CYCLES_PER_LINE;
+		pIoData->bInDrawLine = 0;
 	}
 
 	if(pContext->llCycleCounter >= pIoData->llDliCycle)
@@ -4052,7 +4157,6 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 	_6502_SetRom(pContext, 0xd000, 0xd7ff);
 	_6502_SetRom(pContext, 0xd800, 0xffff);
 
-	pIoData->llDrawLineCycle = CYCLES_PER_LINE + 16;
 	pIoData->llDisplayListFetchCycle = CYCLES_PER_LINE;
 	pIoData->llDliCycle = CYCLE_NEVER;
 	pIoData->llSerialOutputNeedDataCycle = CYCLE_NEVER;
