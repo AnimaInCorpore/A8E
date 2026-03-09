@@ -613,8 +613,28 @@
       return debugRuntime.stepOver();
     }
 
+    function stepInstructionAsync() {
+      return debugRuntime.stepInstructionAsync();
+    }
+
+    function stepOverAsync() {
+      return debugRuntime.stepOverAsync();
+    }
+
     function getDebugState() {
       return debugRuntime.getDebugState();
+    }
+
+    function getCounters() {
+      return debugRuntime.getCounters();
+    }
+
+    function getTraceTail(limit) {
+      return debugRuntime.getTraceTail(limit);
+    }
+
+    function runUntilPc(targetPc, opts) {
+      return debugRuntime.runUntilPc(targetPc, opts);
     }
 
     function onDebugStateChange(fn) {
@@ -662,6 +682,9 @@
     const unmountDeviceSlot = memoryRuntime.unmountDeviceSlot;
     const getMountedDiskForDeviceSlot = memoryRuntime.getMountedDiskForDeviceSlot;
     const hasMountedDiskForDeviceSlot = memoryRuntime.hasMountedDiskForDeviceSlot;
+    const readMemoryRuntime = memoryRuntime.readMemory;
+    const readRangeRuntime = memoryRuntime.readRange;
+    const getBankStateRuntime = memoryRuntime.getBankState;
 
     // H: device -- create instance and install CIO hook(s)
     let hDevice = null;
@@ -786,6 +809,189 @@
       renderer.paint(video);
     }
 
+    function getRendererBackend() {
+      return renderer && renderer.backend ? renderer.backend : "unknown";
+    }
+
+    function readMemory(address) {
+      return readMemoryRuntime(address);
+    }
+
+    function readRange(startAddress, length) {
+      return readRangeRuntime(startAddress, length);
+    }
+
+    function getBankState() {
+      return getBankStateRuntime();
+    }
+
+    function createCaptureCanvas(width, height) {
+      if (typeof OffscreenCanvas === "function") {
+        return new OffscreenCanvas(width, height);
+      }
+      if (typeof document !== "undefined" && document.createElement) {
+        const canvasEl = document.createElement("canvas");
+        canvasEl.width = width;
+        canvasEl.height = height;
+        return canvasEl;
+      }
+      return null;
+    }
+
+    function dataUrlToArrayBuffer(dataUrl) {
+      if (!dataUrl || typeof dataUrl !== "string") {
+        return new ArrayBuffer(0);
+      }
+      const comma = dataUrl.indexOf(",");
+      const base64 = comma >= 0 ? dataUrl.substring(comma + 1) : dataUrl;
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i) & 0xff;
+      }
+      return bytes.buffer;
+    }
+
+    function bytesToHex(bytes) {
+      let out = "";
+      for (let i = 0; i < bytes.length; i++) {
+        out += Util.toHex2(bytes[i]);
+      }
+      return out;
+    }
+
+    function normalizeArtifactRange(entry, fallbackLabel) {
+      if (entry === null || entry === undefined) return null;
+      let start = 0;
+      let length = 0;
+      let label = fallbackLabel || "";
+      if (Array.isArray(entry)) {
+        if (entry.length < 2) return null;
+        start = Number(entry[0]);
+        length = Number(entry[1]);
+        if (entry.length > 2 && typeof entry[2] === "string") {
+          label = entry[2];
+        }
+      } else if (typeof entry === "object") {
+        start = Number(entry.start);
+        if (entry.length !== undefined && entry.length !== null) {
+          length = Number(entry.length);
+        } else if (entry.end !== undefined && entry.end !== null) {
+          length = Number(entry.end) - start + 1;
+        }
+        if (typeof entry.label === "string" && entry.label.length) {
+          label = entry.label;
+        }
+      } else {
+        return null;
+      }
+      if (!isFinite(start) || !isFinite(length)) return null;
+      start = start | 0;
+      length = length | 0;
+      if (start < 0 || start > 0xffff || length <= 0) return null;
+      if (length > 0x10000) length = 0x10000;
+      return {
+        label: label || "range_" + Util.toHex4(start),
+        start: start & 0xffff,
+        end: (start + length - 1) & 0xffff,
+        length: length,
+      };
+    }
+
+    async function captureScreenshot() {
+      const captureCanvas = createCaptureCanvas(VIEW_W, VIEW_H);
+      if (!captureCanvas) {
+        throw new Error("A8E: screenshot capture canvas unavailable");
+      }
+      const captureCtx = captureCanvas.getContext("2d", { alpha: false });
+      if (!captureCtx || typeof captureCtx.createImageData !== "function") {
+        throw new Error("A8E: screenshot capture context unavailable");
+      }
+      const imageData = captureCtx.createImageData(VIEW_W, VIEW_H);
+      blitViewportToImageData(video, imageData);
+      captureCtx.putImageData(imageData, 0, 0);
+
+      if (typeof captureCanvas.convertToBlob === "function") {
+        const blob = await captureCanvas.convertToBlob({ type: "image/png" });
+        return {
+          mimeType: "image/png",
+          width: VIEW_W,
+          height: VIEW_H,
+          buffer: await blob.arrayBuffer(),
+        };
+      }
+
+      if (typeof captureCanvas.toBlob === "function") {
+        return new Promise(function (resolve, reject) {
+          captureCanvas.toBlob(
+            function (blob) {
+              if (!blob) {
+                reject(new Error("A8E: screenshot capture failed"));
+                return;
+              }
+              blob
+                .arrayBuffer()
+                .then(function (buffer) {
+                  resolve({
+                    mimeType: "image/png",
+                    width: VIEW_W,
+                    height: VIEW_H,
+                    buffer: buffer,
+                  });
+                })
+                .catch(reject);
+            },
+            "image/png",
+            1.0,
+          );
+        });
+      }
+
+      if (typeof captureCanvas.toDataURL === "function") {
+        return {
+          mimeType: "image/png",
+          width: VIEW_W,
+          height: VIEW_H,
+          buffer: dataUrlToArrayBuffer(captureCanvas.toDataURL("image/png")),
+        };
+      }
+
+      throw new Error("A8E: screenshot capture unsupported in this runtime");
+    }
+
+    function collectArtifacts(options) {
+      const config = options || {};
+      const ranges = Array.isArray(config.ranges) ? config.ranges : [];
+      const labels = Array.isArray(config.labels) ? config.labels : [];
+      const memoryRanges = [];
+      for (let i = 0; i < ranges.length; i++) {
+        const normalized = normalizeArtifactRange(ranges[i], labels[i]);
+        if (!normalized) continue;
+        const bytes = readRangeRuntime(normalized.start, normalized.length);
+        memoryRanges.push({
+          label: normalized.label,
+          start: normalized.start,
+          end: normalized.end,
+          length: bytes.length | 0,
+          hex: bytesToHex(bytes),
+        });
+      }
+
+      const debugState = getDebugState();
+      return {
+        rendererBackend: getRendererBackend(),
+        debugState: debugState,
+        counters: getCounters(),
+        bankState: getBankState(),
+        breakpointHit:
+          debugState && typeof debugState.breakpointHit === "number"
+            ? debugState.breakpointHit & 0xffff
+            : null,
+        traceTail: getTraceTail(config.traceTailLimit || 32),
+        memoryRanges: memoryRanges,
+      };
+    }
+
     function updateDebug(reason) {
       const c = machine.ctx.cpu;
       if (debugEl) {
@@ -854,7 +1060,19 @@
         if (runCycles <= 0) runCycles = frameBudget;
         if (runCycles > cyclesToRun) runCycles = cyclesToRun;
         const startCycle = machine.ctx.cycleCounter | 0;
-        const endCycle = CPU.run(machine.ctx, machine.ctx.cycleCounter + runCycles) | 0;
+        let endCycle = startCycle;
+        try {
+          endCycle = CPU.run(machine.ctx, machine.ctx.cycleCounter + runCycles) | 0;
+        } catch (err) {
+          if (debugRuntime && typeof debugRuntime.onExecutionError === "function") {
+            debugRuntime.onExecutionError(err);
+          }
+          pauseInternal("fault_execution_error");
+          paint();
+          updateDebug("fault_execution_error");
+          cyclesToRun = 0;
+          break;
+        }
         let executed = (endCycle - startCycle) | 0;
         if (executed < 0) executed = 0;
         if (executed > runCycles) executed = runCycles;
@@ -1006,8 +1224,18 @@
       setKeyboardMappingMode: setKeyboardMappingMode,
       setBreakpoints: setBreakpoints,
       stepInstruction: stepInstruction,
+      stepInstructionAsync: stepInstructionAsync,
       stepOver: stepOver,
+      stepOverAsync: stepOverAsync,
       getDebugState: getDebugState,
+      getCounters: getCounters,
+      getTraceTail: getTraceTail,
+      runUntilPc: runUntilPc,
+      readMemory: readMemory,
+      readRange: readRange,
+      getBankState: getBankState,
+      captureScreenshot: captureScreenshot,
+      collectArtifacts: collectArtifacts,
       onDebugStateChange: onDebugStateChange,
       loadOsRom: loadOsRom,
       loadBasicRom: loadBasicRom,
@@ -1020,6 +1248,10 @@
       hasOsRom: hasOsRom,
       hasBasicRom: hasBasicRom,
       isReady: isReady,
+      getRendererBackend: getRendererBackend,
+      isWorkerBackend: function () {
+        return false;
+      },
       isRunning: function () {
         return machine.running;
       },

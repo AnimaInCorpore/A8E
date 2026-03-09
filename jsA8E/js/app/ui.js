@@ -2,6 +2,7 @@
   "use strict";
 
   const Util = window.A8EUtil;
+  let currentApp = null;
 
   async function boot() {
     let canvas = document.getElementById("screen");
@@ -223,6 +224,13 @@
         );
       }
       if (app && app.dispose) app.dispose();
+      currentApp = null;
+      if (
+        window.A8EAutomation &&
+        typeof window.A8EAutomation.detach === "function"
+      ) {
+        window.A8EAutomation.detach();
+      }
     }
 
     if (useWorkerApp) {
@@ -1752,7 +1760,25 @@
         focusCanvas: focusCanvas,
       });
     }
+
+    currentApp = app;
+    if (
+      window.A8EAutomation &&
+      typeof window.A8EAutomation.attach === "function"
+    ) {
+      window.A8EAutomation.attach({
+        app: app,
+        canvas: canvas,
+        focusCanvas: focusCanvas,
+        updateStatus: updateStatus,
+      });
+    }
   }
 
-  window.A8EUI = { boot: boot };
+  window.A8EUI = {
+    boot: boot,
+    getApp: function () {
+      return currentApp;
+    },
+  };
 })();

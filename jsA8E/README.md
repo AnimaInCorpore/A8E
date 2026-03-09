@@ -111,3 +111,62 @@ The assembler panel includes a source-level debugger:
 - **Step** — execute the next instruction and pause again.
 - **Step Over** — execute a subroutine call without stepping into it.
 - **Continue** — resume execution until the next breakpoint.
+
+## Automation API
+
+jsA8E now exposes a stable browser-facing automation surface at `window.A8EAutomation`.
+
+Primary domains:
+
+- `getCapabilities()`, `getSystemState()`
+- `system.*` for lifecycle and wait helpers
+- `media.*` for ROM and disk control
+- `input.*` for keyboard, joystick, and console keys
+- `debug.*` for breakpoints, stepping, counters, memory, trace, source context, and disassembly
+- `dev.*` for HostFS access, assembly, and `runXex(...)`
+- `artifacts.*` for screenshot/artifact capture
+
+Flat compatibility aliases still exist, so earlier calls such as `start()`, `runUntilPc()`, or `captureScreenshot()` continue to work.
+
+Example:
+
+```js
+const api = await window.A8EAutomation.whenReady();
+await api.media.loadRom("os", { base64: "<ATARIXL.ROM base64>" });
+await api.media.loadRom("basic", { base64: "<ATARIBAS.ROM base64>" });
+
+const build = await api.dev.assembleSource({
+  name: "HELLO.ASM",
+  text: ".ORG $2000\nSTART: RTS\n.RUN START\n",
+});
+
+await api.dev.runXex({ build });
+await api.system.waitForTime({ ms: 1000, clock: "real" });
+
+const cpu = await api.debug.getDebugState();
+const sourceContext = await api.debug.getSourceContext({
+  pc: cpu.pc,
+  beforeLines: 5,
+  afterLines: 5,
+});
+const disassembly = await api.debug.disassemble({
+  pc: cpu.pc,
+  beforeInstructions: 8,
+  afterInstructions: 8,
+});
+const screenshot = await api.artifacts.captureScreenshot();
+const artifacts = await api.artifacts.collectArtifacts({
+  ranges: [{ label: "DOSVEC", start: 10, length: 4 }],
+});
+```
+
+`captureScreenshot()` returns PNG data and `collectArtifacts()` returns JSON-friendly state including registers/debug snapshot, counters, bank state, memory dumps, breakpoint hit, and trace tail. Fault stops now carry explicit reasons such as `fault_illegal_opcode` and `fault_execution_error` in debug snapshots and pause events.
+
+Additional helpers for tool-driven input:
+
+- `input.focusDisplay()`
+- `input.keyDown(eventLike)`, `input.keyUp(eventLike)`, `input.tapKey(eventLike, options)`
+- `input.typeText(text, options)`
+- `input.setJoystick({ up, down, left, right, trigger })`
+- `input.setConsoleKeys({ option, select, start })`
+- `input.releaseAllInputs()`

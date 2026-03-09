@@ -557,6 +557,38 @@
         return !!getMountedDiskForDeviceSlot(deviceSlotIndex);
       }
 
+      function readMemory(address) {
+        const addr = (address | 0) & 0xffff;
+        return machine.ctx.ram[addr] & 0xff;
+      }
+
+      function readRange(startAddress, length) {
+        const start = (startAddress | 0) & 0xffff;
+        const size = length | 0;
+        if (size <= 0) return new Uint8Array(0);
+        const out = new Uint8Array(size);
+        const ram = machine.ctx.ram;
+        for (let i = 0; i < size; i++) {
+          out[i] = ram[(start + i) & 0xffff] & 0xff;
+        }
+        return out;
+      }
+
+      function getBankState() {
+        const portB = machine.ctx.sram[IO_PORTB] & 0xff;
+        return {
+          portB: portB,
+          basicEnabled: (portB & 0x02) === 0,
+          osEnabled: (portB & 0x01) !== 0,
+          floatingPointEnabled: (portB & 0x01) !== 0,
+          selfTestEnabled: (portB & 0x80) === 0,
+          basicRomLoaded: !!machine.media.basicRom,
+          osRomLoaded: !!machine.media.osRom,
+          floatingPointRomLoaded: !!machine.media.floatingPointRom,
+          selfTestRomLoaded: !!machine.media.selfTestRom,
+        };
+      }
+
       return {
         setupMemoryMap: setupMemoryMap,
         hardReset: hardReset,
@@ -567,6 +599,9 @@
         unmountDeviceSlot: unmountDeviceSlot,
         getMountedDiskForDeviceSlot: getMountedDiskForDeviceSlot,
         hasMountedDiskForDeviceSlot: hasMountedDiskForDeviceSlot,
+        readMemory: readMemory,
+        readRange: readRange,
+        getBankState: getBankState,
       };
     }
 

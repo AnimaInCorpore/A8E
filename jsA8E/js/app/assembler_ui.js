@@ -257,6 +257,13 @@
     return (value & 0xffff).toString(16).toUpperCase().padStart(4, "0");
   }
 
+  function parseLineNumber(message) {
+    const match = String(message || "").match(/\bline\s+(\d+)\b/i);
+    if (!match) return 0;
+    const lineNo = parseInt(match[1], 10);
+    return isFinite(lineNo) && lineNo > 0 ? lineNo : 0;
+  }
+
   function uint8ArrayToArrayBuffer(bytes) {
     return bytes.buffer.slice(
       bytes.byteOffset,

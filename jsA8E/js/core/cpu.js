@@ -69,6 +69,8 @@
       irqPending: 0,
       breakRun: false,
       instructionCounter: 0,
+      instructionTraceHook: null,
+      illegalOpcodeHook: null,
       // Set by outside modules (Atari IO).
       ioData: null,
       // PC hooks: address -> function(ctx).  Return true to skip normal execution.
@@ -857,12 +859,34 @@
   const OPCODE_ADDRESS_FUNCS = new Array(256);
   const OPCODE_EXEC_FUNCS = new Array(256);
   const OPCODE_BASE_CYCLES = new Uint8Array(256);
+  const OPCODE_IS_UNSUPPORTED = new Uint8Array(256);
 
   for (let i = 0; i < 256; i++) {
     const meta = CODE_TABLE[i];
     OPCODE_ADDRESS_FUNCS[i] = ADDRESS_FUNCS[meta.addressType];
     OPCODE_EXEC_FUNCS[i] = OPCODE_FUNCS[meta.opcodeId];
     OPCODE_BASE_CYCLES[i] = meta.cycles & 0xff;
+    OPCODE_IS_UNSUPPORTED[i] = meta.opcodeId === 56 ? 1 : 0;
+  }
+
+  function onIllegalOpcode(ctx, opcode) {
+    if (!OPCODE_IS_UNSUPPORTED[opcode & 0xff]) return false;
+    const hook = ctx.illegalOpcodeHook;
+    if (typeof hook !== "function") return false;
+    hook(
+      {
+        opcode: opcode & 0xff,
+        pc: ctx.cpu.pc & 0xffff,
+        a: ctx.cpu.a & 0xff,
+        x: ctx.cpu.x & 0xff,
+        y: ctx.cpu.y & 0xff,
+        sp: ctx.cpu.sp & 0xff,
+        p: getPs(ctx) & 0xff,
+        cycles: ctx.cycleCounter >>> 0,
+      },
+      ctx,
+    );
+    return !!ctx.breakRun;
   }
 
   function executeOne(ctx) {
@@ -882,6 +906,7 @@
     }
 
     const opcode = ram[cpu.pc & 0xffff] & 0xff;
+    if (onIllegalOpcode(ctx, opcode)) return;
     cpu.pc = (cpu.pc + 1) & 0xffff;
 
     ctx.accessFunctionOverride = null;
@@ -943,6 +968,27 @@
         }
 
         const opcode = ram[cpu.pc & 0xffff] & 0xff;
+        if (onIllegalOpcode(ctx, opcode)) {
+          if (ctx.breakRun) {
+            ctx.breakRun = false;
+            break;
+          }
+          cycles = ctx.cycleCounter;
+          continue;
+        }
+        const traceHook = ctx.instructionTraceHook;
+        let traceState = null;
+        if (typeof traceHook === "function") {
+          traceState = {
+            pc: cpu.pc & 0xffff,
+            a: cpu.a & 0xff,
+            x: cpu.x & 0xff,
+            y: cpu.y & 0xff,
+            sp: cpu.sp & 0xff,
+            p: getPs(ctx) & 0xff,
+            cycles: ctx.cycleCounter >>> 0,
+          };
+        }
         let nextEvent = cycleTarget;
         if (
           ctx.ioCycleTimedEventFunction &&
@@ -986,6 +1032,9 @@
 
         ctx.cycleCounter += OPCODE_BASE_CYCLES[opcode];
         ctx.instructionCounter = (ctx.instructionCounter + 1) >>> 0;
+        if (traceState && typeof traceHook === "function") {
+          traceHook(traceState, ctx);
+        }
         cycles = ctx.cycleCounter;
       } else {
         let stallTarget = ctx.stallCycleCounter;

@@ -617,6 +617,8 @@
     let disposed = false;
     let ready = false;
     const pending = [];
+    const pendingRequests = new Map();
+    let requestSeq = 1;
     const debugListeners = new Set();
     let keyboardMappingMode =
       opts && opts.keyboardMappingMode === "original"
@@ -635,7 +637,7 @@
 
     function cloneDebugState(raw) {
       if (!raw || typeof raw !== "object") return null;
-      return {
+      const out = {
         reason: raw.reason || "update",
         running: !!raw.running,
         pc: (raw.pc | 0) & 0xffff,
@@ -644,11 +646,21 @@
         y: (raw.y | 0) & 0xff,
         sp: (raw.sp | 0) & 0xff,
         p: (raw.p | 0) & 0xff,
+        cycleCounter: raw.cycleCounter >>> 0,
+        instructionCounter: raw.instructionCounter >>> 0,
         breakpointHit:
           typeof raw.breakpointHit === "number"
             ? (raw.breakpointHit | 0) & 0xffff
             : undefined,
       };
+      if (typeof raw.stopAddress === "number")
+        {out.stopAddress = (raw.stopAddress | 0) & 0xffff;}
+      if (typeof raw.faultAddress === "number")
+        {out.faultAddress = (raw.faultAddress | 0) & 0xffff;}
+      if (typeof raw.opcode === "number") out.opcode = (raw.opcode | 0) & 0xff;
+      if (raw.faultType) out.faultType = String(raw.faultType);
+      if (raw.faultMessage) out.faultMessage = String(raw.faultMessage);
+      return out;
     }
 
     function emitDebugState(raw) {
@@ -693,6 +705,46 @@
       sendCommand(cmd, payload, transfer || null);
     }
 
+    function rejectPendingRequests(message) {
+      pendingRequests.forEach(function (entry) {
+        try {
+          entry.reject(new Error(message || "A8E worker request failed"));
+        } catch {
+          // ignore
+        }
+      });
+      pendingRequests.clear();
+    }
+
+    function sendRequest(cmd, payload, transfer) {
+      if (disposed) {
+        return Promise.reject(new Error("A8E worker app is disposed"));
+      }
+      const id = requestSeq++;
+      const msg = {
+        type: "req",
+        id: id,
+        cmd: cmd,
+        payload: payload || null,
+      };
+      return new Promise(function (resolve, reject) {
+        pendingRequests.set(id, {
+          resolve: resolve,
+          reject: reject,
+        });
+        if (!ready) {
+          pending.push({ msg: msg, transfer: transfer || null });
+          return;
+        }
+        try {
+          postRaw(msg, transfer || null);
+        } catch (err) {
+          pendingRequests.delete(id);
+          reject(err);
+        }
+      });
+    }
+
     worker.onmessage = function (e) {
       if (disposed) return;
       const data = e && e.data ? e.data : null;
@@ -735,6 +787,23 @@
         return;
       }
 
+      if (data.type === "response") {
+        const id = data.id | 0;
+        const pendingRequest = pendingRequests.get(id) || null;
+        if (!pendingRequest) return;
+        pendingRequests.delete(id);
+        if (data.ok === false) {
+          pendingRequest.reject(
+            new Error(data.error || "A8E worker request failed"),
+          );
+          return;
+        }
+        pendingRequest.resolve(
+          data.result === undefined ? null : data.result,
+        );
+        return;
+      }
+
       if (data.type === "error") {
         console.error("A8E worker error:", data.message || "unknown error");
       }
@@ -742,6 +811,7 @@
 
     worker.onerror = function (err) {
       if (disposed) return;
+      rejectPendingRequests("A8E worker failed");
       console.error("A8E worker failed:", err);
     };
 
@@ -813,8 +883,70 @@
         sendCommand("stepOver");
         return true;
       },
+      stepInstructionAsync: function () {
+        return sendRequest("stepInstruction");
+      },
+      stepOverAsync: function () {
+        return sendRequest("stepOver");
+      },
       getDebugState: function () {
         return state.debugState ? Object.assign({}, state.debugState) : null;
+      },
+      getCounters: function () {
+        return sendRequest("getCounters");
+      },
+      getTraceTail: function (limit) {
+        return sendRequest("getTraceTail", {
+          limit: limit | 0,
+        });
+      },
+      runUntilPc: function (targetPc, opts) {
+        const payload = Object.assign({}, opts || {});
+        if (targetPc !== null && targetPc !== undefined) {
+          payload.targetPc = targetPc | 0;
+        }
+        return sendRequest("runUntilPc", payload);
+      },
+      readMemory: function (address) {
+        return sendRequest("readMemory", {
+          address: address | 0,
+        }).then(function (result) {
+          return result && typeof result.value === "number"
+            ? (result.value | 0) & 0xff
+            : 0;
+        });
+      },
+      readRange: function (start, length) {
+        return sendRequest("readRange", {
+          start: start | 0,
+          length: length | 0,
+        }).then(function (result) {
+          return toUint8(result && result.buffer ? result.buffer : null);
+        });
+      },
+      getBankState: function () {
+        return sendRequest("getBankState");
+      },
+      getMountedDiskForDeviceSlot: function (slot) {
+        return sendRequest("getMountedDiskForDeviceSlot", {
+          slot: slot | 0,
+        });
+      },
+      captureScreenshot: function () {
+        return sendRequest("captureScreenshot").then(function (result) {
+          if (
+            result &&
+            result.buffer &&
+            result.buffer instanceof ArrayBuffer
+          ) {
+            result.bytes = new Uint8Array(result.buffer);
+            delete result.buffer;
+          }
+          return result || null;
+        });
+      },
+      collectArtifacts: function (opts) {
+        return sendRequest("collectArtifacts", opts || null);
       },
       onDebugStateChange: function (fn) {
         if (typeof fn !== "function") return function () {};
@@ -858,9 +990,6 @@
         if (idx >= 0 && idx < state.mounted.length) state.mounted[idx] = false;
         sendCommand("unmountDeviceSlot", { slot: idx });
       },
-      getMountedDiskForDeviceSlot: function () {
-        return null;
-      },
       hasMountedDiskForDeviceSlot: function (slot) {
         const idx = slot | 0;
         if (idx < 0 || idx >= state.mounted.length) return false;
@@ -888,9 +1017,13 @@
       getRendererBackend: function () {
         return state.rendererBackend;
       },
+      isWorkerBackend: function () {
+        return true;
+      },
       dispose: function () {
         if (disposed) return;
         disposed = true;
+        rejectPendingRequests("A8E worker app disposed");
         try {
           sendCommand("dispose");
         } catch {
@@ -938,10 +1071,48 @@
       {app.stepInstruction = function () { return false; };}
     if (app && typeof app.stepOver !== "function")
       {app.stepOver = function () { return false; };}
+    if (app && typeof app.stepInstructionAsync !== "function")
+      {app.stepInstructionAsync = function () {
+        return {
+          ok: false,
+          reason: "unsupported",
+          debugState: app.getDebugState ? app.getDebugState() : null,
+        };
+      };}
+    if (app && typeof app.stepOverAsync !== "function")
+      {app.stepOverAsync = function () {
+        return {
+          ok: false,
+          reason: "unsupported",
+          debugState: app.getDebugState ? app.getDebugState() : null,
+        };
+      };}
     if (app && typeof app.getDebugState !== "function")
       {app.getDebugState = function () { return null; };}
+    if (app && typeof app.getCounters !== "function")
+      {app.getCounters = function () { return null; };}
+    if (app && typeof app.getTraceTail !== "function")
+      {app.getTraceTail = function () { return []; };}
+    if (app && typeof app.runUntilPc !== "function")
+      {app.runUntilPc = function () { return { ok: false, reason: "unsupported" }; };}
+    if (app && typeof app.readMemory !== "function")
+      {app.readMemory = function () { return 0; };}
+    if (app && typeof app.readRange !== "function")
+      {app.readRange = function () { return new Uint8Array(0); };}
+    if (app && typeof app.getBankState !== "function")
+      {app.getBankState = function () { return null; };}
+    if (app && typeof app.getMountedDiskForDeviceSlot !== "function")
+      {app.getMountedDiskForDeviceSlot = function () { return null; };}
+    if (app && typeof app.captureScreenshot !== "function")
+      {app.captureScreenshot = function () {
+        return Promise.reject(new Error("A8E screenshot capture unavailable"));
+      };}
+    if (app && typeof app.collectArtifacts !== "function")
+      {app.collectArtifacts = function () { return null; };}
     if (app && typeof app.onDebugStateChange !== "function")
       {app.onDebugStateChange = function () { return function () {}; };}
+    if (app && typeof app.isWorkerBackend !== "function")
+      {app.isWorkerBackend = function () { return false; };}
     return app;
   }
 

@@ -69,9 +69,24 @@
     }
   }
 
+  function postResponse(id, ok, result, error, transfer) {
+    const msg = {
+      type: "response",
+      id: id | 0,
+      ok: !!ok,
+    };
+    if (ok) msg.result = result === undefined ? null : result;
+    else msg.error = String(error || "unknown error");
+    if (transfer && transfer.length) {
+      self.postMessage(msg, transfer);
+      return;
+    }
+    self.postMessage(msg);
+  }
+
   function cloneDebugState(raw) {
     if (!raw || typeof raw !== "object") return null;
-    return {
+    const out = {
       reason: raw.reason || "update",
       running: !!raw.running,
       pc: (raw.pc | 0) & 0xffff,
@@ -80,11 +95,21 @@
       y: (raw.y | 0) & 0xff,
       sp: (raw.sp | 0) & 0xff,
       p: (raw.p | 0) & 0xff,
+      cycleCounter: raw.cycleCounter >>> 0,
+      instructionCounter: raw.instructionCounter >>> 0,
       breakpointHit:
         typeof raw.breakpointHit === "number"
           ? (raw.breakpointHit | 0) & 0xffff
           : undefined,
     };
+    if (typeof raw.stopAddress === "number")
+      {out.stopAddress = (raw.stopAddress | 0) & 0xffff;}
+    if (typeof raw.faultAddress === "number")
+      {out.faultAddress = (raw.faultAddress | 0) & 0xffff;}
+    if (typeof raw.opcode === "number") out.opcode = (raw.opcode | 0) & 0xff;
+    if (raw.faultType) out.faultType = String(raw.faultType);
+    if (raw.faultMessage) out.faultMessage = String(raw.faultMessage);
+    return out;
   }
 
   function postDebugState(snapshot) {
@@ -441,6 +466,25 @@
 
     while (pendingCommands.length) {
       const c = pendingCommands.shift();
+      if (!c) continue;
+      if (c.type === "req") {
+        handleRequest(c.cmd, c.payload)
+          .then(function (result) {
+            const transfer = [];
+            if (
+              result &&
+              result.buffer &&
+              result.buffer instanceof ArrayBuffer
+            ) {
+              transfer.push(result.buffer);
+            }
+            postResponse(c.id | 0, true, result, null, transfer);
+          })
+          .catch(function (err2) {
+            postResponse(c.id | 0, false, null, err2, null);
+          });
+        continue;
+      }
       try {
         handleCommand(c.cmd, c.payload);
       } catch (err2) {
@@ -609,6 +653,86 @@
     if (shouldPostState) postState();
   }
 
+  async function handleRequest(cmd, payload) {
+    if (!app) throw new Error("A8E worker app is not initialized");
+    const data = payload || {};
+    switch (cmd) {
+      case "stepInstruction":
+        if (typeof app.stepInstructionAsync === "function") {
+          return app.stepInstructionAsync();
+        }
+        return {
+          ok: !!(app.stepInstruction && app.stepInstruction()),
+          debugState:
+            typeof app.getDebugState === "function" ? app.getDebugState() : null,
+        };
+      case "stepOver":
+        if (typeof app.stepOverAsync === "function") {
+          return app.stepOverAsync();
+        }
+        return {
+          ok: !!(app.stepOver && app.stepOver()),
+          debugState:
+            typeof app.getDebugState === "function" ? app.getDebugState() : null,
+        };
+      case "getCounters":
+        if (typeof app.getCounters === "function") return app.getCounters();
+        return null;
+      case "getTraceTail":
+        if (typeof app.getTraceTail === "function") {
+          return app.getTraceTail(data.limit | 0);
+        }
+        return [];
+      case "runUntilPc":
+        if (typeof app.runUntilPc === "function") {
+          const hasTarget =
+            data.targetPc !== null && data.targetPc !== undefined;
+          return app.runUntilPc(hasTarget ? data.targetPc | 0 : null, data);
+        }
+        return { ok: false, reason: "unsupported" };
+      case "readMemory":
+        if (typeof app.readMemory === "function") {
+          return {
+            value: app.readMemory(data.address | 0),
+          };
+        }
+        return { value: 0 };
+      case "readRange":
+        if (typeof app.readRange === "function") {
+          const bytes = app.readRange(data.start | 0, data.length | 0);
+          return {
+            buffer: bytes.buffer.slice(
+              bytes.byteOffset,
+              bytes.byteOffset + bytes.byteLength,
+            ),
+          };
+        }
+        return {
+          buffer: new ArrayBuffer(0),
+        };
+      case "getBankState":
+        if (typeof app.getBankState === "function") return app.getBankState();
+        return null;
+      case "getMountedDiskForDeviceSlot":
+        if (typeof app.getMountedDiskForDeviceSlot === "function") {
+          return app.getMountedDiskForDeviceSlot(data.slot | 0);
+        }
+        return null;
+      case "captureScreenshot":
+        if (typeof app.captureScreenshot === "function") {
+          return app.captureScreenshot();
+        }
+        return null;
+      case "collectArtifacts":
+        if (typeof app.collectArtifacts === "function") {
+          return app.collectArtifacts(data);
+        }
+        return null;
+      default:
+        throw new Error("Unknown worker request: " + cmd);
+    }
+  }
+
   self.onmessage = function (e) {
     const msg = e && e.data ? e.data : null;
     if (!msg || !msg.type) return;
@@ -630,6 +754,34 @@
       } catch (err2) {
         notifyError(err2);
       }
+      return;
+    }
+
+    if (msg.type === "req") {
+      if (!initDone) {
+        pendingCommands.push({
+          type: "req",
+          id: msg.id | 0,
+          cmd: msg.cmd || "",
+          payload: msg.payload || null,
+        });
+        return;
+      }
+      handleRequest(msg.cmd || "", msg.payload || null)
+        .then(function (result) {
+          const transfer = [];
+          if (
+            result &&
+            result.buffer &&
+            result.buffer instanceof ArrayBuffer
+          ) {
+            transfer.push(result.buffer);
+          }
+          postResponse(msg.id | 0, true, result, null, transfer);
+        })
+        .catch(function (err2) {
+          postResponse(msg.id | 0, false, null, err2, null);
+        });
     }
   };
 })();

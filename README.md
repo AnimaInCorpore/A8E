@@ -59,6 +59,12 @@ For an online demo of the jsA8E version, visit https://jsa8e.anides.de/
 
 The latest unreleased development version is available at https://dev.jsa8e.anides.de/
 
+## Automation
+
+The browser port includes a stable automation surface at `window.A8EAutomation`.
+
+It is intended to be the canonical browser-first control surface for external automation, debugger/introspection workflows, artifact capture, HostFS access, assembler-driven development flows, and future higher-level harnesses. The public surface is grouped into `system`, `media`, `input`, `debug`, `dev`, `artifacts`, and `events` while keeping the earlier flat aliases for compatibility. See the [jsA8E README](jsA8E/README.md) for the current API details.
+
 ## Quick Start (Native)
 
 Building requires **SDL 2** development headers. See the [A8E README](A8E/README.md) for full build instructions covering Windows (MSVC, MinGW), macOS (Homebrew), and Linux.

@@ -2,7 +2,7 @@
 
 - Files: `jsA8E/emulator_worker.js`, `jsA8E/js/core/app_proxy.js`
 - Purpose: run emulation away from the main thread and exchange events/data with UI/audio.
-- Status: verified on 2026-03-05 (`implemented`).
-- Notes: worker messaging transports control/state, hostfs snapshots, and audio bridge status between runtime parts; rendering is driven through OffscreenCanvas with fallback to legacy in-thread mode when unsupported. Debugger protocol now includes runtime debug snapshots (`debugState`) and control commands for assembler debugging (`setBreakpoints`, `stepInstruction`, `stepOver`) alongside regular run/pause/reset flow.
+- Status: verified on 2026-03-09 (`implemented`).
+- Notes: worker messaging transports control/state, hostfs snapshots, and audio bridge status between runtime parts; rendering is driven through OffscreenCanvas with fallback to legacy in-thread mode when unsupported. The proxy/worker boundary now supports request/response RPC in addition to fire-and-forget control messages so external automation can fetch structured results from worker mode without special cases. Debugger protocol includes runtime debug snapshots (`debugState`) and control commands for assembler debugging (`setBreakpoints`, `stepInstruction`, `stepOver`) alongside regular run/pause/reset flow, plus automation-oriented calls for `getCounters`, `getTraceTail`, `runUntilPc`, `readMemory`, `readRange`, `getBankState`, `getMountedDiskForDeviceSlot`, `captureScreenshot`, and `collectArtifacts`. Worker debug snapshots now preserve pause/fault metadata (`stopAddress`, `faultType`, `faultMessage`, `faultAddress`, `opcode`) so `window.A8EAutomation` sees the same stop semantics in worker mode as in the main-thread runtime. Binary return values are normalized so falsy payloads such as `0` or `false` survive the round-trip.
 - Issues: none tracked.
-- Todo: log protocol changes whenever message schema changes.
+- Todo: log protocol changes whenever message schema changes; keep new RPC result payloads backward-compatible when adding worker methods because `window.A8EAutomation` depends on them in both worker and main-thread mode.

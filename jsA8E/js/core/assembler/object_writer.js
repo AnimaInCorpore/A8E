@@ -15,7 +15,7 @@
     }
     const out = [];
     for (let i = 0; i < source.length; i++) {
-      let cp = source.charCodeAt(i);
+      const cp = source.charCodeAt(i);
       if (cp <= 0x7f) {
         out.push(cp);
       } else if (cp <= 0x7ff) {

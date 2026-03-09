@@ -73,21 +73,23 @@ This method produces a standalone `.exe` without external DLL dependencies.
 
 #### Prerequisites
 - Install Visual Studio 2022 with the "Desktop development with C++" workload, or the standalone Build Tools.
-- Install vcpkg and SDL2:
+- Install an external `vcpkg` checkout and SDL2. Do not clone `vcpkg` into this repository:
   ```powershell
-  git clone https://github.com/microsoft/vcpkg C:\dev\vcpkg
-  cd C:\dev\vcpkg
+  git clone https://github.com/microsoft/vcpkg C:\dev\external\vcpkg
+  cd C:\dev\external\vcpkg
   .\bootstrap-vcpkg.bat
   .\vcpkg install sdl2:x64-windows-static
   ```
   > **Note:** `vcpkg install sdl2:x64-windows-static` builds SDL2 from source and may take a few minutes.
+  >
+  > Any external path works; the examples below use `C:\dev\external\vcpkg`.
 
 #### Build (PowerShell)
 Run from the repository root:
 ```powershell
 cmake -S . -B build/msvc `
   -G "Visual Studio 17 2022" -A x64 `
-  -DCMAKE_TOOLCHAIN_FILE=C:\dev\vcpkg\scripts\buildsystems\vcpkg.cmake `
+  -DCMAKE_TOOLCHAIN_FILE=C:\dev\external\vcpkg\scripts\buildsystems\vcpkg.cmake `
   -DVCPKG_TARGET_TRIPLET=x64-windows-static `
   -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded$<$<CONFIG:Debug>:Debug>"
 
