@@ -16,6 +16,22 @@ The original codebase is by Sascha Springer (2004). Each subproject has its own 
 | `A8E/` | [Native C/SDL code and CMake project](A8E/README.md) |
 | `jsA8E/` | [Browser app (`index.html` + JavaScript modules + shaders)](jsA8E/README.md) |
 
+## Current Emulation Status
+
+Recent raster-timing work landed in both cores:
+
+- Visible scanlines now render playfield/background state on the per-color-clock path.
+- Visible player/missile output is interleaved on the scanline timing path in both implementations.
+- Visible blank/background-only lines now spend the initial color-burst clocks invisibly before drawing the live-read remainder of the line.
+
+The project is still not fully legacy-compliant. The main remaining timing gaps are:
+
+- border/playfield clock geometry
+- non-wide `HSCROL` fetch timing
+- remaining raster verification against real content
+
+For the detailed checklist and current compliance notes, see [COLOR_CLOCK_ACCURACY.md](COLOR_CLOCK_ACCURACY.md).
+
 ## ROM Requirements
 
 Both implementations require the following ROM dumps (not included):

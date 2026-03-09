@@ -9,6 +9,16 @@ Browser-based Atari 800 XL emulator port of the native C/SDL `A8E` implementatio
 - If WebGL is unavailable (or shader/program init fails), rendering falls back to 2D canvas.
 - Audio uses `AudioWorklet` when available, with `ScriptProcessorNode` fallback.
 
+## Current Emulation Status
+
+The current JS renderer includes the recent raster-timing pass:
+
+- visible playfield/background rendering is on the per-color-clock path
+- visible player/missile output is interleaved on the scanline timing path
+- visible blank/background-only lines now spend the leading color-burst clocks invisibly before drawing the rest of the line
+
+The browser port still has open timing work, mainly around border/playfield geometry, non-wide `HSCROL` fetch timing, and broader regression verification against raster-effect content. The current checklist lives in [../COLOR_CLOCK_ACCURACY.md](../COLOR_CLOCK_ACCURACY.md).
+
 ## Run
 
 Serve from HTTP (not `file://`) because shader and optional ROM auto-load use `fetch()`:

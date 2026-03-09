@@ -22,6 +22,16 @@ To run A8E, the following ROM files must be present in your current working dire
 * `ATARIXL.ROM` (16 KB)
 * `ATARIBAS.ROM` (8 KB)
 
+## Current Emulation Status
+
+The native core includes the current raster-timing pass:
+
+- visible scanlines draw playfield/background state on the per-color-clock path
+- visible player/missile output is interleaved on the scanline timing path
+- visible blank/background-only lines spend the leading color-burst clocks invisibly before drawing the rest of the line
+
+The remaining known timing gaps are mainly border/playfield geometry and non-wide `HSCROL` fetch timing, plus continued regression verification against real raster-effect content. See [../COLOR_CLOCK_ACCURACY.md](../COLOR_CLOCK_ACCURACY.md) for the detailed status.
+
 **Command Line:**
 ```text
 A8E [options] [disk.atr|program.xex]
