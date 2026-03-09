@@ -678,6 +678,9 @@
       case "getCounters":
         if (typeof app.getCounters === "function") return app.getCounters();
         return null;
+      case "getDebugState":
+        if (typeof app.getDebugState === "function") return app.getDebugState();
+        return null;
       case "getTraceTail":
         if (typeof app.getTraceTail === "function") {
           return app.getTraceTail(data.limit | 0);

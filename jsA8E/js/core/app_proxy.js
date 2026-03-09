@@ -892,6 +892,13 @@
       getDebugState: function () {
         return state.debugState ? Object.assign({}, state.debugState) : null;
       },
+      getDebugStateAsync: function () {
+        return sendRequest("getDebugState").then(function (result) {
+          return result && typeof result === "object"
+            ? cloneDebugState(result)
+            : null;
+        });
+      },
       getCounters: function () {
         return sendRequest("getCounters");
       },

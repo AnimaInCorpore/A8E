@@ -137,13 +137,14 @@ await api.media.loadRom("basic", { base64: "<ATARIBAS.ROM base64>" });
 
 const build = await api.dev.assembleSource({
   name: "HELLO.ASM",
-  text: ".ORG $2000\nSTART: RTS\n.RUN START\n",
+  text: ".ORG $2000\nSTART: JMP START\n.RUN START\n",
 });
 
+await api.debug.setBreakpoints([0x2000]);
 await api.dev.runXex({ build });
-await api.system.waitForTime({ ms: 1000, clock: "real" });
+const stop = await api.debug.waitForBreakpoint({ timeoutMs: 5000 });
 
-const cpu = await api.debug.getDebugState();
+const cpu = stop.debugState;
 const sourceContext = await api.debug.getSourceContext({
   pc: cpu.pc,
   beforeLines: 5,

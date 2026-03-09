@@ -215,6 +215,17 @@
     return currentApp;
   }
 
+  async function readAppDebugState(app) {
+    if (!app) return null;
+    if (typeof app.getDebugStateAsync === "function") {
+      return Promise.resolve(app.getDebugStateAsync());
+    }
+    if (typeof app.getDebugState === "function") {
+      return Promise.resolve(app.getDebugState());
+    }
+    return null;
+  }
+
   function getCurrentHostFs() {
     if (
       !currentApp ||
@@ -1524,21 +1535,18 @@
       const app = await getApp();
       if (typeof currentFocusCanvas === "function") currentFocusCanvas(false);
       app.start();
-      return typeof app.getDebugState === "function" ? app.getDebugState() : null;
+      return readAppDebugState(app);
     },
     pause: async function () {
       const app = await getApp();
       app.pause();
-      return typeof app.getDebugState === "function" ? app.getDebugState() : null;
+      return readAppDebugState(app);
     },
     reset: async function (options) {
       const app = await getApp();
       app.reset();
       notifyStatus();
-      const state =
-        typeof app.getDebugState === "function"
-          ? await Promise.resolve(app.getDebugState())
-          : null;
+      const state = await readAppDebugState(app);
       if (options && options.kind) {
         return {
           requestedKind: String(options.kind),
@@ -1601,7 +1609,7 @@
       }
       return {
         ok: !!(app.stepInstruction && app.stepInstruction()),
-        debugState: typeof app.getDebugState === "function" ? app.getDebugState() : null,
+        debugState: await readAppDebugState(app),
         counters: typeof app.getCounters === "function" ? app.getCounters() : null,
         traceTail: typeof app.getTraceTail === "function" ? app.getTraceTail(32) : [],
       };
@@ -1613,7 +1621,7 @@
       }
       return {
         ok: !!(app.stepOver && app.stepOver()),
-        debugState: typeof app.getDebugState === "function" ? app.getDebugState() : null,
+        debugState: await readAppDebugState(app),
         counters: typeof app.getCounters === "function" ? app.getCounters() : null,
         traceTail: typeof app.getTraceTail === "function" ? app.getTraceTail(32) : [],
       };
@@ -1649,10 +1657,7 @@
     },
     getDebugState: async function () {
       const app = await getApp();
-      const state =
-        typeof app.getDebugState === "function"
-          ? await Promise.resolve(app.getDebugState())
-          : null;
+      const state = await readAppDebugState(app);
       const cloned = cloneDebugState(state);
       if (cloned) lastDebugState = cloned;
       return cloned;

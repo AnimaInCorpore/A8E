@@ -6,3 +6,4 @@ node_modules/
 .DS_Store
 ATARIBAS.ROM
 ATARIXL.ROM
+.cache/
