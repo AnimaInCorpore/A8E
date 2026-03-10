@@ -114,13 +114,6 @@
       if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 1)
         {io.nextDisplayListLine = 8;}
 
-      // VBI around scanline 248 (VCOUNT=124)
-      if (io.video.currentDisplayLine === 248) {
-        ram[IO_NMIRES_NMIST] &= ~NMI_DLI;
-        ram[IO_NMIRES_NMIST] |= NMI_VBI;
-        if (sram[IO_NMIEN] & NMI_VBI) CPU.nmi(ctx);
-      }
-
       // Playfield DMA active?
       if (sram[IO_DMACTL] & 0x20) {
         if (io.video.currentDisplayLine === io.nextDisplayListLine) {
@@ -163,7 +156,7 @@
           // DLI scheduling
           if (cmd & 0x80) {
             io.dliCycle =
-              ctx.cycleCounter +
+              io.clock +
               (io.nextDisplayListLine - io.video.currentDisplayLine - 1) *
                 CYCLES_PER_LINE;
             cycleTimedEventUpdate(ctx);
@@ -200,6 +193,34 @@
       }
     }
 
+    function advanceScanline(ctx) {
+      const io = ctx.ioData;
+      const ram = ctx.ram;
+      const sram = ctx.sram;
+
+      io.video.currentDisplayLine++;
+
+      if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 1) {
+        io.dliCycle = CYCLE_NEVER;
+      }
+
+      if (io.video.currentDisplayLine >= LINES_PER_SCREEN_PAL) {
+        io.video.currentDisplayLine = 0;
+        io.nextDisplayListLine = 8;
+        io.currentDisplayListCommand = 0;
+        io.video.verticalScrollOffset = 0;
+        io.videoOut.priority.fill(0);
+      }
+
+      ram[IO_VCOUNT] = (io.video.currentDisplayLine >> 1) & 0xff;
+      ram[IO_NMIRES_NMIST] &= ~NMI_DLI;
+
+      if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 2) {
+        ram[IO_NMIRES_NMIST] |= NMI_VBI;
+        if (sram[IO_NMIEN] & NMI_VBI) CPU.nmi(ctx);
+      }
+    }
+
     function ioCycleTimedEvent(ctx) {
       const io = ctx.ioData;
       const ram = ctx.ram;
@@ -209,80 +230,75 @@
         if (io.video.currentDisplayLine === 0) {
           io.clock = io.displayListFetchCycle - CYCLES_PER_LINE;
         }
-        io.video.currentDisplayLine++;
-        if (io.video.currentDisplayLine >= LINES_PER_SCREEN_PAL) {
-          io.video.currentDisplayLine = 0;
-          io.nextDisplayListLine = 8;
-        }
-        ram[IO_VCOUNT] = (io.video.currentDisplayLine >> 1) & 0xff;
         fetchLine(ctx);
-
-        if (io.video.currentDisplayLine === 1) io.videoOut.priority.fill(0);
         io.inDrawLine = true;
-        io.displayListFetchCycle += CYCLES_PER_LINE;
         cycleTimedEventUpdate(ctx);
 
         try {
           drawLine(ctx);
           if (!io.drawLine.playerMissileInterleaved) drawPlayerMissiles(ctx);
+          io.displayListFetchCycle += CYCLES_PER_LINE;
+          advanceScanline(ctx);
         } finally {
           io.inDrawLine = false;
         }
       }
 
-      if (ctx.cycleCounter >= io.dliCycle) {
+      const eff = io.inDrawLine ? io.clock : ctx.cycleCounter;
+
+      if (eff >= io.dliCycle) {
         ram[IO_NMIRES_NMIST] &= ~NMI_VBI;
         ram[IO_NMIRES_NMIST] |= NMI_DLI;
         if (sram[IO_NMIEN] & NMI_DLI) CPU.nmi(ctx);
         io.dliCycle = CYCLE_NEVER;
       }
 
-      if (ctx.cycleCounter >= io.serialOutputTransmissionDoneCycle) {
+      if (eff >= io.serialOutputTransmissionDoneCycle) {
         ram[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
         if (sram[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE)
           {CPU.irq(ctx);}
         io.serialOutputTransmissionDoneCycle = CYCLE_NEVER;
       }
 
-      if (ctx.cycleCounter >= io.serialOutputNeedDataCycle) {
+      if (eff >= io.serialOutputNeedDataCycle) {
         ram[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_DATA_NEEDED;
         if (sram[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_DATA_NEEDED) CPU.irq(ctx);
         io.serialOutputNeedDataCycle = CYCLE_NEVER;
       }
 
-      if (ctx.cycleCounter >= io.serialInputDataReadyCycle) {
+      if (eff >= io.serialInputDataReadyCycle) {
         ram[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_INPUT_DATA_READY;
         if (sram[IO_IRQEN_IRQST] & IRQ_SERIAL_INPUT_DATA_READY) CPU.irq(ctx);
         io.serialInputDataReadyCycle = CYCLE_NEVER;
       }
 
-      if (ctx.cycleCounter >= io.timer1Cycle) {
+      if (eff >= io.timer1Cycle) {
         const p1 = pokeyTimerPeriodCpuCycles(ctx, 1);
         ram[IO_IRQEN_IRQST] &= ~IRQ_TIMER_1;
         if (sram[IO_IRQEN_IRQST] & IRQ_TIMER_1) CPU.irq(ctx);
         if (p1 === 0) io.timer1Cycle = CYCLE_NEVER;
         else {
-          while (io.timer1Cycle <= ctx.cycleCounter) io.timer1Cycle += p1;
+          while (io.timer1Cycle <= eff) io.timer1Cycle += p1;
         }
       }
 
-      if (ctx.cycleCounter >= io.timer2Cycle) {
+      if (eff >= io.timer2Cycle) {
         const p2 = pokeyTimerPeriodCpuCycles(ctx, 2);
         ram[IO_IRQEN_IRQST] &= ~IRQ_TIMER_2;
         if (sram[IO_IRQEN_IRQST] & IRQ_TIMER_2) CPU.irq(ctx);
         if (p2 === 0) io.timer2Cycle = CYCLE_NEVER;
         else {
-          while (io.timer2Cycle <= ctx.cycleCounter) io.timer2Cycle += p2;
+          while (io.timer2Cycle <= eff) io.timer2Cycle += p2;
         }
       }
 
-      if (ctx.cycleCounter >= io.timer4Cycle) {
+      if (eff >= io.timer4Cycle) {
         const p4 = pokeyTimerPeriodCpuCycles(ctx, 4);
         ram[IO_IRQEN_IRQST] &= ~IRQ_TIMER_4;
         if (sram[IO_IRQEN_IRQST] & IRQ_TIMER_4) CPU.irq(ctx);
         if (p4 === 0) io.timer4Cycle = CYCLE_NEVER;
         else {
-          while (io.timer4Cycle <= ctx.cycleCounter) io.timer4Cycle += p4;
+          while (io.timer4Cycle <= eff) io.timer4Cycle += p4;
         }
       }
 

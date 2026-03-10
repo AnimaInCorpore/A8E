@@ -44,6 +44,11 @@
       return checksum & 0xff;
     }
 
+    function effectiveEventCycle(ctx) {
+      const io = ctx.ioData;
+      return io.inDrawLine ? io.clock : ctx.cycleCounter;
+    }
+
     function queueSerinResponse(ctx, now, size) {
       const io = ctx.ioData;
       io.sioInSize = size | 0;
@@ -310,7 +315,7 @@
 
     function seroutWrite(ctx, value) {
       const io = ctx.ioData;
-      const now = ctx.cycleCounter;
+      const now = effectiveEventCycle(ctx);
 
       io.serialOutputNeedDataCycle = now + SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
       cycleTimedEventUpdate(ctx);
@@ -402,7 +407,7 @@
 
         if ((io.sioInSize | 0) > 0) {
           io.serialInputDataReadyCycle =
-            ctx.cycleCounter + SERIAL_INPUT_DATA_READY_CYCLES;
+            effectiveEventCycle(ctx) + SERIAL_INPUT_DATA_READY_CYCLES;
           cycleTimedEventUpdate(ctx);
         } else {
           io.sioInIndex = 0;

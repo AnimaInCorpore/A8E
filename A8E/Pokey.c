@@ -106,6 +106,13 @@ typedef struct
 	float dc_block_y1;
 } PokeyState_t;
 
+static u64 PokeyEventReferenceCycle(_6502_Context_t *pContext)
+{
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+
+	return pIoData->bInDrawLine ? pIoData->llCycle : pContext->llCycleCounter;
+}
+
 static u32 PokeyAudio_ClampU32(u32 v, u32 lo, u32 hi)
 {
 	if(hi < lo)
@@ -1495,6 +1502,7 @@ u8 *Pokey_STIMER_KBCODE(_6502_Context_t *pContext, u8 *pValue)
 	if(pValue)
 	{
 		IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+		u64 llNow;
 		u64 period;
 
 		Pokey_Sync(pContext, pContext->llCycleCounter);
@@ -1538,14 +1546,16 @@ u8 *Pokey_STIMER_KBCODE(_6502_Context_t *pContext, u8 *pValue)
 			}
 		}
 
+		llNow = PokeyEventReferenceCycle(pContext);
+
 		period = Pokey_TimerPeriodCpuCycles(pContext, 1);
-		pIoData->llTimer1Cycle = period ? (pContext->llCycleCounter + period) : CYCLE_NEVER;
+		pIoData->llTimer1Cycle = period ? (llNow + period) : CYCLE_NEVER;
 
 		period = Pokey_TimerPeriodCpuCycles(pContext, 2);
-		pIoData->llTimer2Cycle = period ? (pContext->llCycleCounter + period) : CYCLE_NEVER;
+		pIoData->llTimer2Cycle = period ? (llNow + period) : CYCLE_NEVER;
 
 		period = Pokey_TimerPeriodCpuCycles(pContext, 4);
-		pIoData->llTimer4Cycle = period ? (pContext->llCycleCounter + period) : CYCLE_NEVER;
+		pIoData->llTimer4Cycle = period ? (llNow + period) : CYCLE_NEVER;
 
 		AtariIoCycleTimedEventUpdate(pContext);
 	}
@@ -1642,11 +1652,12 @@ static u8 AtariIo_SioChecksum(u8 *pBuffer, u32 lSize)
 static void Pokey_SioQueueSerinResponse(_6502_Context_t *pContext, u16 size)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+	u64 llNow = PokeyEventReferenceCycle(pContext);
 
 	sSioInSize = size;
 	sSioInIndex = 0;
 	pIoData->llSerialInputDataReadyCycle =
-		pContext->llCycleCounter + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
+		llNow + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
 	AtariIoCycleTimedEventUpdate(pContext);
 }
 
@@ -1673,12 +1684,13 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 	Pokey_Sync(pContext, pContext->llCycleCounter);
 	if(pValue)
 	{
+		u64 llNow = PokeyEventReferenceCycle(pContext);
 #ifdef VERBOSE_SIO
 		printf("             [%16llu] SEROUT ", pContext->llCycleCounter);
 		printf("(%02X)!\n", *pValue);
 #endif
 		pIoData->llSerialOutputNeedDataCycle =
-			pContext->llCycleCounter + SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
+			llNow + SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
 
 		AtariIoCycleTimedEventUpdate(pContext);
 
@@ -1700,7 +1712,7 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 				u8 calculated = AtariIo_SioChecksum(&aSioBuffer[SIO_DATA_OFFSET], sSioPendingBytes);
 
 				pIoData->llSerialOutputTransmissionDoneCycle =
-					pContext->llCycleCounter + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
+					llNow + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
 				AtariIoCycleTimedEventUpdate(pContext);
 
 				Pokey_SioSectorBytesAndOffset(sSioPendingSector, sSectorSize, &sBytesToRead, &lOffset);
@@ -1783,7 +1795,7 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 					}
 #endif
 					pIoData->llSerialOutputTransmissionDoneCycle =
-						pContext->llCycleCounter + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
+						llNow + SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
 
 					AtariIoCycleTimedEventUpdate(pContext);
 
@@ -1840,7 +1852,7 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 								}
 #endif
 								pIoData->llSerialInputDataReadyCycle =
-									pContext->llCycleCounter + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
+									llNow + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
 							}
 						}
 
@@ -1879,7 +1891,7 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 						if(pIoData->pDisk1[0] != 0)
 						{
 							pIoData->llSerialInputDataReadyCycle =
-								pContext->llCycleCounter + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
+								llNow + SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
 
 							AtariIoCycleTimedEventUpdate(pContext);
 						}
@@ -1992,8 +2004,9 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 #endif
 		if(sSioInSize > 0)
 		{
+			u64 llNow = PokeyEventReferenceCycle(pContext);
 			pIoData->llSerialInputDataReadyCycle =
-				pContext->llCycleCounter + SERIAL_INPUT_DATA_READY_CYCLES;
+				llNow + SERIAL_INPUT_DATA_READY_CYCLES;
 
 			AtariIoCycleTimedEventUpdate(pContext);
 		}
