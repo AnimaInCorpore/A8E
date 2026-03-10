@@ -17,7 +17,7 @@ The current JS renderer includes the recent raster-timing pass:
 - visible player/missile output is interleaved on the scanline timing path
 - visible blank/background-only lines now spend the leading color-burst clocks invisibly before drawing the rest of the line
 
-The browser port still has open timing work, mainly around border/playfield geometry, non-wide `HSCROL` fetch timing, and broader regression verification against raster-effect content. The current checklist lives in [../COLOR_CLOCK_ACCURACY.md](../COLOR_CLOCK_ACCURACY.md).
+The browser timing pass now covers the legacy-style active-line geometry, HSCROL handling, visible PMG interleaving, and blank-line color-burst behavior. Remaining work is broader regression verification against raster-effect content and any localized title-specific differences that show up during that sweep. The current verification checklist lives in [../legacy/COLOR_CLOCK_ACCURACY.md](../legacy/COLOR_CLOCK_ACCURACY.md).
 
 ## Run
 

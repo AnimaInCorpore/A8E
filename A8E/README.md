@@ -30,7 +30,7 @@ The native core includes the current raster-timing pass:
 - visible player/missile output is interleaved on the scanline timing path
 - visible blank/background-only lines spend the leading color-burst clocks invisibly before drawing the rest of the line
 
-The remaining known timing gaps are mainly border/playfield geometry and non-wide `HSCROL` fetch timing, plus continued regression verification against real raster-effect content. See [../COLOR_CLOCK_ACCURACY.md](../COLOR_CLOCK_ACCURACY.md) for the detailed status.
+The native timing pass now covers the legacy-style active-line geometry, HSCROL handling, visible PMG interleaving, and blank-line color-burst behavior. Remaining work is continued regression verification against real raster-effect content and any localized title-specific differences that turn up during that sweep. See [../legacy/COLOR_CLOCK_ACCURACY.md](../legacy/COLOR_CLOCK_ACCURACY.md) for the current verification status.
 
 **Command Line:**
 ```text
