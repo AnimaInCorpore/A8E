@@ -126,6 +126,8 @@ Primary domains:
 - `dev.*` for HostFS access, assembly, `runXex(...)`, and `runXexFromUrl(...)`
 - `artifacts.*` for screenshot/artifact capture, including `captureFailureState(...)`
 
+Reset-time bank overrides are available for bring-up flows that need a specific boot mapping. `system.reset({ portB: 0xFF })`, `system.boot({ portB: 0xFF })`, and `dev.runXex({ ..., resetOptions: { portB: 0xFF } })` apply the initial PIA `PORTB` value before the cold-reset memory map is built.
+
 Flat compatibility aliases still exist, so earlier calls such as `start()`, `runUntilPc()`, or `captureScreenshot()` continue to work.
 
 Example:

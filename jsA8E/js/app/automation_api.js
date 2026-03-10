@@ -163,6 +163,15 @@
     return (value | 0) & 0xff;
   }
 
+  function normalizeResetOptions(options) {
+    if (!options || typeof options !== "object") return null;
+    const out = {};
+    if (options.portB !== undefined && options.portB !== null) {
+      out.portB = clamp8(options.portB);
+    }
+    return Object.keys(out).length ? out : null;
+  }
+
   function decodeBase64(base64) {
     if (typeof base64 !== "string") return new Uint8Array(0);
     const text = base64.trim();
@@ -1698,6 +1707,7 @@
       groupedApi: true,
       events: true,
       faultReporting: true,
+      resetPortBOverride: typeof app.reset === "function",
     };
   }
 
@@ -1801,6 +1811,11 @@
     const hostFs = getCurrentHostFs();
     const raw = spec && typeof spec === "object" ? spec : {};
     const operation = raw.operation ? String(raw.operation) : "runXex";
+    const resetOptions = normalizeResetOptions(
+      raw.resetOptions && typeof raw.resetOptions === "object"
+        ? raw.resetOptions
+        : raw,
+    );
     let bytes = null;
     let name = raw.name ? String(raw.name) : "PROGRAM.XEX";
     let runAddr = null;
@@ -1884,7 +1899,7 @@
     });
     if (raw.reset !== false && typeof app.reset === "function") {
       try {
-        app.reset();
+        app.reset(resetOptions);
       } catch (err) {
         throw createAutomationError({
           operation: operation,
@@ -1918,14 +1933,15 @@
     }
     notifyStatus();
     return {
-      name: name,
-      slot: slotIndex,
-      byteLength: bytes.length | 0,
-      reset: raw.reset !== false,
-      started: started,
-      runAddr: runAddr,
-      sourceUrl: raw.sourceUrl ? String(raw.sourceUrl) : null,
-    };
+        name: name,
+        slot: slotIndex,
+        byteLength: bytes.length | 0,
+        reset: raw.reset !== false,
+        started: started,
+        resetOptions: resetOptions,
+        runAddr: runAddr,
+        sourceUrl: raw.sourceUrl ? String(raw.sourceUrl) : null,
+      };
   }
 
   async function mountDiskFromUrl(url, options) {
@@ -2308,13 +2324,16 @@
     },
     reset: async function (options) {
       const app = await getApp();
-      app.reset();
+      const opts = options && typeof options === "object" ? options : {};
+      const resetOptions = normalizeResetOptions(opts);
+      app.reset(resetOptions);
       notifyStatus();
       const state = await readAppDebugState(app);
-      if (options && options.kind) {
+      if (opts.kind || resetOptions) {
         return {
-          requestedKind: String(options.kind),
+          requestedKind: opts.kind ? String(opts.kind) : "cold",
           actualKind: "cold",
+          resetOptions: resetOptions,
           debugState: state,
         };
       }
@@ -2322,7 +2341,11 @@
     },
     boot: async function (options) {
       const opts = options || {};
-      if (opts.reset !== false) await api.reset({ kind: opts.kind || "cold" });
+      if (opts.reset !== false) {
+        await api.reset(Object.assign({}, opts, {
+          kind: opts.kind || "cold",
+        }));
+      }
       if (opts.start !== false) await api.start();
       return api.getSystemState();
     },

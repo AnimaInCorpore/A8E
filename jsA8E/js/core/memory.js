@@ -253,6 +253,10 @@
     const DEVICE_SLOT_COUNT = 8;
     const NO_IMAGE_MOUNTED = -1;
 
+    function sanitizePortB(value) {
+      return ((value & 0x83) | 0x7c) & 0xff;
+    }
+
     function createRuntime(opts) {
       const machine = opts.machine;
       const video = opts.video;
@@ -421,7 +425,17 @@
         installIoHandlers(ctx, ioAccess);
       }
 
-      function hardReset() {
+      function applyResetOverrides(options) {
+        if (!options || typeof options !== "object") return;
+        if (options.portB !== undefined && options.portB !== null) {
+          const portB = sanitizePortB(options.portB | 0);
+          machine.ctx.ram[IO_PORTB] = portB;
+          machine.ctx.sram[IO_PORTB] = portB;
+          machine.ctx.ioData.valuePortB = portB;
+        }
+      }
+
+      function hardReset(options) {
         ensureMediaLayout();
         machine.ctx.cycleCounter = 0;
         machine.ctx.stallCycleCounter = 0;
@@ -434,6 +448,7 @@
         machine.ctx.ioCycleTimedEventFunction = ioCycleTimedEvent;
         cycleTimedEventUpdate(machine.ctx);
         initHardwareDefaults(machine.ctx);
+        applyResetOverrides(options);
         installIoHandlers(machine.ctx, ioAccess);
         setupMemoryMap();
         CPU.reset(machine.ctx);

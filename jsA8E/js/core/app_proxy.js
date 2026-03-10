@@ -885,8 +885,8 @@
         state.running = false;
         sendCommand("pause");
       },
-      reset: function () {
-        sendCommand("reset");
+      reset: function (options) {
+        sendCommand("reset", options || null);
       },
       setTurbo: function (v) {
         sendCommand("setTurbo", { value: !!v });

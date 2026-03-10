@@ -570,7 +570,7 @@
         app.pause();
         break;
       case "reset":
-        app.reset();
+        app.reset(data);
         break;
       case "setTurbo":
         app.setTurbo(!!data.value);

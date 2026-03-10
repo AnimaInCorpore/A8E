@@ -745,8 +745,8 @@
       installHDeviceCioHooks();
     }
 
-    function hardReset() {
-      memoryHardReset();
+    function hardReset(options) {
+      memoryHardReset(options || null);
       debugRuntime.resetExecutionState();
       if (hDevice) {
         hDevice.resetChannels();
@@ -1013,11 +1013,11 @@
       debugRuntime.emitDebugState(reason || "debug");
     }
 
-    function hardResetWithInputRelease() {
+    function hardResetWithInputRelease(options) {
       if (releaseAllKeys) releaseAllKeys();
       machine.cycleAccum = 0;
       machine.frameCycleAccum = 0;
-      hardReset();
+      hardReset(options || null);
     }
 
     const CYCLES_PER_FRAME = LINES_PER_SCREEN_PAL * CYCLES_PER_LINE; // 35568
@@ -1148,10 +1148,10 @@
       pauseInternal("pause");
     }
 
-    function reset() {
+    function reset(options) {
       if (!isReady()) return;
       debugRuntime.resetExecutionState();
-      hardResetWithInputRelease();
+      hardResetWithInputRelease(options || null);
       paint();
       updateDebug("reset");
     }
