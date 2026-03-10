@@ -156,7 +156,7 @@
           // DLI scheduling
           if (cmd & 0x80) {
             io.dliCycle =
-              io.clock +
+              ctx.cycleCounter +
               (io.nextDisplayListLine - io.video.currentDisplayLine - 1) *
                 CYCLES_PER_LINE;
             cycleTimedEventUpdate(ctx);
@@ -249,61 +249,61 @@
         }
       }
 
-      const eff = io.inDrawLine ? io.clock : ctx.cycleCounter;
+      const masterEff = ctx.cycleCounter;
 
-      if (eff >= io.dliCycle) {
+      if (masterEff >= io.dliCycle) {
         ram[IO_NMIRES_NMIST] &= ~NMI_VBI;
         ram[IO_NMIRES_NMIST] |= NMI_DLI;
         if (sram[IO_NMIEN] & NMI_DLI) CPU.nmi(ctx);
         io.dliCycle = CYCLE_NEVER;
       }
 
-      if (eff >= io.serialOutputTransmissionDoneCycle) {
+      if (masterEff >= io.serialOutputTransmissionDoneCycle) {
         ram[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
         if (sram[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE)
           {CPU.irq(ctx);}
         io.serialOutputTransmissionDoneCycle = CYCLE_NEVER;
       }
 
-      if (eff >= io.serialOutputNeedDataCycle) {
+      if (masterEff >= io.serialOutputNeedDataCycle) {
         ram[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_DATA_NEEDED;
         if (sram[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_DATA_NEEDED) CPU.irq(ctx);
         io.serialOutputNeedDataCycle = CYCLE_NEVER;
       }
 
-      if (eff >= io.serialInputDataReadyCycle) {
+      if (masterEff >= io.serialInputDataReadyCycle) {
         ram[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_INPUT_DATA_READY;
         if (sram[IO_IRQEN_IRQST] & IRQ_SERIAL_INPUT_DATA_READY) CPU.irq(ctx);
         io.serialInputDataReadyCycle = CYCLE_NEVER;
       }
 
-      if (eff >= io.timer1Cycle) {
+      if (masterEff >= io.timer1Cycle) {
         const p1 = pokeyTimerPeriodCpuCycles(ctx, 1);
         ram[IO_IRQEN_IRQST] &= ~IRQ_TIMER_1;
         if (sram[IO_IRQEN_IRQST] & IRQ_TIMER_1) CPU.irq(ctx);
         if (p1 === 0) io.timer1Cycle = CYCLE_NEVER;
         else {
-          while (io.timer1Cycle <= eff) io.timer1Cycle += p1;
+          while (io.timer1Cycle <= masterEff) io.timer1Cycle += p1;
         }
       }
 
-      if (eff >= io.timer2Cycle) {
+      if (masterEff >= io.timer2Cycle) {
         const p2 = pokeyTimerPeriodCpuCycles(ctx, 2);
         ram[IO_IRQEN_IRQST] &= ~IRQ_TIMER_2;
         if (sram[IO_IRQEN_IRQST] & IRQ_TIMER_2) CPU.irq(ctx);
         if (p2 === 0) io.timer2Cycle = CYCLE_NEVER;
         else {
-          while (io.timer2Cycle <= eff) io.timer2Cycle += p2;
+          while (io.timer2Cycle <= masterEff) io.timer2Cycle += p2;
         }
       }
 
-      if (eff >= io.timer4Cycle) {
+      if (masterEff >= io.timer4Cycle) {
         const p4 = pokeyTimerPeriodCpuCycles(ctx, 4);
         ram[IO_IRQEN_IRQST] &= ~IRQ_TIMER_4;
         if (sram[IO_IRQEN_IRQST] & IRQ_TIMER_4) CPU.irq(ctx);
         if (p4 === 0) io.timer4Cycle = CYCLE_NEVER;
         else {
-          while (io.timer4Cycle <= eff) io.timer4Cycle += p4;
+          while (io.timer4Cycle <= masterEff) io.timer4Cycle += p4;
         }
       }
 

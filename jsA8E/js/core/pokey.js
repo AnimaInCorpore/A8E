@@ -1025,7 +1025,7 @@
 
     function pokeyRestartTimers(ctx) {
       const io = ctx.ioData;
-      const now = io.inDrawLine ? io.clock : ctx.cycleCounter;
+      const now = ctx.cycleCounter;
 
       const p1 = pokeyTimerPeriodCpuCycles(ctx, 1);
       io.timer1Cycle = p1 ? now + p1 : CYCLE_NEVER;

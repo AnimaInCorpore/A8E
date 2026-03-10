@@ -46,13 +46,6 @@
 
 #define CLIP(a) MAX(0, MIN(255, a))
 
-static u64 AtariIoEventReferenceCycle(_6502_Context_t *pContext)
-{
-	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-
-	return pIoData->bInDrawLine ? pIoData->llCycle : pContext->llCycleCounter;
-}
-
 static void AtariIoAdvanceScanline(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
@@ -2717,7 +2710,7 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			// DLI? (schedule after vertical scrolling adjustments)
 			if(pIoData->cCurrentDisplayListCommand & 0x80)
 			{
-				pIoData->llDliCycle = pIoData->llCycle +
+				pIoData->llDliCycle = pContext->llCycleCounter +
 									  (pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine - 1) * CYCLES_PER_LINE;
 
 				AtariIoCycleTimedEventUpdate(pContext);
@@ -4556,7 +4549,7 @@ void AtariIoCycleTimedEventUpdate(_6502_Context_t *pContext)
 static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u64 llEffectiveCycle;
+	u64 llMasterCycle = pContext->llCycleCounter;
 
 	if(!pIoData->bInDrawLine &&
 	   pContext->llCycleCounter >= pIoData->llDisplayListFetchCycle)
@@ -4577,9 +4570,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		pIoData->bInDrawLine = 0;
 	}
 
-	llEffectiveCycle = AtariIoEventReferenceCycle(pContext);
-
-	if(llEffectiveCycle >= pIoData->llDliCycle)
+	if(llMasterCycle >= pIoData->llDliCycle)
 	{
 #ifdef VERBOSE_DL
 		printf("             [%16llu]", pContext->llCycleCounter);
@@ -4598,7 +4589,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		pIoData->llDliCycle = CYCLE_NEVER;
 	}
 
-	if(llEffectiveCycle >= pIoData->llSerialOutputTransmissionDoneCycle)
+	if(llMasterCycle >= pIoData->llSerialOutputTransmissionDoneCycle)
 	{
 #ifdef VERBOSE_SIO
 		printf("             [%16llu] SERIAL_OUTPUT_TRANSMISSION_DONE request!\n", pContext->llCycleCounter);
@@ -4612,7 +4603,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		pIoData->llSerialOutputTransmissionDoneCycle = CYCLE_NEVER;
 	}
 
-	if(llEffectiveCycle >= pIoData->llSerialOutputNeedDataCycle)
+	if(llMasterCycle >= pIoData->llSerialOutputNeedDataCycle)
 	{
 #ifdef VERBOSE_SIO
 		printf("             [%16llu] SERIAL_OUTPUT_DATA_NEEDED request!\n", pContext->llCycleCounter);
@@ -4626,7 +4617,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		pIoData->llSerialOutputNeedDataCycle = CYCLE_NEVER;
 	}
 
-	if(llEffectiveCycle >= pIoData->llSerialInputDataReadyCycle)
+	if(llMasterCycle >= pIoData->llSerialInputDataReadyCycle)
 	{
 #ifdef VERBOSE_SIO
 		printf("             [%16llu] SERIAL_INPUT_DATA_READY request!\n", pContext->llCycleCounter);
@@ -4640,7 +4631,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		pIoData->llSerialInputDataReadyCycle = CYCLE_NEVER;
 	}
 
-	if(llEffectiveCycle >= pIoData->llTimer1Cycle)
+	if(llMasterCycle >= pIoData->llTimer1Cycle)
 	{
 		u64 period = Pokey_TimerPeriodCpuCycles(pContext, 1);
 #ifdef VERBOSE_SIO
@@ -4658,14 +4649,14 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		}
 		else
 		{
-			while(pIoData->llTimer1Cycle <= llEffectiveCycle)
+			while(pIoData->llTimer1Cycle <= llMasterCycle)
 			{
 				pIoData->llTimer1Cycle += period;
 			}
 		}
 	}
 
-	if(llEffectiveCycle >= pIoData->llTimer2Cycle)
+	if(llMasterCycle >= pIoData->llTimer2Cycle)
 	{
 		u64 period = Pokey_TimerPeriodCpuCycles(pContext, 2);
 #ifdef VERBOSE_SIO
@@ -4683,14 +4674,14 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		}
 		else
 		{
-			while(pIoData->llTimer2Cycle <= llEffectiveCycle)
+			while(pIoData->llTimer2Cycle <= llMasterCycle)
 			{
 				pIoData->llTimer2Cycle += period;
 			}
 		}
 	}
 
-	if(llEffectiveCycle >= pIoData->llTimer4Cycle)
+	if(llMasterCycle >= pIoData->llTimer4Cycle)
 	{
 		u64 period = Pokey_TimerPeriodCpuCycles(pContext, 4);
 #ifdef VERBOSE_SIO
@@ -4708,7 +4699,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		}
 		else
 		{
-			while(pIoData->llTimer4Cycle <= llEffectiveCycle)
+			while(pIoData->llTimer4Cycle <= llMasterCycle)
 			{
 				pIoData->llTimer4Cycle += period;
 			}

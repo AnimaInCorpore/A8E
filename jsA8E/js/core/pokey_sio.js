@@ -45,8 +45,7 @@
     }
 
     function effectiveEventCycle(ctx) {
-      const io = ctx.ioData;
-      return io.inDrawLine ? io.clock : ctx.cycleCounter;
+      return ctx.cycleCounter;
     }
 
     function queueSerinResponse(ctx, now, size) {
