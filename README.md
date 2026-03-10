@@ -24,13 +24,12 @@ Recent raster-timing work landed in both cores:
 - Visible player/missile output is interleaved on the scanline timing path in both implementations.
 - Visible blank/background-only lines now spend the initial color-burst clocks invisibly before drawing the live-read remainder of the line.
 
-The project is still not fully legacy-compliant. The main remaining timing gaps are:
+The implementation pass for legacy-style per-color-clock rendering is now in place in both cores. Remaining work is verification against real raster-effect content and closing any title-specific differences that show up during that sweep.
 
-- border/playfield clock geometry
-- non-wide `HSCROL` fetch timing
-- remaining raster verification against real content
+- regression verification against real raster-effect content
+- follow-up on any localized title-specific timing differences found during that verification
 
-For the detailed checklist and current compliance notes, see [COLOR_CLOCK_ACCURACY.md](COLOR_CLOCK_ACCURACY.md).
+For the current verification checklist and signoff notes, see [legacy/COLOR_CLOCK_ACCURACY.md](legacy/COLOR_CLOCK_ACCURACY.md).
 
 ## ROM Requirements
 
