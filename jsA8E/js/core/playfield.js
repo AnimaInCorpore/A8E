@@ -62,6 +62,14 @@
       for (let i = 0; i < cycles; i++) clockAction(ctx);
     }
 
+    function advanceDisplayMemoryRow(io) {
+      io.displayMemoryAddress = Util.fixedAdd(
+        io.displayMemoryAddress,
+        0x0fff,
+        io.drawLine.bytesPerLine,
+      );
+    }
+
     function copyScratchLine(video, y, width, dstPixels, dstPriority) {
       const srcBase = y * width + PLAYFIELD_SCRATCH_VIEW_X;
       const dstBase = y * PIXELS_PER_LINE;
@@ -204,13 +212,6 @@
       const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       const vScrollOffset = 8 - lineDelta - (io.video.verticalScrollOffset | 0);
-      if (lineDelta === 1) {
-        io.displayMemoryAddress = Util.fixedAdd(
-          io.displayMemoryAddress,
-          0x0fff,
-          io.drawLine.bytesPerLine,
-        );
-      }
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 2;
@@ -237,7 +238,7 @@
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           ctx.cycleCounter++; // DMA steal: pattern
 
-          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+          if (io.firstRowScanline) {
             ctx.cycleCounter++; // DMA steal: name (only on first line of row)
           }
 
@@ -337,13 +338,6 @@
 
       const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      if (lineDelta === 1) {
-        io.displayMemoryAddress = Util.fixedAdd(
-          io.displayMemoryAddress,
-          0x0fff,
-          io.drawLine.bytesPerLine,
-        );
-      }
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 2;
@@ -369,7 +363,7 @@
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           ctx.cycleCounter++; // DMA steal: pattern
 
-          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+          if (io.firstRowScanline) {
             ctx.cycleCounter++; // DMA steal: name
           }
 
@@ -512,13 +506,6 @@
       const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       const vScrollOffset = 8 - lineDelta - (io.video.verticalScrollOffset | 0);
-      if (lineDelta === 1) {
-        io.displayMemoryAddress = Util.fixedAdd(
-          io.displayMemoryAddress,
-          0x0fff,
-          io.drawLine.bytesPerLine,
-        );
-      }
 
       const chactl = sram[IO_CHACTL] & 0x03;
       const aColorTable0 = SCRATCH_COLOR_TABLE_A;
@@ -549,7 +536,7 @@
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           ctx.cycleCounter++; // DMA steal: pattern
 
-          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+          if (io.firstRowScanline) {
             ctx.cycleCounter++; // DMA steal: name
           }
 
@@ -603,13 +590,6 @@
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       const vScrollLine = 16 - lineDelta - (io.video.verticalScrollOffset | 0);
       const vScrollOffset = (vScrollLine >> 1) & 0xff;
-      if (lineDelta === 1) {
-        io.displayMemoryAddress = Util.fixedAdd(
-          io.displayMemoryAddress,
-          0x0fff,
-          io.drawLine.bytesPerLine,
-        );
-      }
 
       const chactl = sram[IO_CHACTL] & 0x03;
       const aColorTable0 = SCRATCH_COLOR_TABLE_A;
@@ -642,7 +622,7 @@
             ctx.cycleCounter++; // DMA steal: pattern
           }
 
-          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+          if (io.firstRowScanline) {
             ctx.cycleCounter++; // DMA steal: name
           }
 
@@ -694,13 +674,6 @@
       const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       const vScrollOffset = 8 - lineDelta - (io.video.verticalScrollOffset | 0);
-      if (lineDelta === 1) {
-        io.displayMemoryAddress = Util.fixedAdd(
-          io.displayMemoryAddress,
-          0x0fff,
-          io.drawLine.bytesPerLine,
-        );
-      }
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
       aColorTable[0] = sram[IO_COLPF0] & 0xff;
@@ -727,7 +700,7 @@
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           ctx.cycleCounter++; // DMA steal: pattern
 
-          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+          if (io.firstRowScanline) {
             ctx.cycleCounter++; // DMA steal: name
           }
 
@@ -789,13 +762,6 @@
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
       const vScrollLine = 16 - lineDelta - (io.video.verticalScrollOffset | 0);
       const vScrollOffset = (vScrollLine >> 1) & 0xff;
-      if (lineDelta === 1) {
-        io.displayMemoryAddress = Util.fixedAdd(
-          io.displayMemoryAddress,
-          0x0fff,
-          io.drawLine.bytesPerLine,
-        );
-      }
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
       aColorTable[0] = sram[IO_COLPF0] & 0xff;
@@ -824,7 +790,7 @@
             ctx.cycleCounter++; // DMA steal: pattern
           }
 
-          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+          if (io.firstRowScanline) {
             ctx.cycleCounter++; // DMA steal: name
           }
 
@@ -883,13 +849,6 @@
 
       const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      if (lineDelta === 1) {
-        io.displayMemoryAddress = Util.fixedAdd(
-          io.displayMemoryAddress,
-          0x0fff,
-          io.drawLine.bytesPerLine,
-        );
-      }
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
 
@@ -907,7 +866,7 @@
         if (phase === 8) {
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+          if (io.firstRowScanline) {
             ctx.cycleCounter++; // DMA steal: display
           }
           phase = 0;
@@ -937,13 +896,6 @@
 
       const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      if (lineDelta === 1) {
-        io.displayMemoryAddress = Util.fixedAdd(
-          io.displayMemoryAddress,
-          0x0fff,
-          io.drawLine.bytesPerLine,
-        );
-      }
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 8;
@@ -959,7 +911,7 @@
         if (mask === 0x00) {
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+          if (io.firstRowScanline) {
             ctx.cycleCounter++; // DMA steal: display
           }
           mask = 0x80;
@@ -990,13 +942,6 @@
 
       const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      if (lineDelta === 1) {
-        io.displayMemoryAddress = Util.fixedAdd(
-          io.displayMemoryAddress,
-          0x0fff,
-          io.drawLine.bytesPerLine,
-        );
-      }
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
 
@@ -1014,7 +959,7 @@
         if (phase === 4) {
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+          if (io.firstRowScanline) {
             ctx.cycleCounter++; // DMA steal: display
           }
           phase = 0;
@@ -1048,13 +993,6 @@
 
       const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      if (lineDelta === 1) {
-        io.displayMemoryAddress = Util.fixedAdd(
-          io.displayMemoryAddress,
-          0x0fff,
-          io.drawLine.bytesPerLine,
-        );
-      }
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 4;
@@ -1070,7 +1008,7 @@
         if (mask === 0x00) {
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+          if (io.firstRowScanline) {
             ctx.cycleCounter++; // DMA steal: display
           }
           mask = 0x80;
@@ -1111,13 +1049,6 @@
 
       const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      if (lineDelta === 1) {
-        io.displayMemoryAddress = Util.fixedAdd(
-          io.displayMemoryAddress,
-          0x0fff,
-          io.drawLine.bytesPerLine,
-        );
-      }
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
 
@@ -1135,7 +1066,7 @@
         if (phase === 2) {
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          if (lineDelta === ANTIC_MODE_INFO[mode].lines) {
+          if (io.firstRowScanline) {
             ctx.cycleCounter++; // DMA steal: display
           }
           phase = 0;
@@ -1178,14 +1109,8 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
+      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      if (lineDelta === 1) {
-        io.displayMemoryAddress = Util.fixedAdd(
-          io.displayMemoryAddress,
-          0x0fff,
-          io.drawLine.bytesPerLine,
-        );
-      }
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 2;
@@ -1345,10 +1270,11 @@
         video.playfieldScratchPixels.fill(baseColor, lineBase, lineBase + PIXELS_PER_LINE);
         video.playfieldScratchPriority.fill(PRIO_BKG, lineBase, lineBase + PIXELS_PER_LINE);
 
+        const lineDelta = (io.nextDisplayListLine - io.video.currentDisplayLine) | 0;
         io.drawLine.bytesPerLine = geometry.bytesPerLine;
         io.drawLine.destIndex =
           lineBase + geometry.playfieldStartX;
-        io.drawLine.displayMemoryAddress = io.displayMemoryAddress & 0xffff;
+        io.drawLine.displayMemoryAddress = io.rowDisplayMemoryAddress & 0xffff;
 
         stepClockActions(ctx, ACTIVE_LINE_COLOR_BURST_CYCLES);
         drawBackgroundClipped(
@@ -1391,6 +1317,11 @@
               for (let i = 0; i < pfCycles; i++) clockAction(ctx);
             }
             break;
+        }
+
+        if (io.firstRowScanline) {
+          advanceDisplayMemoryRow(io);
+          io.firstRowScanline = false;
         }
 
         if (io.clock < lineStartClock + 114) {

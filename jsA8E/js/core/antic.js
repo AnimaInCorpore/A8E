@@ -189,6 +189,11 @@
               1,
             );
           }
+
+          if (mode > 0x01) {
+            io.rowDisplayMemoryAddress = io.displayMemoryAddress & 0xffff;
+            io.firstRowScanline = true;
+          }
         }
       }
     }

@@ -107,7 +107,9 @@ typedef struct
 	u8 cCurrentDisplayListCommand;
 	u32 lNextDisplayListLine;
 	u16 sDisplayListAddress;
+	u16 sRowDisplayMemoryAddress;
 	u16 sDisplayMemoryAddress;
+	u8 bFirstRowScanline;
 	u8 cValuePortA;
 	u8 cValuePortB;
 

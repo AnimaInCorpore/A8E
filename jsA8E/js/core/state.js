@@ -54,7 +54,9 @@
         currentDisplayListCommand: 0,
         nextDisplayListLine: 8,
         displayListAddress: 0,
+        rowDisplayMemoryAddress: 0,
         displayMemoryAddress: 0,
+        firstRowScanline: false,
         drawLine: {
           displayMemoryAddress: 0,
           bytesPerLine: 0,
