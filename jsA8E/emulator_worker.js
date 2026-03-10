@@ -42,16 +42,54 @@
   let audioBridgePort = null;
   let activeAudioNodePort = null;
   let workerAudioSampleRate = 48000;
+  const OBJECT_TO_STRING = Object.prototype.toString;
+  const TYPED_ARRAY_TAGS = new Set([
+    "[object Int8Array]",
+    "[object Uint8Array]",
+    "[object Uint8ClampedArray]",
+    "[object Int16Array]",
+    "[object Uint16Array]",
+    "[object Int32Array]",
+    "[object Uint32Array]",
+    "[object Float32Array]",
+    "[object Float64Array]",
+    "[object BigInt64Array]",
+    "[object BigUint64Array]",
+  ]);
+
+  function getObjectTag(value) {
+    return OBJECT_TO_STRING.call(value);
+  }
+
+  function isArrayBufferLike(value) {
+    const tag = getObjectTag(value);
+    return tag === "[object ArrayBuffer]" || tag === "[object SharedArrayBuffer]";
+  }
+
+  function isViewLike(value) {
+    if (!value) return false;
+    if (typeof ArrayBuffer !== "undefined" && typeof ArrayBuffer.isView === "function") {
+      return ArrayBuffer.isView(value);
+    }
+    return getObjectTag(value) === "[object DataView]" || TYPED_ARRAY_TAGS.has(getObjectTag(value));
+  }
+
+  function copyBufferLike(data, byteOffset, byteLength) {
+    if (!isArrayBufferLike(data)) return new Uint8Array(0);
+    const offset = Math.max(0, byteOffset | 0);
+    const length = Math.max(0, byteLength | 0);
+    const source = new Uint8Array(data, offset, length);
+    const out = new Uint8Array(length);
+    out.set(source);
+    return out;
+  }
 
   function toUint8(data) {
     if (!data) return new Uint8Array(0);
-    if (data instanceof Uint8Array) return new Uint8Array(data);
-    if (data instanceof ArrayBuffer) return new Uint8Array(data.slice(0));
-    if (ArrayBuffer.isView(data)) {
-      return new Uint8Array(
-        data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
-      );
-    }
+    if (getObjectTag(data) === "[object Uint8Array]") return new Uint8Array(data);
+    if (isArrayBufferLike(data)) return copyBufferLike(data, 0, data.byteLength | 0);
+    if (isViewLike(data))
+      {return copyBufferLike(data.buffer, data.byteOffset | 0, data.byteLength | 0);}
     if (Array.isArray(data)) return new Uint8Array(data);
     return new Uint8Array(0);
   }
@@ -471,11 +509,7 @@
         handleRequest(c.cmd, c.payload)
           .then(function (result) {
             const transfer = [];
-            if (
-              result &&
-              result.buffer &&
-              result.buffer instanceof ArrayBuffer
-            ) {
+            if (result && result.buffer && isArrayBufferLike(result.buffer)) {
               transfer.push(result.buffer);
             }
             postResponse(c.id | 0, true, result, null, transfer);
@@ -721,6 +755,11 @@
           return app.getMountedDiskForDeviceSlot(data.slot | 0);
         }
         return null;
+      case "getConsoleKeyState":
+        if (typeof app.getConsoleKeyState === "function") {
+          return app.getConsoleKeyState();
+        }
+        return null;
       case "captureScreenshot":
         if (typeof app.captureScreenshot === "function") {
           return app.captureScreenshot();
@@ -773,11 +812,7 @@
       handleRequest(msg.cmd || "", msg.payload || null)
         .then(function (result) {
           const transfer = [];
-          if (
-            result &&
-            result.buffer &&
-            result.buffer instanceof ArrayBuffer
-          ) {
+          if (result && result.buffer && isArrayBufferLike(result.buffer)) {
             transfer.push(result.buffer);
           }
           postResponse(msg.id | 0, true, result, null, transfer);

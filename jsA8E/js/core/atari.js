@@ -804,6 +804,7 @@
     const onKeyDown = inputRuntime.onKeyDown;
     const onKeyUp = inputRuntime.onKeyUp;
     const releaseAllKeys = inputRuntime.releaseAll;
+    const getConsoleKeyState = inputRuntime.getConsoleKeyState;
 
     function paint() {
       renderer.paint(video);
@@ -1259,6 +1260,7 @@
       onKeyDown: onKeyDown,
       onKeyUp: onKeyUp,
       releaseAllKeys: releaseAllKeys,
+      getConsoleKeyState: getConsoleKeyState,
     };
   }
 

@@ -3,7 +3,7 @@
 - Files: `jsA8E/js/app/automation_api.js`, `jsA8E/js/app/ui.js`, `jsA8E/js/core/atari.js`, `jsA8E/js/core/debugger.js`, `jsA8E/js/core/memory.js`, `jsA8E/js/core/input.js`, `jsA8E/js/core/hostfs.js`, `jsA8E/js/core/app_proxy.js`, `jsA8E/emulator_worker.js`, `jsA8E/js/core/assembler_core.js`
 - Purpose: define the universal, browser-first automation abstraction for jsA8E so UI, in-browser tools, and external agents all use one coherent machine-control contract.
 - Status: verified on 2026-03-09 (`implemented`, with follow-up UI/tooling ideas below).
-- Notes: `window.A8EAutomation` now exposes the planned browser-first grouped surface (`system`, `media`, `input`, `debug`, `dev`, `artifacts`, `events`) while keeping the earlier flat aliases for compatibility. The live API covers worker-safe request/response RPC, deterministic paused-mode debug execution, explicit stop/fault semantics, memory/bank introspection, trace/counter export, framebuffer-based screenshot/artifact capture, HostFS access, source-text assembly, XEX launch helpers, wait primitives, mapped source context, and runtime disassembly. The browser UI attaches the live app instance, but the public contract lives in `automation_api.js`, not in UI internals.
+- Notes: `window.A8EAutomation` now exposes the planned browser-first grouped surface (`system`, `media`, `input`, `debug`, `dev`, `artifacts`, `events`) while keeping the earlier flat aliases for compatibility. The live API covers worker-safe request/response RPC, deterministic paused-mode debug execution, explicit stop/fault semantics, cross-realm-safe binary normalization for automation inputs, URL-native media loaders (`mountDiskFromUrl`, `runXexFromUrl`), progress events, memory/bank introspection, trace/counter export, framebuffer-based screenshot/artifact capture, schema-versioned failure snapshots, HostFS access, source-text assembly, XEX launch helpers, wait primitives, mapped source context, and runtime disassembly. The browser UI attaches the live app instance, but the public contract lives in `automation_api.js`, not in UI internals.
 - Issues: the base browser API is now in place, but there is still no dedicated in-browser automation console or standalone visible diagnostics panel layered on top of it.
 - Todo: use the phased plan below for follow-up tooling work (for example an in-browser automation console/test page and richer UI integrations) while keeping the stable machine API itself transport-neutral and browser-first.
 
@@ -120,6 +120,7 @@ window.A8EAutomation = {
     start(),
     pause(),
     reset(),
+    reload(options),
     waitForPause(),
     waitForPc(pc, options),
     waitForFrame(options),
@@ -129,6 +130,7 @@ window.A8EAutomation = {
     loadOsRom(data),
     loadBasicRom(data),
     mountDisk(data, options),
+    mountDiskFromUrl(url, options),
     unmountDisk(slot),
     getMountedMedia(),
   },
@@ -138,7 +140,9 @@ window.A8EAutomation = {
     tapKey(event, options),
     typeText(text, options),
     setJoystick(port, state),
+    getConsoleKeyState(),
     setConsoleKeys(state),
+    pressConsoleKey(key, options),
     releaseAllInputs(),
   },
   debug: {
@@ -146,6 +150,7 @@ window.A8EAutomation = {
     stepInstruction(),
     stepOver(),
     runUntilPc(targetPc, options),
+    runUntilPcOrSnapshot(targetPc, options),
     readMemory(address),
     readRange(start, length, options),
     getDebugState(),
@@ -163,12 +168,14 @@ window.A8EAutomation = {
     writeHostFile(name, data, options),
     deleteHostFile(name),
     assembleHostFile(name, options),
+    runXexFromUrl(url, options),
     runXex(spec),
     getLastBuildResult(),
   },
   artifacts: {
     captureScreenshot(options),
     collectArtifacts(options),
+    captureFailureState(options),
   },
   events: {
     subscribe(listener),
@@ -186,6 +193,7 @@ Rules for that shape:
 - Every externally consumed result shape should carry a stable version when schema churn is likely.
 - Source-oriented debug helpers should prefer returning structured data (line numbers, addresses, text, labels) rather than preformatted UI strings.
 - Pause/fault reasons should be explicit enums in public state/event payloads, not free-form UI messages.
+- Timeout/failure helpers should return actionable diagnostic bundles, not only generic timeout strings.
 
 ## Required Discovery Surface
 

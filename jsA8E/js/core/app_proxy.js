@@ -5,6 +5,20 @@
     window.A8EApp && typeof window.A8EApp.create === "function"
       ? window.A8EApp.create
       : null;
+  const OBJECT_TO_STRING = Object.prototype.toString;
+  const TYPED_ARRAY_TAGS = new Set([
+    "[object Int8Array]",
+    "[object Uint8Array]",
+    "[object Uint8ClampedArray]",
+    "[object Int16Array]",
+    "[object Uint16Array]",
+    "[object Int32Array]",
+    "[object Uint32Array]",
+    "[object Float32Array]",
+    "[object Float64Array]",
+    "[object BigInt64Array]",
+    "[object BigUint64Array]",
+  ]);
 
   function supportsWorker() {
     if (typeof window.Worker === "undefined") return false;
@@ -20,21 +34,45 @@
     return true;
   }
 
+  function getObjectTag(value) {
+    return OBJECT_TO_STRING.call(value);
+  }
+
+  function isArrayBufferLike(value) {
+    const tag = getObjectTag(value);
+    return tag === "[object ArrayBuffer]" || tag === "[object SharedArrayBuffer]";
+  }
+
+  function isViewLike(value) {
+    if (!value) return false;
+    if (typeof ArrayBuffer !== "undefined" && typeof ArrayBuffer.isView === "function") {
+      return ArrayBuffer.isView(value);
+    }
+    return getObjectTag(value) === "[object DataView]" || TYPED_ARRAY_TAGS.has(getObjectTag(value));
+  }
+
+  function copyBufferLike(data, byteOffset, byteLength) {
+    if (!isArrayBufferLike(data)) return new Uint8Array(0);
+    const offset = Math.max(0, byteOffset | 0);
+    const length = Math.max(0, byteLength | 0);
+    const source = new Uint8Array(data, offset, length);
+    const out = new Uint8Array(length);
+    out.set(source);
+    return out;
+  }
+
   function toArrayBuffer(data) {
     if (!data) return new ArrayBuffer(0);
-    if (data instanceof ArrayBuffer) return data;
-    if (ArrayBuffer.isView(data)) {
+    if (isArrayBufferLike(data)) {
+      return copyBufferLike(data, 0, data.byteLength | 0).buffer;
+    }
+    if (isViewLike(data)) {
       const view = data;
-      if (
-        view.byteOffset === 0 &&
-        view.byteLength === view.buffer.byteLength &&
-        view.buffer instanceof ArrayBuffer
-      ) {
-        return view.buffer;
-      }
-      const copy = new Uint8Array(view.byteLength | 0);
-      copy.set(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
-      return copy.buffer;
+      return copyBufferLike(
+        view.buffer,
+        view.byteOffset | 0,
+        view.byteLength | 0,
+      ).buffer;
     }
     if (Array.isArray(data)) return new Uint8Array(data).buffer;
     return new ArrayBuffer(0);
@@ -42,13 +80,10 @@
 
   function toUint8(data) {
     if (!data) return new Uint8Array(0);
-    if (data instanceof Uint8Array) return new Uint8Array(data);
-    if (data instanceof ArrayBuffer) return new Uint8Array(data.slice(0));
-    if (ArrayBuffer.isView(data)) {
-      return new Uint8Array(
-        data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
-      );
-    }
+    if (getObjectTag(data) === "[object Uint8Array]") return new Uint8Array(data);
+    if (isArrayBufferLike(data)) return copyBufferLike(data, 0, data.byteLength | 0);
+    if (isViewLike(data))
+      {return copyBufferLike(data.buffer, data.byteOffset | 0, data.byteLength | 0);}
     if (Array.isArray(data)) return new Uint8Array(data);
     return new Uint8Array(0);
   }
@@ -239,7 +274,7 @@
     function pushScriptSamples(samples) {
       if (!samples || !samples.length) return;
       let chunk = samples;
-      if (!(chunk instanceof Float32Array)) {
+      if (getObjectTag(chunk) !== "[object Float32Array]") {
         if (ArrayBuffer.isView(chunk) && chunk.buffer) {
           chunk = new Float32Array(
             chunk.buffer,
@@ -341,7 +376,7 @@
           if (
             msg.type === "samples" &&
             msg.samples &&
-            msg.samples.buffer instanceof ArrayBuffer
+            isArrayBufferLike(msg.samples.buffer)
           ) {
             n.port.postMessage(msg, [msg.samples.buffer]);
             return;
@@ -939,13 +974,12 @@
           slot: slot | 0,
         });
       },
+      getConsoleKeyState: function () {
+        return sendRequest("getConsoleKeyState");
+      },
       captureScreenshot: function () {
         return sendRequest("captureScreenshot").then(function (result) {
-          if (
-            result &&
-            result.buffer &&
-            result.buffer instanceof ArrayBuffer
-          ) {
+          if (result && result.buffer && isArrayBufferLike(result.buffer)) {
             result.bytes = new Uint8Array(result.buffer);
             delete result.buffer;
           }
@@ -1110,6 +1144,8 @@
       {app.getBankState = function () { return null; };}
     if (app && typeof app.getMountedDiskForDeviceSlot !== "function")
       {app.getMountedDiskForDeviceSlot = function () { return null; };}
+    if (app && typeof app.getConsoleKeyState !== "function")
+      {app.getConsoleKeyState = function () { return null; };}
     if (app && typeof app.captureScreenshot !== "function")
       {app.captureScreenshot = function () {
         return Promise.reject(new Error("A8E screenshot capture unavailable"));

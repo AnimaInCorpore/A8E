@@ -349,10 +349,21 @@
         machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x0c;
       }
 
+      function getConsoleKeyState() {
+        const raw = machine.ctx && machine.ctx.ram ? machine.ctx.ram[IO_CONSOL] | 0 : 0x07;
+        return {
+          raw: raw & 0x07,
+          option: (raw & 0x04) === 0,
+          select: (raw & 0x02) === 0,
+          start: (raw & 0x01) === 0,
+        };
+      }
+
       return {
         onKeyDown: onKeyDown,
         onKeyUp: onKeyUp,
         releaseAll: releaseAll,
+        getConsoleKeyState: getConsoleKeyState,
       };
     }
 

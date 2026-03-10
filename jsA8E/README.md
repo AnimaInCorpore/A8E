@@ -119,12 +119,12 @@ jsA8E now exposes a stable browser-facing automation surface at `window.A8EAutom
 Primary domains:
 
 - `getCapabilities()`, `getSystemState()`
-- `system.*` for lifecycle and wait helpers
-- `media.*` for ROM and disk control
-- `input.*` for keyboard, joystick, and console keys
-- `debug.*` for breakpoints, stepping, counters, memory, trace, source context, and disassembly
-- `dev.*` for HostFS access, assembly, and `runXex(...)`
-- `artifacts.*` for screenshot/artifact capture
+- `system.*` for lifecycle, cache-busting reload, and wait helpers
+- `media.*` for ROM and disk control, including `mountDiskFromUrl(...)`
+- `input.*` for keyboard, joystick, and console keys, including `getConsoleKeyState()` and timed console-key presses
+- `debug.*` for breakpoints, stepping, counters, memory, trace, source context, disassembly, and `runUntilPcOrSnapshot(...)`
+- `dev.*` for HostFS access, assembly, `runXex(...)`, and `runXexFromUrl(...)`
+- `artifacts.*` for screenshot/artifact capture, including `captureFailureState(...)`
 
 Flat compatibility aliases still exist, so earlier calls such as `start()`, `runUntilPc()`, or `captureScreenshot()` continue to work.
 
@@ -155,13 +155,14 @@ const disassembly = await api.debug.disassemble({
   beforeInstructions: 8,
   afterInstructions: 8,
 });
-const screenshot = await api.artifacts.captureScreenshot();
-const artifacts = await api.artifacts.collectArtifacts({
+const failure = await api.debug.runUntilPcOrSnapshot(0x2000, {
+  maxInstructions: 500000,
+  screenshot: true,
   ranges: [{ label: "DOSVEC", start: 10, length: 4 }],
 });
 ```
 
-`captureScreenshot()` returns PNG data and `collectArtifacts()` returns JSON-friendly state including registers/debug snapshot, counters, bank state, memory dumps, breakpoint hit, and trace tail. Fault stops now carry explicit reasons such as `fault_illegal_opcode` and `fault_execution_error` in debug snapshots and pause events.
+`captureScreenshot()` returns PNG data. `collectArtifacts()` and `captureFailureState()` now return schema-versioned JSON bundles (`artifactSchemaVersion: "2"`) that include debug state, counters, trace tail, bank state, mounted media, console-key state, memory dumps, optional disassembly/source context, and optional screenshots. Wait helpers such as `waitForPc()` / `waitForBreakpoint()` return these structured failure bundles on timeout instead of only throwing a generic timeout error.
 
 Additional helpers for tool-driven input:
 
@@ -169,5 +170,9 @@ Additional helpers for tool-driven input:
 - `input.keyDown(eventLike)`, `input.keyUp(eventLike)`, `input.tapKey(eventLike, options)`
 - `input.typeText(text, options)`
 - `input.setJoystick({ up, down, left, right, trigger })`
+- `input.getConsoleKeyState()`
 - `input.setConsoleKeys({ option, select, start })`
+- `input.pressConsoleKey("start", { holdMs: 200 })`
 - `input.releaseAllInputs()`
+- `system.reload({ cacheBust: true })`
+- `events.subscribe("progress", handler)` for fetch/boot/wait checkpoints
