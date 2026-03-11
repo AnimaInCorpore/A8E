@@ -6,6 +6,10 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 function loadAutomationApi(fetchImpl) {
+  const utilSource = fs.readFileSync(
+    path.join(__dirname, "..", "js", "app", "automation", "utils.js"),
+    "utf8",
+  );
   const source = fs.readFileSync(
     path.join(__dirname, "..", "js", "app", "automation_api.js"),
     "utf8",
@@ -60,6 +64,9 @@ function loadAutomationApi(fetchImpl) {
     },
   };
   vm.createContext(context);
+  vm.runInContext(utilSource, context, {
+    filename: "automation/utils.js",
+  });
   vm.runInContext(source, context, {
     filename: "automation_api.js",
   });
