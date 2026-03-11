@@ -69,6 +69,109 @@
   const ATR_BOOT_LOADER_SIZE = ATR_BOOT_SECTOR_COUNT * ATR_SECTOR_SIZE;
   const ATR_DATA_OFFSET = ATR_HEADER_SIZE + ATR_BOOT_LOADER_SIZE;
 
+  function sanitizePortB(value) {
+    return ((value & 0x83) | 0x7c) & 0xff;
+  }
+
+  function cloneRange(range) {
+    if (!range || typeof range !== "object") return null;
+    const out = {
+      start: range.start & 0xffff,
+      end: range.end & 0xffff,
+      length:
+        typeof range.length === "number"
+          ? Math.max(0, range.length | 0)
+          : ((range.end - range.start + 1) | 0),
+    };
+    if (range.kind) out.kind = String(range.kind);
+    if (range.name) out.name = String(range.name);
+    if (range.protected) out.protected = true;
+    if (range.romBacked) out.romBacked = true;
+    return out;
+  }
+
+  function cloneXexPreflightReport(report) {
+    if (!report || typeof report !== "object") return null;
+    return {
+      ok: !!report.ok,
+      phase: report.phase ? String(report.phase) : null,
+      code: report.code ? String(report.code) : null,
+      message: report.message ? String(report.message) : null,
+      byteLength: report.byteLength >>> 0,
+      normalizedByteLength: report.normalizedByteLength >>> 0,
+      segmentCount: report.segmentCount >>> 0,
+      segments: Array.isArray(report.segments)
+        ? report.segments.map(function (segment) {
+            return {
+              index: segment.index | 0,
+              start: segment.start & 0xffff,
+              end: segment.end & 0xffff,
+              length: segment.length >>> 0,
+            };
+          })
+        : [],
+      loaderRange: cloneRange(report.loaderRange),
+      bufferAddress:
+        typeof report.bufferAddress === "number"
+          ? report.bufferAddress & 0xffff
+          : null,
+      bufferRange: cloneRange(report.bufferRange),
+      protectedRegions: Array.isArray(report.protectedRegions)
+        ? report.protectedRegions.map(cloneRange).filter(Boolean)
+        : [],
+      overlaps: Array.isArray(report.overlaps)
+        ? report.overlaps.map(function (entry) {
+            return {
+              segmentIndex: entry.segmentIndex | 0,
+              segmentStart: entry.segmentStart & 0xffff,
+              segmentEnd: entry.segmentEnd & 0xffff,
+              regionKind: String(entry.regionKind || ""),
+              regionName: String(entry.regionName || ""),
+              regionStart: entry.regionStart & 0xffff,
+              regionEnd: entry.regionEnd & 0xffff,
+              overlapStart: entry.overlapStart & 0xffff,
+              overlapEnd: entry.overlapEnd & 0xffff,
+              overlapLength: entry.overlapLength >>> 0,
+              protected: !!entry.protected,
+              romBacked: !!entry.romBacked,
+            };
+          })
+        : [],
+      runAddress:
+        typeof report.runAddress === "number" ? report.runAddress & 0xffff : null,
+      initAddress:
+        typeof report.initAddress === "number" ? report.initAddress & 0xffff : null,
+      portB: typeof report.portB === "number" ? report.portB & 0xff : null,
+      bankState: report.bankState
+        ? {
+            portB: report.bankState.portB & 0xff,
+            basicEnabled: !!report.bankState.basicEnabled,
+            osEnabled: !!report.bankState.osEnabled,
+            floatingPointEnabled: !!report.bankState.floatingPointEnabled,
+            selfTestEnabled: !!report.bankState.selfTestEnabled,
+            basicRomLoaded: !!report.bankState.basicRomLoaded,
+            osRomLoaded: !!report.bankState.osRomLoaded,
+            floatingPointRomLoaded: !!report.bankState.floatingPointRomLoaded,
+            selfTestRomLoaded: !!report.bankState.selfTestRomLoaded,
+          }
+        : null,
+    };
+  }
+
+  function makeXexError(report, name) {
+    const err = new Error(
+      (report && report.message ? String(report.message) : "XEX preflight failed") +
+        (name ? ": " + String(name) : ""),
+    );
+    err.code = report && report.code ? String(report.code) : "xex_preflight_failed";
+    err.phase = "xex_preflight_failed";
+    err.details = {
+      name: name ? String(name) : "",
+      xexPreflight: cloneXexPreflightReport(report),
+    };
+    return err;
+  }
+
   function skipXexSegmentMarkers(bytes, startIndex) {
     let i = startIndex | 0;
     while (
@@ -98,24 +201,50 @@
       i = skipXexSegmentMarkers(xexBytes, i);
 
       if (i >= xexBytes.length) break;
-      if (i + 3 >= xexBytes.length) break;
+      if (i + 3 >= xexBytes.length) {
+        return {
+          ok: false,
+          code: "xex_truncated_header",
+          message: "XEX segment header is truncated",
+        };
+      }
 
       const start = (xexBytes[i] & 0xff) | ((xexBytes[i + 1] & 0xff) << 8);
       const end = (xexBytes[i + 2] & 0xff) | ((xexBytes[i + 3] & 0xff) << 8);
-      if (end < start) return null;
+      if (end < start) {
+        return {
+          ok: false,
+          code: "xex_invalid_segment_range",
+          message: "XEX segment end address precedes the start address",
+        };
+      }
 
       const segmentSize = end - start + 1;
       i += 4;
-      if (i + segmentSize > xexBytes.length) return null;
+      if (i + segmentSize > xexBytes.length) {
+        return {
+          ok: false,
+          code: "xex_truncated_segment",
+          message: "XEX segment data is truncated",
+        };
+      }
 
       total += 6 + segmentSize;
       i += segmentSize;
       foundSegment = true;
     }
 
-    if (!foundSegment) return null;
+    if (!foundSegment) {
+      return {
+        ok: false,
+        code: "xex_no_segments",
+        message: "XEX file does not contain any loadable segments",
+      };
+    }
 
     const normalized = new Uint8Array(total);
+    const segments = [];
+    const vectorBytes = Object.create(null);
     let out = 0;
     i = 0;
 
@@ -123,7 +252,13 @@
       i = skipXexSegmentMarkers(xexBytes, i);
 
       if (i >= xexBytes.length) break;
-      if (i + 3 >= xexBytes.length) break;
+      if (i + 3 >= xexBytes.length) {
+        return {
+          ok: false,
+          code: "xex_truncated_header",
+          message: "XEX segment header is truncated",
+        };
+      }
 
       const startLo = xexBytes[i] & 0xff;
       const startHi = xexBytes[i + 1] & 0xff;
@@ -131,11 +266,23 @@
       const endHi = xexBytes[i + 3] & 0xff;
       const start2 = startLo | (startHi << 8);
       const end2 = endLo | (endHi << 8);
-      if (end2 < start2) return null;
+      if (end2 < start2) {
+        return {
+          ok: false,
+          code: "xex_invalid_segment_range",
+          message: "XEX segment end address precedes the start address",
+        };
+      }
 
       const segmentSize2 = end2 - start2 + 1;
       i += 4;
-      if (i + segmentSize2 > xexBytes.length) return null;
+      if (i + segmentSize2 > xexBytes.length) {
+        return {
+          ok: false,
+          code: "xex_truncated_segment",
+          message: "XEX segment data is truncated",
+        };
+      }
 
       normalized[out++] = XEX_SEGMENT_MARKER;
       normalized[out++] = XEX_SEGMENT_MARKER;
@@ -144,11 +291,43 @@
       normalized[out++] = endLo;
       normalized[out++] = endHi;
       normalized.set(xexBytes.subarray(i, i + segmentSize2), out);
+      segments.push({
+        index: segments.length | 0,
+        start: start2,
+        end: end2,
+        length: segmentSize2,
+      });
+      for (let offset = 0; offset < segmentSize2; offset++) {
+        const addr = (start2 + offset) & 0xffff;
+        if (addr >= 0x02e0 && addr <= 0x02e3) {
+          vectorBytes[addr] = xexBytes[i + offset] & 0xff;
+        }
+      }
       out += segmentSize2;
       i += segmentSize2;
     }
 
-    return out === normalized.length ? normalized : null;
+    if (out !== normalized.length) {
+      return {
+        ok: false,
+        code: "xex_normalization_failed",
+        message: "XEX normalization produced an unexpected byte count",
+      };
+    }
+
+    return {
+      ok: true,
+      normalizedXex: normalized,
+      segments: segments,
+      runAddress:
+        vectorBytes[0x02e0] !== undefined && vectorBytes[0x02e1] !== undefined
+          ? (vectorBytes[0x02e0] & 0xff) | ((vectorBytes[0x02e1] & 0xff) << 8)
+          : null,
+      initAddress:
+        vectorBytes[0x02e2] !== undefined && vectorBytes[0x02e3] !== undefined
+          ? (vectorBytes[0x02e2] & 0xff) | ((vectorBytes[0x02e3] & 0xff) << 8)
+          : null,
+    };
   }
 
   function xexSegmentOverlapsRange(normalizedXex, rangeStart, rangeEnd) {
@@ -193,19 +372,7 @@
     return -1;
   }
 
-  function buildXexBootLoader(normalizedXex) {
-    if (
-      xexSegmentOverlapsRange(
-        normalizedXex,
-        XEX_BOOT_LOADER_RESERVED_START,
-        XEX_BOOT_LOADER_RESERVED_END
-      )
-    )
-      {return null;}
-
-    const bufferAddr = chooseXexBootBuffer(normalizedXex);
-    if (bufferAddr < 0) return null;
-
+  function buildXexBootLoader(bufferAddr) {
     const loader = XEX_BOOT_LOADER.slice();
     loader[XEX_BOOT_PATCH_GETBYTE_BUF_LO] = bufferAddr & 0xff;
     loader[XEX_BOOT_PATCH_GETBYTE_BUF_HI] = (bufferAddr >> 8) & 0xff;
@@ -214,11 +381,219 @@
     return loader;
   }
 
-  function xexToAtr(xexBytes) {
-    const normalizedXex = normalizeXex(xexBytes);
-    if (!normalizedXex) return null;
-    const bootLoader = buildXexBootLoader(normalizedXex);
-    if (!bootLoader) return null;
+  function createPredictedBankState(mediaState, portB) {
+    const effectivePortB = sanitizePortB(portB | 0);
+    return {
+      portB: effectivePortB,
+      basicEnabled: (effectivePortB & 0x02) === 0,
+      osEnabled: (effectivePortB & 0x01) !== 0,
+      floatingPointEnabled: (effectivePortB & 0x01) !== 0,
+      selfTestEnabled: (effectivePortB & 0x80) === 0,
+      basicRomLoaded: !!mediaState.basicRomLoaded,
+      osRomLoaded: !!mediaState.osRomLoaded,
+      floatingPointRomLoaded: !!mediaState.floatingPointRomLoaded,
+      selfTestRomLoaded: !!mediaState.selfTestRomLoaded,
+    };
+  }
+
+  function getProtectedXexRegions(mediaState, portB) {
+    const bankState = createPredictedBankState(mediaState, portB | 0);
+    const regions = [
+      {
+        kind: "boot_loader_reserved",
+        name: "XEX boot loader",
+        start: XEX_BOOT_LOADER_RESERVED_START,
+        end: XEX_BOOT_LOADER_RESERVED_END,
+        length: XEX_BOOT_LOADER_RESERVED_END - XEX_BOOT_LOADER_RESERVED_START + 1,
+        protected: true,
+      },
+      {
+        kind: "io_registers",
+        name: "I/O registers",
+        start: 0xd000,
+        end: 0xd7ff,
+        length: 0x0800,
+        protected: true,
+      },
+    ];
+    if (bankState.selfTestEnabled && bankState.selfTestRomLoaded) {
+      regions.push({
+        kind: "self_test_rom",
+        name: "Self-test ROM",
+        start: 0x5000,
+        end: 0x57ff,
+        length: 0x0800,
+        romBacked: true,
+      });
+    }
+    if (bankState.basicEnabled && bankState.basicRomLoaded) {
+      regions.push({
+        kind: "basic_rom",
+        name: "BASIC ROM",
+        start: 0xa000,
+        end: 0xbfff,
+        length: 0x2000,
+        romBacked: true,
+      });
+    }
+    if (bankState.osEnabled && bankState.osRomLoaded) {
+      regions.push({
+        kind: "os_rom",
+        name: "OS ROM",
+        start: 0xc000,
+        end: 0xcfff,
+        length: 0x1000,
+        romBacked: true,
+      });
+    }
+    if (bankState.floatingPointEnabled && bankState.floatingPointRomLoaded) {
+      regions.push({
+        kind: "floating_point_rom",
+        name: "Floating-point ROM",
+        start: 0xd800,
+        end: 0xffff,
+        length: 0x2800,
+        romBacked: true,
+      });
+    }
+    return {
+      portB: bankState.portB,
+      bankState: bankState,
+      regions: regions,
+    };
+  }
+
+  function computeXexRangeOverlap(startA, endA, startB, endB) {
+    const overlapStart = Math.max(startA | 0, startB | 0) | 0;
+    const overlapEnd = Math.min(endA | 0, endB | 0) | 0;
+    if (overlapStart > overlapEnd) return null;
+    return {
+      start: overlapStart & 0xffff,
+      end: overlapEnd & 0xffff,
+      length: (overlapEnd - overlapStart + 1) >>> 0,
+    };
+  }
+
+  function preflightXex(xexBytes, options) {
+    const opts = options || {};
+    const normalized = normalizeXex(xexBytes);
+    const portBInfo = getProtectedXexRegions(
+      opts.mediaState || {},
+      opts.portB !== undefined && opts.portB !== null ? opts.portB : 0xff,
+    );
+    const report = {
+      ok: false,
+      phase: "xex_preflight_failed",
+      code: "",
+      message: "",
+      byteLength: xexBytes.length | 0,
+      normalizedByteLength: 0,
+      segmentCount: 0,
+      segments: [],
+      loaderRange: {
+        start: XEX_BOOT_LOADER_RESERVED_START,
+        end: XEX_BOOT_LOADER_RESERVED_END,
+        length: XEX_BOOT_LOADER_RESERVED_END - XEX_BOOT_LOADER_RESERVED_START + 1,
+      },
+      bufferAddress: null,
+      bufferRange: null,
+      protectedRegions: portBInfo.regions.map(cloneRange),
+      overlaps: [],
+      runAddress: null,
+      initAddress: null,
+      portB: portBInfo.portB & 0xff,
+      bankState: portBInfo.bankState,
+    };
+
+    if (!normalized.ok) {
+      report.code = normalized.code;
+      report.message = normalized.message;
+      return report;
+    }
+
+    report.normalizedByteLength = normalized.normalizedXex.length | 0;
+    report.segmentCount = normalized.segments.length | 0;
+    report.segments = normalized.segments.map(function (segment) {
+      return {
+        index: segment.index | 0,
+        start: segment.start & 0xffff,
+        end: segment.end & 0xffff,
+        length: segment.length >>> 0,
+      };
+    });
+    report.runAddress =
+      typeof normalized.runAddress === "number" ? normalized.runAddress & 0xffff : null;
+    report.initAddress =
+      typeof normalized.initAddress === "number" ? normalized.initAddress & 0xffff : null;
+    for (let i = 0; i < normalized.segments.length; i++) {
+      const segment = normalized.segments[i];
+      for (let j = 0; j < portBInfo.regions.length; j++) {
+        const region = portBInfo.regions[j];
+        const overlap = computeXexRangeOverlap(
+          segment.start,
+          segment.end,
+          region.start,
+          region.end,
+        );
+        if (!overlap) continue;
+        report.overlaps.push({
+          segmentIndex: segment.index | 0,
+          segmentStart: segment.start & 0xffff,
+          segmentEnd: segment.end & 0xffff,
+          regionKind: String(region.kind || ""),
+          regionName: String(region.name || ""),
+          regionStart: region.start & 0xffff,
+          regionEnd: region.end & 0xffff,
+          overlapStart: overlap.start & 0xffff,
+          overlapEnd: overlap.end & 0xffff,
+          overlapLength: overlap.length >>> 0,
+          protected: !!region.protected,
+          romBacked: !!region.romBacked,
+        });
+      }
+    }
+    if (report.overlaps.length) {
+      const firstOverlap = report.overlaps[0];
+      report.code =
+        firstOverlap.regionKind === "boot_loader_reserved"
+          ? "xex_loader_overlap"
+          : "xex_protected_memory_overlap";
+      report.message =
+        "XEX segment $" +
+        firstOverlap.segmentStart.toString(16).toUpperCase().padStart(4, "0") +
+        "-$" +
+        firstOverlap.segmentEnd.toString(16).toUpperCase().padStart(4, "0") +
+        " overlaps " +
+        firstOverlap.regionName;
+      return report;
+    }
+
+    const bufferAddress = chooseXexBootBuffer(normalized.normalizedXex);
+    if (bufferAddress < 0) {
+      report.code = "xex_boot_buffer_unavailable";
+      report.message = "XEX boot loader could not reserve a safe boot buffer";
+      return report;
+    }
+
+    report.ok = true;
+    report.phase = "xex_preflight_passed";
+    report.code = "xex_preflight_passed";
+    report.message = "XEX preflight passed";
+    report.bufferAddress = bufferAddress & 0xffff;
+    report.bufferRange = {
+      start: bufferAddress & 0xffff,
+      end: (bufferAddress + 0x7f) & 0xffff,
+      length: 0x80,
+    };
+    report.normalizedXex = normalized.normalizedXex;
+    return report;
+  }
+
+  function xexToAtr(preflight) {
+    if (!preflight || !preflight.ok || !(preflight.normalizedXex instanceof Uint8Array))
+      {return null;}
+    const normalizedXex = preflight.normalizedXex;
+    const bootLoader = buildXexBootLoader(preflight.bufferAddress | 0);
 
     const normalizedSize = normalizedXex.length;
     const dataSectors = ((normalizedSize + (ATR_SECTOR_SIZE - 1)) / ATR_SECTOR_SIZE) | 0;
@@ -250,12 +625,10 @@
   function createApi(cfg) {
     const CPU = cfg.CPU;
     const IO_PORTB = cfg.IO_PORTB;
+    const DEFAULT_PORTB =
+      typeof cfg.DEFAULT_PORTB === "number" ? sanitizePortB(cfg.DEFAULT_PORTB) : 0xff;
     const DEVICE_SLOT_COUNT = 8;
     const NO_IMAGE_MOUNTED = -1;
-
-    function sanitizePortB(value) {
-      return ((value & 0x83) | 0x7c) & 0xff;
-    }
 
     function createRuntime(opts) {
       const machine = opts.machine;
@@ -377,6 +750,87 @@
           bytes: bytes,
           size: bytes.length | 0,
           writable: true,
+        };
+      }
+
+      function getMediaStateForXex() {
+        return {
+          basicRomLoaded: !!machine.media.basicRom,
+          osRomLoaded: !!machine.media.osRom,
+          floatingPointRomLoaded: !!machine.media.floatingPointRom,
+          selfTestRomLoaded: !!machine.media.selfTestRom,
+        };
+      }
+
+      function normalizeXexPortBOverride(options) {
+        if (!options || typeof options !== "object") return DEFAULT_PORTB;
+        if (options.portB !== undefined && options.portB !== null) {
+          return sanitizePortB(options.portB | 0);
+        }
+        if (
+          options.resetOptions &&
+          typeof options.resetOptions === "object" &&
+          options.resetOptions.portB !== undefined &&
+          options.resetOptions.portB !== null
+        ) {
+          return sanitizePortB(options.resetOptions.portB | 0);
+        }
+        return DEFAULT_PORTB;
+      }
+
+      function prepareDiskBytesForMount(bytes, name, options) {
+        const result = {
+          format: isXexFile(name) ? "xex" : "atr",
+          sourceByteLength: bytes.length | 0,
+          mountedByteLength: bytes.length | 0,
+          bytes: bytes,
+          xexPreflight: null,
+        };
+        if (!isXexFile(name)) return result;
+        const preflight = preflightXex(bytes, {
+          mediaState: getMediaStateForXex(),
+          portB: normalizeXexPortBOverride(options),
+        });
+        result.xexPreflight = cloneXexPreflightReport(preflight);
+        if (!preflight.ok) throw makeXexError(preflight, name || "");
+        const converted = xexToAtr(preflight);
+        if (!converted) throw makeXexError(preflight, name || "");
+        result.bytes = converted;
+        result.mountedByteLength = converted.length | 0;
+        return result;
+      }
+
+      function loadDiskToDeviceSlotDetailed(
+        arrayBuffer,
+        name,
+        deviceSlotIndex,
+        options,
+      ) {
+        ensureMediaLayout();
+        const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
+        const deviceImageIndex = machine.media.deviceSlots[deviceSlot] | 0;
+        const preferredImageIndex = isValidImageIndex(deviceImageIndex)
+          ? deviceImageIndex
+          : NO_IMAGE_MOUNTED;
+        const prepared = prepareDiskBytesForMount(
+          new Uint8Array(arrayBuffer),
+          name,
+          options || null,
+        );
+        const imageIndex = storeDiskImage(
+          prepared.bytes,
+          name,
+          preferredImageIndex,
+        );
+        machine.media.deviceSlots[deviceSlot] = imageIndex;
+        copyMediaToIoData();
+        return {
+          imageIndex: imageIndex,
+          deviceSlot: deviceSlot,
+          format: prepared.format,
+          sourceByteLength: prepared.sourceByteLength | 0,
+          mountedByteLength: prepared.mountedByteLength | 0,
+          xexPreflight: prepared.xexPreflight,
         };
       }
 
@@ -510,24 +964,12 @@
       }
 
       function loadDiskToDeviceSlot(arrayBuffer, name, deviceSlotIndex) {
-        ensureMediaLayout();
-        const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
-        const deviceImageIndex = machine.media.deviceSlots[deviceSlot] | 0;
-        const preferredImageIndex = isValidImageIndex(deviceImageIndex)
-          ? deviceImageIndex
-          : NO_IMAGE_MOUNTED;
-        let bytes = new Uint8Array(arrayBuffer);
-        if (isXexFile(name)) {
-          const converted = xexToAtr(bytes);
-          if (!converted) {
-            throw new Error("Invalid or unsupported XEX file: " + (name || ""));
-          }
-          bytes = converted;
-        }
-        const imageIndex = storeDiskImage(bytes, name, preferredImageIndex);
-        machine.media.deviceSlots[deviceSlot] = imageIndex;
-        copyMediaToIoData();
-        return imageIndex;
+        return loadDiskToDeviceSlotDetailed(
+          arrayBuffer,
+          name,
+          deviceSlotIndex,
+          null,
+        ).imageIndex;
       }
 
       function mountImageToDeviceSlot(imageIndex, deviceSlotIndex) {
@@ -610,6 +1052,7 @@
         loadOsRom: loadOsRom,
         loadBasicRom: loadBasicRom,
         loadDiskToDeviceSlot: loadDiskToDeviceSlot,
+        loadDiskToDeviceSlotDetailed: loadDiskToDeviceSlotDetailed,
         mountImageToDeviceSlot: mountImageToDeviceSlot,
         unmountDeviceSlot: unmountDeviceSlot,
         getMountedDiskForDeviceSlot: getMountedDiskForDeviceSlot,

@@ -107,6 +107,29 @@
     }
   }
 
+  function serializeError(err) {
+    if (!err || typeof err !== "object") {
+      return {
+        name: "Error",
+        message: String(err || "unknown error"),
+      };
+    }
+    const out = {
+      name: err.name ? String(err.name) : "Error",
+      message: err.message ? String(err.message) : String(err),
+    };
+    if (err.code) out.code = String(err.code);
+    if (err.phase) out.phase = String(err.phase);
+    if (err.details !== undefined) out.details = err.details;
+    if (err.cause && typeof err.cause === "object") {
+      out.cause = {
+        name: err.cause.name ? String(err.cause.name) : "Error",
+        message: err.cause.message ? String(err.cause.message) : String(err.cause),
+      };
+    }
+    return out;
+  }
+
   function postResponse(id, ok, result, error, transfer) {
     const msg = {
       type: "response",
@@ -114,7 +137,7 @@
       ok: !!ok,
     };
     if (ok) msg.result = result === undefined ? null : result;
-    else msg.error = String(error || "unknown error");
+    else msg.error = serializeError(error);
     if (transfer && transfer.length) {
       self.postMessage(msg, transfer);
       return;
@@ -727,6 +750,36 @@
           return app.runUntilPc(hasTarget ? data.targetPc | 0 : null, data);
         }
         return { ok: false, reason: "unsupported" };
+      case "loadDiskToDeviceSlot":
+        if (typeof app.loadDiskToDeviceSlotDetailed === "function") {
+          return app.loadDiskToDeviceSlotDetailed(
+            data.buffer || new ArrayBuffer(0),
+            data.name || "",
+            data.slot | 0,
+            data.options || null,
+          );
+        }
+        if (typeof app.loadDiskToDeviceSlot === "function") {
+          return {
+            imageIndex: app.loadDiskToDeviceSlot(
+              data.buffer || new ArrayBuffer(0),
+              data.name || "",
+              data.slot | 0,
+            ),
+            deviceSlot: data.slot | 0,
+            format: /\.xex$/i.test(String(data.name || "")) ? "xex" : "atr",
+            sourceByteLength:
+              data.buffer && typeof data.buffer.byteLength === "number"
+                ? data.buffer.byteLength | 0
+                : 0,
+            mountedByteLength:
+              data.buffer && typeof data.buffer.byteLength === "number"
+                ? data.buffer.byteLength | 0
+                : 0,
+            xexPreflight: null,
+          };
+        }
+        throw new Error("A8E worker loadDiskToDeviceSlot is unavailable");
       case "readMemory":
         if (typeof app.readMemory === "function") {
           return {

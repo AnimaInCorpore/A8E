@@ -317,6 +317,28 @@
         return out;
       }
 
+      function summarizeTightLoopHistory(history) {
+        const counts = Object.create(null);
+        for (let i = 0; i < history.length; i++) {
+          const key = String(history[i] & 0xffff);
+          counts[key] = ((counts[key] | 0) + 1) | 0;
+        }
+        const pcs = Object.keys(counts);
+        pcs.sort(function (a, b) {
+          return (counts[b] | 0) - (counts[a] | 0);
+        });
+        return {
+          windowSize: history.length | 0,
+          uniquePcCount: pcs.length | 0,
+          hotAddresses: pcs.slice(0, 4).map(function (key) {
+            return {
+              pc: (key | 0) & 0xffff,
+              count: counts[key] | 0,
+            };
+          }),
+        };
+      }
+
       function executeSingleInstruction() {
         const ctx = machine.ctx;
         const startCycleCounter = ctx.cycleCounter >>> 0;
@@ -427,6 +449,20 @@
         if (result && typeof result.stopAddress === "number") {
           out.stopAddress = result.stopAddress & 0xffff;
         }
+        if (result && result.tightLoop) {
+          out.tightLoop = {
+            windowSize: result.tightLoop.windowSize | 0,
+            uniquePcCount: result.tightLoop.uniquePcCount | 0,
+            hotAddresses: Array.isArray(result.tightLoop.hotAddresses)
+              ? result.tightLoop.hotAddresses.map(function (entry) {
+                  return {
+                    pc: entry.pc & 0xffff,
+                    count: entry.count | 0,
+                  };
+                })
+              : [],
+          };
+        }
         if (breakpointHitAddress >= 0) {
           out.breakpointHit = breakpointHitAddress & 0xffff;
         }
@@ -479,6 +515,17 @@
           65536,
         );
         const maxCycles = normalizePositiveLimit(config.maxCycles, 2000000);
+        const detectTightLoop = !!config.detectTightLoop;
+        const tightLoopWindow = normalizePositiveLimit(config.tightLoopWindow, 32);
+        const tightLoopMinInstructions = normalizePositiveLimit(
+          config.tightLoopMinInstructions,
+          256,
+        );
+        const tightLoopUniquePcLimit = normalizePositiveLimit(
+          config.tightLoopUniquePcLimit,
+          4,
+        );
+        const tightLoopHistory = [];
         const ctx = machine.ctx;
         const startCycleCounter = ctx.cycleCounter >>> 0;
         const startInstructionCounter = ctx.instructionCounter >>> 0;
@@ -552,6 +599,29 @@
               executedCycles:
                 ((ctx.cycleCounter >>> 0) - startCycleCounter) >>> 0,
             };
+          }
+          if (detectTightLoop) {
+            tightLoopHistory.push(currentPc & 0xffff);
+            if (tightLoopHistory.length > tightLoopWindow) tightLoopHistory.shift();
+            if (
+              tightLoopHistory.length >= tightLoopWindow &&
+              (((ctx.instructionCounter >>> 0) - startInstructionCounter) >>> 0) >=
+                tightLoopMinInstructions
+            ) {
+              const summary = summarizeTightLoopHistory(tightLoopHistory);
+              if (summary.uniquePcCount <= tightLoopUniquePcLimit) {
+                return {
+                  ok: false,
+                  reason: "tight_loop",
+                  stopAddress: ctx.cpu.pc & 0xffff,
+                  executedInstructions:
+                    ((ctx.instructionCounter >>> 0) - startInstructionCounter) >>> 0,
+                  executedCycles:
+                    ((ctx.cycleCounter >>> 0) - startCycleCounter) >>> 0,
+                  tightLoop: summary,
+                };
+              }
+            }
           }
         }
       }

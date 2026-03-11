@@ -224,6 +224,7 @@
       ? window.A8EMemory.createApi({
           CPU: CPU,
           IO_PORTB: IO_PORTB,
+          DEFAULT_PORTB: IO_INIT_VALUES[IO_PORTB] & 0xff,
         })
       : null;
   if (!memoryApi) throw new Error("A8EMemory is not loaded");
@@ -678,6 +679,7 @@
     const memoryLoadOsRom = memoryRuntime.loadOsRom;
     const loadBasicRom = memoryRuntime.loadBasicRom;
     const loadDiskToDeviceSlot = memoryRuntime.loadDiskToDeviceSlot;
+    const loadDiskToDeviceSlotDetailed = memoryRuntime.loadDiskToDeviceSlotDetailed;
     const mountImageToDeviceSlot = memoryRuntime.mountImageToDeviceSlot;
     const unmountDeviceSlot = memoryRuntime.unmountDeviceSlot;
     const getMountedDiskForDeviceSlot = memoryRuntime.getMountedDiskForDeviceSlot;
@@ -1241,6 +1243,7 @@
       loadOsRom: loadOsRom,
       loadBasicRom: loadBasicRom,
       loadDiskToDeviceSlot: loadDiskToDeviceSlot,
+      loadDiskToDeviceSlotDetailed: loadDiskToDeviceSlotDetailed,
       mountImageToDeviceSlot: mountImageToDeviceSlot,
       unmountDeviceSlot: unmountDeviceSlot,
       getMountedDiskForDeviceSlot: getMountedDiskForDeviceSlot,

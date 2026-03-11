@@ -78,6 +78,7 @@
     "pauseAddress",
     "instructionLimit",
     "cycleLimit",
+    "tight_loop",
     "fault_illegal_opcode",
     "fault_execution_error",
     "reset",
@@ -1530,6 +1531,10 @@
             : null,
       message:
         raw.message !== undefined && raw.message !== null ? String(raw.message) : null,
+      phase:
+        raw.phase !== undefined && raw.phase !== null ? String(raw.phase) : null,
+      code:
+        raw.code !== undefined && raw.code !== null ? String(raw.code) : null,
       timedOut: raw.timedOut === true || isTimeoutLikeReason(raw.reason),
       timeoutMs:
         raw.timeoutMs !== undefined && raw.timeoutMs !== null
@@ -1547,6 +1552,119 @@
     if (raw.error) out.error = serializeAutomationError(raw.error);
     out.phase = inferFailurePhase(out, bundle);
     return out;
+  }
+
+  function cloneMountedMediaState(entries) {
+    if (!Array.isArray(entries)) return [];
+    return entries.map(function (entry) {
+      return entry && typeof entry === "object" ? Object.assign({}, entry) : entry;
+    });
+  }
+
+  function cloneXexPreflightReport(report) {
+    if (!report || typeof report !== "object") return null;
+    return {
+      ok: !!report.ok,
+      phase: report.phase ? String(report.phase) : null,
+      code: report.code ? String(report.code) : null,
+      message: report.message ? String(report.message) : null,
+      byteLength:
+        typeof report.byteLength === "number" ? report.byteLength >>> 0 : 0,
+      normalizedByteLength:
+        typeof report.normalizedByteLength === "number"
+          ? report.normalizedByteLength >>> 0
+          : 0,
+      segmentCount:
+        typeof report.segmentCount === "number" ? report.segmentCount >>> 0 : 0,
+      segments: Array.isArray(report.segments)
+        ? report.segments.map(function (segment) {
+            return {
+              index: segment.index | 0,
+              start: clamp16(segment.start),
+              end: clamp16(segment.end),
+              length: segment.length >>> 0,
+            };
+          })
+        : [],
+      loaderRange:
+        report.loaderRange && typeof report.loaderRange === "object"
+          ? {
+              start: clamp16(report.loaderRange.start),
+              end: clamp16(report.loaderRange.end),
+              length: report.loaderRange.length >>> 0,
+            }
+          : null,
+      bufferAddress:
+        typeof report.bufferAddress === "number" ? clamp16(report.bufferAddress) : null,
+      bufferRange:
+        report.bufferRange && typeof report.bufferRange === "object"
+          ? {
+              start: clamp16(report.bufferRange.start),
+              end: clamp16(report.bufferRange.end),
+              length: report.bufferRange.length >>> 0,
+            }
+          : null,
+      protectedRegions: Array.isArray(report.protectedRegions)
+        ? report.protectedRegions.map(function (region) {
+            return {
+              kind: region.kind ? String(region.kind) : "",
+              name: region.name ? String(region.name) : "",
+              start: clamp16(region.start),
+              end: clamp16(region.end),
+              length: region.length >>> 0,
+              protected: !!region.protected,
+              romBacked: !!region.romBacked,
+            };
+          })
+        : [],
+      overlaps: Array.isArray(report.overlaps)
+        ? report.overlaps.map(function (entry) {
+            return {
+              segmentIndex: entry.segmentIndex | 0,
+              segmentStart: clamp16(entry.segmentStart),
+              segmentEnd: clamp16(entry.segmentEnd),
+              regionKind: entry.regionKind ? String(entry.regionKind) : "",
+              regionName: entry.regionName ? String(entry.regionName) : "",
+              regionStart: clamp16(entry.regionStart),
+              regionEnd: clamp16(entry.regionEnd),
+              overlapStart: clamp16(entry.overlapStart),
+              overlapEnd: clamp16(entry.overlapEnd),
+              overlapLength: entry.overlapLength >>> 0,
+              protected: !!entry.protected,
+              romBacked: !!entry.romBacked,
+            };
+          })
+        : [],
+      runAddress:
+        typeof report.runAddress === "number" ? clamp16(report.runAddress) : null,
+      initAddress:
+        typeof report.initAddress === "number" ? clamp16(report.initAddress) : null,
+      portB: typeof report.portB === "number" ? clamp8(report.portB) : null,
+      bankState:
+        report.bankState && typeof report.bankState === "object"
+          ? Object.assign({}, report.bankState, {
+              portB:
+                typeof report.bankState.portB === "number"
+                  ? clamp8(report.bankState.portB)
+                  : null,
+            })
+          : null,
+    };
+  }
+
+  function buildBootStateSnapshot(app, debugState, bankState, mountedMedia, consoleKeys, renderer) {
+    return {
+      ready: typeof app.isReady === "function" ? !!app.isReady() : false,
+      running: !!(debugState && debugState.running),
+      rendererBackend: renderer ? String(renderer) : "unknown",
+      currentPc:
+        debugState && typeof debugState.pc === "number" ? clamp16(debugState.pc) : null,
+      stopReason:
+        debugState && debugState.reason ? String(debugState.reason) : null,
+      bankState: bankState ? Object.assign({}, bankState) : null,
+      mountedMedia: cloneMountedMediaState(mountedMedia),
+      consoleKeys: consoleKeys ? Object.assign({}, consoleKeys) : null,
+    };
   }
 
   async function buildArtifactBundle(options) {
@@ -1610,6 +1728,22 @@
         };
       }
     }
+    const counters =
+      base && base.counters !== undefined ? base.counters : await api.getCounters();
+    const bankState =
+      base && base.bankState !== undefined ? base.bankState : await api.getBankState();
+    const traceTail =
+      base && Array.isArray(base.traceTail)
+        ? cloneTraceEntries(base.traceTail)
+        : cloneTraceEntries(await api.getTraceTail(traceTailLimit));
+    const mountedMedia = await getMountedMedia();
+    const consoleKeys = await api.getConsoleKeyState();
+    const rendererBackend =
+      base && base.rendererBackend
+        ? String(base.rendererBackend)
+        : typeof app.getRendererBackend === "function"
+          ? String(app.getRendererBackend() || "unknown")
+          : "unknown";
     return {
       type: "a8e.artifactBundle",
       schemaVersion: ARTIFACT_SCHEMA_VERSION,
@@ -1618,29 +1752,36 @@
       capturedAt: new Date().toISOString(),
       capturedAtMs: Date.now(),
       operation: opts.operation ? String(opts.operation) : null,
-      rendererBackend:
-        base && base.rendererBackend ? String(base.rendererBackend) : null,
+      rendererBackend: rendererBackend,
       capabilities: await getCapabilities(),
       runConfiguration: normalizeRunConfiguration(opts.runConfiguration),
       debugState: debugState,
-      counters:
-        base && base.counters !== undefined ? base.counters : await api.getCounters(),
-      bankState:
-        base && base.bankState !== undefined ? base.bankState : await api.getBankState(),
+      counters: counters,
+      bankState: bankState,
       breakpointHit:
         base && base.breakpointHit !== undefined
           ? base.breakpointHit
           : debugState && typeof debugState.breakpointHit === "number"
             ? debugState.breakpointHit & 0xffff
             : null,
-      traceTail:
-        base && Array.isArray(base.traceTail)
-          ? cloneTraceEntries(base.traceTail)
-          : cloneTraceEntries(await api.getTraceTail(traceTailLimit)),
+      traceTail: traceTail,
       disassembly: disassemblyResult,
       sourceContext: sourceContext,
-      mountedMedia: await getMountedMedia(),
-      consoleKeys: await api.getConsoleKeyState(),
+      mountedMedia: mountedMedia,
+      consoleKeys: consoleKeys,
+      bootState: buildBootStateSnapshot(
+        app,
+        debugState,
+        bankState,
+        mountedMedia,
+        consoleKeys,
+        rendererBackend,
+      ),
+      xexPreflight: cloneXexPreflightReport(opts.xexPreflight),
+      xexLaunch:
+        opts.xexLaunch && typeof opts.xexLaunch === "object"
+          ? Object.assign({}, opts.xexLaunch)
+          : null,
       memoryRanges:
         base && Array.isArray(base.memoryRanges)
           ? base.memoryRanges.map(function (entry) {
@@ -1806,6 +1947,172 @@
     return assembleSource(spec);
   }
 
+  function buildXexLaunchSummary(context) {
+    return {
+      name: String(context.name || "PROGRAM.XEX"),
+      slot: context.slot | 0,
+      byteLength: context.byteLength >>> 0,
+      mountedByteLength: context.mountedByteLength >>> 0,
+      reset: context.reset !== false,
+      started: !!context.started,
+      resetOptions: context.resetOptions || null,
+      runAddr:
+        typeof context.runAddr === "number" ? clamp16(context.runAddr) : null,
+      entryPc:
+        typeof context.entryPc === "number" ? clamp16(context.entryPc) : null,
+      sourceUrl: context.sourceUrl ? String(context.sourceUrl) : null,
+      format: context.format ? String(context.format) : "xex",
+    };
+  }
+
+  function buildXexRunConfiguration(context, options) {
+    const opts = options || {};
+    const out = {
+      slot: context.slot | 0,
+      xexName: String(context.name || "PROGRAM.XEX"),
+      byteLength: context.byteLength >>> 0,
+      mountedByteLength: context.mountedByteLength >>> 0,
+      reset: context.reset !== false,
+    };
+    if (context.resetOptions) out.resetOptions = context.resetOptions;
+    if (typeof context.entryPc === "number") out.targetPc = clamp16(context.entryPc);
+    if (typeof context.runAddr === "number") out.runAddr = clamp16(context.runAddr);
+    if (typeof opts.maxInstructions === "number") out.maxInstructions = opts.maxInstructions;
+    if (typeof opts.maxCycles === "number") out.maxCycles = opts.maxCycles;
+    if (opts.detectTightLoop) out.detectTightLoop = true;
+    return out;
+  }
+
+  function resolveXexEntryPc(raw, runAddr, xexPreflight) {
+    if (raw.entryPc !== undefined && raw.entryPc !== null) return clamp16(raw.entryPc);
+    if (raw.expectedEntryPc !== undefined && raw.expectedEntryPc !== null) {
+      return clamp16(raw.expectedEntryPc);
+    }
+    if (typeof runAddr === "number") return clamp16(runAddr);
+    if (
+      xexPreflight &&
+      typeof xexPreflight.runAddress === "number" &&
+      isFinite(xexPreflight.runAddress)
+    ) {
+      return clamp16(xexPreflight.runAddress);
+    }
+    return null;
+  }
+
+  function describeXexBootFailure(result, entryPc) {
+    const targetPc = typeof entryPc === "number" ? clamp16(entryPc) : null;
+    const reason =
+      result && result.reason !== undefined && result.reason !== null
+        ? String(result.reason)
+        : "xex_boot_failed";
+    const failure = {
+      phase: "xex_boot_failed",
+      reason: reason,
+      code: "xex_boot_failed",
+      message: "XEX boot failed before reaching the entry point",
+    };
+    if (targetPc !== null) failure.targetPc = targetPc;
+    if (result && typeof result.executedInstructions === "number") {
+      failure.executedInstructions = result.executedInstructions >>> 0;
+    }
+    if (result && typeof result.executedCycles === "number") {
+      failure.executedCycles = result.executedCycles >>> 0;
+    }
+    if (result && result.tightLoop) {
+      failure.reason = "tight_loop";
+      failure.code = "xex_boot_tight_loop";
+      failure.message = "XEX boot got stuck in a tight loop before reaching the entry point";
+      failure.tightLoop = result.tightLoop;
+      return failure;
+    }
+    if (reason === "instructionLimit" || reason === "cycleLimit") {
+      failure.code = "xex_boot_entry_not_reached";
+      failure.message = "XEX boot did not reach the entry point before execution limits";
+      return failure;
+    }
+    if (reason === "fault_illegal_opcode" || reason === "fault_execution_error") {
+      failure.code = reason === "fault_illegal_opcode"
+        ? "xex_boot_fault_illegal_opcode"
+        : "xex_boot_fault_execution_error";
+      failure.message = "XEX boot stopped on a CPU fault before reaching the entry point";
+      return failure;
+    }
+    if (reason === "breakpoint") {
+      failure.code = "xex_boot_breakpoint_mismatch";
+      failure.message = "XEX boot stopped at a different breakpoint before reaching the entry point";
+      return failure;
+    }
+    if (reason === "unsupported") {
+      failure.code = "xex_boot_unsupported";
+      failure.message = "Paused-mode XEX boot execution is unavailable";
+      return failure;
+    }
+    return failure;
+  }
+
+  async function captureXexBootFailure(operation, context, failure, options) {
+    const failureInfo = Object.assign({}, failure || {});
+    const launch = buildXexLaunchSummary(context);
+    const snapshot = await captureFailureState(
+      Object.assign({}, options || {}, {
+        operation: operation,
+        runConfiguration: buildXexRunConfiguration(context, options || {}),
+        xexPreflight: context.xexPreflight || null,
+        xexLaunch: launch,
+        failure: {
+          operation: operation,
+          phase: failureInfo.phase || "xex_boot_failed",
+          reason: failureInfo.reason || "xex_boot_failed",
+          code: failureInfo.code || "xex_boot_failed",
+          message: failureInfo.message || "XEX boot failed",
+          targetPc:
+            typeof context.entryPc === "number" ? clamp16(context.entryPc) : undefined,
+          error: failureInfo.error || null,
+        },
+      }),
+    );
+    snapshot.type = "a8e.xexBootFailure";
+    snapshot.ok = false;
+    snapshot.phase = "xex_boot_failed";
+    snapshot.reason = failureInfo.reason || "xex_boot_failed";
+    snapshot.code = failureInfo.code || "xex_boot_failed";
+    snapshot.xexLaunch = launch;
+    snapshot.xexPreflight = cloneXexPreflightReport(context.xexPreflight);
+    snapshot.bootDiagnostics = {
+      currentPc:
+        snapshot.bootState && typeof snapshot.bootState.currentPc === "number"
+          ? snapshot.bootState.currentPc & 0xffff
+          : null,
+      bankState: snapshot.bankState ? Object.assign({}, snapshot.bankState) : null,
+      mountedMedia: cloneMountedMediaState(snapshot.mountedMedia),
+      traceTail: cloneTraceEntries(snapshot.traceTail),
+      disassembly:
+        snapshot.disassembly && typeof snapshot.disassembly === "object"
+          ? Object.assign({}, snapshot.disassembly)
+          : null,
+    };
+    if (typeof failureInfo.executedInstructions === "number") {
+      snapshot.executedInstructions = failureInfo.executedInstructions >>> 0;
+    }
+    if (typeof failureInfo.executedCycles === "number") {
+      snapshot.executedCycles = failureInfo.executedCycles >>> 0;
+    }
+    if (failureInfo.tightLoop) snapshot.tightLoop = failureInfo.tightLoop;
+    emitProgress(operation, "boot_failed", {
+      name: launch.name,
+      slot: launch.slot,
+      reason: snapshot.reason,
+      code: snapshot.code,
+      targetPc:
+        typeof launch.entryPc === "number" ? launch.entryPc & 0xffff : undefined,
+      currentPc:
+        snapshot.bootState && typeof snapshot.bootState.currentPc === "number"
+          ? snapshot.bootState.currentPc & 0xffff
+          : undefined,
+    });
+    return snapshot;
+  }
+
   async function runXex(spec) {
     const app = await getApp();
     const hostFs = getCurrentHostFs();
@@ -1870,78 +2177,218 @@
     }
 
     const slotIndex = raw.slot !== undefined ? raw.slot | 0 : 0;
-    emitProgress(operation, "media_accepted", {
+    let mountResult = null;
+    let xexPreflight = null;
+    try {
+      if (typeof app.loadDiskToDeviceSlotDetailed === "function") {
+        mountResult = await Promise.resolve(
+          app.loadDiskToDeviceSlotDetailed(toArrayBuffer(bytes), name, slotIndex, {
+            portB: resetOptions && resetOptions.portB,
+          }),
+        );
+      } else {
+        app.loadDiskToDeviceSlot(toArrayBuffer(bytes), name, slotIndex);
+        mountResult = {
+          deviceSlot: slotIndex,
+          format: "xex",
+          sourceByteLength: bytes.length | 0,
+          mountedByteLength: bytes.length | 0,
+          xexPreflight: null,
+        };
+      }
+      xexPreflight = cloneXexPreflightReport(
+        mountResult && mountResult.xexPreflight ? mountResult.xexPreflight : null,
+      );
+      emitProgress(operation, "xex_preflight_passed", {
+        name: name,
+        slot: slotIndex,
+        byteLength: bytes.length | 0,
+        segmentCount:
+          xexPreflight && typeof xexPreflight.segmentCount === "number"
+            ? xexPreflight.segmentCount | 0
+            : undefined,
+        bufferAddress:
+          xexPreflight && typeof xexPreflight.bufferAddress === "number"
+            ? xexPreflight.bufferAddress & 0xffff
+            : undefined,
+        entryPc:
+          xexPreflight && typeof xexPreflight.runAddress === "number"
+            ? xexPreflight.runAddress & 0xffff
+            : undefined,
+      });
+    } catch (err) {
+      xexPreflight = cloneXexPreflightReport(
+        err && err.details && err.details.xexPreflight
+          ? err.details.xexPreflight
+          : err && err.details && err.details.preflight
+            ? err.details.preflight
+            : null,
+      );
+      emitProgress(operation, "xex_preflight_failed", {
+        name: name,
+        slot: slotIndex,
+        code: err && err.code ? String(err.code) : "xex_preflight_failed",
+      });
+      return captureXexBootFailure(
+        operation,
+        {
+          name: name,
+          slot: slotIndex,
+          byteLength: bytes.length | 0,
+          mountedByteLength: 0,
+          reset: raw.reset !== false,
+          started: false,
+          resetOptions: resetOptions,
+          runAddr: runAddr,
+          entryPc: null,
+          sourceUrl: raw.sourceUrl ? String(raw.sourceUrl) : null,
+          format: "xex",
+          xexPreflight: xexPreflight,
+        },
+        {
+          phase: err && err.phase ? String(err.phase) : "xex_preflight_failed",
+          reason: "xex_boot_failed",
+          code: err && err.code ? String(err.code) : "xex_preflight_failed",
+          message:
+            err && err.message ? String(err.message) : "XEX preflight failed",
+          error: err,
+        },
+        raw,
+      );
+    }
+
+    const entryPc = resolveXexEntryPc(raw, runAddr, xexPreflight);
+    const launchContext = {
       name: name,
       slot: slotIndex,
       byteLength: bytes.length | 0,
-    });
-    try {
-      app.loadDiskToDeviceSlot(toArrayBuffer(bytes), name, slotIndex);
-    } catch (err) {
-      emitProgress(operation, "xex_loader_failed", {
-        name: name,
-        slot: slotIndex,
-      });
-      throw createAutomationError({
-        operation: operation,
-        phase: "xex_loader_start",
-        message: "Failed to hand XEX bytes to the loader path",
-        details: {
-          name: name,
-          slot: slotIndex,
-        },
-        cause: err,
-      });
-    }
-    emitProgress(operation, "loader_installed", {
-      name: name,
-      slot: slotIndex,
-    });
+      mountedByteLength:
+        mountResult && typeof mountResult.mountedByteLength === "number"
+          ? mountResult.mountedByteLength | 0
+          : bytes.length | 0,
+      reset: raw.reset !== false,
+      started: false,
+      resetOptions: resetOptions,
+      runAddr: runAddr,
+      entryPc: entryPc,
+      sourceUrl: raw.sourceUrl ? String(raw.sourceUrl) : null,
+      format:
+        mountResult && mountResult.format ? String(mountResult.format) : "xex",
+      xexPreflight: xexPreflight,
+    };
+
     if (raw.reset !== false && typeof app.reset === "function") {
       try {
         app.reset(resetOptions);
       } catch (err) {
-        throw createAutomationError({
-          operation: operation,
-          phase: "system_reset",
-          message: "Failed to reset emulator after installing XEX loader media",
-          cause: err,
-        });
+        return captureXexBootFailure(
+          operation,
+          launchContext,
+          {
+            phase: "system_reset",
+            reason: "xex_boot_failed",
+            code: "xex_reset_failed",
+            message:
+              err && err.message
+                ? String(err.message)
+                : "Failed to reset emulator for XEX boot",
+            error: err,
+          },
+          raw,
+        );
       }
       emitProgress(operation, "boot_reset", {
         name: name,
         slot: slotIndex,
       });
     }
-    let started = false;
+
+    const shouldAwaitEntry =
+      raw.awaitEntry !== false &&
+      raw.start !== false &&
+      entryPc !== null &&
+      typeof app.runUntilPc === "function";
+    if (shouldAwaitEntry) {
+      const runOptions = {
+        maxInstructions: Math.max(
+          1,
+          raw.maxBootInstructions | 0 || raw.maxInstructions | 0 || 500000,
+        ),
+        maxCycles: Math.max(
+          1,
+          raw.maxBootCycles | 0 || raw.maxCycles | 0 || 4000000,
+        ),
+        detectTightLoop: raw.detectTightLoop !== false,
+        tightLoopWindow: Math.max(1, raw.tightLoopWindow | 0 || 32),
+        tightLoopMinInstructions: Math.max(
+          1,
+          raw.tightLoopMinInstructions | 0 || 256,
+        ),
+        tightLoopUniquePcLimit: Math.max(
+          1,
+          raw.tightLoopUniquePcLimit | 0 || 4,
+        ),
+      };
+      const result = await Promise.resolve(app.runUntilPc(entryPc, runOptions));
+      if (didReachTargetPc(result, entryPc)) {
+        emitProgress(operation, "entry_breakpoint_hit", {
+          name: name,
+          slot: slotIndex,
+          entryPc: entryPc & 0xffff,
+        });
+        notifyStatus();
+        return Object.assign({}, buildXexLaunchSummary(launchContext), {
+          ok: true,
+          phase: "entry_breakpoint_hit",
+          debugState:
+            result && result.debugState ? result.debugState : await api.getDebugState(),
+          counters: result && result.counters ? result.counters : await api.getCounters(),
+          traceTail:
+            result && Array.isArray(result.traceTail)
+              ? cloneTraceEntries(result.traceTail)
+              : await api.getTraceTail(32),
+          xexPreflight: xexPreflight,
+        });
+      }
+      return captureXexBootFailure(
+        operation,
+        launchContext,
+        describeXexBootFailure(result, entryPc),
+        Object.assign({}, raw, runOptions),
+      );
+    }
+
     if (raw.start !== false && typeof app.start === "function") {
       try {
         app.start();
-        started = true;
+        launchContext.started = true;
       } catch (err) {
-        throw createAutomationError({
-          operation: operation,
-          phase: "xex_loader_start",
-          message: "Failed to start emulator after installing XEX loader media",
-          cause: err,
-        });
+        return captureXexBootFailure(
+          operation,
+          launchContext,
+          {
+            phase: "xex_boot_start",
+            reason: "xex_boot_failed",
+            code: "xex_start_failed",
+            message:
+              err && err.message
+                ? String(err.message)
+                : "Failed to start emulator after XEX setup",
+            error: err,
+          },
+          raw,
+        );
       }
-      emitProgress(operation, "loader_running", {
-        name: name,
-        slot: slotIndex,
-      });
     }
     notifyStatus();
-    return {
-        name: name,
-        slot: slotIndex,
-        byteLength: bytes.length | 0,
-        reset: raw.reset !== false,
-        started: started,
-        resetOptions: resetOptions,
-        runAddr: runAddr,
-        sourceUrl: raw.sourceUrl ? String(raw.sourceUrl) : null,
-      };
+    return Object.assign({}, buildXexLaunchSummary(launchContext), {
+      ok: true,
+      phase:
+        launchContext.started && entryPc === null
+          ? "boot_started"
+          : "xex_preflight_passed",
+      xexPreflight: xexPreflight,
+    });
   }
 
   async function mountDiskFromUrl(url, options) {

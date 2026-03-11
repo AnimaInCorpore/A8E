@@ -88,6 +88,19 @@
     return new Uint8Array(0);
   }
 
+  function hydrateWorkerError(raw) {
+    if (!raw || typeof raw !== "object") {
+      return new Error(String(raw || "A8E worker request failed"));
+    }
+    const err = new Error(raw.message ? String(raw.message) : "A8E worker request failed");
+    if (raw.name) err.name = String(raw.name);
+    if (raw.code) err.code = String(raw.code);
+    if (raw.phase) err.phase = String(raw.phase);
+    if (raw.details !== undefined) err.details = raw.details;
+    if (raw.cause !== undefined) err.cause = raw.cause;
+    return err;
+  }
+
   function normalizeName(raw) {
     if (!raw) return null;
     let s = String(raw);
@@ -829,7 +842,7 @@
         pendingRequests.delete(id);
         if (data.ok === false) {
           pendingRequest.reject(
-            new Error(data.error || "A8E worker request failed"),
+            hydrateWorkerError(data.error || "A8E worker request failed"),
           );
           return;
         }
@@ -1018,6 +1031,23 @@
           [buf],
         );
       },
+      loadDiskToDeviceSlotDetailed: function (arrayBuffer, name, slot, options) {
+        const idx = slot | 0;
+        const buf = toArrayBuffer(arrayBuffer);
+        return sendRequest(
+          "loadDiskToDeviceSlot",
+          {
+            buffer: buf,
+            name: name || "",
+            slot: idx,
+            options: options && typeof options === "object" ? options : null,
+          },
+          [buf],
+        ).then(function (result) {
+          if (idx >= 0 && idx < state.mounted.length) state.mounted[idx] = true;
+          return result || null;
+        });
+      },
       mountImageToDeviceSlot: function (image, slot) {
         const idx = slot | 0;
         if (idx >= 0 && idx < state.mounted.length) state.mounted[idx] = true;
@@ -1152,6 +1182,29 @@
       };}
     if (app && typeof app.collectArtifacts !== "function")
       {app.collectArtifacts = function () { return null; };}
+    if (app && typeof app.loadDiskToDeviceSlotDetailed !== "function")
+      {app.loadDiskToDeviceSlotDetailed = function (arrayBuffer, name, slot, options) {
+        const imageIndex = app.loadDiskToDeviceSlot
+          ? app.loadDiskToDeviceSlot(arrayBuffer, name, slot)
+          : null;
+        return {
+          imageIndex: imageIndex,
+          deviceSlot: slot | 0,
+          format: /\.xex$/i.test(String(name || "")) ? "xex" : "atr",
+          sourceByteLength:
+            arrayBuffer && typeof arrayBuffer.byteLength === "number"
+              ? arrayBuffer.byteLength | 0
+              : 0,
+          mountedByteLength:
+            arrayBuffer && typeof arrayBuffer.byteLength === "number"
+              ? arrayBuffer.byteLength | 0
+              : 0,
+          xexPreflight:
+            options && typeof options === "object" && options.xexPreflight
+              ? options.xexPreflight
+              : null,
+        };
+      };}
     if (app && typeof app.onDebugStateChange !== "function")
       {app.onDebugStateChange = function () { return function () {}; };}
     if (app && typeof app.isWorkerBackend !== "function")

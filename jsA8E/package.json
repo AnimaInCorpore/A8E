@@ -2,6 +2,7 @@
   "name": "jsa8e",
   "private": true,
   "scripts": {
+    "test:automation": "node tests/automation_xex_boot_failure.test.js",
     "lint": "eslint \"js/**/*.js\"",
     "lint:fix": "eslint \"js/**/*.js\" --fix"
   },
