@@ -96,6 +96,27 @@
       return sram[IO_COLBK] & 0xf0;
     }
 
+    function fetchCharacterRow8(ram, chBase, ch, row) {
+      const glyphRow = row & 0xff;
+      if (glyphRow >= 8) return 0;
+      return ram[(chBase + ch * 8 + glyphRow) & 0xffff] & 0xff;
+    }
+
+    function fetchCharacterRow10(ram, chBase, ch, row) {
+      const glyphRow = row & 0xff;
+      if (ch < 0x60) return fetchCharacterRow8(ram, chBase, ch, glyphRow);
+      if (glyphRow < 2) return 0;
+      if (glyphRow < 8) return ram[(chBase + ch * 8 + glyphRow) & 0xffff] & 0xff;
+      if (glyphRow < 10) return ram[(chBase + ch * 8 + (glyphRow - 8)) & 0xffff] & 0xff;
+      return 0;
+    }
+
+    function fetchCharacterRow16(ram, chBase, ch, row) {
+      const glyphRow = row & 0xff;
+      if (glyphRow >= 16) return 0;
+      return ram[(chBase + ch * 8 + (glyphRow >> 1)) & 0xffff] & 0xff;
+    }
+
     function drawBackgroundClipped(ctx, dst, prio, dstIndex, startX, cycles) {
       const sram = ctx.sram;
       let x = startX | 0;
@@ -209,9 +230,8 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
-      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      const vScrollOffset = 8 - lineDelta - (io.video.verticalScrollOffset | 0);
+      const vScrollOffset = ((8 - lineDelta) - (io.video.verticalScrollOffset | 0)) & 0xff;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 2;
@@ -242,8 +262,7 @@
             ctx.cycleCounter++; // DMA steal: name (only on first line of row)
           }
 
-          data =
-            ram[(chBase + ch * 8 + (vScrollOffset & 0xff)) & 0xffff] & 0xff;
+          data = fetchCharacterRow8(ram, chBase, ch, vScrollOffset);
           mask = 0x80;
         }
 
@@ -336,8 +355,8 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
-      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
+      const vScrollOffset = ((10 - lineDelta) - (io.video.verticalScrollOffset | 0)) & 0xff;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 2;
@@ -367,23 +386,7 @@
             ctx.cycleCounter++; // DMA steal: name
           }
 
-          if (ch < 0x60) {
-            if (lineDelta > 2) {
-              data =
-                ram[(chBase + ch * 8 + (10 - lineDelta)) & 0xffff] & 0xff;
-            } else {
-              data = 0;
-            }
-          } else {
-            if (lineDelta > 8) {
-              data = 0;
-            } else if (lineDelta > 2) {
-              data =
-                ram[(chBase + ch * 8 + (10 - lineDelta)) & 0xffff] & 0xff;
-            } else {
-              data = ram[(chBase + ch * 8 + (2 - lineDelta)) & 0xffff] & 0xff;
-            }
-          }
+          data = fetchCharacterRow10(ram, chBase, ch, vScrollOffset);
           mask = 0x80;
         }
 
@@ -503,11 +506,9 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
-      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      const vScrollOffset = 8 - lineDelta - (io.video.verticalScrollOffset | 0);
+      const vScrollOffset = ((8 - lineDelta) - (io.video.verticalScrollOffset | 0)) & 0xff;
 
-      const chactl = sram[IO_CHACTL] & 0x03;
       const aColorTable0 = SCRATCH_COLOR_TABLE_A;
       const aColorTable1 = SCRATCH_COLOR_TABLE_B;
       fillBkgPf012ColorTable(sram, aColorTable0);
@@ -530,9 +531,9 @@
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (mask === 0x00) {
-          const decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
-          const ch = decoded & 0xff;
-          inverse = (decoded & 0x100) !== 0;
+          const raw = ram[dispAddr] & 0xff;
+          inverse = (raw & 0x80) !== 0;
+          const ch = raw & 0x7f;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           ctx.cycleCounter++; // DMA steal: pattern
 
@@ -540,8 +541,7 @@
             ctx.cycleCounter++; // DMA steal: name
           }
 
-          data =
-            ram[(chBase + ch * 8 + (vScrollOffset & 0xff)) & 0xffff] & 0xff;
+          data = fetchCharacterRow8(ram, chBase, ch, vScrollOffset);
           mask = 0x02;
         }
 
@@ -586,12 +586,9 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
-      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      const vScrollLine = 16 - lineDelta - (io.video.verticalScrollOffset | 0);
-      const vScrollOffset = (vScrollLine >> 1) & 0xff;
+      const vScrollLine = ((16 - lineDelta) - (io.video.verticalScrollOffset | 0)) & 0xff;
 
-      const chactl = sram[IO_CHACTL] & 0x03;
       const aColorTable0 = SCRATCH_COLOR_TABLE_A;
       const aColorTable1 = SCRATCH_COLOR_TABLE_B;
       fillBkgPf012ColorTable(sram, aColorTable0);
@@ -614,9 +611,9 @@
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (mask === 0x00) {
-          const decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
-          const ch = decoded & 0xff;
-          inverse = (decoded & 0x100) !== 0;
+          const raw = ram[dispAddr] & 0xff;
+          inverse = (raw & 0x80) !== 0;
+          const ch = raw & 0x7f;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           if ((vScrollLine & 1) === 0) {
             ctx.cycleCounter++; // DMA steal: pattern
@@ -626,7 +623,7 @@
             ctx.cycleCounter++; // DMA steal: name
           }
 
-          data = ram[(chBase + ch * 8 + vScrollOffset) & 0xffff] & 0xff;
+          data = fetchCharacterRow16(ram, chBase, ch, vScrollLine);
           mask = 0x02;
         }
 
@@ -671,9 +668,8 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
-      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      const vScrollOffset = 8 - lineDelta - (io.video.verticalScrollOffset | 0);
+      const vScrollOffset = ((8 - lineDelta) - (io.video.verticalScrollOffset | 0)) & 0xff;
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
       aColorTable[0] = sram[IO_COLPF0] & 0xff;
@@ -708,8 +704,7 @@
           p = PRIORITY_TABLE_PF0123[colorIndex] & 0xff;
           ch &= 0x3f;
 
-          data =
-            ram[(chBase + ch * 8 + (vScrollOffset & 0xff)) & 0xffff] & 0xff;
+          data = fetchCharacterRow8(ram, chBase, ch, vScrollOffset);
           mask = 0x80;
         }
 
@@ -758,10 +753,8 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
-      const mode = io.currentDisplayListCommand & 0x0f;
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      const vScrollLine = 16 - lineDelta - (io.video.verticalScrollOffset | 0);
-      const vScrollOffset = (vScrollLine >> 1) & 0xff;
+      const vScrollLine = ((16 - lineDelta) - (io.video.verticalScrollOffset | 0)) & 0xff;
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
       aColorTable[0] = sram[IO_COLPF0] & 0xff;
@@ -798,7 +791,7 @@
           p = PRIORITY_TABLE_PF0123[colorIndex] & 0xff;
           ch &= 0x3f;
 
-          data = ram[(chBase + ch * 8 + vScrollOffset) & 0xffff] & 0xff;
+          data = fetchCharacterRow16(ram, chBase, ch, vScrollLine);
           mask = 0x80;
         }
 
@@ -847,9 +840,6 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
-      const mode = io.currentDisplayListCommand & 0x0f;
-      const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-
       const aColorTable = SCRATCH_COLOR_TABLE_A;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
@@ -894,9 +884,6 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
-      const mode = io.currentDisplayListCommand & 0x0f;
-      const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 8;
       const dst = io.videoOut.pixels;
@@ -939,9 +926,6 @@
       const io = ctx.ioData;
       const ram = ctx.ram;
       const sram = ctx.sram;
-
-      const mode = io.currentDisplayListCommand & 0x0f;
-      const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
 
@@ -990,9 +974,6 @@
       const io = ctx.ioData;
       const ram = ctx.ram;
       const sram = ctx.sram;
-
-      const mode = io.currentDisplayListCommand & 0x0f;
-      const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 4;
@@ -1046,9 +1027,6 @@
       const io = ctx.ioData;
       const ram = ctx.ram;
       const sram = ctx.sram;
-
-      const mode = io.currentDisplayListCommand & 0x0f;
-      const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
 
@@ -1108,9 +1086,6 @@
       const io = ctx.ioData;
       const ram = ctx.ram;
       const sram = ctx.sram;
-
-      const mode = io.currentDisplayListCommand & 0x0f;
-      const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 2;
@@ -1270,7 +1245,6 @@
         video.playfieldScratchPixels.fill(baseColor, lineBase, lineBase + PIXELS_PER_LINE);
         video.playfieldScratchPriority.fill(PRIO_BKG, lineBase, lineBase + PIXELS_PER_LINE);
 
-        const lineDelta = (io.nextDisplayListLine - io.video.currentDisplayLine) | 0;
         io.drawLine.bytesPerLine = geometry.bytesPerLine;
         io.drawLine.destIndex =
           lineBase + geometry.playfieldStartX;
