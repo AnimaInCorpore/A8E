@@ -19,6 +19,26 @@
     "[object BigInt64Array]",
     "[object BigUint64Array]",
   ]);
+  const DEFAULT_REQUEST_TIMEOUT_MS = 4000;
+  const REQUEST_TIMEOUT_MS = {
+    start: 4000,
+    pause: 4000,
+    reset: 5000,
+    stepInstruction: 4000,
+    stepOver: 4000,
+    getDebugState: 4000,
+    getCounters: 4000,
+    getTraceTail: 4000,
+    runUntilPc: 30000,
+    loadDiskToDeviceSlot: 15000,
+    readMemory: 4000,
+    readRange: 4000,
+    getBankState: 4000,
+    getMountedDiskForDeviceSlot: 4000,
+    getConsoleKeyState: 4000,
+    captureScreenshot: 15000,
+    collectArtifacts: 15000,
+  };
 
   function supportsWorker() {
     if (typeof window.Worker === "undefined") return false;
@@ -32,6 +52,87 @@
     )
       {return false;}
     return true;
+  }
+
+  function parseBooleanLike(value) {
+    if (value === true || value === false) return value;
+    if (value === undefined || value === null) return null;
+    const text = String(value).trim().toLowerCase();
+    if (!text.length) return null;
+    if (
+      text === "1" ||
+      text === "true" ||
+      text === "yes" ||
+      text === "on"
+    ) {
+      return true;
+    }
+    if (
+      text === "0" ||
+      text === "false" ||
+      text === "no" ||
+      text === "off"
+    ) {
+      return false;
+    }
+    return null;
+  }
+
+  function getQueryWorkerPreference() {
+    if (
+      !window.location ||
+      typeof window.location.search !== "string" ||
+      typeof window.URLSearchParams !== "function"
+    ) {
+      return null;
+    }
+    try {
+      const params = new window.URLSearchParams(window.location.search);
+      const noWorker = parseBooleanLike(
+        params.get("a8e_no_worker") || params.get("noWorker"),
+      );
+      if (noWorker === true) return false;
+      const worker = parseBooleanLike(
+        params.get("a8e_worker") || params.get("worker"),
+      );
+      if (worker !== null) return worker;
+    } catch {
+      // ignore malformed URLs
+    }
+    return null;
+  }
+
+  function getBootWorkerPreference() {
+    const boot =
+      window.A8E_BOOT_OPTIONS && typeof window.A8E_BOOT_OPTIONS === "object"
+        ? window.A8E_BOOT_OPTIONS
+        : null;
+    if (!boot) return null;
+    const noWorker = parseBooleanLike(boot.noWorker);
+    if (noWorker === true) return false;
+    return parseBooleanLike(boot.worker);
+  }
+
+  function resolveWorkerPreference(opts) {
+    const directNoWorker =
+      opts && Object.prototype.hasOwnProperty.call(opts, "noWorker")
+        ? parseBooleanLike(opts.noWorker)
+        : null;
+    if (directNoWorker === true) return false;
+    const directWorker =
+      opts && Object.prototype.hasOwnProperty.call(opts, "worker")
+        ? parseBooleanLike(opts.worker)
+        : null;
+    if (directWorker !== null) return directWorker;
+    const bootWorker = getBootWorkerPreference();
+    if (bootWorker !== null) return bootWorker;
+    return getQueryWorkerPreference();
+  }
+
+  function shouldUseWorker(opts) {
+    const preferred = resolveWorkerPreference(opts);
+    if (preferred === false) return false;
+    return supportsWorker();
   }
 
   function getObjectTag(value) {
@@ -88,15 +189,48 @@
     return new Uint8Array(0);
   }
 
-  function hydrateWorkerError(raw) {
+  function createWorkerRequestError(cmd, message, details) {
+    const text = message
+      ? String(message)
+      : 'A8E worker request "' + String(cmd || "unknown") + '" failed';
+    const err = new Error(text);
+    err.name = "A8EWorkerRequestError";
+    err.code =
+      details && details.code ? String(details.code) : "worker_request_failed";
+    if (cmd) err.command = String(cmd);
+    if (details && details.phase) err.phase = String(details.phase);
+    err.details = Object.assign(
+      {
+        command: cmd ? String(cmd) : "unknown",
+      },
+      details && typeof details === "object" ? details : {},
+    );
+    return err;
+  }
+
+  function hydrateWorkerError(raw, cmd) {
     if (!raw || typeof raw !== "object") {
-      return new Error(String(raw || "A8E worker request failed"));
+      return createWorkerRequestError(
+        cmd,
+        String(raw || "A8E worker request failed"),
+        null,
+      );
     }
-    const err = new Error(raw.message ? String(raw.message) : "A8E worker request failed");
+    const err = createWorkerRequestError(
+      cmd,
+      raw.message ? String(raw.message) : "A8E worker request failed",
+      {
+        code: raw.code,
+        phase: raw.phase,
+      },
+    );
     if (raw.name) err.name = String(raw.name);
-    if (raw.code) err.code = String(raw.code);
-    if (raw.phase) err.phase = String(raw.phase);
-    if (raw.details !== undefined) err.details = raw.details;
+    if (raw.details !== undefined) {
+      err.details =
+        raw.details && typeof raw.details === "object"
+          ? Object.assign({}, err.details || {}, raw.details)
+          : raw.details;
+    }
     if (raw.cause !== undefined) err.cause = raw.cause;
     return err;
   }
@@ -683,6 +817,25 @@
       debugState: null,
     };
 
+    function applyWorkerStateSnapshot(snapshot) {
+      if (!snapshot || typeof snapshot !== "object") return;
+      if (typeof snapshot.running === "boolean") state.running = !!snapshot.running;
+      if (typeof snapshot.hasOsRom === "boolean")
+        {state.hasOsRom = !!snapshot.hasOsRom;}
+      if (typeof snapshot.hasBasicRom === "boolean")
+        {state.hasBasicRom = !!snapshot.hasBasicRom;}
+      if (Array.isArray(snapshot.mounted)) {
+        for (let i = 0; i < state.mounted.length; i++) {
+          state.mounted[i] = !!snapshot.mounted[i];
+        }
+      }
+      if (typeof snapshot.rendererBackend === "string") {
+        state.rendererBackend = snapshot.rendererBackend;
+      }
+      if (snapshot.debug) emitDebugState(snapshot.debug);
+      syncReadyFlag();
+    }
+
     function cloneDebugState(raw) {
       if (!raw || typeof raw !== "object") return null;
       const out = {
@@ -735,6 +888,66 @@
       else worker.postMessage(msg);
     }
 
+    function getRequestTimeoutMs(cmd, requestOptions) {
+      const explicit =
+        requestOptions &&
+        typeof requestOptions === "object" &&
+        Object.prototype.hasOwnProperty.call(requestOptions, "timeoutMs")
+          ? requestOptions.timeoutMs
+          : null;
+      const parsed = explicit !== null ? explicit | 0 : 0;
+      if (explicit !== null) return parsed > 0 ? parsed : 0;
+      const mapped = REQUEST_TIMEOUT_MS[cmd];
+      return mapped > 0 ? mapped : DEFAULT_REQUEST_TIMEOUT_MS;
+    }
+
+    function clearRequestTimer(entry) {
+      if (!entry || !entry.timeoutId) return;
+      clearTimeout(entry.timeoutId);
+      entry.timeoutId = 0;
+    }
+
+    function startRequestTimer(entry) {
+      if (!entry || entry.timeoutStarted) return;
+      entry.timeoutStarted = true;
+      const timeoutMs = entry.timeoutMs | 0;
+      if (timeoutMs <= 0) return;
+      entry.timeoutId = setTimeout(function () {
+        if (pendingRequests.get(entry.id | 0) !== entry) return;
+        pendingRequests.delete(entry.id | 0);
+        entry.reject(
+          createWorkerRequestError(
+            entry.cmd,
+            'A8E worker request "' +
+              entry.cmd +
+              '" timed out after ' +
+              timeoutMs +
+              "ms",
+            {
+              code: "worker_request_timeout",
+              phase: "worker_request_timeout",
+              timeoutMs: timeoutMs,
+              reason: "timeout",
+            },
+          ),
+        );
+      }, timeoutMs);
+    }
+
+    function queuePendingMessage(msg, transfer) {
+      pending.push({ msg: msg, transfer: transfer || null });
+    }
+
+    function dispatchPendingMessage(entry) {
+      if (!entry || !entry.msg) return;
+      if (entry.msg.type === "req") {
+        const pendingEntry = pendingRequests.get(entry.msg.id | 0) || null;
+        if (!pendingEntry) return;
+        startRequestTimer(pendingEntry);
+      }
+      postRaw(entry.msg, entry.transfer);
+    }
+
     function sendCommand(cmd, payload, transfer) {
       if (disposed) return;
       const msg = {
@@ -743,7 +956,7 @@
         payload: payload || null,
       };
       if (!ready) {
-        pending.push({ msg: msg, transfer: transfer || null });
+        queuePendingMessage(msg, transfer || null);
         return;
       }
       postRaw(msg, transfer || null);
@@ -753,10 +966,24 @@
       sendCommand(cmd, payload, transfer || null);
     }
 
-    function rejectPendingRequests(message) {
+    function rejectPendingRequests(message, details) {
       pendingRequests.forEach(function (entry) {
+        clearRequestTimer(entry);
         try {
-          entry.reject(new Error(message || "A8E worker request failed"));
+          entry.reject(
+            createWorkerRequestError(
+              entry.cmd,
+              message || 'A8E worker request "' + entry.cmd + '" failed',
+              Object.assign(
+                {
+                  code: "worker_request_failed",
+                  phase: "worker_request_failed",
+                  reason: "worker_unavailable",
+                },
+                details && typeof details === "object" ? details : {},
+              ),
+            ),
+          );
         } catch {
           // ignore
         }
@@ -764,9 +991,19 @@
       pendingRequests.clear();
     }
 
-    function sendRequest(cmd, payload, transfer) {
+    function sendRequest(cmd, payload, transfer, requestOptions) {
       if (disposed) {
-        return Promise.reject(new Error("A8E worker app is disposed"));
+        return Promise.reject(
+          createWorkerRequestError(
+            cmd,
+            "A8E worker app is disposed",
+            {
+              code: "worker_request_disposed",
+              phase: "worker_request_failed",
+              reason: "disposed",
+            },
+          ),
+        );
       }
       const id = requestSeq++;
       const msg = {
@@ -776,17 +1013,25 @@
         payload: payload || null,
       };
       return new Promise(function (resolve, reject) {
-        pendingRequests.set(id, {
+        const entry = {
+          id: id,
+          cmd: String(cmd || ""),
           resolve: resolve,
           reject: reject,
-        });
+          timeoutMs: getRequestTimeoutMs(cmd, requestOptions),
+          timeoutId: 0,
+          timeoutStarted: false,
+        };
+        pendingRequests.set(id, entry);
         if (!ready) {
-          pending.push({ msg: msg, transfer: transfer || null });
+          queuePendingMessage(msg, transfer || null);
           return;
         }
         try {
+          startRequestTimer(entry);
           postRaw(msg, transfer || null);
         } catch (err) {
+          clearRequestTimer(entry);
           pendingRequests.delete(id);
           reject(err);
         }
@@ -806,22 +1051,13 @@
             : "unknown";
         while (pending.length) {
           const next = pending.shift();
-          postRaw(next.msg, next.transfer);
+          dispatchPendingMessage(next);
         }
         return;
       }
 
       if (data.type === "state") {
-        state.running = !!data.running;
-        state.hasOsRom = !!data.hasOsRom;
-        state.hasBasicRom = !!data.hasBasicRom;
-        if (Array.isArray(data.mounted)) {
-          for (let i = 0; i < state.mounted.length; i++) {
-            state.mounted[i] = !!data.mounted[i];
-          }
-        }
-        if (data.debug) emitDebugState(data.debug);
-        syncReadyFlag();
+        applyWorkerStateSnapshot(data);
         return;
       }
 
@@ -840,11 +1076,18 @@
         const pendingRequest = pendingRequests.get(id) || null;
         if (!pendingRequest) return;
         pendingRequests.delete(id);
+        clearRequestTimer(pendingRequest);
         if (data.ok === false) {
           pendingRequest.reject(
-            hydrateWorkerError(data.error || "A8E worker request failed"),
+            hydrateWorkerError(
+              data.error || "A8E worker request failed",
+              pendingRequest.cmd,
+            ),
           );
           return;
+        }
+        if (data.result && data.result.state) {
+          applyWorkerStateSnapshot(data.result.state);
         }
         pendingRequest.resolve(
           data.result === undefined ? null : data.result,
@@ -859,7 +1102,10 @@
 
     worker.onerror = function (err) {
       if (disposed) return;
-      rejectPendingRequests("A8E worker failed");
+      rejectPendingRequests("A8E worker failed", {
+        code: "worker_request_worker_failed",
+        reason: "worker_failed",
+      });
       console.error("A8E worker failed:", err);
     };
 
@@ -892,14 +1138,15 @@
       start: function () {
         state.running = true;
         audioBridge.resumeFromGesture();
-        sendCommand("start");
+        return sendRequest("start");
       },
       pause: function () {
         state.running = false;
-        sendCommand("pause");
+        return sendRequest("pause");
       },
       reset: function (options) {
-        sendCommand("reset", options || null);
+        state.running = false;
+        return sendRequest("reset", options || null);
       },
       setTurbo: function (v) {
         sendCommand("setTurbo", { value: !!v });
@@ -1043,6 +1290,7 @@
             options: options && typeof options === "object" ? options : null,
           },
           [buf],
+          { timeoutMs: REQUEST_TIMEOUT_MS.loadDiskToDeviceSlot },
         ).then(function (result) {
           if (idx >= 0 && idx < state.mounted.length) state.mounted[idx] = true;
           return result || null;
@@ -1094,7 +1342,10 @@
       dispose: function () {
         if (disposed) return;
         disposed = true;
-        rejectPendingRequests("A8E worker app disposed");
+        rejectPendingRequests("A8E worker app disposed", {
+          code: "worker_request_disposed",
+          reason: "disposed",
+        });
         try {
           sendCommand("dispose");
         } catch {
@@ -1213,7 +1464,7 @@
   }
 
   function create(opts) {
-    if (!supportsWorker()) {
+    if (!shouldUseWorker(opts)) {
       return createLegacyApp(opts);
     }
 
@@ -1227,5 +1478,6 @@
   window.A8EApp = {
     create: create,
     supportsWorker: supportsWorker,
+    shouldUseWorker: shouldUseWorker,
   };
 })();

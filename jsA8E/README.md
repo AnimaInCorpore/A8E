@@ -128,6 +128,8 @@ Primary domains:
 
 Reset-time bank overrides are available for bring-up flows that need a specific boot mapping. `system.reset({ portB: 0xFF })`, `system.boot({ portB: 0xFF })`, and `dev.runXex({ ..., resetOptions: { portB: 0xFF } })` apply the initial PIA `PORTB` value before the cold-reset memory map is built.
 
+Worker-backed control calls now acknowledge completion before `system.start()`, `system.pause()`, and `system.reset()` resolve, and `getSystemState({ timeoutMs })` returns partial state with an `error` object instead of hanging forever when one backend read stalls. For deterministic headless/manual fallback, boot with `?a8e_worker=0` (or set `window.A8E_BOOT_OPTIONS = { worker: false }` before `ui.js` runs) to force the main-thread backend.
+
 Flat compatibility aliases still exist, so earlier calls such as `start()`, `runUntilPc()`, or `captureScreenshot()` continue to work.
 
 Example:

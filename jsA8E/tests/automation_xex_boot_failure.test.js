@@ -258,7 +258,11 @@ async function main() {
   assert.equal(result.bootDiagnostics.currentPc, 0xc000);
   assert.equal(Array.isArray(result.bootDiagnostics.mountedMedia), true);
   assert.equal(Array.isArray(result.bootDiagnostics.traceTail), true);
-  assert.deepEqual(progress, ["xex_preflight_failed", "boot_failed"]);
+  assert.deepEqual(progress, [
+    "xex_mount_started",
+    "xex_preflight_failed",
+    "boot_failed",
+  ]);
   assert.equal(resetCalled, false);
   assert.equal(startCalled, false);
 

@@ -4,6 +4,70 @@
   const Util = window.A8EUtil;
   let currentApp = null;
 
+  function parseBooleanLike(value) {
+    if (value === true || value === false) return value;
+    if (value === undefined || value === null) return null;
+    const text = String(value).trim().toLowerCase();
+    if (
+      text === "1" ||
+      text === "true" ||
+      text === "yes" ||
+      text === "on"
+    ) {
+      return true;
+    }
+    if (
+      text === "0" ||
+      text === "false" ||
+      text === "no" ||
+      text === "off"
+    ) {
+      return false;
+    }
+    return null;
+  }
+
+  function resolveWorkerPreference() {
+    const boot =
+      window.A8E_BOOT_OPTIONS && typeof window.A8E_BOOT_OPTIONS === "object"
+        ? window.A8E_BOOT_OPTIONS
+        : null;
+    if (boot) {
+      const noWorker = parseBooleanLike(boot.noWorker);
+      if (noWorker === true) return false;
+      const worker = parseBooleanLike(boot.worker);
+      if (worker !== null) return worker;
+    }
+    if (
+      window.location &&
+      typeof window.location.search === "string" &&
+      typeof window.URLSearchParams === "function"
+    ) {
+      try {
+        const params = new window.URLSearchParams(window.location.search);
+        const noWorker = parseBooleanLike(
+          params.get("a8e_no_worker") || params.get("noWorker"),
+        );
+        if (noWorker === true) return false;
+        const worker = parseBooleanLike(
+          params.get("a8e_worker") || params.get("worker"),
+        );
+        if (worker !== null) return worker;
+      } catch {
+        // ignore malformed URLs
+      }
+    }
+    return null;
+  }
+
+  function withWorkerPreference(base, workerPreference) {
+    if (workerPreference === null) return Object.assign({}, base);
+    return Object.assign({}, base, {
+      worker: workerPreference,
+      noWorker: workerPreference === false,
+    });
+  }
+
   async function boot() {
     let canvas = document.getElementById("screen");
     const debugEl = document.getElementById("debug");
@@ -18,10 +82,17 @@
     const keyboardPanel = document.getElementById("keyboardPanel");
     const joystickPanel = document.getElementById("joystickPanel");
     let app = null;
+    const workerPreference = resolveWorkerPreference();
     const useWorkerApp =
       window.A8EApp &&
-      typeof window.A8EApp.supportsWorker === "function" &&
-      window.A8EApp.supportsWorker();
+      ((typeof window.A8EApp.shouldUseWorker === "function" &&
+        window.A8EApp.shouldUseWorker({
+          worker: workerPreference,
+          noWorker: workerPreference === false,
+        })) ||
+        (typeof window.A8EApp.supportsWorker === "function" &&
+          workerPreference !== false &&
+          window.A8EApp.supportsWorker()));
     let gl = null;
     if (!useWorkerApp) {
       try {
@@ -504,7 +575,7 @@
     }
 
     if (useWorkerApp) {
-      app = window.A8EApp.create({
+      app = window.A8EApp.create(withWorkerPreference({
         canvas: canvas,
         gl: null,
         ctx2d: null,
@@ -514,11 +585,11 @@
         sioTurbo: btnSioTurbo.classList.contains("active"),
         optionOnStart: btnOptionOnStart.classList.contains("active"),
         keyboardMappingMode: getKeyboardMappingModeFromUi(),
-      });
+      }, workerPreference));
       resizeCrtCanvas();
     } else {
       try {
-        app = window.A8EApp.create({
+        app = window.A8EApp.create(withWorkerPreference({
           canvas: canvas,
           gl: gl,
           ctx2d: ctx2d,
@@ -528,7 +599,7 @@
           sioTurbo: btnSioTurbo.classList.contains("active"),
           optionOnStart: btnOptionOnStart.classList.contains("active"),
           keyboardMappingMode: getKeyboardMappingModeFromUi(),
-        });
+        }, workerPreference));
       } catch (e) {
         // If WebGL init succeeded but shader/program setup failed, fall back to 2D by replacing the canvas.
         if (gl && !ctx2d) {
@@ -549,7 +620,7 @@
             canvas.tabIndex = 0;
             gl = null;
             ctx2d = canvas.getContext("2d", { alpha: false });
-            app = window.A8EApp.create({
+            app = window.A8EApp.create(withWorkerPreference({
               canvas: canvas,
               gl: null,
               ctx2d: ctx2d,
@@ -559,7 +630,7 @@
               sioTurbo: btnSioTurbo.classList.contains("active"),
               optionOnStart: btnOptionOnStart.classList.contains("active"),
               keyboardMappingMode: getKeyboardMappingModeFromUi(),
-            });
+            }, workerPreference));
             resizeCrtCanvas();
           } else {
             throw e;

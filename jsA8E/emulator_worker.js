@@ -387,22 +387,35 @@
 
   function postState() {
     if (!app) return;
+    self.postMessage(buildStateSnapshot());
+  }
+
+  function buildStateSnapshot() {
     const mounted = [];
     for (let i = 0; i < 8; i++) {
       if (typeof app.hasMountedDiskForDeviceSlot === "function")
         {mounted.push(!!app.hasMountedDiskForDeviceSlot(i));}
       else mounted.push(false);
     }
-    self.postMessage({
+    return {
       type: "state",
-      running: !!(app.isRunning && app.isRunning()),
-      hasOsRom: !!(app.hasOsRom && app.hasOsRom()),
-      hasBasicRom: !!(app.hasBasicRom && app.hasBasicRom()),
+      running: !!(app && app.isRunning && app.isRunning()),
+      hasOsRom: !!(app && app.hasOsRom && app.hasOsRom()),
+      hasBasicRom: !!(app && app.hasBasicRom && app.hasBasicRom()),
       mounted: mounted,
       rendererBackend: rendererBackend,
       debug:
-        typeof app.getDebugState === "function" ? app.getDebugState() : null,
-    });
+        app && typeof app.getDebugState === "function" ? app.getDebugState() : null,
+    };
+  }
+
+  function buildControlAck(command) {
+    const snapshot = buildStateSnapshot();
+    return {
+      command: String(command || ""),
+      state: snapshot,
+      debugState: snapshot.debug ? cloneDebugState(snapshot.debug) : null,
+    };
   }
 
   async function initApp(msg) {
@@ -715,6 +728,18 @@
     if (!app) throw new Error("A8E worker app is not initialized");
     const data = payload || {};
     switch (cmd) {
+      case "start":
+        app.start();
+        postState();
+        return buildControlAck("start");
+      case "pause":
+        app.pause();
+        postState();
+        return buildControlAck("pause");
+      case "reset":
+        app.reset(data);
+        postState();
+        return buildControlAck("reset");
       case "stepInstruction":
         if (typeof app.stepInstructionAsync === "function") {
           return app.stepInstructionAsync();

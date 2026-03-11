@@ -83,6 +83,7 @@
     "fault_execution_error",
     "reset",
   ]);
+  const DEFAULT_SYSTEM_STATE_TIMEOUT_MS = 1500;
 
   let currentApp = null;
   let currentCanvas = null;
@@ -154,6 +155,159 @@
       return Promise.resolve(app.getDebugState());
     }
     return null;
+  }
+
+  function normalizeTimeoutMs(value, fallbackMs) {
+    if (value === undefined || value === null) return fallbackMs | 0;
+    const timeoutMs = value | 0;
+    if (timeoutMs <= 0) return 0;
+    return timeoutMs;
+  }
+
+  function withTimeout(promise, timeoutMs, onTimeout) {
+    const limit = normalizeTimeoutMs(timeoutMs, 0);
+    if (limit <= 0) return Promise.resolve(promise);
+    return new Promise(function (resolve, reject) {
+      let settled = false;
+      const timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        try {
+          reject(onTimeout());
+        } catch (err) {
+          reject(err);
+        }
+      }, limit);
+      Promise.resolve(promise)
+        .then(function (result) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(result);
+        })
+        .catch(function (err) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(err);
+        });
+    });
+  }
+
+  async function readSystemStatePart(part, producer, fallbackValue, timeoutMs) {
+    try {
+      const value = await withTimeout(
+        Promise.resolve().then(producer),
+        timeoutMs,
+        function () {
+          return createAutomationError({
+            operation: "getSystemState",
+            phase: "system_state_timeout",
+            code: "system_state_timeout",
+            message:
+              'Timed out while reading getSystemState() part "' +
+              String(part || "unknown") +
+              '"',
+            details: {
+              part: String(part || "unknown"),
+              timeoutMs: normalizeTimeoutMs(timeoutMs, DEFAULT_SYSTEM_STATE_TIMEOUT_MS),
+            },
+          });
+        },
+      );
+      return {
+        value: value === undefined ? fallbackValue : value,
+        error: null,
+      };
+    } catch (err) {
+      return {
+        value: fallbackValue,
+        error: serializeAutomationError(
+          createAutomationError({
+            operation: "getSystemState",
+            phase:
+              err && err.phase ? String(err.phase) : "system_state_part_failed",
+            code:
+              err && err.code ? String(err.code) : "system_state_part_failed",
+            message:
+              'Failed to read getSystemState() part "' +
+              String(part || "unknown") +
+              '"',
+            details: {
+              part: String(part || "unknown"),
+              timeoutMs: normalizeTimeoutMs(timeoutMs, DEFAULT_SYSTEM_STATE_TIMEOUT_MS),
+            },
+            cause: err,
+          }),
+        ),
+      };
+    }
+  }
+
+  async function getMountedMediaForSystemState(app, timeoutMs) {
+    const tasks = [];
+    for (let i = 0; i < 8; i++) {
+      tasks.push(
+        readSystemStatePart(
+          "media.slot." + i,
+          async function () {
+            if (typeof app.getMountedDiskForDeviceSlot !== "function") return null;
+            return app.getMountedDiskForDeviceSlot(i);
+          },
+          null,
+          timeoutMs,
+        ).then(function (result) {
+          const info = result.value;
+          if (info) {
+            return {
+              slot: {
+                slot: i,
+                mounted: true,
+                deviceSlot:
+                  typeof info.deviceSlot === "number" ? info.deviceSlot | 0 : i,
+                imageIndex:
+                  typeof info.imageIndex === "number" ? info.imageIndex | 0 : null,
+                name: info.name ? String(info.name) : "disk.atr",
+                size: typeof info.size === "number" ? info.size | 0 : 0,
+                writable: info.writable !== false,
+              },
+              error: result.error,
+            };
+          }
+          const mounted =
+            typeof app.hasMountedDiskForDeviceSlot === "function"
+              ? !!app.hasMountedDiskForDeviceSlot(i)
+              : false;
+          return {
+            slot: {
+              slot: i,
+              mounted: mounted,
+            },
+            error: result.error,
+          };
+        }),
+      );
+    }
+    const results = await Promise.all(tasks);
+    const slots = [];
+    const slotErrors = {};
+    for (let i = 0; i < results.length; i++) {
+      slots.push(results[i].slot);
+      if (results[i].error) slotErrors[String(i)] = results[i].error;
+    }
+    return {
+      slots: slots,
+      error:
+        Object.keys(slotErrors).length > 0
+          ? {
+              code: "system_state_media_partial",
+              message: "Mounted media state is partial",
+              details: {
+                slots: slotErrors,
+              },
+            }
+          : null,
+    };
   }
 
   function getCurrentHostFs() {
@@ -1678,12 +1832,42 @@
     };
   }
 
-  async function getSystemState() {
+  async function getSystemState(options) {
     const app = await getApp();
     const hostFs = getCurrentHostFs();
-    const mountedMedia = await getMountedMedia();
-    const counters = await api.getCounters();
-    const debugState = await api.getDebugState();
+    const opts = options && typeof options === "object" ? options : {};
+    const timeoutMs = normalizeTimeoutMs(
+      opts.timeoutMs,
+      DEFAULT_SYSTEM_STATE_TIMEOUT_MS,
+    );
+    const [
+      mountedMediaResult,
+      countersResult,
+      debugStateResult,
+      consoleKeyStateResult,
+      bankStateResult,
+    ] = await Promise.all([
+      getMountedMediaForSystemState(app, timeoutMs),
+      readSystemStatePart("counters", function () {
+        return api.getCounters();
+      }, null, timeoutMs),
+      readSystemStatePart("debugState", function () {
+        return api.getDebugState();
+      }, lastDebugState ? cloneDebugState(lastDebugState) : null, timeoutMs),
+      readSystemStatePart("consoleKeys", function () {
+        return api.getConsoleKeyState();
+      }, null, timeoutMs),
+      readSystemStatePart("bankState", function () {
+        return api.getBankState();
+      }, null, timeoutMs),
+    ]);
+    const partialErrors = {};
+    if (mountedMediaResult.error) partialErrors.media = mountedMediaResult.error;
+    if (countersResult.error) partialErrors.counters = countersResult.error;
+    if (debugStateResult.error) partialErrors.debugState = debugStateResult.error;
+    if (consoleKeyStateResult.error)
+      {partialErrors.consoleKeys = consoleKeyStateResult.error;}
+    if (bankStateResult.error) partialErrors.bankState = bankStateResult.error;
     return {
       apiVersion: API_VERSION,
       artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
@@ -1703,7 +1887,7 @@
           typeof app.hasBasicRom === "function" ? !!app.hasBasicRom() : false,
       },
       media: {
-        deviceSlots: mountedMedia,
+        deviceSlots: mountedMediaResult.slots,
       },
       hostfs: {
         available: !!hostFs,
@@ -1712,11 +1896,22 @@
             ? hostFs.listFiles().length | 0
             : 0,
       },
-      consoleKeys: await api.getConsoleKeyState(),
-      counters: counters,
-      debugState: debugState,
-      bankState: await api.getBankState(),
+      consoleKeys: consoleKeyStateResult.value,
+      counters: countersResult.value,
+      debugState: debugStateResult.value,
+      bankState: bankStateResult.value,
       lastBuild: lastBuildRecord ? normalizeBuildResult(lastBuildRecord) : null,
+      error:
+        Object.keys(partialErrors).length > 0
+          ? {
+              code: "system_state_partial",
+              message: "getSystemState() returned partial state",
+              details: {
+                timeoutMs: timeoutMs,
+                parts: partialErrors,
+              },
+            }
+          : null,
     };
   }
 
@@ -2005,6 +2200,11 @@
     const slotIndex = raw.slot !== undefined ? raw.slot | 0 : 0;
     let mountResult = null;
     let xexPreflight = null;
+    emitProgress(operation, "xex_mount_started", {
+      name: name,
+      slot: slotIndex,
+      byteLength: bytes.length | 0,
+    });
     try {
       if (typeof app.loadDiskToDeviceSlotDetailed === "function") {
         mountResult = await Promise.resolve(
@@ -2104,8 +2304,12 @@
     };
 
     if (raw.reset !== false && typeof app.reset === "function") {
+      emitProgress(operation, "boot_reset_started", {
+        name: name,
+        slot: slotIndex,
+      });
       try {
-        app.reset(resetOptions);
+        await Promise.resolve(app.reset(resetOptions));
       } catch (err) {
         return captureXexBootFailure(
           operation,
@@ -2186,7 +2390,7 @@
 
     if (raw.start !== false && typeof app.start === "function") {
       try {
-        app.start();
+        await Promise.resolve(app.start());
         launchContext.started = true;
       } catch (err) {
         return captureXexBootFailure(
@@ -2564,8 +2768,20 @@
         name: request.name,
         slot: request.slot,
       });
+      let mountResult = null;
       try {
-        app.loadDiskToDeviceSlot(request.buffer, request.name, request.slot);
+        if (typeof app.loadDiskToDeviceSlotDetailed === "function") {
+          mountResult = await Promise.resolve(
+            app.loadDiskToDeviceSlotDetailed(
+              request.buffer,
+              request.name,
+              request.slot,
+              null,
+            ),
+          );
+        } else {
+          app.loadDiskToDeviceSlot(request.buffer, request.name, request.slot);
+        }
       } catch (err) {
         throw createAutomationError({
           operation: "mountDisk",
@@ -2583,10 +2799,20 @@
         slot: request.slot,
       });
       notifyStatus();
-      return {
+      return Object.assign({
         name: request.name,
         slot: request.slot,
-      };
+      }, mountResult && typeof mountResult === "object" ? {
+        imageIndex:
+          typeof mountResult.imageIndex === "number"
+            ? mountResult.imageIndex | 0
+            : undefined,
+        format: mountResult.format ? String(mountResult.format) : undefined,
+        mountedByteLength:
+          typeof mountResult.mountedByteLength === "number"
+            ? mountResult.mountedByteLength | 0
+            : undefined,
+      } : null);
     },
     mountDiskFromUrl: mountDiskFromUrl,
     loadDisk: function (data, nameOrOpts, slot) {
@@ -2607,19 +2833,54 @@
     start: async function () {
       const app = await getApp();
       if (typeof currentFocusCanvas === "function") currentFocusCanvas(false);
-      app.start();
+      try {
+        await Promise.resolve(app.start());
+      } catch (err) {
+        throw createAutomationError({
+          operation: "start",
+          phase: "system_start",
+          code: "system_start_failed",
+          message: "Failed to start emulator",
+          cause: err,
+        });
+      }
+      notifyStatus();
       return readAppDebugState(app);
     },
     pause: async function () {
       const app = await getApp();
-      app.pause();
+      try {
+        await Promise.resolve(app.pause());
+      } catch (err) {
+        throw createAutomationError({
+          operation: "pause",
+          phase: "system_pause",
+          code: "system_pause_failed",
+          message: "Failed to pause emulator",
+          cause: err,
+        });
+      }
+      notifyStatus();
       return readAppDebugState(app);
     },
     reset: async function (options) {
       const app = await getApp();
       const opts = options && typeof options === "object" ? options : {};
       const resetOptions = normalizeResetOptions(opts);
-      app.reset(resetOptions);
+      try {
+        await Promise.resolve(app.reset(resetOptions));
+      } catch (err) {
+        throw createAutomationError({
+          operation: "reset",
+          phase: "system_reset",
+          code: "system_reset_failed",
+          message: "Failed to reset emulator",
+          details: {
+            resetOptions: resetOptions,
+          },
+          cause: err,
+        });
+      }
       notifyStatus();
       const state = await readAppDebugState(app);
       if (opts.kind || resetOptions) {
