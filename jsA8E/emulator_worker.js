@@ -323,6 +323,7 @@
       "js/core/state.js",
       "js/core/memory.js",
       "js/core/io.js",
+      "js/core/playfield_renderer.js",
       "js/core/playfield.js",
       "js/core/antic.js",
       "js/core/gtia.js",
