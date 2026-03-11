@@ -120,7 +120,7 @@ Primary domains:
 
 - `getCapabilities()`, `getSystemState()`
 - `system.*` for lifecycle, cache-busting reload, and wait helpers
-- `media.*` for ROM and disk control, including `mountDiskFromUrl(...)`
+- `media.*` for ROM and disk control, including `loadRomFromUrl(...)` and `mountDiskFromUrl(...)`
 - `input.*` for keyboard, joystick, and console keys, including `getConsoleKeyState()` and timed console-key presses
 - `debug.*` for breakpoints, stepping, counters, memory, trace, source context, disassembly, and `runUntilPcOrSnapshot(...)`
 - `dev.*` for HostFS access, assembly, `runXex(...)`, and `runXexFromUrl(...)`
@@ -132,10 +132,12 @@ Flat compatibility aliases still exist, so earlier calls such as `start()`, `run
 
 Example:
 
+All URL-based loaders (`loadRomFromUrl`, `mountDiskFromUrl`, `runXexFromUrl`) share the same deterministic fetch controls: `cacheBust`, `cacheBustParam`, `cache`, `credentials`, `mode`, and `fetch` / `requestInit`.
+
 ```js
 const api = await window.A8EAutomation.whenReady();
-await api.media.loadRom("os", { base64: "<ATARIXL.ROM base64>" });
-await api.media.loadRom("basic", { base64: "<ATARIBAS.ROM base64>" });
+await api.media.loadOsRomFromUrl("/roms/ATARIXL.ROM", { cacheBust: "build-20260311" });
+await api.media.loadBasicRomFromUrl("/roms/ATARIBAS.ROM", { cacheBust: "build-20260311" });
 
 const build = await api.dev.assembleSource({
   name: "HELLO.ASM",

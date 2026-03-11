@@ -675,6 +675,43 @@
     };
   }
 
+  function normalizeRomUrlRequest(kind, url, options) {
+    let nextKind = kind;
+    let nextUrl = url;
+    let nextOptions = options;
+    if (
+      kind &&
+      typeof kind === "object" &&
+      !isBinaryView(kind) &&
+      !isDataViewLike(kind) &&
+      !isArrayBufferLike(kind)
+    ) {
+      const spec = Object.assign({}, kind);
+      nextKind = spec.kind || spec.type || spec.rom || "";
+      nextUrl =
+        spec.url !== undefined
+          ? spec.url
+          : spec.href !== undefined
+            ? spec.href
+            : spec.sourceUrl;
+      delete spec.kind;
+      delete spec.type;
+      delete spec.rom;
+      delete spec.url;
+      delete spec.href;
+      delete spec.sourceUrl;
+      nextOptions = spec;
+    }
+    return {
+      kind: nextKind,
+      url: nextUrl,
+      options:
+        nextOptions && typeof nextOptions === "object"
+          ? Object.assign({}, nextOptions)
+          : {},
+    };
+  }
+
   function normalizeDiskRequest(data, nameOrOpts, slot) {
     let name = "disk.atr";
     let targetSlot = 0;
@@ -1812,6 +1849,14 @@
   async function getCapabilities() {
     const app = await getApp();
     const hostFs = getCurrentHostFs();
+    const hasDiskLoad = typeof app.loadDiskToDeviceSlot === "function";
+    const hasRomLoad =
+      typeof app.loadOsRom === "function" &&
+      typeof app.loadBasicRom === "function";
+    const hasUrlXexLoad =
+      hasDiskLoad &&
+      typeof app.reset === "function" &&
+      typeof app.start === "function";
     return {
       apiVersion: API_VERSION,
       artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
@@ -1823,10 +1868,8 @@
       assembler:
         !!window.A8EAssemblerCore &&
         typeof window.A8EAssemblerCore.assembleToXex === "function",
-      disk: typeof app.loadDiskToDeviceSlot === "function",
-      romLoad:
-        typeof app.loadOsRom === "function" &&
-        typeof app.loadBasicRom === "function",
+      disk: hasDiskLoad,
+      romLoad: hasRomLoad,
       screenshot: typeof app.captureScreenshot === "function",
       artifacts: true,
       trace: typeof app.getTraceTail === "function",
@@ -1840,7 +1883,10 @@
       joystick: true,
       consoleKeys: true,
       consoleKeyState: typeof app.getConsoleKeyState === "function",
-      urlMediaLoad: true,
+      urlMediaLoad: hasRomLoad || hasDiskLoad || hasUrlXexLoad,
+      urlRomLoad: hasRomLoad,
+      urlDiskLoad: hasDiskLoad,
+      urlXexLoad: hasUrlXexLoad,
       failureSnapshots: true,
       progressEvents: true,
       cacheControl: true,
@@ -2409,6 +2455,19 @@
     });
   }
 
+  async function loadRomFromUrl(kind, url, options) {
+    const request = normalizeRomUrlRequest(kind, url, options);
+    const resource = await fetchBinaryResource(request.url, Object.assign({}, request.options, {
+      operation: "loadRomFromUrl",
+    }));
+    const result = await api.loadRom(request.kind, resource.bytes);
+    return Object.assign({}, result, {
+      sourceUrl: resource.responseUrl || resource.url,
+      byteLength: resource.bytes.length | 0,
+      contentType: resource.contentType || "",
+    });
+  }
+
   async function runXexFromUrl(url, options) {
     const opts = options && typeof options === "object" ? Object.assign({}, options) : {};
     const resource = await fetchBinaryResource(url, Object.assign({}, opts, {
@@ -2710,6 +2769,13 @@
     },
     loadBasicRom: function (data) {
       return api.loadRom("basic", data);
+    },
+    loadRomFromUrl: loadRomFromUrl,
+    loadOsRomFromUrl: function (url, options) {
+      return api.loadRomFromUrl("os", url, options);
+    },
+    loadBasicRomFromUrl: function (url, options) {
+      return api.loadRomFromUrl("basic", url, options);
     },
     mountDisk: async function (data, nameOrOpts, slot) {
       const request = normalizeDiskRequest(data, nameOrOpts, slot);
@@ -3231,6 +3297,9 @@
     loadRom: api.loadRom,
     loadOsRom: api.loadOsRom,
     loadBasicRom: api.loadBasicRom,
+    loadRomFromUrl: api.loadRomFromUrl,
+    loadOsRomFromUrl: api.loadOsRomFromUrl,
+    loadBasicRomFromUrl: api.loadBasicRomFromUrl,
     mountDisk: api.mountDisk,
     mountDiskFromUrl: api.mountDiskFromUrl,
     loadDisk: api.loadDisk,
