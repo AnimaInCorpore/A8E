@@ -296,6 +296,7 @@
         start: start2,
         end: end2,
         length: segmentSize2,
+        data: xexBytes.slice(i, i + segmentSize2),
       });
       for (let offset = 0; offset < segmentSize2; offset++) {
         const addr = (start2 + offset) & 0xffff;
@@ -407,14 +408,6 @@
         length: XEX_BOOT_LOADER_RESERVED_END - XEX_BOOT_LOADER_RESERVED_START + 1,
         protected: true,
       },
-      {
-        kind: "io_registers",
-        name: "I/O registers",
-        start: 0xd000,
-        end: 0xd7ff,
-        length: 0x0800,
-        protected: true,
-      },
     ];
     if (bankState.selfTestEnabled && bankState.selfTestRomLoaded) {
       regions.push({
@@ -463,15 +456,142 @@
     };
   }
 
-  function computeXexRangeOverlap(startA, endA, startB, endB) {
-    const overlapStart = Math.max(startA | 0, startB | 0) | 0;
-    const overlapEnd = Math.min(endA | 0, endB | 0) | 0;
-    if (overlapStart > overlapEnd) return null;
-    return {
-      start: overlapStart & 0xffff,
-      end: overlapEnd & 0xffff,
-      length: (overlapEnd - overlapStart + 1) >>> 0,
-    };
+  function getBlockedXexWriteRegion(mediaState, portB, address) {
+    const addr = address & 0xffff;
+    const effectivePortB = sanitizePortB(portB | 0);
+
+    if (
+      addr >= XEX_BOOT_LOADER_RESERVED_START &&
+      addr <= XEX_BOOT_LOADER_RESERVED_END
+    ) {
+      return {
+        kind: "boot_loader_reserved",
+        name: "XEX boot loader",
+        start: XEX_BOOT_LOADER_RESERVED_START,
+        end: XEX_BOOT_LOADER_RESERVED_END,
+        length:
+          XEX_BOOT_LOADER_RESERVED_END - XEX_BOOT_LOADER_RESERVED_START + 1,
+        protected: true,
+      };
+    }
+
+    if (
+      addr >= 0x5000 &&
+      addr <= 0x57ff &&
+      (effectivePortB & 0x80) === 0 &&
+      mediaState.selfTestRomLoaded
+    ) {
+      return {
+        kind: "self_test_rom",
+        name: "Self-test ROM",
+        start: 0x5000,
+        end: 0x57ff,
+        length: 0x0800,
+        romBacked: true,
+      };
+    }
+
+    if (
+      addr >= 0xa000 &&
+      addr <= 0xbfff &&
+      (effectivePortB & 0x02) === 0 &&
+      mediaState.basicRomLoaded
+    ) {
+      return {
+        kind: "basic_rom",
+        name: "BASIC ROM",
+        start: 0xa000,
+        end: 0xbfff,
+        length: 0x2000,
+        romBacked: true,
+      };
+    }
+
+    if (
+      addr >= 0xc000 &&
+      addr <= 0xcfff &&
+      (effectivePortB & 0x01) !== 0 &&
+      mediaState.osRomLoaded
+    ) {
+      return {
+        kind: "os_rom",
+        name: "OS ROM",
+        start: 0xc000,
+        end: 0xcfff,
+        length: 0x1000,
+        romBacked: true,
+      };
+    }
+
+    if (
+      addr >= 0xd800 &&
+      addr <= 0xffff &&
+      (effectivePortB & 0x01) !== 0 &&
+      mediaState.floatingPointRomLoaded
+    ) {
+      return {
+        kind: "floating_point_rom",
+        name: "Floating-point ROM",
+        start: 0xd800,
+        end: 0xffff,
+        length: 0x2800,
+        romBacked: true,
+      };
+    }
+
+    return null;
+  }
+
+  function collectBlockedXexWrites(segments, mediaState, initialPortB) {
+    const overlaps = [];
+    let currentPortB = sanitizePortB(initialPortB | 0);
+
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      const bytes = segment && segment.data instanceof Uint8Array ? segment.data : null;
+      let activeOverlap = null;
+
+      for (let offset = 0; offset < segment.length; offset++) {
+        const addr = (segment.start + offset) & 0xffff;
+        const region = getBlockedXexWriteRegion(mediaState, currentPortB, addr);
+
+        if (region) {
+          if (
+            activeOverlap &&
+            activeOverlap.regionKind === String(region.kind || "") &&
+            activeOverlap.overlapEnd + 1 === addr
+          ) {
+            activeOverlap.overlapEnd = addr;
+            activeOverlap.overlapLength =
+              ((activeOverlap.overlapEnd - activeOverlap.overlapStart + 1) | 0) >>> 0;
+          } else {
+            activeOverlap = {
+              segmentIndex: segment.index | 0,
+              segmentStart: segment.start & 0xffff,
+              segmentEnd: segment.end & 0xffff,
+              regionKind: String(region.kind || ""),
+              regionName: String(region.name || ""),
+              regionStart: region.start & 0xffff,
+              regionEnd: region.end & 0xffff,
+              overlapStart: addr & 0xffff,
+              overlapEnd: addr & 0xffff,
+              overlapLength: 1,
+              protected: !!region.protected,
+              romBacked: !!region.romBacked,
+            };
+            overlaps.push(activeOverlap);
+          }
+        } else {
+          activeOverlap = null;
+        }
+
+        if (addr === 0xd301 && bytes && offset < bytes.length) {
+          currentPortB = sanitizePortB(bytes[offset] | 0);
+        }
+      }
+    }
+
+    return overlaps;
   }
 
   function preflightXex(xexBytes, options) {
@@ -525,33 +645,11 @@
       typeof normalized.runAddress === "number" ? normalized.runAddress & 0xffff : null;
     report.initAddress =
       typeof normalized.initAddress === "number" ? normalized.initAddress & 0xffff : null;
-    for (let i = 0; i < normalized.segments.length; i++) {
-      const segment = normalized.segments[i];
-      for (let j = 0; j < portBInfo.regions.length; j++) {
-        const region = portBInfo.regions[j];
-        const overlap = computeXexRangeOverlap(
-          segment.start,
-          segment.end,
-          region.start,
-          region.end,
-        );
-        if (!overlap) continue;
-        report.overlaps.push({
-          segmentIndex: segment.index | 0,
-          segmentStart: segment.start & 0xffff,
-          segmentEnd: segment.end & 0xffff,
-          regionKind: String(region.kind || ""),
-          regionName: String(region.name || ""),
-          regionStart: region.start & 0xffff,
-          regionEnd: region.end & 0xffff,
-          overlapStart: overlap.start & 0xffff,
-          overlapEnd: overlap.end & 0xffff,
-          overlapLength: overlap.length >>> 0,
-          protected: !!region.protected,
-          romBacked: !!region.romBacked,
-        });
-      }
-    }
+    report.overlaps = collectBlockedXexWrites(
+      normalized.segments,
+      opts.mediaState || {},
+      portBInfo.portB,
+    );
     if (report.overlaps.length) {
       const firstOverlap = report.overlaps[0];
       report.code =
@@ -763,7 +861,12 @@
       }
 
       function normalizeXexPortBOverride(options) {
-        if (!options || typeof options !== "object") return DEFAULT_PORTB;
+        const optionOnStart = !!getOptionOnStart();
+        if (!options || typeof options !== "object") {
+          return optionOnStart
+            ? sanitizePortB(DEFAULT_PORTB | 0x02)
+            : DEFAULT_PORTB;
+        }
         if (options.portB !== undefined && options.portB !== null) {
           return sanitizePortB(options.portB | 0);
         }
@@ -775,7 +878,9 @@
         ) {
           return sanitizePortB(options.resetOptions.portB | 0);
         }
-        return DEFAULT_PORTB;
+        return optionOnStart
+          ? sanitizePortB(DEFAULT_PORTB | 0x02)
+          : DEFAULT_PORTB;
       }
 
       function prepareDiskBytesForMount(bytes, name, options) {

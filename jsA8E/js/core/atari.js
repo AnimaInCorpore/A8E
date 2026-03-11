@@ -124,6 +124,13 @@
   const ANTIC_MODE_INFO = hwApi.ANTIC_MODE_INFO;
   const IO_INIT_VALUES = hwApi.IO_INIT_VALUES;
   const PLAYFIELD_SCRATCH_VIEW_X = 64;
+  const DEFAULT_PORTB = (function () {
+    for (let i = 0; i < IO_INIT_VALUES.length; i++) {
+      const entry = IO_INIT_VALUES[i];
+      if (entry && entry.addr === IO_PORTB) return entry.write & 0xff;
+    }
+    return 0xfd;
+  })();
 
   function fillGtiaColorTable(sram, out) {
     out[0] = sram[IO_COLPM0_TRIG2] & 0xff;
@@ -224,7 +231,7 @@
       ? window.A8EMemory.createApi({
           CPU: CPU,
           IO_PORTB: IO_PORTB,
-          DEFAULT_PORTB: IO_INIT_VALUES[IO_PORTB] & 0xff,
+          DEFAULT_PORTB: DEFAULT_PORTB,
         })
       : null;
   if (!memoryApi) throw new Error("A8EMemory is not loaded");

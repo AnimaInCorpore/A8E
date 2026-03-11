@@ -1616,7 +1616,7 @@
               buffer: await Util.readFileAsArrayBuffer(file),
               name: file.name,
             };
-          handler(resolved.buffer, resolved.name || file.name);
+          await Promise.resolve(handler(resolved.buffer, resolved.name || file.name));
           updateStatus();
         } catch (e) {
           console.error("File load error:", e);
@@ -1635,8 +1635,8 @@
 
     attachFileInput(
       disk1,
-      function (buf, name) {
-        app.loadDiskToDeviceSlot(buf, name, 0);
+      async function (buf, name) {
+        await mountDiskToDrive(buf, name);
       },
       resolveDiskInputFile,
     );
@@ -1649,12 +1649,29 @@
 
     function autoStartAfterDiskLoad() {
       if (app.isRunning()) {
-        app.reset();
+        return Promise.resolve(app.reset());
       } else if (app.isReady()) {
-        app.start();
-        setButtons(true);
-        focusCanvas(false);
+        return Promise.resolve(app.start()).then(function () {
+          setButtons(true);
+          focusCanvas(false);
+        });
       }
+      return Promise.resolve();
+    }
+
+    function mountDiskToDrive(buffer, name) {
+      if (typeof app.loadDiskToDeviceSlotDetailed === "function") {
+        return Promise.resolve(app.loadDiskToDeviceSlotDetailed(buffer, name, 0, null));
+      }
+      app.loadDiskToDeviceSlot(buffer, name, 0);
+      return Promise.resolve(null);
+    }
+
+    function mountDiskAndAutoStart(buffer, name) {
+      return mountDiskToDrive(buffer, name).then(function () {
+        updateStatus();
+        return autoStartAfterDiskLoad();
+      });
     }
 
     async function handleScreenDrop(dataTransfer) {
@@ -1665,9 +1682,7 @@
           const file = files[i];
           if (isDiskFileName(file.name)) {
             const resolved = await resolveDiskInputFile(file);
-            app.loadDiskToDeviceSlot(resolved.buffer, resolved.name || file.name, 0);
-            updateStatus();
-            autoStartAfterDiskLoad();
+            await mountDiskAndAutoStart(resolved.buffer, resolved.name || file.name);
             return;
           }
         }
@@ -1689,9 +1704,7 @@
             if (!response.ok) throw new Error("HTTP " + response.status);
             const buffer = await response.arrayBuffer();
             const name = decodeURIComponent(url.split("/").pop()) || "disk.atr";
-            app.loadDiskToDeviceSlot(buffer, name, 0);
-            updateStatus();
-            autoStartAfterDiskLoad();
+            await mountDiskAndAutoStart(buffer, name);
           } catch (e) {
             console.error("Drop: failed to fetch URL (CORS?): " + url, e);
           }
