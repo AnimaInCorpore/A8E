@@ -347,6 +347,7 @@
 
     const btnStart = document.getElementById("btnStart");
     const btnReset = document.getElementById("btnReset");
+    const btnControlsCollapse = document.getElementById("btnControlsCollapse");
     const btnFullscreen = document.getElementById("btnFullscreen");
     const btnTurbo = document.getElementById("btnTurbo");
     const btnSioTurbo = document.getElementById("btnSioTurbo");
@@ -358,6 +359,7 @@
     const btnHostFs = document.getElementById("btnHostFs");
     const btnAssembler = document.getElementById("btnAssembler");
     const btnSnapshots = document.getElementById("btnSnapshots");
+    const secondaryControls = document.getElementById("secondaryControls");
 
     function getKeyboardMappingModeFromUi() {
       if (!btnKeyboardMap) return "translated";
@@ -657,6 +659,27 @@
           ? "Pause emulation. Use this button again to continue from the current state."
           : "Start emulation and run the loaded Atari system.",
       );
+    }
+
+    function setSecondaryControlsExpanded(expanded, skipLayoutRefresh) {
+      if (!secondaryControls || !btnControlsCollapse) return;
+      const isExpanded = !!expanded;
+      secondaryControls.hidden = !isExpanded;
+      btnControlsCollapse.innerHTML = isExpanded
+        ? '<i class="fa-solid fa-chevron-up"></i>'
+        : '<i class="fa-solid fa-chevron-down"></i>';
+      const label = isExpanded
+        ? "Collapse the secondary toolbar controls."
+        : "Expand the secondary toolbar controls.";
+      btnControlsCollapse.title = label;
+      btnControlsCollapse.setAttribute("aria-label", label);
+      btnControlsCollapse.setAttribute(
+        "aria-expanded",
+        isExpanded ? "true" : "false",
+      );
+      if (skipLayoutRefresh) return;
+      resizeCrtCanvas();
+      queueKeyboardScaleConsistencyCheck();
     }
 
     function setButtons(running) {
@@ -1346,6 +1369,12 @@
       focusCanvas(false);
     });
 
+    if (btnControlsCollapse && secondaryControls) {
+      btnControlsCollapse.addEventListener("click", function () {
+        setSecondaryControlsExpanded(secondaryControls.hidden);
+      });
+    }
+
     if (btnFullscreen) {
       btnFullscreen.addEventListener("click", function () {
         toggleFullscreen();
@@ -1828,6 +1857,7 @@
 
     updateStatus();
     updateFullscreenButton();
+    setSecondaryControlsExpanded(false, true);
     setKeyboardMappingMode(getKeyboardMappingModeFromUi(), true);
     if (btnJoystick && joystickPanel) {
       setJoystickEnabled(btnJoystick.classList.contains("active"));
