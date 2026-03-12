@@ -228,6 +228,13 @@
           ),
         };
         await storage.put(entry);
+        if (result && result.savedRunning) {
+          if (automation && automation.system) {
+            await automation.system.start();
+          } else {
+            app.start();
+          }
+        }
         updateQuickSlotUi(entry);
         setStatus("Quick snapshot saved.", "success");
         if (typeof onMediaChanged === "function") onMediaChanged();
@@ -294,6 +301,13 @@
           makeExportName(result && result.savedAt),
           result && result.mimeType ? result.mimeType : "application/x-a8e-snapshot",
         );
+        if (result && result.savedRunning) {
+          if (automation && automation.system) {
+            await automation.system.start();
+          } else {
+            app.start();
+          }
+        }
         setStatus("Snapshot exported.", "success");
         if (typeof focusCanvas === "function") focusCanvas(true);
       } catch (err) {

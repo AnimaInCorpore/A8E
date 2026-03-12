@@ -1347,6 +1347,24 @@
         diskStatus.classList.add("fa-circle-xmark");
       }
 
+      // Reconcile config toggle buttons with the app's current state so that
+      // snapshot restore (which writes config internally) keeps the UI in sync.
+      if (btnTurbo && typeof app.getTurbo === "function") {
+        btnTurbo.classList.toggle("active", !!app.getTurbo());
+      }
+      if (btnSioTurbo && typeof app.getSioTurbo === "function") {
+        btnSioTurbo.classList.toggle("active", !!app.getSioTurbo());
+      }
+      if (btnAudio && typeof app.getAudioEnabled === "function") {
+        btnAudio.classList.toggle("active", !!app.getAudioEnabled());
+      }
+      if (btnOptionOnStart && typeof app.getOptionOnStart === "function") {
+        btnOptionOnStart.classList.toggle("active", !!app.getOptionOnStart());
+      }
+      if (typeof app.getKeyboardMappingMode === "function") {
+        setKeyboardMappingMode(app.getKeyboardMappingMode(), false);
+      }
+
       setButtons(app.isRunning());
     }
 

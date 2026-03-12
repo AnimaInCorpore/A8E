@@ -817,6 +817,10 @@
       mounted: [false, false, false, false, false, false, false, false],
       rendererBackend: "unknown",
       debugState: null,
+      turbo: false,
+      sioTurbo: false,
+      audioEnabled: false,
+      optionOnStart: false,
     };
 
     function applyWorkerStateSnapshot(snapshot) {
@@ -833,6 +837,18 @@
       }
       if (typeof snapshot.rendererBackend === "string") {
         state.rendererBackend = snapshot.rendererBackend;
+      }
+      if (snapshot.config && typeof snapshot.config === "object") {
+        if (typeof snapshot.config.turbo === "boolean")
+          {state.turbo = !!snapshot.config.turbo;}
+        if (typeof snapshot.config.sioTurbo === "boolean")
+          {state.sioTurbo = !!snapshot.config.sioTurbo;}
+        if (typeof snapshot.config.audioEnabled === "boolean")
+          {state.audioEnabled = !!snapshot.config.audioEnabled;}
+        if (typeof snapshot.config.optionOnStart === "boolean")
+          {state.optionOnStart = !!snapshot.config.optionOnStart;}
+        if (typeof snapshot.config.keyboardMappingMode === "string")
+          {keyboardMappingMode = snapshot.config.keyboardMappingMode === "original" ? "original" : "translated";}
       }
       if (snapshot.debug) emitDebugState(snapshot.debug);
       syncReadyFlag();
@@ -1151,21 +1167,40 @@
         return sendRequest("reset", options || null);
       },
       setTurbo: function (v) {
+        state.turbo = !!v;
         sendCommand("setTurbo", { value: !!v });
       },
+      getTurbo: function () {
+        return state.turbo;
+      },
       setSioTurbo: function (v) {
+        state.sioTurbo = !!v;
         sendCommand("setSioTurbo", { value: !!v });
       },
+      getSioTurbo: function () {
+        return state.sioTurbo;
+      },
       setAudioEnabled: function (v) {
+        state.audioEnabled = !!v;
         if (v) audioBridge.resumeFromGesture();
         sendCommand("setAudioEnabled", { value: !!v });
       },
+      getAudioEnabled: function () {
+        return state.audioEnabled;
+      },
       setOptionOnStart: function (v) {
+        state.optionOnStart = !!v;
         sendCommand("setOptionOnStart", { value: !!v });
+      },
+      getOptionOnStart: function () {
+        return state.optionOnStart;
       },
       setKeyboardMappingMode: function (mode) {
         keyboardMappingMode = mode === "original" ? "original" : "translated";
         sendCommand("setKeyboardMappingMode", { mode: keyboardMappingMode });
+      },
+      getKeyboardMappingMode: function () {
+        return keyboardMappingMode;
       },
       setBreakpoints: function (addresses) {
         sendCommand("setBreakpoints", {

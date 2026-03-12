@@ -405,6 +405,16 @@
       hasBasicRom: !!(app && app.hasBasicRom && app.hasBasicRom()),
       mounted: mounted,
       rendererBackend: rendererBackend,
+      config: {
+        turbo: !!(app && typeof app.getTurbo === "function" && app.getTurbo()),
+        sioTurbo: !!(app && typeof app.getSioTurbo === "function" && app.getSioTurbo()),
+        audioEnabled: !!(app && typeof app.getAudioEnabled === "function" && app.getAudioEnabled()),
+        optionOnStart: !!(app && typeof app.getOptionOnStart === "function" && app.getOptionOnStart()),
+        keyboardMappingMode:
+          app && typeof app.getKeyboardMappingMode === "function"
+            ? app.getKeyboardMappingMode()
+            : "translated",
+      },
       debug:
         app && typeof app.getDebugState === "function" ? app.getDebugState() : null,
     };
