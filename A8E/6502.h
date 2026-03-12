@@ -75,6 +75,8 @@ typedef struct _6502_Context
 	u64 llStallCycleCounter;
 
 	u64 llIoCycleTimedEventCycle;
+	u64 llIoMasterTimedEventCycle;
+	u64 llIoBeamTimedEventCycle;
 	void (*IoCycleTimedEventFunction)(struct _6502_Context *);
 
 	u8 cIrqPendingFlag;

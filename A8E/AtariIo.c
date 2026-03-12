@@ -901,7 +901,8 @@ typedef struct
 static void AtariIo_DrawClockAction(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	if(pContext->llIoCycleTimedEventCycle <= pIoData->llCycle)
+	if(pContext->llIoBeamTimedEventCycle <= pIoData->llCycle ||
+	   pContext->llIoMasterTimedEventCycle <= pContext->llCycleCounter)
 	{
 		AtariIo_CycleTimedEvent(pContext);
 	}
@@ -4518,33 +4519,38 @@ void AtariIoCycleTimedEventUpdate(_6502_Context_t *pContext)
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
 
 	pContext->llIoCycleTimedEventCycle = CYCLE_NEVER;
+	pContext->llIoMasterTimedEventCycle = CYCLE_NEVER;
+	pContext->llIoBeamTimedEventCycle = CYCLE_NEVER;
 
 	if(!pIoData->bInDrawLine)
 	{
-		pContext->llIoCycleTimedEventCycle =
-			MIN(pIoData->llDisplayListFetchCycle, pContext->llIoCycleTimedEventCycle);
+		pContext->llIoBeamTimedEventCycle =
+			MIN(pIoData->llDisplayListFetchCycle, pContext->llIoBeamTimedEventCycle);
 	}
 
-	pContext->llIoCycleTimedEventCycle =
-		MIN(pIoData->llDliCycle, pContext->llIoCycleTimedEventCycle);
+	pContext->llIoBeamTimedEventCycle =
+		MIN(pIoData->llDliCycle, pContext->llIoBeamTimedEventCycle);
+
+	pContext->llIoMasterTimedEventCycle =
+		MIN(pIoData->llSerialOutputTransmissionDoneCycle, pContext->llIoMasterTimedEventCycle);
+
+	pContext->llIoMasterTimedEventCycle =
+		MIN(pIoData->llSerialOutputNeedDataCycle, pContext->llIoMasterTimedEventCycle);
+
+	pContext->llIoMasterTimedEventCycle =
+		MIN(pIoData->llSerialInputDataReadyCycle, pContext->llIoMasterTimedEventCycle);
+
+	pContext->llIoMasterTimedEventCycle =
+		MIN(pIoData->llTimer1Cycle, pContext->llIoMasterTimedEventCycle);
+
+	pContext->llIoMasterTimedEventCycle =
+		MIN(pIoData->llTimer2Cycle, pContext->llIoMasterTimedEventCycle);
+
+	pContext->llIoMasterTimedEventCycle =
+		MIN(pIoData->llTimer4Cycle, pContext->llIoMasterTimedEventCycle);
 
 	pContext->llIoCycleTimedEventCycle =
-		MIN(pIoData->llSerialOutputTransmissionDoneCycle, pContext->llIoCycleTimedEventCycle);
-
-	pContext->llIoCycleTimedEventCycle =
-		MIN(pIoData->llSerialOutputNeedDataCycle, pContext->llIoCycleTimedEventCycle);
-
-	pContext->llIoCycleTimedEventCycle =
-		MIN(pIoData->llSerialInputDataReadyCycle, pContext->llIoCycleTimedEventCycle);
-
-	pContext->llIoCycleTimedEventCycle =
-		MIN(pIoData->llTimer1Cycle, pContext->llIoCycleTimedEventCycle);
-
-	pContext->llIoCycleTimedEventCycle =
-		MIN(pIoData->llTimer2Cycle, pContext->llIoCycleTimedEventCycle);
-
-	pContext->llIoCycleTimedEventCycle =
-		MIN(pIoData->llTimer4Cycle, pContext->llIoCycleTimedEventCycle);
+		MIN(pContext->llIoBeamTimedEventCycle, pContext->llIoMasterTimedEventCycle);
 }
 
 static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)

@@ -80,21 +80,24 @@
 
     function cycleTimedEventUpdate(ctx) {
       const io = ctx.ioData;
-      let next = CYCLE_NEVER;
+      let beamNext = CYCLE_NEVER;
+      let masterNext = CYCLE_NEVER;
 
-      if (!io.inDrawLine && io.displayListFetchCycle < next)
-        {next = io.displayListFetchCycle;}
-      if (io.dliCycle < next) next = io.dliCycle;
-      if (io.serialOutputTransmissionDoneCycle < next)
-        {next = io.serialOutputTransmissionDoneCycle;}
-      if (io.serialOutputNeedDataCycle < next)
-        {next = io.serialOutputNeedDataCycle;}
-      if (io.serialInputDataReadyCycle < next)
-        {next = io.serialInputDataReadyCycle;}
-      if (io.timer1Cycle < next) next = io.timer1Cycle;
-      if (io.timer2Cycle < next) next = io.timer2Cycle;
-      if (io.timer4Cycle < next) next = io.timer4Cycle;
-      ctx.ioCycleTimedEventCycle = next;
+      if (!io.inDrawLine && io.displayListFetchCycle < beamNext)
+        {beamNext = io.displayListFetchCycle;}
+      if (io.dliCycle < beamNext) beamNext = io.dliCycle;
+      if (io.serialOutputTransmissionDoneCycle < masterNext)
+        {masterNext = io.serialOutputTransmissionDoneCycle;}
+      if (io.serialOutputNeedDataCycle < masterNext)
+        {masterNext = io.serialOutputNeedDataCycle;}
+      if (io.serialInputDataReadyCycle < masterNext)
+        {masterNext = io.serialInputDataReadyCycle;}
+      if (io.timer1Cycle < masterNext) masterNext = io.timer1Cycle;
+      if (io.timer2Cycle < masterNext) masterNext = io.timer2Cycle;
+      if (io.timer4Cycle < masterNext) masterNext = io.timer4Cycle;
+      ctx.ioBeamTimedEventCycle = beamNext;
+      ctx.ioMasterTimedEventCycle = masterNext;
+      ctx.ioCycleTimedEventCycle = Math.min(beamNext, masterNext);
     }
 
     function initHardwareDefaults(ctx) {

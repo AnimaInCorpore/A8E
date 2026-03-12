@@ -692,6 +692,8 @@ _6502_Context_t *_6502_Open()
 
 	memset(pContext, 0, sizeof(_6502_Context_t));
 	pContext->llIoCycleTimedEventCycle = 0xffffffffffffffffLL;
+	pContext->llIoMasterTimedEventCycle = 0xffffffffffffffffLL;
+	pContext->llIoBeamTimedEventCycle = 0xffffffffffffffffLL;
 
 	RAM = malloc(_6502_MEMORY_SIZE);
 

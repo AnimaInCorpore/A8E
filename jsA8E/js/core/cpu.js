@@ -65,6 +65,8 @@
       cycleCounter: 0,
       stallCycleCounter: 0,
       ioCycleTimedEventCycle: Infinity,
+      ioMasterTimedEventCycle: Infinity,
+      ioBeamTimedEventCycle: Infinity,
       ioCycleTimedEventFunction: null,
       irqPending: 0,
       breakRun: false,

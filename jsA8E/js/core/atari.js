@@ -1092,12 +1092,15 @@
           ? snapshot.stallCycleCounter
           : 0;
       machine.ctx.ioCycleTimedEventCycle = snapshot.ioCycleTimedEventCycle;
+      machine.ctx.ioMasterTimedEventCycle = Infinity;
+      machine.ctx.ioBeamTimedEventCycle = Infinity;
       machine.ctx.irqPending = snapshot.irqPending | 0;
       machine.ctx.instructionCounter = snapshot.instructionCounter >>> 0;
       machine.ctx.breakRun = false;
       machine.ctx.pcHooks = Object.create(null);
       memoryRuntime.importSnapshotState(snapshot.memory);
       restoreVideoState(snapshot.video);
+      cycleTimedEventUpdate(machine.ctx);
       if (hDevice && typeof hDevice.importSnapshotState === "function") {
         hDevice.importSnapshotState(snapshot.hDevice);
       }

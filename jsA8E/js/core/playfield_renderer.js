@@ -40,7 +40,12 @@
 
     function clockAction(ctx) {
       const io = ctx.ioData;
-      if (ctx.ioCycleTimedEventCycle <= io.clock) ioCycleTimedEvent(ctx);
+      if (
+        ctx.ioBeamTimedEventCycle <= io.clock ||
+        ctx.ioMasterTimedEventCycle <= ctx.cycleCounter
+      ) {
+        ioCycleTimedEvent(ctx);
+      }
       if (drawPlayerMissilesClock && io.drawLine.playerMissileClockActive) {
         drawPlayerMissilesClock(
           ctx,
