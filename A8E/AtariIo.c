@@ -2711,7 +2711,7 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			// DLI? (schedule after vertical scrolling adjustments)
 			if(pIoData->cCurrentDisplayListCommand & 0x80)
 			{
-				pIoData->llDliCycle = pContext->llCycleCounter +
+				pIoData->llDliCycle = pIoData->llCycle +
 									  (pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine - 1) * CYCLES_PER_LINE;
 
 				AtariIoCycleTimedEventUpdate(pContext);
@@ -4551,6 +4551,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
 	u64 llMasterCycle = pContext->llCycleCounter;
+	u64 llBeamCycle = pIoData->llCycle;
 
 	if(!pIoData->bInDrawLine &&
 	   pContext->llCycleCounter >= pIoData->llDisplayListFetchCycle)
@@ -4571,7 +4572,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		pIoData->bInDrawLine = 0;
 	}
 
-	if(llMasterCycle >= pIoData->llDliCycle)
+	if(llBeamCycle >= pIoData->llDliCycle)
 	{
 #ifdef VERBOSE_DL
 		printf("             [%16llu]", pContext->llCycleCounter);

@@ -156,7 +156,7 @@
           // DLI scheduling
           if (cmd & 0x80) {
             io.dliCycle =
-              ctx.cycleCounter +
+              io.clock +
               (io.nextDisplayListLine - io.video.currentDisplayLine - 1) *
                 CYCLES_PER_LINE;
             cycleTimedEventUpdate(ctx);
@@ -250,8 +250,9 @@
       }
 
       const masterEff = ctx.cycleCounter;
+      const beamEff = io.clock;
 
-      if (masterEff >= io.dliCycle) {
+      if (beamEff >= io.dliCycle) {
         ram[IO_NMIRES_NMIST] &= ~NMI_VBI;
         ram[IO_NMIRES_NMIST] |= NMI_DLI;
         if (sram[IO_NMIEN] & NMI_DLI) CPU.nmi(ctx);
