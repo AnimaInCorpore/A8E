@@ -116,15 +116,18 @@ The assembler panel includes a source-level debugger:
 
 jsA8E now exposes a stable browser-facing automation surface at `window.A8EAutomation`.
 
+The full public API reference lives in [AUTOMATION.md](AUTOMATION.md). This README keeps the short overview in sync with that document.
+
 Primary domains:
 
-- `getCapabilities()`, `getSystemState()`
-- `system.*` for lifecycle, cache-busting reload, and wait helpers
-- `media.*` for ROM and disk control, including `loadRomFromUrl(...)` and `mountDiskFromUrl(...)`
+- `whenReady()`, `getCapabilities()`, `getSystemState()`
+- `system.*` for lifecycle, boot/reset options, cache-busting reload, wait helpers, and snapshot save/load
+- `media.*` for ROM and disk control, including `loadRomFromUrl(...)`, `mountDiskFromUrl(...)`, and mounted-media queries
 - `input.*` for keyboard, joystick, and console keys, including `getConsoleKeyState()` and timed console-key presses
 - `debug.*` for breakpoints, stepping, counters, memory, trace, source context, disassembly, and `runUntilPcOrSnapshot(...)`
-- `dev.*` for HostFS access, assembly, `runXex(...)`, and `runXexFromUrl(...)`
+- `dev.*` for HostFS access, file-state helpers, assembly, `runXex(...)`, and `runXexFromUrl(...)`
 - `artifacts.*` for screenshot/artifact capture, including `captureFailureState(...)`
+- `events.*` for `attached`, progress, pause, fault, `debugState`, build, and HostFS subscriptions
 
 Reset-time bank overrides are available for bring-up flows that need a specific boot mapping. `system.reset({ portB: 0xFF })`, `system.boot({ portB: 0xFF })`, and `dev.runXex({ ..., resetOptions: { portB: 0xFF } })` apply the initial PIA `PORTB` value before the cold-reset memory map is built.
 
@@ -161,14 +164,18 @@ const disassembly = await api.debug.disassemble({
   beforeInstructions: 8,
   afterInstructions: 8,
 });
+const snapshot = await api.system.saveSnapshot();
 const failure = await api.debug.runUntilPcOrSnapshot(0x2000, {
   maxInstructions: 500000,
   screenshot: true,
   ranges: [{ label: "DOSVEC", start: 10, length: 4 }],
 });
+await api.system.loadSnapshot(snapshot.bytes, { resume: "saved" });
 ```
 
 `captureScreenshot()` returns PNG data. `collectArtifacts()` and `captureFailureState()` now return schema-versioned JSON bundles (`artifactSchemaVersion: "2"`) that include debug state, counters, trace tail, bank state, mounted media, console-key state, memory dumps, optional disassembly/source context, and optional screenshots. Wait helpers such as `waitForPc()` / `waitForBreakpoint()` return these structured failure bundles on timeout instead of only throwing a generic timeout error.
+
+`getCapabilities()` also returns the current automation contract/version flags (`apiVersion`, `artifactSchemaVersion`) and feature booleans such as `worker`, `hostfs`, `assembler`, `urlRomLoad`, `urlDiskLoad`, `urlXexLoad`, `progressEvents`, `snapshots`, and `resetPortBOverride`. `getSystemState()` reports the current ROM/media/debug snapshot, console-key state, HostFS summary, and the last assembler build record.
 
 Additional helpers for tool-driven input:
 
@@ -180,5 +187,10 @@ Additional helpers for tool-driven input:
 - `input.setConsoleKeys({ option, select, start })`
 - `input.pressConsoleKey("start", { holdMs: 200 })`
 - `input.releaseAllInputs()`
+- `system.waitForFrames({ count })`, `system.waitForCycles({ count })`
+- `system.saveSnapshot(options)`, `system.loadSnapshot(data, options)`
+- `dev.renameHostFile(oldName, newName)`, `dev.lockHostFile(name)`, `dev.unlockHostFile(name)`
+- `dev.getHostFileStatus(name)`, `dev.waitForHostFsFile(name, options)`, `dev.getLastBuildResult(options)`
 - `system.reload({ cacheBust: true })`
+- `events.subscribe(handler)` for all automation events
 - `events.subscribe("progress", handler)` for fetch/boot/wait checkpoints

@@ -62,7 +62,9 @@ The latest unreleased development version is available at https://dev.jsa8e.anid
 
 The browser port includes a stable automation surface at `window.A8EAutomation`.
 
-It is intended to be the canonical browser-first control surface for external automation, debugger/introspection workflows, artifact capture, HostFS access, assembler-driven development flows, and future higher-level harnesses. The public surface is grouped into `system`, `media`, `input`, `debug`, `dev`, `artifacts`, and `events` while keeping the earlier flat aliases for compatibility. See the [jsA8E README](jsA8E/README.md) for the current API details.
+It is intended to be the canonical browser-first control surface for external automation, debugger/introspection workflows, artifact capture, HostFS access, assembler-driven development flows, and future higher-level harnesses. The public surface is grouped into `system`, `media`, `input`, `debug`, `dev`, `artifacts`, and `events` while keeping the earlier flat aliases for compatibility.
+
+Current highlights include worker-acknowledged lifecycle control, URL-native ROM/disk/XEX loading, structured pause/fault events, schema-versioned failure artifacts, HostFS file automation, assembler/XEX helpers, and versioned full-machine snapshot save/load through `system.saveSnapshot()` / `system.loadSnapshot()`. See the [jsA8E README](jsA8E/README.md) for the overview and [jsA8E/AUTOMATION.md](jsA8E/AUTOMATION.md) for the full public API reference.
 
 ## Quick Start (Native)
 

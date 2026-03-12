@@ -44,6 +44,8 @@ Process rule: review this file before planning any improvement, and update it af
 - [Debug](jsA8E/DEBUG.md)
 
 ## Recent Improvements
+- 2026-03-12: `jsA8E/AUTOMATION.md`, `README.md`, `jsA8E/README.md`, `implementation/jsA8E/AUTOMATION.md`, `implementation/NOTES.md`: added a dedicated public jsA8E automation API reference and aligned the root README, jsA8E README, and implementation note around the same current grouped `window.A8EAutomation` surface, including the new public-document split, root version fields, and the live `attached` event.
+- 2026-03-12: `README.md`, `jsA8E/README.md`, `implementation/jsA8E/AUTOMATION.md`: refreshed the automation documentation to match the live browser API. The docs now describe the grouped `window.A8EAutomation` surface as implemented today, including snapshot save/load, HostFS file-state helpers, current event subscriptions, capability/state reporting, and the structured failure/system-state behavior used by the current automation facade.
 - 2026-03-12: `jsA8E/style.css`, `implementation/jsA8E/UI.md`: aligned the jsA8E brand block to the toolbar’s 44px primary-control height so the `jsA8E` label sits in the same vertical band as the first-row button text instead of reading too high against the top edge.
 - 2026-03-12: `jsA8E/style.css`, `implementation/jsA8E/UI.md`: changed the jsA8E brand headline row from centered/icon-box alignment to baseline alignment so the `jsA8E` text follows the surrounding text baseline instead of being visually centered too high.
 - 2026-03-12: `jsA8E/style.css`, `implementation/jsA8E/UI.md`: nudged the jsA8E headline text down by 1px so the `jsA8E` label aligns better with the surrounding icon/button text after the earlier headline alignment pass.
