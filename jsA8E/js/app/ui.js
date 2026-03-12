@@ -141,6 +141,8 @@
     let didCleanup = false;
     let workerRenderWidth = 0;
     let workerRenderHeight = 0;
+    let pendingRunPauseAction = null;
+    let runPauseRequestToken = 0;
 
     function readFlexGapPx(el) {
       if (!el || !window.getComputedStyle) return 0;
@@ -646,18 +648,25 @@
 
     window.addEventListener("beforeunload", cleanup);
 
-    function setRunPauseButton(running) {
+    function setRunPauseButton(running, pendingAction) {
       btnStart.innerHTML = running
         ? '<i class="fa-solid fa-pause"></i>'
         : '<i class="fa-solid fa-play"></i>';
-      btnStart.title = running
-        ? "Pause emulation. Use this button again to continue from the current state."
-        : "Start emulation and run the loaded Atari system.";
+      const label = pendingAction === "pause"
+        ? "Pausing emulation..."
+        : pendingAction === "start"
+          ? "Starting emulation..."
+          : running
+            ? "Pause emulation. Use this button again to continue from the current state."
+            : "Start emulation and run the loaded Atari system.";
+      btnStart.title = label;
       btnStart.setAttribute(
         "aria-label",
-        running
-          ? "Pause emulation. Use this button again to continue from the current state."
-          : "Start emulation and run the loaded Atari system.",
+        label,
+      );
+      btnStart.setAttribute(
+        "aria-busy",
+        pendingAction ? "true" : "false",
       );
     }
 
@@ -682,10 +691,17 @@
       queueKeyboardScaleConsistencyCheck();
     }
 
+    function getRunPauseDisplayState(running) {
+      if (pendingRunPauseAction === "start") return true;
+      if (pendingRunPauseAction === "pause") return false;
+      return !!running;
+    }
+
     function setButtons(running) {
-      setRunPauseButton(running);
-      btnStart.disabled = !app.isReady();
-      btnReset.disabled = !app.isReady();
+      const busy = !!pendingRunPauseAction;
+      setRunPauseButton(getRunPauseDisplayState(running), pendingRunPauseAction);
+      btnStart.disabled = !app.isReady() || busy;
+      btnReset.disabled = !app.isReady() || busy;
     }
 
     if (app && typeof app.onDebugStateChange === "function") {
@@ -1342,24 +1358,47 @@
       });
     }
 
-    function handleRunPauseRequest(result, action) {
-      Promise.resolve(result).catch(function (err) {
+    function handleRunPauseRequest(action, runRequest) {
+      const requestToken = ++runPauseRequestToken;
+      pendingRunPauseAction = action;
+      setButtons(app.isRunning());
+      let result;
+      try {
+        result = runRequest();
+      } catch (err) {
+        pendingRunPauseAction = null;
+        setButtons(app.isRunning());
         console.error(
           'Failed to ' + (action === "pause" ? "pause" : "start") + " emulation:",
           err,
         );
-        updateStatus();
-      });
+        return;
+      }
+      Promise.resolve(result)
+        .catch(function (err) {
+          console.error(
+            'Failed to ' + (action === "pause" ? "pause" : "start") + " emulation:",
+            err,
+          );
+        })
+        .finally(function () {
+          if (requestToken !== runPauseRequestToken) return;
+          pendingRunPauseAction = null;
+          updateStatus();
+        });
     }
 
     btnStart.addEventListener("click", function () {
+      if (pendingRunPauseAction) return;
       if (app.isRunning()) {
-        handleRunPauseRequest(app.pause(), "pause");
-        setButtons(app.isRunning());
+        handleRunPauseRequest("pause", function () {
+          return app.pause();
+        });
         return;
       }
-      handleRunPauseRequest(app.start(), "start");
-      setButtons(app.isRunning());
+      handleRunPauseRequest("start", function () {
+        return app.start();
+      });
       focusCanvas(false);
     });
 
