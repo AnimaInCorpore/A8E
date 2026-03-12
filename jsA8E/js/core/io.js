@@ -280,6 +280,10 @@
 
           case IO_SEROUT_SERIN:
             sram[addr] = v;
+            // On real POKEY, writing SEROUT fills the output shift register:
+            // bit 3 (XMTDON) → 1: transmission now in progress
+            // bit 4 (output data needed) → 1: buffer now full
+            ram[IO_IRQEN_IRQST] |= 0x18;
             pokeySeroutWrite(ctx, v);
             break;
 
@@ -294,6 +298,16 @@
             sram[addr] = v;
             if (io.pokeyAudio)
               {pokeyAudioOnRegisterWrite(io.pokeyAudio, addr, v);}
+            // Writing SKCTL with serial mode off (bits 0-1 = 0) resets the
+            // serial port.  Clear the high-level SIO state machine so a
+            // subsequent command frame starts cleanly.
+            if ((v & 0x03) === 0) {
+              io.sioOutIndex = 0;
+              io.sioOutPhase = 0;
+              io.sioDataIndex = 0;
+              io.sioInSize = 0;
+              io.sioInIndex = 0;
+            }
             break;
 
           // --- PIA ---
@@ -417,6 +431,9 @@
           return ram[addr] & 0xff;
 
         case IO_SEROUT_SERIN:
+          // On real POKEY, reading SERIN acknowledges the data-ready condition:
+          // bit 5 (serial input data ready) → 1: byte consumed, not ready
+          ram[IO_IRQEN_IRQST] |= 0x20;
           return pokeySerinRead(ctx);
 
         case IO_AUDF1_POT0:
