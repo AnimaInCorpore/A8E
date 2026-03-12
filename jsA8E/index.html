@@ -74,6 +74,7 @@
                   <span class="tt-icon"><i class="fa-solid fa-hand-point-down"></i> BASIC off</span>
                   <span class="tt-icon"><i class="fa-solid fa-folder-open"></i> HostFS</span>
                   <span class="tt-icon"><i class="fa-solid fa-file-code"></i> assembler</span>
+                  <span class="tt-icon"><i class="fa-solid fa-camera-retro"></i> snapshots</span>
                 </div>
               </div>
             </span>
@@ -136,6 +137,9 @@
           </button>
           <button id="btnAssembler" class="toggle-btn" title="Toggle assembler editor. Read and write source files on HostFS (H:) and assemble executable XEX files to HostFS." aria-label="Toggle assembler editor panel.">
             <i class="fa-solid fa-file-code"></i>
+          </button>
+          <button id="btnSnapshots" class="toggle-btn" title="Toggle snapshot controls. Save or restore a full paused emulator state, plus export or import snapshot files." aria-label="Toggle snapshot controls panel.">
+            <i class="fa-solid fa-camera-retro"></i>
           </button>
         </div>
       </div>
@@ -401,6 +405,46 @@
         </div>
         <div class="asm-resize-handle" title="Drag to resize editor"></div>
       </section>
+      <section id="snapshotPanel" class="snapshotPanel" hidden aria-label="Emulator snapshot controls">
+        <div class="snapshot-titlebar">
+          <i class="fa-solid fa-camera-retro snapshot-title-icon"></i>
+          <span class="snapshot-title-text">Snapshots</span>
+          <span class="snapshot-title-meta">Quick slot + export/import</span>
+        </div>
+        <div class="snapshot-toolbar">
+          <label class="snapshot-label">Quick Slot</label>
+          <button class="snapshot-btn snapshot-save-btn" title="Save a full emulator snapshot into the browser quick-save slot. If the emulator is running it will be paused first.">
+            <i class="fa-solid fa-floppy-disk"></i> Save
+          </button>
+          <button class="snapshot-btn snapshot-load-btn" title="Load the browser quick-save slot and restore the saved emulator state." disabled>
+            <i class="fa-solid fa-rotate-left"></i> Load
+          </button>
+          <span class="snapshot-toolbar-sep"></span>
+          <label class="snapshot-label">File</label>
+          <button class="snapshot-btn snapshot-export-btn" title="Export the current emulator snapshot as a downloadable file.">
+            <i class="fa-solid fa-download"></i> Export
+          </button>
+          <button class="snapshot-btn snapshot-import-btn" title="Import a previously exported snapshot file and restore it.">
+            <i class="fa-solid fa-upload"></i> Import
+          </button>
+          <input type="file" class="snapshot-import-input" accept=".a8esnap,application/x-a8e-snapshot,application/octet-stream" hidden />
+        </div>
+        <div class="snapshot-body">
+          <div class="snapshot-card">
+            <div class="snapshot-card-label">Quick Slot</div>
+            <div class="snapshot-card-value snapshot-slot-state">Empty</div>
+            <div class="snapshot-card-meta snapshot-slot-meta">No browser snapshot saved yet.</div>
+          </div>
+          <div class="snapshot-card">
+            <div class="snapshot-card-label">Behavior</div>
+            <div class="snapshot-card-value">Pause-safe full machine save/load</div>
+            <div class="snapshot-card-meta">Includes RAM, CPU/chip state, mounted media, debugger state, and H: channels.</div>
+          </div>
+        </div>
+        <div class="snapshot-statusbar">
+          <span class="snapshot-status">Ready.</span>
+        </div>
+      </section>
     </main>
 
     <script src="js/shared/util.js"></script>
@@ -441,6 +485,7 @@
     <script src="js/app/automation_api.js"></script>
     <script src="js/app/hostfs_ui.js"></script>
     <script src="js/app/assembler_ui.js"></script>
+    <script src="js/app/snapshot_ui.js"></script>
     <script src="js/app/version.js"></script>
     <script src="js/app/a8e.js"></script>
   </body>

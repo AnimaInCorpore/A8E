@@ -357,6 +357,7 @@
     const btnOptionOnStart = document.getElementById("btnOptionOnStart");
     const btnHostFs = document.getElementById("btnHostFs");
     const btnAssembler = document.getElementById("btnAssembler");
+    const btnSnapshots = document.getElementById("btnSnapshots");
 
     function getKeyboardMappingModeFromUi() {
       if (!btnKeyboardMap) return "translated";
@@ -660,6 +661,7 @@
 
     function setButtons(running) {
       setRunPauseButton(running);
+      btnStart.disabled = !app.isReady();
       btnReset.disabled = !app.isReady();
     }
 
@@ -1317,15 +1319,25 @@
       });
     }
 
+    function handleRunPauseRequest(result, action) {
+      Promise.resolve(result).catch(function (err) {
+        console.error(
+          'Failed to ' + (action === "pause" ? "pause" : "start") + " emulation:",
+          err,
+        );
+        updateStatus();
+      });
+    }
+
     btnStart.addEventListener("click", function () {
       if (app.isRunning()) {
-        app.pause();
+        handleRunPauseRequest(app.pause(), "pause");
         setButtons(app.isRunning());
-      } else {
-        app.start();
-        setButtons(app.isRunning());
-        focusCanvas(false);
+        return;
       }
+      handleRunPauseRequest(app.start(), "start");
+      setButtons(app.isRunning());
+      focusCanvas(false);
     });
 
     btnReset.addEventListener("click", function () {
@@ -1855,6 +1867,16 @@
         canvas: canvas,
         focusCanvas: focusCanvas,
         updateStatus: updateStatus,
+      });
+    }
+
+    if (window.A8ESnapshotUI && app) {
+      window.A8ESnapshotUI.init({
+        app: app,
+        panel: document.getElementById("snapshotPanel"),
+        button: btnSnapshots,
+        onMediaChanged: updateStatus,
+        focusCanvas: focusCanvas,
       });
     }
   }
