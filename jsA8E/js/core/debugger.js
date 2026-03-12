@@ -213,6 +213,31 @@
         for (let i = 0; i < active.length; i++) installBreakpointHook(active[i]);
       }
 
+      function suspendBreakpoints() {
+        const state = {
+          breakpointHitAddress: breakpointHitAddress,
+          breakpointResumeAddress: breakpointResumeAddress,
+        };
+        for (let i = 0; i < breakpointAddresses.length; i++) {
+          removeBreakpointHook(breakpointAddresses[i]);
+        }
+        return state;
+      }
+
+      function restoreBreakpoints(state) {
+        for (let i = 0; i < breakpointAddresses.length; i++) {
+          installBreakpointHook(breakpointAddresses[i]);
+        }
+        breakpointHitAddress =
+          state && typeof state.breakpointHitAddress === "number"
+            ? state.breakpointHitAddress & 0xffff
+            : -1;
+        breakpointResumeAddress =
+          state && typeof state.breakpointResumeAddress === "number"
+            ? state.breakpointResumeAddress & 0xffff
+            : -1;
+      }
+
       function applyBreakpoints(addresses, emit) {
         removeStepOverHook();
         const nextSet = Object.create(null);
@@ -798,6 +823,8 @@
         onPause: onPause,
         setBreakpoints: setBreakpoints,
         rebindBreakpointHooks: rebindBreakpointHooks,
+        suspendBreakpoints: suspendBreakpoints,
+        restoreBreakpoints: restoreBreakpoints,
         removeStepOverHook: removeStepOverHook,
         resetExecutionState: resetExecutionState,
         onStart: onStart,

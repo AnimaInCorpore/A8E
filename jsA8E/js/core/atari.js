@@ -930,11 +930,81 @@
       };
     }
 
+    function normalizeSnapshotTiming(options) {
+      const opts = options && typeof options === "object" ? options : null;
+      return opts && opts.timing === "exact" ? "exact" : "frame";
+    }
+
+    function alignSnapshotToFrameBoundary(options) {
+      const timing = normalizeSnapshotTiming(options);
+      if (timing === "exact") {
+        return {
+          timing: timing,
+          advancedCycles: 0,
+        };
+      }
+
+      const frameRemainder = machine.frameCycleAccum | 0;
+      if (frameRemainder <= 0) {
+        return {
+          timing: timing,
+          advancedCycles: 0,
+        };
+      }
+
+      const remainingCycles = CYCLES_PER_FRAME - frameRemainder;
+      if (remainingCycles <= 0) {
+        machine.frameCycleAccum = 0;
+        return {
+          timing: timing,
+          advancedCycles: 0,
+        };
+      }
+
+      const debugState =
+        debugRuntime && typeof debugRuntime.suspendBreakpoints === "function"
+          ? debugRuntime.suspendBreakpoints()
+          : null;
+      const startCycle = machine.ctx.cycleCounter | 0;
+      let endCycle = startCycle;
+      try {
+        endCycle = CPU.run(machine.ctx, startCycle + remainingCycles) | 0;
+      } catch (err) {
+        if (debugRuntime && typeof debugRuntime.onExecutionError === "function") {
+          debugRuntime.onExecutionError(err);
+        }
+        throw err;
+      } finally {
+        if (debugRuntime && typeof debugRuntime.restoreBreakpoints === "function") {
+          debugRuntime.restoreBreakpoints(debugState);
+        }
+      }
+
+      let executed = (endCycle - startCycle) | 0;
+      if (executed < 0) executed = 0;
+      if (executed > remainingCycles) executed = remainingCycles;
+      if (executed !== remainingCycles) {
+        throw new Error(
+          "A8E snapshot frame alignment stopped before the next frame boundary",
+        );
+      }
+
+      machine.frameCycleAccum =
+        (frameRemainder + executed) % CYCLES_PER_FRAME;
+      paint();
+      updateDebug("snapshot_save");
+      return {
+        timing: timing,
+        advancedCycles: executed,
+      };
+    }
+
     function saveSnapshot(options) {
       if (machine.running) {
         throw new Error("A8E snapshot save requires paused emulation");
       }
       const opts = options && typeof options === "object" ? options : {};
+      const alignment = alignSnapshotToFrameBoundary(opts);
       const snapshot = buildCoreSnapshot(
         opts.savedRunning !== undefined ? !!opts.savedRunning : false,
       );
@@ -947,6 +1017,7 @@
         mimeType: "application/x-a8e-snapshot",
         byteLength: buffer.byteLength | 0,
         buffer: buffer,
+        timing: alignment.timing,
       };
     }
 

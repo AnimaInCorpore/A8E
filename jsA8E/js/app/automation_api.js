@@ -2692,6 +2692,7 @@
         app.saveSnapshot({
           savedRunning:
             opts.savedRunning !== undefined ? !!opts.savedRunning : wasRunning,
+          timing: opts.timing === "exact" ? "exact" : undefined,
         }),
       );
       const buffer = toArrayBuffer(result && result.buffer ? result.buffer : null);
@@ -2715,6 +2716,8 @@
             : buffer.byteLength | 0,
         buffer: buffer,
         bytes: new Uint8Array(buffer),
+        timing:
+          result && result.timing === "exact" ? "exact" : "frame",
       };
     } catch (err) {
       throw createAutomationError({

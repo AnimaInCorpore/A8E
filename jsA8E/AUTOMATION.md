@@ -55,7 +55,7 @@ jsA8E exposes a stable browser-first automation facade on `window.A8EAutomation`
 | `pause()` | Pauses emulation and resolves after the backend acknowledges the transition. |
 | `reset(options)` | Cold-resets the machine. Supports reset-time overrides such as `portB`. |
 | `boot(options)` | Convenience wrapper around reset + start. Use `reset: false` or `start: false` to skip parts. |
-| `saveSnapshot(options)` | Saves a versioned full-machine snapshot. Pauses first unless `pauseRunning === false`, in which case it throws if the machine is running. |
+| `saveSnapshot(options)` | Saves a versioned full-machine snapshot. Pauses first unless `pauseRunning === false`, in which case it throws if the machine is running. The default save timing is frame-aligned; pass `timing: "exact"` to keep the current paused cycle position. |
 | `loadSnapshot(data, options)` | Loads a snapshot from `ArrayBuffer`, typed array, or similar binary input. `resume` defaults to `"saved"`. |
 | `reload(options)` | Reloads the page using the shared cache-control URL logic. |
 | `dispose()` | Disposes the app and detaches the automation facade. |
@@ -188,7 +188,7 @@ Current event types:
 ## Result Notes
 
 - `captureScreenshot()` returns `{ mimeType, width, height, base64 }` by default, or `{ ..., bytes }` with `encoding: "bytes"`.
-- `saveSnapshot()` returns `{ type, version, mimeType, savedAt, savedRunning, byteLength, buffer, bytes }`.
+- `saveSnapshot()` returns `{ type, version, mimeType, savedAt, savedRunning, byteLength, buffer, bytes, timing }`.
 - Successful build results include `ok`, `format`, `sourceName`, `timestamp`, `byteLength`, `runAddr`, `symbols`, line/address maps, and output bytes or base64.
 - Wait helpers and XEX bring-up failures can return failure artifacts instead of throwing generic timeout strings.
 - `runXex(...)` reports structured XEX preflight and boot failures, including `xexPreflight`, `xexLaunch`, `bootDiagnostics`, and schema-versioned artifact data.

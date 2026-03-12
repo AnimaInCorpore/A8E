@@ -98,6 +98,7 @@ async function main() {
     loadSnapshot: 0,
   };
   let lastSavedRunning = null;
+  let lastSaveTiming = null;
   let lastLoadedBytes = null;
   let lastLoadOptions = null;
   const app = {
@@ -122,6 +123,7 @@ async function main() {
     saveSnapshot: function (options) {
       calls.saveSnapshot++;
       lastSavedRunning = !!(options && options.savedRunning);
+      lastSaveTiming = options && options.timing ? String(options.timing) : null;
       return {
         type: "a8e.snapshot",
         version: 1,
@@ -130,6 +132,7 @@ async function main() {
         byteLength: 3,
         mimeType: "application/x-a8e-snapshot",
         buffer: new Uint8Array([9, 8, 7]).buffer,
+        timing: lastSaveTiming === "exact" ? "exact" : "frame",
       };
     },
     loadSnapshot: function (buffer, options) {
@@ -152,8 +155,19 @@ async function main() {
   assert.equal(calls.pause, 1);
   assert.equal(calls.saveSnapshot, 1);
   assert.equal(lastSavedRunning, true);
+  assert.equal(lastSaveTiming, null);
   assert.deepEqual(Array.from(saved.bytes), [9, 8, 7]);
   assert.equal(saved.savedRunning, true);
+  assert.equal(saved.timing, "frame");
+
+  debugState.running = true;
+  debugState.reason = "start";
+
+  const exactSaved = await api.system.saveSnapshot({ timing: "exact" });
+  assert.equal(calls.pause, 2);
+  assert.equal(calls.saveSnapshot, 2);
+  assert.equal(lastSaveTiming, "exact");
+  assert.equal(exactSaved.timing, "exact");
 
   debugState.running = true;
   debugState.reason = "start";
@@ -161,7 +175,7 @@ async function main() {
   const loaded = await api.system.loadSnapshot(new Uint8Array([1, 2, 3]), {
     resume: "saved",
   });
-  assert.equal(calls.pause, 2);
+  assert.equal(calls.pause, 3);
   assert.equal(calls.loadSnapshot, 1);
   assert.deepEqual(lastLoadedBytes, [1, 2, 3]);
   assert.equal(lastLoadOptions.resume, "saved");
