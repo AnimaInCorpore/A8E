@@ -2,7 +2,7 @@
   "name": "jsa8e",
   "private": true,
   "scripts": {
-    "test:automation": "node tests/automation_xex_boot_failure.test.js && node tests/automation_url_media_loading.test.js && node tests/automation_system_state_resilience.test.js && node tests/automation_snapshot_api.test.js && node tests/snapshot_codec_roundtrip.test.js && node tests/memory_xex_preflight_bank_switch.test.js",
+    "test:automation": "node tests/automation_xex_boot_failure.test.js && node tests/automation_url_media_loading.test.js && node tests/automation_system_state_resilience.test.js && node tests/automation_snapshot_api.test.js && node tests/snapshot_codec_roundtrip.test.js && node tests/memory_xex_preflight_bank_switch.test.js && node tests/hdevice_snapshot_state.test.js",
     "lint": "eslint \"js/**/*.js\"",
     "lint:fix": "eslint \"js/**/*.js\" --fix"
   },

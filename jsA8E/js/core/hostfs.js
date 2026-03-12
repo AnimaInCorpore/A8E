@@ -305,6 +305,92 @@
         return !!key && !!cache[key];
       }
 
+      function exportSnapshotState() {
+        const keys = Object.keys(cache);
+        keys.sort();
+        return {
+          files: keys.map(function (key) {
+            const entry = cache[key];
+            return {
+              name: entry.name,
+              data: new Uint8Array(entry.data),
+              locked: !!entry.locked,
+              created: entry.created || 0,
+              modified: entry.modified || 0,
+            };
+          }),
+        };
+      }
+
+      function importSnapshotState(snapshot) {
+        const state = snapshot && typeof snapshot === "object" ? snapshot : null;
+        if (!state || !Array.isArray(state.files)) return false;
+
+        const nextCache = Object.create(null);
+        for (let i = 0; i < state.files.length; i++) {
+          const src = state.files[i];
+          if (!src || typeof src !== "object") continue;
+          const key = normalizeName(src.name);
+          if (!key) continue;
+          const data = src.data ? new Uint8Array(src.data) : new Uint8Array(0);
+          const created =
+            typeof src.created === "number" && isFinite(src.created)
+              ? src.created
+              : 0;
+          const modified =
+            typeof src.modified === "number" && isFinite(src.modified)
+              ? src.modified
+              : created;
+          nextCache[key] = {
+            name: key,
+            data: data,
+            locked: !!src.locked,
+            created: created,
+            modified: modified,
+          };
+        }
+
+        const oldKeys = Object.keys(cache);
+        for (let i = 0; i < oldKeys.length; i++) delete cache[oldKeys[i]];
+
+        const nextKeys = Object.keys(nextCache);
+        for (let i = 0; i < nextKeys.length; i++) {
+          const key = nextKeys[i];
+          const entry = nextCache[key];
+          cache[key] = {
+            name: entry.name,
+            data: new Uint8Array(entry.data),
+            locked: !!entry.locked,
+            created: entry.created || 0,
+            modified: entry.modified || 0,
+          };
+        }
+
+        if (db) {
+          try {
+            const tx = db.transaction(STORE_NAME, "readwrite");
+            const store = tx.objectStore(STORE_NAME);
+            store.clear();
+            for (let i = 0; i < nextKeys.length; i++) {
+              const key = nextKeys[i];
+              const entry = cache[key];
+              store.put({
+                name: entry.name,
+                data: new Uint8Array(entry.data),
+                locked: entry.locked,
+                created: entry.created,
+                modified: entry.modified,
+              });
+            }
+          } catch {
+            // ignore persistence failures
+          }
+        }
+
+        _emitChange();
+        return true;
+      }
+
       return {
         init: init,
         isReady: isReady,
@@ -318,6 +404,8 @@
         getStatus: getStatus,
         fileExists: fileExists,
         onChange: onChange,
+        exportSnapshotState: exportSnapshotState,
+        importSnapshotState: importSnapshotState,
         normalizeName: normalizeName,
         matchesWildcard: matchesWildcard,
       };

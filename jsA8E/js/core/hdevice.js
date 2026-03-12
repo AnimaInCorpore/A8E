@@ -826,7 +826,15 @@
       }
 
       function exportSnapshotState() {
+        const hostFsState =
+          hostFs && typeof hostFs.exportSnapshotState === "function"
+            ? hostFs.exportSnapshotState()
+            : null;
         return {
+          files:
+            hostFsState && Array.isArray(hostFsState.files)
+              ? hostFsState.files
+              : null,
           channels: channels.map(function (ch) {
             return {
               isOpen: !!ch.isOpen,
@@ -849,6 +857,13 @@
       function importSnapshotState(snapshot) {
         resetChannels();
         if (!snapshot || typeof snapshot !== "object") return;
+        if (
+          hostFs &&
+          typeof hostFs.importSnapshotState === "function" &&
+          Array.isArray(snapshot.files)
+        ) {
+          hostFs.importSnapshotState({ files: snapshot.files });
+        }
         const list = Array.isArray(snapshot.channels) ? snapshot.channels : [];
         for (let i = 0; i < channels.length && i < list.length; i++) {
           const src = list[i];
