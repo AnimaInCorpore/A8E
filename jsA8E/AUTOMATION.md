@@ -1,17 +1,20 @@
 # jsA8E Automation API
 
-Public browser-facing reference for `window.A8EAutomation`.
+Public automation reference for jsA8E.
 
-This is the user-facing API document for automation scripts, browser tooling, and external harnesses that drive jsA8E through the page itself. Implementation details and ownership notes live in [../implementation/jsA8E/AUTOMATION.md](../implementation/jsA8E/AUTOMATION.md).
+This is the user-facing API document for automation scripts, browser tooling, and external harnesses. Browser integrations use `window.A8EAutomation`; browser-less integrations use `createHeadlessAutomation(...)` from `jsA8E/headless.js`. Implementation details and ownership notes live in [../implementation/jsA8E/AUTOMATION.md](../implementation/jsA8E/AUTOMATION.md).
 
 ## Entry Point
 
-jsA8E exposes a stable browser-first automation facade on `window.A8EAutomation`.
+jsA8E exposes one grouped automation contract through two entrypaths:
 
-- Most consumers should wait for `await window.A8EAutomation.whenReady()`.
+- For external agents, CI, and non-interactive automation, prefer `createHeadlessAutomation(options)` from `jsA8E/headless.js`.
+- Browser tooling can use `await window.A8EAutomation.whenReady()`.
 - The grouped surface is the primary contract: `system`, `media`, `input`, `debug`, `dev`, `artifacts`, and `events`.
 - Flat aliases remain at the root for compatibility, so older calls such as `api.start()` or `api.captureScreenshot()` still work.
-- Main-thread mode and worker mode use the same public semantics.
+- Browser main-thread mode, browser worker mode, and headless Node mode use the same public semantics.
+
+For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomation(options)`. It loads the same core and automation scripts into a Node `vm` context, creates the no-worker backend, and returns `{ api, app, context, dispose() }`. The returned `api` is the same grouped automation surface documented below.
 
 ## Root API
 

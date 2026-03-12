@@ -114,7 +114,7 @@ The assembler panel includes a source-level debugger:
 
 ## Automation API
 
-jsA8E now exposes a stable browser-facing automation surface at `window.A8EAutomation`.
+jsA8E now exposes a stable automation surface through `window.A8EAutomation` in the browser and `createHeadlessAutomation(...)` in Node.
 
 The full public API reference lives in [AUTOMATION.md](AUTOMATION.md). This README keeps the short overview in sync with that document.
 
@@ -134,6 +134,18 @@ Reset-time bank overrides are available for bring-up flows that need a specific 
 Worker-backed control calls now acknowledge completion before `system.start()`, `system.pause()`, and `system.reset()` resolve, and `getSystemState({ timeoutMs })` returns partial state with an `error` object instead of hanging forever when one backend read stalls. For deterministic headless/manual fallback, boot with `?a8e_worker=0` (or set `window.A8E_BOOT_OPTIONS = { worker: false }` before `ui.js` runs) to force the main-thread backend.
 
 Flat compatibility aliases still exist, so earlier calls such as `start()`, `runUntilPc()`, or `captureScreenshot()` continue to work.
+
+### Browser-less Node bootstrap
+
+jsA8E now also ships a supported Node bootstrap at `jsA8E/headless.js` for browser-less automation.
+
+- For external agents, CI harnesses, screenshot/snapshot jobs, and other scripted control flows, this is the preferred integration path.
+- `createHeadlessAutomation(options)` loads the same core and automation scripts into a Node `vm` context, creates the no-worker app backend, and attaches the normal grouped automation API.
+- `options.roms.os` and `options.roms.basic` accept `ArrayBuffer`, typed arrays, `Buffer`, byte arrays, or filesystem paths.
+- Headless mode uses the 2D/software renderer, keeps audio disabled by default, and drives continuous execution through a synthetic `requestAnimationFrame` loop so wait helpers and `system.start()` work without a browser.
+- `HostFS` falls back to the existing in-memory mode unless you inject your own `indexedDB` global through `options.globals`.
+
+Use the browser-attached `window.A8EAutomation` facade mainly for in-page tooling, manual experiments, or browser harnesses that specifically need to live inside the emulator page.
 
 Example:
 
@@ -171,6 +183,28 @@ const failure = await api.debug.runUntilPcOrSnapshot(0x2000, {
   ranges: [{ label: "DOSVEC", start: 10, length: 4 }],
 });
 await api.system.loadSnapshot(snapshot.bytes, { resume: "saved" });
+```
+
+Headless example:
+
+```js
+const path = require("node:path");
+const { createHeadlessAutomation } = require("./headless");
+
+const runtime = await createHeadlessAutomation({
+  roms: {
+    os: path.resolve("..", "ATARIXL.ROM"),
+    basic: path.resolve("..", "ATARIBAS.ROM"),
+  },
+  turbo: true,
+});
+
+const api = runtime.api;
+await api.system.start();
+await api.system.waitForCycles({ count: 20000, timeoutMs: 5000 });
+await api.system.pause();
+
+await runtime.dispose();
 ```
 
 `captureScreenshot()` returns PNG data. `collectArtifacts()` and `captureFailureState()` now return schema-versioned JSON bundles (`artifactSchemaVersion: "2"`) that include debug state, counters, trace tail, bank state, mounted media, console-key state, memory dumps, optional disassembly/source context, and optional screenshots. Wait helpers such as `waitForPc()` / `waitForBreakpoint()` return these structured failure bundles on timeout instead of only throwing a generic timeout error.
