@@ -825,12 +825,60 @@
         }
       }
 
+      function exportSnapshotState() {
+        return {
+          channels: channels.map(function (ch) {
+            return {
+              isOpen: !!ch.isOpen,
+              fileName: ch.fileName ? String(ch.fileName) : null,
+              mode: ch.mode | 0,
+              position: ch.position | 0,
+              fileData: ch.fileData ? new Uint8Array(ch.fileData) : null,
+              writeBuffer: ch.writeBuffer ? new Uint8Array(ch.writeBuffer) : null,
+              dirListing: Array.isArray(ch.dirListing)
+                ? ch.dirListing.map(function (entry) {
+                    return new Uint8Array(entry || []);
+                  })
+                : null,
+              dirIndex: ch.dirIndex | 0,
+            };
+          }),
+        };
+      }
+
+      function importSnapshotState(snapshot) {
+        resetChannels();
+        if (!snapshot || typeof snapshot !== "object") return;
+        const list = Array.isArray(snapshot.channels) ? snapshot.channels : [];
+        for (let i = 0; i < channels.length && i < list.length; i++) {
+          const src = list[i];
+          if (!src || typeof src !== "object") continue;
+          const ch = channels[i];
+          ch.isOpen = !!src.isOpen;
+          ch.fileName = src.fileName ? String(src.fileName) : null;
+          ch.mode = src.mode | 0;
+          ch.position = Math.max(0, src.position | 0);
+          ch.fileData = src.fileData ? new Uint8Array(src.fileData) : null;
+          ch.writeBuffer = src.writeBuffer
+            ? Array.prototype.slice.call(new Uint8Array(src.writeBuffer))
+            : null;
+          ch.dirListing = Array.isArray(src.dirListing)
+            ? src.dirListing.map(function (entry) {
+                return Array.prototype.slice.call(new Uint8Array(entry || []));
+              })
+            : null;
+          ch.dirIndex = Math.max(0, src.dirIndex | 0);
+        }
+      }
+
       return {
         onCioCall: onCioCall,
         onPutByteCall: onPutByteCall,
         putByteHookAddr: HDEVICE_PUTBYTE_HOOK_ADDR,
         putByteHookAltAddr: (HDEVICE_PUTBYTE_HOOK_ADDR + 1) & 0xffff,
         resetChannels: resetChannels,
+        exportSnapshotState: exportSnapshotState,
+        importSnapshotState: importSnapshotState,
         getHostFs: function () {
           return hostFs;
         },

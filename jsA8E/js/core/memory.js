@@ -1151,6 +1151,217 @@
         };
       }
 
+      function copyBytesTo(target, source) {
+        target.fill(0);
+        if (!source) return;
+        const bytes = source instanceof Uint8Array ? source : new Uint8Array(source);
+        target.set(bytes.subarray(0, target.length), 0);
+      }
+
+      function cloneIoDataState(io) {
+        return {
+          video: io && io.video
+            ? {
+                verticalScrollOffset: io.video.verticalScrollOffset | 0,
+                currentDisplayLine: io.video.currentDisplayLine | 0,
+              }
+            : null,
+          displayListFetchCycle: io.displayListFetchCycle,
+          clock: io.clock,
+          inDrawLine: !!io.inDrawLine,
+          dliCycle: io.dliCycle,
+          serialOutputNeedDataCycle: io.serialOutputNeedDataCycle,
+          serialOutputTransmissionDoneCycle: io.serialOutputTransmissionDoneCycle,
+          serialInputDataReadyCycle: io.serialInputDataReadyCycle,
+          timer1Cycle: io.timer1Cycle,
+          timer2Cycle: io.timer2Cycle,
+          timer4Cycle: io.timer4Cycle,
+          valuePortA: io.valuePortA | 0,
+          valuePortB: io.valuePortB | 0,
+          sioBuffer: new Uint8Array(io.sioBuffer || 0),
+          sioOutIndex: io.sioOutIndex | 0,
+          sioOutPhase: io.sioOutPhase | 0,
+          sioDataIndex: io.sioDataIndex | 0,
+          sioPendingDevice: io.sioPendingDevice | 0,
+          sioPendingCmd: io.sioPendingCmd | 0,
+          sioPendingSector: io.sioPendingSector | 0,
+          sioPendingBytes: io.sioPendingBytes | 0,
+          sioInIndex: io.sioInIndex | 0,
+          sioInSize: io.sioInSize | 0,
+          pokeyLfsr17: io.pokeyLfsr17 | 0,
+          pokeyLfsr17LastCycle: io.pokeyLfsr17LastCycle,
+          pokeyPotValues: new Uint8Array(io.pokeyPotValues || 0),
+          pokeyPotLatched: new Uint8Array(io.pokeyPotLatched || 0),
+          pokeyPotAllPot: io.pokeyPotAllPot | 0,
+          pokeyPotScanStartCycle: io.pokeyPotScanStartCycle,
+          pokeyPotScanActive: !!io.pokeyPotScanActive,
+          trigPhysical: new Uint8Array(io.trigPhysical || 0),
+          trigLatched: new Uint8Array(io.trigLatched || 0),
+          currentDisplayListCommand: io.currentDisplayListCommand | 0,
+          nextDisplayListLine: io.nextDisplayListLine | 0,
+          displayListAddress: io.displayListAddress | 0,
+          rowDisplayMemoryAddress: io.rowDisplayMemoryAddress | 0,
+          displayMemoryAddress: io.displayMemoryAddress | 0,
+          firstRowScanline: !!io.firstRowScanline,
+          drawLine: io.drawLine
+            ? {
+                displayMemoryAddress: io.drawLine.displayMemoryAddress | 0,
+                bytesPerLine: io.drawLine.bytesPerLine | 0,
+                destIndex: io.drawLine.destIndex | 0,
+              }
+            : null,
+          keyPressCounter: io.keyPressCounter | 0,
+          optionOnStart: !!io.optionOnStart,
+          sioTurbo: !!io.sioTurbo,
+        };
+      }
+
+      function createIoDataFromSnapshot(snapshot) {
+        const state = snapshot && typeof snapshot === "object" ? snapshot : {};
+        const io = makeIoData(video);
+        if (state.video && typeof state.video === "object") {
+          io.video.verticalScrollOffset = state.video.verticalScrollOffset | 0;
+          io.video.currentDisplayLine = state.video.currentDisplayLine | 0;
+        }
+        io.displayListFetchCycle = state.displayListFetchCycle;
+        io.clock = state.clock;
+        io.inDrawLine = !!state.inDrawLine;
+        io.dliCycle = state.dliCycle;
+        io.serialOutputNeedDataCycle = state.serialOutputNeedDataCycle;
+        io.serialOutputTransmissionDoneCycle = state.serialOutputTransmissionDoneCycle;
+        io.serialInputDataReadyCycle = state.serialInputDataReadyCycle;
+        io.timer1Cycle = state.timer1Cycle;
+        io.timer2Cycle = state.timer2Cycle;
+        io.timer4Cycle = state.timer4Cycle;
+        io.valuePortA = state.valuePortA | 0;
+        io.valuePortB = state.valuePortB | 0;
+        copyBytesTo(io.sioBuffer, state.sioBuffer);
+        io.sioOutIndex = state.sioOutIndex | 0;
+        io.sioOutPhase = state.sioOutPhase | 0;
+        io.sioDataIndex = state.sioDataIndex | 0;
+        io.sioPendingDevice = state.sioPendingDevice | 0;
+        io.sioPendingCmd = state.sioPendingCmd | 0;
+        io.sioPendingSector = state.sioPendingSector | 0;
+        io.sioPendingBytes = state.sioPendingBytes | 0;
+        io.sioInIndex = state.sioInIndex | 0;
+        io.sioInSize = state.sioInSize | 0;
+        io.pokeyLfsr17 = state.pokeyLfsr17 | 0;
+        io.pokeyLfsr17LastCycle = state.pokeyLfsr17LastCycle;
+        copyBytesTo(io.pokeyPotValues, state.pokeyPotValues);
+        copyBytesTo(io.pokeyPotLatched, state.pokeyPotLatched);
+        io.pokeyPotAllPot = state.pokeyPotAllPot | 0;
+        io.pokeyPotScanStartCycle = state.pokeyPotScanStartCycle;
+        io.pokeyPotScanActive = !!state.pokeyPotScanActive;
+        copyBytesTo(io.trigPhysical, state.trigPhysical);
+        copyBytesTo(io.trigLatched, state.trigLatched);
+        io.currentDisplayListCommand = state.currentDisplayListCommand | 0;
+        io.nextDisplayListLine = state.nextDisplayListLine | 0;
+        io.displayListAddress = state.displayListAddress | 0;
+        io.rowDisplayMemoryAddress = state.rowDisplayMemoryAddress | 0;
+        io.displayMemoryAddress = state.displayMemoryAddress | 0;
+        io.firstRowScanline = !!state.firstRowScanline;
+        if (state.drawLine && typeof state.drawLine === "object") {
+          io.drawLine.displayMemoryAddress = state.drawLine.displayMemoryAddress | 0;
+          io.drawLine.bytesPerLine = state.drawLine.bytesPerLine | 0;
+          io.drawLine.destIndex = state.drawLine.destIndex | 0;
+        }
+        io.keyPressCounter = state.keyPressCounter | 0;
+        io.optionOnStart = !!state.optionOnStart;
+        io.sioTurbo = !!state.sioTurbo;
+        return io;
+      }
+
+      function cloneMediaState() {
+        ensureMediaLayout();
+        return {
+          deviceSlots: Array.from(machine.media.deviceSlots || []),
+          diskImages: machine.media.diskImages.map(function (image) {
+            return {
+              id: image.id ? String(image.id) : "",
+              name: image.name ? String(image.name) : "disk.atr",
+              size: image.size | 0,
+              writable: image.writable !== false,
+              bytes: new Uint8Array(image.bytes || 0),
+            };
+          }),
+          basicRom: machine.media.basicRom ? new Uint8Array(machine.media.basicRom) : null,
+          osRom: machine.media.osRom ? new Uint8Array(machine.media.osRom) : null,
+          selfTestRom: machine.media.selfTestRom
+            ? new Uint8Array(machine.media.selfTestRom)
+            : null,
+          floatingPointRom: machine.media.floatingPointRom
+            ? new Uint8Array(machine.media.floatingPointRom)
+            : null,
+        };
+      }
+
+      function restoreMediaState(snapshot) {
+        const state = snapshot && typeof snapshot === "object" ? snapshot : {};
+        const deviceSlots = makeDefaultDeviceSlots();
+        const rawSlots = Array.isArray(state.deviceSlots) ? state.deviceSlots : [];
+        for (let i = 0; i < deviceSlots.length && i < rawSlots.length; i++) {
+          deviceSlots[i] = rawSlots[i] | 0;
+        }
+        const diskImages = [];
+        const rawImages = Array.isArray(state.diskImages) ? state.diskImages : [];
+        for (let i = 0; i < rawImages.length; i++) {
+          const image = rawImages[i];
+          if (!image || typeof image !== "object") continue;
+          const bytes = image.bytes ? new Uint8Array(image.bytes) : new Uint8Array(0);
+          diskImages.push({
+            id: image.id ? String(image.id) : Date.now() + ":" + i,
+            name: image.name ? String(image.name) : "disk.atr",
+            bytes: bytes,
+            size: image.size | 0 || bytes.length | 0,
+            writable: image.writable !== false,
+          });
+        }
+        machine.media = {
+          deviceSlots: deviceSlots,
+          diskImages: diskImages,
+          basicRom: state.basicRom ? new Uint8Array(state.basicRom) : null,
+          osRom: state.osRom ? new Uint8Array(state.osRom) : null,
+          selfTestRom: state.selfTestRom ? new Uint8Array(state.selfTestRom) : null,
+          floatingPointRom: state.floatingPointRom
+            ? new Uint8Array(state.floatingPointRom)
+            : null,
+        };
+      }
+
+      function exportSnapshotState() {
+        ensureMediaLayout();
+        return {
+          ram: new Uint8Array(machine.ctx.ram),
+          sram: new Uint8Array(machine.ctx.sram),
+          ioData: cloneIoDataState(machine.ctx.ioData),
+          media: cloneMediaState(),
+          osRomLoaded: !!machine.osRomLoaded,
+          basicRomLoaded: !!machine.basicRomLoaded,
+        };
+      }
+
+      function importSnapshotState(snapshot) {
+        const state = snapshot && typeof snapshot === "object" ? snapshot : {};
+        restoreMediaState(state.media);
+        machine.osRomLoaded = !!state.osRomLoaded;
+        machine.basicRomLoaded = !!state.basicRomLoaded;
+        copyBytesTo(machine.ctx.ram, state.ram);
+        copyBytesTo(machine.ctx.sram, state.sram);
+        machine.ctx.ioData = createIoDataFromSnapshot(state.ioData);
+        copyMediaToIoData();
+        machine.ctx.ioCycleTimedEventFunction = ioCycleTimedEvent;
+        machine.ctx.ioData.pokeyAudio = null;
+        machine.ctx.accessFunctionOverride = null;
+        machine.ctx.accessFunction = null;
+        machine.ctx.accessAddress = 0;
+        machine.ctx.accessMode = 0;
+        machine.ctx.pageCrossed = 0;
+        machine.ctx.breakRun = false;
+        installIoHandlers(machine.ctx, ioAccess);
+        setupMemoryMap();
+        cycleTimedEventUpdate(machine.ctx);
+      }
+
       return {
         setupMemoryMap: setupMemoryMap,
         hardReset: hardReset,
@@ -1165,6 +1376,8 @@
         readMemory: readMemory,
         readRange: readRange,
         getBankState: getBankState,
+        exportSnapshotState: exportSnapshotState,
+        importSnapshotState: importSnapshotState,
       };
     }
 

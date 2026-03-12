@@ -359,11 +359,55 @@
         };
       }
 
+      function exportSnapshotState() {
+        const entries = [];
+        const syms = Object.keys(pressedKeys);
+        for (let i = 0; i < syms.length; i++) {
+          const sym = syms[i] | 0;
+          const st = pressedKeys[sym];
+          if (!st) continue;
+          entries.push({
+            sym: sym & 0xffff,
+            anonymousCount: Math.max(0, st.anonymousCount | 0),
+            sources: Array.from(st.sources || []),
+          });
+        }
+        return {
+          pressedKeys: entries,
+          joystickArrowMask: joystickArrowMask & 0x0f,
+        };
+      }
+
+      function importSnapshotState(snapshot) {
+        pressedKeys = {};
+        joystickArrowMask = 0;
+        if (!snapshot || typeof snapshot !== "object") return;
+        joystickArrowMask = Math.max(0, snapshot.joystickArrowMask | 0) & 0x0f;
+        const entries = Array.isArray(snapshot.pressedKeys) ? snapshot.pressedKeys : [];
+        for (let i = 0; i < entries.length; i++) {
+          const entry = entries[i];
+          if (!entry || typeof entry !== "object") continue;
+          const sym = entry.sym | 0;
+          if (sym < 0) continue;
+          const sources = new Set();
+          const rawSources = Array.isArray(entry.sources) ? entry.sources : [];
+          for (let j = 0; j < rawSources.length; j++) {
+            sources.add(String(rawSources[j]));
+          }
+          pressedKeys[sym] = {
+            anonymousCount: Math.max(0, entry.anonymousCount | 0),
+            sources: sources,
+          };
+        }
+      }
+
       return {
         onKeyDown: onKeyDown,
         onKeyUp: onKeyUp,
         releaseAll: releaseAll,
         getConsoleKeyState: getConsoleKeyState,
+        exportSnapshotState: exportSnapshotState,
+        importSnapshotState: importSnapshotState,
       };
     }
 

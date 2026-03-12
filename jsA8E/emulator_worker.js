@@ -321,6 +321,7 @@
       "js/core/input.js",
       "js/core/hw.js",
       "js/core/state.js",
+      "js/core/snapshot_codec.js",
       "js/core/memory.js",
       "js/core/io.js",
       "js/core/playfield_renderer.js",
@@ -849,6 +850,24 @@
           return app.collectArtifacts(data);
         }
         return null;
+      case "saveSnapshot":
+        if (typeof app.saveSnapshot === "function") {
+          return app.saveSnapshot(data || null);
+        }
+        throw new Error("A8E worker saveSnapshot is unavailable");
+      case "loadSnapshot":
+        if (typeof app.loadSnapshot === "function") {
+          const result = app.loadSnapshot(
+            data.buffer || new ArrayBuffer(0),
+            data.options || null,
+          );
+          return Object.assign(
+            {},
+            result && typeof result === "object" ? result : {},
+            buildControlAck("loadSnapshot"),
+          );
+        }
+        throw new Error("A8E worker loadSnapshot is unavailable");
       default:
         throw new Error("Unknown worker request: " + cmd);
     }

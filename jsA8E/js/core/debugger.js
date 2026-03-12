@@ -213,7 +213,7 @@
         for (let i = 0; i < active.length; i++) installBreakpointHook(active[i]);
       }
 
-      function setBreakpoints(addresses) {
+      function applyBreakpoints(addresses, emit) {
         removeStepOverHook();
         const nextSet = Object.create(null);
         const nextList = [];
@@ -254,8 +254,12 @@
           !breakpointSet[String(breakpointResumeAddress)]
         )
           {breakpointResumeAddress = -1;}
-        emitDebugState("breakpoints");
+        if (emit !== false) emitDebugState("breakpoints");
         return breakpointAddresses.length;
+      }
+
+      function setBreakpoints(addresses) {
+        return applyBreakpoints(addresses, true);
       }
 
       function resetExecutionState() {
@@ -298,6 +302,93 @@
           index = (index + 1) % TRACE_BUFFER_SIZE;
         }
         return out;
+      }
+
+      function exportSnapshotState() {
+        return {
+          breakpointAddresses: breakpointAddresses.slice(),
+          breakpointHitAddress:
+            breakpointHitAddress >= 0 ? breakpointHitAddress & 0xffff : null,
+          breakpointResumeAddress:
+            breakpointResumeAddress >= 0 ? breakpointResumeAddress & 0xffff : null,
+          lastStopReason: lastStopReason ? String(lastStopReason) : "",
+          lastStopAddress: lastStopAddress >= 0 ? lastStopAddress & 0xffff : null,
+          lastFaultInfo: lastFaultInfo
+            ? {
+                faultType: lastFaultInfo.faultType
+                  ? String(lastFaultInfo.faultType)
+                  : "",
+                faultMessage: lastFaultInfo.faultMessage
+                  ? String(lastFaultInfo.faultMessage)
+                  : "",
+                faultAddress:
+                  typeof lastFaultInfo.faultAddress === "number"
+                    ? lastFaultInfo.faultAddress & 0xffff
+                    : null,
+                opcode:
+                  typeof lastFaultInfo.opcode === "number"
+                    ? lastFaultInfo.opcode & 0xff
+                    : null,
+              }
+            : null,
+          traceTail: getTraceTail(TRACE_BUFFER_SIZE),
+        };
+      }
+
+      function importSnapshotState(snapshot) {
+        const state = snapshot && typeof snapshot === "object" ? snapshot : {};
+        clearTraceBuffer();
+        const traceEntries = Array.isArray(state.traceTail) ? state.traceTail : [];
+        for (let i = 0; i < traceEntries.length; i++) {
+          pushTraceEntry(traceEntries[i]);
+        }
+        const keys = Object.keys(breakpointHookBackups);
+        for (let i = 0; i < keys.length; i++) delete breakpointHookBackups[keys[i]];
+        const setKeys = Object.keys(breakpointSet);
+        for (let i = 0; i < setKeys.length; i++) delete breakpointSet[setKeys[i]];
+        breakpointAddresses = [];
+        breakpointHitAddress = -1;
+        breakpointResumeAddress = -1;
+        clearLastStopState();
+        applyBreakpoints(state.breakpointAddresses || [], false);
+        if (
+          typeof state.breakpointHitAddress === "number" &&
+          breakpointSet[String(state.breakpointHitAddress & 0xffff)]
+        ) {
+          breakpointHitAddress = state.breakpointHitAddress & 0xffff;
+        }
+        if (
+          typeof state.breakpointResumeAddress === "number" &&
+          breakpointSet[String(state.breakpointResumeAddress & 0xffff)]
+        ) {
+          breakpointResumeAddress = state.breakpointResumeAddress & 0xffff;
+        }
+        lastStopReason = state.lastStopReason ? String(state.lastStopReason) : "";
+        lastStopAddress =
+          typeof state.lastStopAddress === "number"
+            ? state.lastStopAddress & 0xffff
+            : -1;
+        if (state.lastFaultInfo && typeof state.lastFaultInfo === "object") {
+          lastFaultInfo = {
+            faultType: state.lastFaultInfo.faultType
+              ? String(state.lastFaultInfo.faultType)
+              : "",
+            faultMessage: state.lastFaultInfo.faultMessage
+              ? String(state.lastFaultInfo.faultMessage)
+              : "",
+            faultAddress:
+              typeof state.lastFaultInfo.faultAddress === "number"
+                ? state.lastFaultInfo.faultAddress & 0xffff
+                : undefined,
+            opcode:
+              typeof state.lastFaultInfo.opcode === "number"
+                ? state.lastFaultInfo.opcode & 0xff
+                : undefined,
+          };
+        } else {
+          lastFaultInfo = null;
+        }
+        lastDebugState = null;
       }
 
       function normalizePositiveLimit(value, fallbackValue) {
@@ -716,6 +807,8 @@
         stepOverAsync: stepOverAsync,
         runUntilPc: runUntilPc,
         onExecutionError: onExecutionError,
+        exportSnapshotState: exportSnapshotState,
+        importSnapshotState: importSnapshotState,
       };
     }
 

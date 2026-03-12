@@ -1825,6 +1825,9 @@
       progressEvents: true,
       cacheControl: true,
       waitPrimitives: true,
+      snapshots:
+        typeof app.saveSnapshot === "function" &&
+        typeof app.loadSnapshot === "function",
       groupedApi: true,
       events: true,
       faultReporting: true,
@@ -2665,6 +2668,110 @@
     });
   }
 
+  async function saveSnapshot(options) {
+    const app = await getApp();
+    if (typeof app.saveSnapshot !== "function") {
+      throw new Error("A8EAutomation.saveSnapshot is unavailable");
+    }
+    const opts = options && typeof options === "object" ? options : {};
+    const state = await readAppDebugState(app);
+    const wasRunning = !!(state && state.running);
+    if (wasRunning) {
+      if (opts.pauseRunning === false) {
+        throw createAutomationError({
+          operation: "saveSnapshot",
+          phase: "snapshot_save_running",
+          code: "snapshot_save_requires_pause",
+          message: "Saving a snapshot requires paused emulation",
+        });
+      }
+      await api.pause();
+    }
+    try {
+      const result = await Promise.resolve(
+        app.saveSnapshot({
+          savedRunning:
+            opts.savedRunning !== undefined ? !!opts.savedRunning : wasRunning,
+        }),
+      );
+      const buffer = toArrayBuffer(result && result.buffer ? result.buffer : null);
+      return {
+        type: "a8e.snapshot",
+        version:
+          result && typeof result.version === "number" ? result.version | 0 : 0,
+        mimeType:
+          result && result.mimeType
+            ? String(result.mimeType)
+            : "application/x-a8e-snapshot",
+        savedAt:
+          result && typeof result.savedAt === "number" ? result.savedAt : Date.now(),
+        savedRunning:
+          result && typeof result.savedRunning === "boolean"
+            ? !!result.savedRunning
+            : wasRunning,
+        byteLength:
+          result && typeof result.byteLength === "number"
+            ? result.byteLength | 0
+            : buffer.byteLength | 0,
+        buffer: buffer,
+        bytes: new Uint8Array(buffer),
+      };
+    } catch (err) {
+      throw createAutomationError({
+        operation: "saveSnapshot",
+        phase: "snapshot_save_failed",
+        code: "snapshot_save_failed",
+        message: "Failed to save emulator snapshot",
+        cause: err,
+      });
+    }
+  }
+
+  async function loadSnapshot(data, options) {
+    const app = await getApp();
+    if (typeof app.loadSnapshot !== "function") {
+      throw new Error("A8EAutomation.loadSnapshot is unavailable");
+    }
+    const opts = options && typeof options === "object" ? options : {};
+    const input = toArrayBuffer(data);
+    const state = await readAppDebugState(app);
+    if (state && state.running && opts.pauseRunning === false) {
+      throw createAutomationError({
+        operation: "loadSnapshot",
+        phase: "snapshot_load_running",
+        code: "snapshot_load_requires_pause",
+        message: "Loading a snapshot requires paused emulation",
+      });
+    }
+    if (state && state.running) {
+      await api.pause();
+    }
+    try {
+      const result = await Promise.resolve(
+        app.loadSnapshot(input, {
+          resume: opts.resume !== undefined ? opts.resume : "saved",
+        }),
+      );
+      notifyStatus();
+      const debugState = await readAppDebugState(app);
+      return Object.assign(
+        {
+          resumed: !!(debugState && debugState.running),
+          debugState: debugState,
+        },
+        result && typeof result === "object" ? result : {},
+      );
+    } catch (err) {
+      throw createAutomationError({
+        operation: "loadSnapshot",
+        phase: "snapshot_load_failed",
+        code: "snapshot_load_failed",
+        message: "Failed to load emulator snapshot",
+        cause: err,
+      });
+    }
+  }
+
   const api = {
     apiVersion: API_VERSION,
     artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
@@ -2710,6 +2817,8 @@
     },
     getCapabilities: getCapabilities,
     getSystemState: getSystemState,
+    saveSnapshot: saveSnapshot,
+    loadSnapshot: loadSnapshot,
     focusDisplay: function () {
       if (typeof currentFocusCanvas === "function") {
         currentFocusCanvas(true);
@@ -3325,6 +3434,8 @@
     pause: api.pause,
     reset: api.reset,
     boot: api.boot,
+    saveSnapshot: api.saveSnapshot,
+    loadSnapshot: api.loadSnapshot,
     reload: api.reload,
     dispose: api.dispose,
     waitForPause: api.waitForPause,

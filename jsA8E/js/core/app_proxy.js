@@ -38,6 +38,8 @@
     getConsoleKeyState: 4000,
     captureScreenshot: 15000,
     collectArtifacts: 15000,
+    saveSnapshot: 15000,
+    loadSnapshot: 15000,
   };
 
   function supportsWorker() {
@@ -1249,6 +1251,25 @@
       collectArtifacts: function (opts) {
         return sendRequest("collectArtifacts", opts || null);
       },
+      saveSnapshot: function (options) {
+        return sendRequest("saveSnapshot", options || null).then(function (result) {
+          if (result && result.buffer && isArrayBufferLike(result.buffer)) {
+            result.bytes = new Uint8Array(result.buffer);
+          }
+          return result || null;
+        });
+      },
+      loadSnapshot: function (data, options) {
+        const buffer = toArrayBuffer(data);
+        return sendRequest(
+          "loadSnapshot",
+          {
+            buffer: buffer,
+            options: options && typeof options === "object" ? options : null,
+          },
+          [buffer],
+        );
+      },
       onDebugStateChange: function (fn) {
         if (typeof fn !== "function") return function () {};
         debugListeners.add(fn);
@@ -1433,6 +1454,14 @@
       };}
     if (app && typeof app.collectArtifacts !== "function")
       {app.collectArtifacts = function () { return null; };}
+    if (app && typeof app.saveSnapshot !== "function")
+      {app.saveSnapshot = function () {
+        return Promise.reject(new Error("A8E snapshot save unavailable"));
+      };}
+    if (app && typeof app.loadSnapshot !== "function")
+      {app.loadSnapshot = function () {
+        return Promise.reject(new Error("A8E snapshot load unavailable"));
+      };}
     if (app && typeof app.loadDiskToDeviceSlotDetailed !== "function")
       {app.loadDiskToDeviceSlotDetailed = function (arrayBuffer, name, slot, options) {
         const imageIndex = app.loadDiskToDeviceSlot

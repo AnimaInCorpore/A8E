@@ -226,6 +226,13 @@
   const cycleTimedEventUpdate = stateApi.cycleTimedEventUpdate;
   const initHardwareDefaults = stateApi.initHardwareDefaults;
   const installIoHandlers = stateApi.installIoHandlers;
+  const snapshotCodec =
+    window.A8ESnapshotCodec &&
+    typeof window.A8ESnapshotCodec.encodeSnapshot === "function" &&
+    typeof window.A8ESnapshotCodec.decodeSnapshot === "function"
+      ? window.A8ESnapshotCodec
+      : null;
+  if (!snapshotCodec) throw new Error("A8ESnapshotCodec is not loaded");
   const memoryApi =
     window.A8EMemory && window.A8EMemory.createApi
       ? window.A8EMemory.createApi({
@@ -835,6 +842,224 @@
       return getBankStateRuntime();
     }
 
+    function cloneVideoState() {
+      return {
+        pixels: new Uint8Array(video.pixels),
+        priority: new Uint8Array(video.priority),
+        playfieldScratchPixels: new Uint8Array(video.playfieldScratchPixels),
+        playfieldScratchPriority: new Uint8Array(video.playfieldScratchPriority),
+      };
+    }
+
+    function restoreVideoState(snapshot) {
+      const state = snapshot && typeof snapshot === "object" ? snapshot : {};
+      video.pixels.fill(0);
+      video.priority.fill(0);
+      video.playfieldScratchPixels.fill(0);
+      video.playfieldScratchPriority.fill(0);
+      if (state.pixels) {
+        video.pixels.set(
+          new Uint8Array(state.pixels).subarray(0, video.pixels.length),
+          0,
+        );
+      }
+      if (state.priority) {
+        video.priority.set(
+          new Uint8Array(state.priority).subarray(0, video.priority.length),
+          0,
+        );
+      }
+      if (state.playfieldScratchPixels) {
+        video.playfieldScratchPixels.set(
+          new Uint8Array(state.playfieldScratchPixels).subarray(
+            0,
+            video.playfieldScratchPixels.length,
+          ),
+          0,
+        );
+      }
+      if (state.playfieldScratchPriority) {
+        video.playfieldScratchPriority.set(
+          new Uint8Array(state.playfieldScratchPriority).subarray(
+            0,
+            video.playfieldScratchPriority.length,
+          ),
+          0,
+        );
+      }
+    }
+
+    function buildCoreSnapshot(savedRunning) {
+      return {
+        type: "a8e.snapshot",
+        version: snapshotCodec.formatVersion | 0,
+        savedAt: Date.now(),
+        savedRunning: !!savedRunning,
+        config: {
+          audioEnabled: !!audioEnabled,
+          turbo: !!turbo,
+          sioTurbo: !!sioTurbo,
+          optionOnStart: !!optionOnStart,
+          keyboardMappingMode: keyboardMappingMode,
+        },
+        machine: {
+          cpu: {
+            a: machine.ctx.cpu.a & 0xff,
+            x: machine.ctx.cpu.x & 0xff,
+            y: machine.ctx.cpu.y & 0xff,
+            sp: machine.ctx.cpu.sp & 0xff,
+            pc: machine.ctx.cpu.pc & 0xffff,
+            ps: CPU.getPs(machine.ctx) & 0xff,
+          },
+          cycleCounter: machine.ctx.cycleCounter,
+          stallCycleCounter: machine.ctx.stallCycleCounter,
+          ioCycleTimedEventCycle: machine.ctx.ioCycleTimedEventCycle,
+          irqPending: machine.ctx.irqPending | 0,
+          instructionCounter: machine.ctx.instructionCounter >>> 0,
+          cycleAccum: +machine.cycleAccum || 0,
+          frameCycleAccum: machine.frameCycleAccum | 0,
+          video: cloneVideoState(),
+          memory: memoryRuntime.exportSnapshotState(),
+          debug: debugRuntime.exportSnapshotState(),
+          input: inputRuntime.exportSnapshotState(),
+          hDevice:
+            hDevice && typeof hDevice.exportSnapshotState === "function"
+              ? hDevice.exportSnapshotState()
+              : null,
+        },
+      };
+    }
+
+    function saveSnapshot(options) {
+      if (machine.running) {
+        throw new Error("A8E snapshot save requires paused emulation");
+      }
+      const opts = options && typeof options === "object" ? options : {};
+      const snapshot = buildCoreSnapshot(
+        opts.savedRunning !== undefined ? !!opts.savedRunning : false,
+      );
+      const buffer = snapshotCodec.encodeSnapshot(snapshot);
+      return {
+        type: "a8e.snapshot",
+        version: snapshot.version | 0,
+        savedAt: snapshot.savedAt,
+        savedRunning: snapshot.savedRunning,
+        mimeType: "application/x-a8e-snapshot",
+        byteLength: buffer.byteLength | 0,
+        buffer: buffer,
+      };
+    }
+
+    function loadSnapshot(arrayBuffer, options) {
+      const bytes = snapshotCodec.toUint8Array(arrayBuffer);
+      const payload = snapshotCodec.decodeSnapshot(bytes);
+      if (!payload || payload.type !== "a8e.snapshot") {
+        throw new Error("A8E snapshot is invalid");
+      }
+      const snapshot = payload.machine || {};
+      const opts = options && typeof options === "object" ? options : {};
+      pauseInternal("pause");
+      if (debugRuntime && typeof debugRuntime.removeStepOverHook === "function") {
+        debugRuntime.removeStepOverHook();
+      }
+      if (typeof opts.audioEnabled === "boolean") {
+        audioEnabled = !!opts.audioEnabled;
+      } else if (payload.config && typeof payload.config.audioEnabled === "boolean") {
+        audioEnabled = !!payload.config.audioEnabled;
+      }
+      if (payload.config && typeof payload.config.turbo === "boolean") {
+        turbo = !!payload.config.turbo;
+      }
+      if (payload.config && typeof payload.config.sioTurbo === "boolean") {
+        sioTurbo = !!payload.config.sioTurbo;
+      }
+      if (payload.config && typeof payload.config.optionOnStart === "boolean") {
+        optionOnStart = !!payload.config.optionOnStart;
+      }
+      if (payload.config && payload.config.keyboardMappingMode) {
+        keyboardMappingMode =
+          payload.config.keyboardMappingMode === "original"
+            ? "original"
+            : "translated";
+        if (setKeysKeyboardMappingMode) {
+          setKeysKeyboardMappingMode(keyboardMappingMode);
+        }
+      }
+      machine.cycleAccum =
+        typeof snapshot.cycleAccum === "number" ? +snapshot.cycleAccum : 0;
+      machine.frameCycleAccum = snapshot.frameCycleAccum | 0;
+      machine.ctx.cpu.a =
+        snapshot.cpu && typeof snapshot.cpu.a === "number"
+          ? snapshot.cpu.a & 0xff
+          : 0;
+      machine.ctx.cpu.x =
+        snapshot.cpu && typeof snapshot.cpu.x === "number"
+          ? snapshot.cpu.x & 0xff
+          : 0;
+      machine.ctx.cpu.y =
+        snapshot.cpu && typeof snapshot.cpu.y === "number"
+          ? snapshot.cpu.y & 0xff
+          : 0;
+      machine.ctx.cpu.sp =
+        snapshot.cpu && typeof snapshot.cpu.sp === "number"
+          ? snapshot.cpu.sp & 0xff
+          : 0;
+      machine.ctx.cpu.pc =
+        snapshot.cpu && typeof snapshot.cpu.pc === "number"
+          ? snapshot.cpu.pc & 0xffff
+          : 0;
+      CPU.setPs(
+        machine.ctx,
+        snapshot.cpu && typeof snapshot.cpu.ps === "number"
+          ? snapshot.cpu.ps & 0xff
+          : 0,
+      );
+      machine.ctx.cycleCounter =
+        typeof snapshot.cycleCounter === "number" ? snapshot.cycleCounter : 0;
+      machine.ctx.stallCycleCounter =
+        typeof snapshot.stallCycleCounter === "number"
+          ? snapshot.stallCycleCounter
+          : 0;
+      machine.ctx.ioCycleTimedEventCycle = snapshot.ioCycleTimedEventCycle;
+      machine.ctx.irqPending = snapshot.irqPending | 0;
+      machine.ctx.instructionCounter = snapshot.instructionCounter >>> 0;
+      machine.ctx.breakRun = false;
+      machine.ctx.pcHooks = Object.create(null);
+      memoryRuntime.importSnapshotState(snapshot.memory);
+      restoreVideoState(snapshot.video);
+      if (hDevice && typeof hDevice.importSnapshotState === "function") {
+        hDevice.importSnapshotState(snapshot.hDevice);
+      }
+      installHDeviceCioHooks();
+      if (typeof inputRuntime.importSnapshotState === "function") {
+        inputRuntime.importSnapshotState(snapshot.input);
+      }
+      if (typeof debugRuntime.importSnapshotState === "function") {
+        debugRuntime.importSnapshotState(snapshot.debug);
+      }
+      if (machine.audioCtx) {
+        stopAudio();
+      }
+      paint();
+      updateDebug("snapshot_load");
+      const resume =
+        opts.resume === true ||
+        (opts.resume !== false && payload.savedRunning === true);
+      if (resume) start();
+      return {
+        command: "loadSnapshot",
+        snapshotVersion: payload.version | 0,
+        savedAt: payload.savedAt || 0,
+        savedRunning: !!payload.savedRunning,
+        resumed: !!resume,
+        state: {
+          running: !!machine.running,
+          debug: getDebugState(),
+        },
+        debugState: getDebugState(),
+      };
+    }
+
     function createCaptureCanvas(width, height) {
       if (typeof OffscreenCanvas === "function") {
         return new OffscreenCanvas(width, height);
@@ -1244,6 +1469,8 @@
       readMemory: readMemory,
       readRange: readRange,
       getBankState: getBankState,
+      saveSnapshot: saveSnapshot,
+      loadSnapshot: loadSnapshot,
       captureScreenshot: captureScreenshot,
       collectArtifacts: collectArtifacts,
       onDebugStateChange: onDebugStateChange,
