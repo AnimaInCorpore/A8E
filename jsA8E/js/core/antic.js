@@ -233,7 +233,7 @@
 
       if (!io.inDrawLine && ctx.cycleCounter >= io.displayListFetchCycle) {
         if (io.video.currentDisplayLine === 0) {
-          io.clock = io.displayListFetchCycle - CYCLES_PER_LINE;
+          io.clock = io.displayListFetchCycle;
         }
         fetchLine(ctx);
         io.inDrawLine = true;

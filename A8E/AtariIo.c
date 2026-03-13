@@ -4524,8 +4524,8 @@ void AtariIoCycleTimedEventUpdate(_6502_Context_t *pContext)
 
 	if(!pIoData->bInDrawLine)
 	{
-		pContext->llIoBeamTimedEventCycle =
-			MIN(pIoData->llDisplayListFetchCycle, pContext->llIoBeamTimedEventCycle);
+		pContext->llIoMasterTimedEventCycle =
+			MIN(pIoData->llDisplayListFetchCycle, pContext->llIoMasterTimedEventCycle);
 	}
 
 	pContext->llIoBeamTimedEventCycle =
@@ -4549,8 +4549,7 @@ void AtariIoCycleTimedEventUpdate(_6502_Context_t *pContext)
 	pContext->llIoMasterTimedEventCycle =
 		MIN(pIoData->llTimer4Cycle, pContext->llIoMasterTimedEventCycle);
 
-	pContext->llIoCycleTimedEventCycle =
-		MIN(pContext->llIoBeamTimedEventCycle, pContext->llIoMasterTimedEventCycle);
+	pContext->llIoCycleTimedEventCycle = pContext->llIoMasterTimedEventCycle;
 }
 
 static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
@@ -4564,7 +4563,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 	{
 		if(pIoData->tVideoData.lCurrentDisplayLine == 0)
 		{
-			pIoData->llCycle = pIoData->llDisplayListFetchCycle - CYCLES_PER_LINE;
+			pIoData->llCycle = pIoData->llDisplayListFetchCycle;
 		}
 
 		AtariIoFetchLine(pContext);
@@ -4800,7 +4799,7 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 	_6502_SetRom(pContext, 0xd000, 0xd7ff);
 	_6502_SetRom(pContext, 0xd800, 0xffff);
 
-	pIoData->llDisplayListFetchCycle = CYCLES_PER_LINE;
+	pIoData->llDisplayListFetchCycle = 0;
 	pIoData->llDliCycle = CYCLE_NEVER;
 	pIoData->llSerialOutputNeedDataCycle = CYCLE_NEVER;
 	pIoData->llSerialOutputTransmissionDoneCycle = CYCLE_NEVER;
