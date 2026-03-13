@@ -155,10 +155,12 @@
 
           // DLI scheduling
           if (cmd & 0x80) {
+            const DLI_HORIZONTAL_OFFSET = 14;
             io.dliCycle =
               io.clock +
               (io.nextDisplayListLine - io.video.currentDisplayLine - 1) *
-                CYCLES_PER_LINE;
+                CYCLES_PER_LINE +
+              DLI_HORIZONTAL_OFFSET;
             cycleTimedEventUpdate(ctx);
           }
 

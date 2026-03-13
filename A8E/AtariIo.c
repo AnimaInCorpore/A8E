@@ -2712,8 +2712,10 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			// DLI? (schedule after vertical scrolling adjustments)
 			if(pIoData->cCurrentDisplayListCommand & 0x80)
 			{
+				const u32 DLI_HORIZONTAL_OFFSET = 14;
 				pIoData->llDliCycle = pIoData->llCycle +
-									  (pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine - 1) * CYCLES_PER_LINE;
+									  (pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine - 1) * CYCLES_PER_LINE +
+									  DLI_HORIZONTAL_OFFSET;
 
 				AtariIoCycleTimedEventUpdate(pContext);
 			}
@@ -4530,6 +4532,9 @@ void AtariIoCycleTimedEventUpdate(_6502_Context_t *pContext)
 
 	pContext->llIoBeamTimedEventCycle =
 		MIN(pIoData->llDliCycle, pContext->llIoBeamTimedEventCycle);
+
+	pContext->llIoMasterTimedEventCycle =
+		MIN(pIoData->llDliCycle, pContext->llIoMasterTimedEventCycle);
 
 	pContext->llIoMasterTimedEventCycle =
 		MIN(pIoData->llSerialOutputTransmissionDoneCycle, pContext->llIoMasterTimedEventCycle);
