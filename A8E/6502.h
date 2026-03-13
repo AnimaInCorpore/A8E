@@ -79,6 +79,8 @@ typedef struct _6502_Context
 	u64 llIoBeamTimedEventCycle;
 	void (*IoCycleTimedEventFunction)(struct _6502_Context *);
 
+	u8 cNmiPendingFlag;
+	u8 cNmiActiveFlag;
 	u8 cIrqPendingFlag;
 
 	void *pIoData;

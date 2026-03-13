@@ -617,6 +617,19 @@ static void _6502_ServiceInterrupt(_6502_Context_t *pContext, u16 sVector, u8 cB
 	CPU.pc = RAM[sVector] | (RAM[sVector + 1] << 8);
 }
 
+static void _6502_ServicePendingNmi(_6502_Context_t *pContext)
+{
+	if(!pContext->cNmiPendingFlag || pContext->cNmiActiveFlag)
+	{
+		return;
+	}
+
+	pContext->cNmiPendingFlag = 0;
+	pContext->cNmiActiveFlag = 1;
+	_6502_ServiceInterrupt(pContext, 0xfffa, 0, CPU.pc);
+	pContext->llCycleCounter += 7;
+}
+
 static void _6502_SetPs(_6502_Context_t *pContext, u8 cPs)
 {
 	PS.n = cPs & FLAG_N;
@@ -1023,8 +1036,8 @@ void _6502_Status(_6502_Context_t *pContext)
 
 void _6502_Nmi(_6502_Context_t *pContext)
 {
-	_6502_ServiceInterrupt(pContext, 0xfffa, 0, CPU.pc);
-	pContext->llCycleCounter += 7;
+	/* Edge-triggered NMI: keep one pending request and service at execute boundary. */
+	pContext->cNmiPendingFlag = 1;
 }
 
 void _6502_Reset(_6502_Context_t *pContext)
@@ -1034,6 +1047,8 @@ void _6502_Reset(_6502_Context_t *pContext)
 	PS.i = 1;
 	PS.d = 0;
 	PS.b = 0;
+	pContext->cNmiPendingFlag = 0;
+	pContext->cNmiActiveFlag = 0;
 	pContext->cIrqPendingFlag = 0;
 	CPU.pc = RAM[0xfffc] | (RAM[0xfffd] << 8);
 
@@ -1066,6 +1081,8 @@ void _6502_Execute(_6502_Context_t *pContext)
 		pContext->llCycleCounter++;
 		return;
 	}
+
+	_6502_ServicePendingNmi(pContext);
 
 	if(pContext->cIrqPendingFlag && !PS.i)
 	{
@@ -1648,6 +1665,7 @@ void _6502_RTI(_6502_Context_t *pContext)
 	CPU.pc = RAM[0x100 + CPU.sp];
 	CPU.sp++;
 	CPU.pc |= RAM[0x100 + CPU.sp] << 8;
+	pContext->cNmiActiveFlag = 0;
 }
 
 void _6502_RTS(_6502_Context_t *pContext)

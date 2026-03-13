@@ -914,6 +914,8 @@
           cycleCounter: machine.ctx.cycleCounter,
           stallCycleCounter: machine.ctx.stallCycleCounter,
           ioCycleTimedEventCycle: machine.ctx.ioCycleTimedEventCycle,
+          nmiPending: machine.ctx.nmiPending | 0,
+          nmiActive: machine.ctx.nmiActive | 0,
           irqPending: machine.ctx.irqPending | 0,
           instructionCounter: machine.ctx.instructionCounter >>> 0,
           cycleAccum: +machine.cycleAccum || 0,
@@ -1094,6 +1096,8 @@
       machine.ctx.ioCycleTimedEventCycle = snapshot.ioCycleTimedEventCycle;
       machine.ctx.ioMasterTimedEventCycle = Infinity;
       machine.ctx.ioBeamTimedEventCycle = Infinity;
+      machine.ctx.nmiPending = snapshot.nmiPending ? 1 : 0;
+      machine.ctx.nmiActive = snapshot.nmiActive ? 1 : 0;
       machine.ctx.irqPending = snapshot.irqPending | 0;
       machine.ctx.instructionCounter = snapshot.instructionCounter >>> 0;
       machine.ctx.breakRun = false;

@@ -998,6 +998,8 @@
         ensureMediaLayout();
         machine.ctx.cycleCounter = 0;
         machine.ctx.stallCycleCounter = 0;
+        machine.ctx.nmiPending = 0;
+        machine.ctx.nmiActive = 0;
         machine.ctx.irqPending = 0;
         machine.ctx.ioData = makeIoData(video);
         machine.ctx.ioData.optionOnStart = !!getOptionOnStart();

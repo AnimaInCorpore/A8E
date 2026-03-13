@@ -68,6 +68,8 @@
       ioMasterTimedEventCycle: Infinity,
       ioBeamTimedEventCycle: Infinity,
       ioCycleTimedEventFunction: null,
+      nmiPending: 0,
+      nmiActive: 0,
       irqPending: 0,
       breakRun: false,
       instructionCounter: 0,
@@ -174,6 +176,15 @@
   }
 
   function nmi(ctx) {
+    // NMI is edge-driven; keep one pending request instead of re-entering
+    // immediately from nested timed events.
+    ctx.nmiPending = 1;
+  }
+
+  function servicePendingNmi(ctx) {
+    if (!ctx.nmiPending || ctx.nmiActive) return;
+    ctx.nmiPending = 0;
+    ctx.nmiActive = 1;
     serviceInterrupt(ctx, 0xfffa, 0, ctx.cpu.pc);
     ctx.cycleCounter += 7;
   }
@@ -183,6 +194,8 @@
     cpu.sp = 0xfd;
     cpu.ps = (cpu.ps | FLAG_I) & ~(FLAG_D | FLAG_B);
     ctx.irqPending = 0;
+    ctx.nmiPending = 0;
+    ctx.nmiActive = 0;
     cpu.pc = ctx.ram[0xfffc] | (ctx.ram[0xfffd] << 8);
     ctx.cycleCounter += 7;
   }
@@ -636,6 +649,7 @@
     cpu.pc = ctx.ram[0x100 + cpu.sp] & 0xff;
     cpu.sp = (cpu.sp + 1) & 0xff;
     cpu.pc |= (ctx.ram[0x100 + cpu.sp] & 0xff) << 8;
+    ctx.nmiActive = 0;
   }
   function opRTS(ctx) {
     const cpu = ctx.cpu;
@@ -900,6 +914,7 @@
     const cpu = ctx.cpu;
     const ram = ctx.ram;
 
+    servicePendingNmi(ctx);
     if (ctx.irqPending && !hasFlag(cpu.ps, FLAG_I)) irq(ctx);
 
     const hook = ctx.pcHooks[cpu.pc];
@@ -957,6 +972,7 @@
       }
 
       if (ctx.cycleCounter >= ctx.stallCycleCounter) {
+        servicePendingNmi(ctx);
         if (ctx.irqPending && !hasFlag(cpu.ps, FLAG_I)) irq(ctx);
 
         const hook = pcHooks[cpu.pc];
