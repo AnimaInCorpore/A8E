@@ -50,7 +50,7 @@
         drawPlayerMissilesClock(
           ctx,
           ACTIVE_LINE_HSYNC_PIXELS +
-            ((io.clock - (io.displayListFetchCycle - CYCLES_PER_LINE)) * 4),
+            ((io.clock - io.displayListFetchCycle) * 4),
         );
       }
       if (ctx.cycleCounter < io.clock) CPU.executeOne(ctx);

@@ -88,9 +88,6 @@
       }
       if (io.dliCycle < beamNext) beamNext = io.dliCycle;
 
-      // Include DLI in masterNext so the CPU loop wakes up for it.
-      if (io.dliCycle < masterNext) masterNext = io.dliCycle;
-
       if (io.serialOutputTransmissionDoneCycle < masterNext) {
         masterNext = io.serialOutputTransmissionDoneCycle;
       }

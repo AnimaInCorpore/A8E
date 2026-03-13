@@ -131,7 +131,7 @@
 
       const y = io.video.currentDisplayLine | 0;
 
-      const lineStartClock = io.displayListFetchCycle - CYCLES_PER_LINE;
+      const lineStartClock = io.displayListFetchCycle;
       if (io.clock < lineStartClock) io.clock = lineStartClock;
       io.drawLine.playerMissileClockActive = false;
       io.drawLine.playerMissileInterleaved = false;

@@ -2798,7 +2798,7 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 		pIoData->tVideoData.pPriorityData +
 		pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
 
-	u64 llLineStartCycle = pIoData->llDisplayListFetchCycle - CYCLES_PER_LINE;
+	u64 llLineStartCycle = pIoData->llDisplayListFetchCycle;
 	if(pIoData->llCycle < llLineStartCycle) pIoData->llCycle = llLineStartCycle;
 
 	if(pIoData->tVideoData.lCurrentDisplayLine < FIRST_VISIBLE_LINE ||
@@ -3463,7 +3463,7 @@ static u8 AtariIo_DrawMissileSpan(
 static void AtariIo_DrawPlayerMissilesClock(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u64 llLineStartCycle = pIoData->llDisplayListFetchCycle - CYCLES_PER_LINE;
+	u64 llLineStartCycle = pIoData->llDisplayListFetchCycle;
 	u32 lSpanStartX;
 	u32 lSpanEndX;
 	u32 lDisplayLine = pIoData->tVideoData.lCurrentDisplayLine;
@@ -4532,9 +4532,6 @@ void AtariIoCycleTimedEventUpdate(_6502_Context_t *pContext)
 
 	pContext->llIoBeamTimedEventCycle =
 		MIN(pIoData->llDliCycle, pContext->llIoBeamTimedEventCycle);
-
-	pContext->llIoMasterTimedEventCycle =
-		MIN(pIoData->llDliCycle, pContext->llIoMasterTimedEventCycle);
 
 	pContext->llIoMasterTimedEventCycle =
 		MIN(pIoData->llSerialOutputTransmissionDoneCycle, pContext->llIoMasterTimedEventCycle);
