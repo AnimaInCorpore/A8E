@@ -44,6 +44,7 @@ Process rule: review this file before planning any improvement, and update it af
 - [Debug](jsA8E/DEBUG.md)
 
 ## Recent Improvements
+- 2026-03-14: `AHRM/index.md`, `implementation/NOTES.md`: encoded AHRM markdown link destinations for GitHub rendering (`%20`, `%28`, `%29`, `%27`) so links with spaces/parentheses/apostrophes are clickable in the GitHub web UI while still resolving to the same local files.
 - 2026-03-14: `AHRM/index.md`, `README.md`, `implementation/NOTES.md`: renamed the AHRM index file to lowercase `index.md` for GitHub-friendly path conventions, updated root README to point to the new path, and kept all AHRM section links relative so they resolve correctly from within the AHRM folder.
 - 2026-03-14: `AHRM/index.md`, `implementation/NOTES.md`: fixed AHRM index link targets to be relative to `AHRM/index.md` by removing the extra leading `AHRM/` path prefix, so section links now resolve to the existing sub-markdown files.
 - 2026-03-14: `README.md`, `implementation/NOTES.md`: added a new root-level Hardware Reference section that points to the local `AHRM/index.md`, explicitly links the Altirra Hardware Reference Manual PDF, and thanks its author Avery Lee.
