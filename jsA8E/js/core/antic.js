@@ -60,6 +60,7 @@
     const fillBkgPf012ColorTable = cfg.fillBkgPf012ColorTable;
     const decodeTextModeCharacter = cfg.decodeTextModeCharacter;
     const fillLine = cfg.fillLine;
+    const DLI_HORIZONTAL_OFFSET = 14;
     const playfieldApi =
       window.A8EPlayfield && window.A8EPlayfield.createApi
         ? window.A8EPlayfield.createApi({
@@ -155,12 +156,16 @@
 
           // DLI scheduling
           if (cmd & 0x80) {
-            const DLI_HORIZONTAL_OFFSET = 14;
-            io.dliCycle =
-              io.clock +
-              (io.nextDisplayListLine - io.video.currentDisplayLine - 1) *
-                CYCLES_PER_LINE +
-              DLI_HORIZONTAL_OFFSET;
+            if ((cmd & 0x4f) === 0x41) {
+              // Replayed JVB has one-scanline height.
+              io.dliCycle = io.clock + DLI_HORIZONTAL_OFFSET;
+            } else {
+              io.dliCycle =
+                io.clock +
+                (io.nextDisplayListLine - io.video.currentDisplayLine - 1) *
+                  CYCLES_PER_LINE +
+                DLI_HORIZONTAL_OFFSET;
+            }
             cycleTimedEventUpdate(ctx);
           }
 
@@ -172,7 +177,7 @@
           }
 
           // Wait for VBL (JVB)
-          if (cmd === 0x41) io.nextDisplayListLine = 8;
+          if ((cmd & 0x4f) === 0x41) io.nextDisplayListLine = 8;
 
           // Load memory scan (LMS)
           if ((cmd & 0x4f) >= 0x42) {
@@ -209,6 +214,8 @@
 
       if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 1) {
         io.dliCycle = CYCLE_NEVER;
+        // NMIST DLI is cleared at start of VBL.
+        ram[IO_NMIRES_NMIST] &= ~NMI_DLI;
       }
 
       if (io.video.currentDisplayLine >= LINES_PER_SCREEN_PAL) {
@@ -220,7 +227,15 @@
       }
 
       ram[IO_VCOUNT] = (io.video.currentDisplayLine >> 1) & 0xff;
-      ram[IO_NMIRES_NMIST] &= ~NMI_DLI;
+
+      // Replayed JVB+DLI ($C1) issues one DLI per scanline until VBL.
+      if (
+        (io.currentDisplayListCommand & 0xcf) === 0xc1 &&
+        io.video.currentDisplayLine >= FIRST_VISIBLE_LINE &&
+        io.video.currentDisplayLine <= LAST_VISIBLE_LINE
+      ) {
+        io.dliCycle = io.displayListFetchCycle + DLI_HORIZONTAL_OFFSET;
+      }
 
       if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 2) {
         ram[IO_NMIRES_NMIST] |= NMI_VBI;

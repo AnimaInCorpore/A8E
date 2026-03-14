@@ -45,6 +45,7 @@
 ********************************************************************/
 
 #define CLIP(a) MAX(0, MIN(255, a))
+#define DLI_HORIZONTAL_OFFSET 14u
 
 static void AtariIoAdvanceScanline(_6502_Context_t *pContext)
 {
@@ -55,6 +56,8 @@ static void AtariIoAdvanceScanline(_6502_Context_t *pContext)
 	if(pIoData->tVideoData.lCurrentDisplayLine == 248)
 	{
 		pIoData->llDliCycle = CYCLE_NEVER;
+		/* NMIST DLI is cleared at the start of VBL (line 248). */
+		RAM[IO_NMIRES_NMIST] &= ~NMI_DLI;
 	}
 
 	if(pIoData->tVideoData.lCurrentDisplayLine >= LINES_PER_SCREEN_PAL)
@@ -67,7 +70,14 @@ static void AtariIoAdvanceScanline(_6502_Context_t *pContext)
 	}
 
 	RAM[IO_VCOUNT] = pIoData->tVideoData.lCurrentDisplayLine >> 1;
-	RAM[IO_NMIRES_NMIST] &= ~NMI_DLI;
+
+	/* Replayed JVB+DLI ($C1) issues one DLI per scanline until VBL. */
+	if((pIoData->cCurrentDisplayListCommand & 0xcf) == 0xc1 &&
+	   pIoData->tVideoData.lCurrentDisplayLine >= 8 &&
+	   pIoData->tVideoData.lCurrentDisplayLine <= 247)
+	{
+		pIoData->llDliCycle = pIoData->llDisplayListFetchCycle + DLI_HORIZONTAL_OFFSET;
+	}
 
 	if(pIoData->tVideoData.lCurrentDisplayLine == 249)
 	{
@@ -2735,10 +2745,18 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			// DLI? (schedule after vertical scrolling adjustments)
 			if(pIoData->cCurrentDisplayListCommand & 0x80)
 			{
-				const u32 DLI_HORIZONTAL_OFFSET = 14;
-				pIoData->llDliCycle = pIoData->llCycle +
-									  (pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine - 1) * CYCLES_PER_LINE +
-									  DLI_HORIZONTAL_OFFSET;
+				if((pIoData->cCurrentDisplayListCommand & 0x4f) == 0x41)
+				{
+					/* JVB mode line height is one scanline while replayed. */
+					pIoData->llDliCycle = pIoData->llCycle + DLI_HORIZONTAL_OFFSET;
+				}
+				else
+				{
+					pIoData->llDliCycle =
+						pIoData->llCycle +
+						(pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine - 1) * CYCLES_PER_LINE +
+						DLI_HORIZONTAL_OFFSET;
+				}
 
 				AtariIoCycleTimedEventUpdate(pContext);
 			}
@@ -2752,7 +2770,7 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			}
 
 			// Wait for VBL?
-			if(pIoData->cCurrentDisplayListCommand == 0x41)
+			if((pIoData->cCurrentDisplayListCommand & 0x4f) == 0x41)
 			{
 				pIoData->lNextDisplayListLine = 8;
 			}
