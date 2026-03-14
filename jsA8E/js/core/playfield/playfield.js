@@ -122,6 +122,25 @@
       };
     }
 
+    function fillBackgroundSpan(linePixels, linePriority, startX, endX, color) {
+      const clampedStart = Math.max(0, startX | 0);
+      const clampedEnd = Math.min(PIXELS_PER_LINE, endX | 0);
+      if (clampedEnd <= clampedStart) return;
+      linePixels.fill(color, clampedStart, clampedEnd);
+      linePriority.fill(PRIO_BKG, clampedStart, clampedEnd);
+    }
+
+    function computeHscrollVisibleAperture(cmd, pfWidth, ppb) {
+      if ((cmd & 0x10) === 0) return null;
+      if ((pfWidth & 0x03) === 0x03) return null;
+      const baseGeometry = computeActiveLineGeometry(cmd & ~0x10, pfWidth, ppb, 0);
+      if (!baseGeometry) return null;
+      return {
+        startX: baseGeometry.playfieldStartX | 0,
+        pixelWidth: baseGeometry.playfieldPixelWidth | 0,
+      };
+    }
+
     function drawLine(ctx) {
       const io = ctx.ioData;
       const sram = ctx.sram;
@@ -165,6 +184,11 @@
           pfWidth,
           ppb,
           sram[IO_HSCROL] & 0x0f,
+        );
+        const hscrollVisibleAperture = computeHscrollVisibleAperture(
+          cmd,
+          pfWidth,
+          ppb,
         );
         if (!geometry) {
           rendererApi.drawInterleavedVisibleBlankLine(
@@ -217,6 +241,36 @@
         if (io.firstRowScanline) {
           advanceDisplayMemoryRow(io);
           io.firstRowScanline = false;
+        }
+
+        if (hscrollVisibleAperture) {
+          const fetchStartX = geometry.playfieldStartX | 0;
+          const fetchEndX = (fetchStartX + geometry.playfieldPixelWidth) | 0;
+          const visibleStartX = hscrollVisibleAperture.startX | 0;
+          const visibleEndX = (visibleStartX + hscrollVisibleAperture.pixelWidth) | 0;
+          const linePixels = video.playfieldScratchPixels.subarray(
+            lineBase,
+            lineBase + PIXELS_PER_LINE,
+          );
+          const linePriority = video.playfieldScratchPriority.subarray(
+            lineBase,
+            lineBase + PIXELS_PER_LINE,
+          );
+
+          fillBackgroundSpan(
+            linePixels,
+            linePriority,
+            fetchStartX,
+            Math.min(fetchEndX, visibleStartX),
+            baseColor,
+          );
+          fillBackgroundSpan(
+            linePixels,
+            linePriority,
+            Math.max(fetchStartX, visibleEndX),
+            fetchEndX,
+            baseColor,
+          );
         }
 
         if (io.clock < lineStartClock + CYCLES_PER_LINE) {

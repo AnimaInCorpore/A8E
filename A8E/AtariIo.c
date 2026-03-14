@@ -1345,6 +1345,29 @@ static u8 AtariIo_ComputeActiveLineGeometry(
 	return 1;
 }
 
+static void AtariIo_FillBackgroundSpan(
+	u8 *pDestination,
+	u8 *pPriorityData,
+	u32 lStartX,
+	u32 lEndX,
+	u8 cColor)
+{
+	u32 lClampedStart = MIN(PIXELS_PER_LINE, lStartX);
+	u32 lClampedEnd = MIN(PIXELS_PER_LINE, lEndX);
+	u32 lX;
+
+	if(lClampedEnd <= lClampedStart)
+	{
+		return;
+	}
+
+	for(lX = lClampedStart; lX < lClampedEnd; lX++)
+	{
+		pDestination[lX] = cColor;
+		pPriorityData[lX] = PRIO_BKG;
+	}
+}
+
 static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
@@ -2821,6 +2844,8 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 		else
 		{
 			ActiveLineGeometry_t tGeometry;
+			ActiveLineGeometry_t tVisibleGeometry;
+			u8 bClipScrolledNonWide = 0;
 			u8 cMode = pIoData->cCurrentDisplayListCommand & 0x0f;
 			u32 lLineBaseOffset =
 				pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
@@ -2836,6 +2861,20 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 			{
 				AtariIo_DrawVisibleBlankLine(pContext, pLineDestination, pLinePriorityData);
 				return;
+			}
+
+			if((pIoData->cCurrentDisplayListCommand & 0x10) &&
+			   ((SRAM[IO_DMACTL] & 0x03) != 0x03))
+			{
+				if(AtariIo_ComputeActiveLineGeometry(
+					   pIoData->cCurrentDisplayListCommand & 0xef,
+					   SRAM[IO_DMACTL] & 0x03,
+					   0,
+					   m_aAnticModeInfoTable[cMode].lPixelsPerByte,
+					   &tVisibleGeometry))
+				{
+					bClipScrolledNonWide = 1;
+				}
 			}
 
 			cBaseColor = AtariIo_GetCurrentBackgroundColor(pContext);
@@ -2867,6 +2906,30 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 			pIoData->tDrawLineData.sDisplayMemoryAddress = pIoData->sRowDisplayMemoryAddress;
 
 			m_aAnticModeInfoTable[cMode].DrawFunction(pContext);
+
+			if(bClipScrolledNonWide)
+			{
+				u32 lFetchStartX = tGeometry.lPlayfieldStartX;
+				u32 lFetchEndX = lFetchStartX + tGeometry.lPlayfieldPixelWidth;
+				u32 lVisibleStartX = tVisibleGeometry.lPlayfieldStartX;
+				u32 lVisibleEndX =
+					lVisibleStartX + tVisibleGeometry.lPlayfieldPixelWidth;
+				u32 lLeftClipEnd = MIN(lFetchEndX, lVisibleStartX);
+				u32 lRightClipStart = MAX(lFetchStartX, lVisibleEndX);
+
+				AtariIo_FillBackgroundSpan(
+					pLineDestination,
+					pLinePriorityData,
+					lFetchStartX,
+					lLeftClipEnd,
+					cBaseColor);
+				AtariIo_FillBackgroundSpan(
+					pLineDestination,
+					pLinePriorityData,
+					lRightClipStart,
+					lFetchEndX,
+					cBaseColor);
+			}
 
 			if(pIoData->bFirstRowScanline)
 			{
