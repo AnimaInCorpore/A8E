@@ -33,6 +33,8 @@
     loadDiskToDeviceSlot: 15000,
     readMemory: 4000,
     readRange: 4000,
+    writeMemory: 4000,
+    writeRange: 4000,
     getBankState: 4000,
     getMountedDiskForDeviceSlot: 4000,
     getConsoleKeyState: 4000,
@@ -1263,6 +1265,27 @@
           return toUint8(result && result.buffer ? result.buffer : null);
         });
       },
+      writeMemory: function (address, value) {
+        return sendRequest("writeMemory", {
+          address: address | 0,
+          value: value | 0,
+        }).then(function (result) {
+          return result && typeof result.value === "number"
+            ? (result.value | 0) & 0xff
+            : 0;
+        });
+      },
+      writeRange: function (start, data) {
+        const bytes = toUint8(data);
+        return sendRequest("writeRange", {
+          start: start | 0,
+          buffer: toArrayBuffer(bytes),
+        }).then(function (result) {
+          return result && typeof result.length === "number"
+            ? result.length | 0
+            : bytes.length | 0;
+        });
+      },
       getBankState: function () {
         return sendRequest("getBankState");
       },
@@ -1477,6 +1500,13 @@
       {app.readMemory = function () { return 0; };}
     if (app && typeof app.readRange !== "function")
       {app.readRange = function () { return new Uint8Array(0); };}
+    if (app && typeof app.writeMemory !== "function")
+      {app.writeMemory = function (_address, value) { return (value | 0) & 0xff; };}
+    if (app && typeof app.writeRange !== "function")
+      {app.writeRange = function (_start, data) {
+        const bytes = toUint8(data);
+        return bytes.length | 0;
+      };}
     if (app && typeof app.getBankState !== "function")
       {app.getBankState = function () { return null; };}
     if (app && typeof app.getMountedDiskForDeviceSlot !== "function")

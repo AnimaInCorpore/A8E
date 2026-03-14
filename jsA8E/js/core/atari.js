@@ -700,6 +700,8 @@
     const hasMountedDiskForDeviceSlot = memoryRuntime.hasMountedDiskForDeviceSlot;
     const readMemoryRuntime = memoryRuntime.readMemory;
     const readRangeRuntime = memoryRuntime.readRange;
+    const writeMemoryRuntime = memoryRuntime.writeMemory;
+    const writeRangeRuntime = memoryRuntime.writeRange;
     const getBankStateRuntime = memoryRuntime.getBankState;
 
     // H: device -- create instance and install CIO hook(s)
@@ -836,6 +838,14 @@
 
     function readRange(startAddress, length) {
       return readRangeRuntime(startAddress, length);
+    }
+
+    function writeMemory(address, value) {
+      return writeMemoryRuntime(address, value);
+    }
+
+    function writeRange(startAddress, data) {
+      return writeRangeRuntime(startAddress, data);
     }
 
     function getBankState() {
@@ -1551,6 +1561,8 @@
       runUntilPc: runUntilPc,
       readMemory: readMemory,
       readRange: readRange,
+      writeMemory: writeMemory,
+      writeRange: writeRange,
       getBankState: getBankState,
       saveSnapshot: saveSnapshot,
       loadSnapshot: loadSnapshot,
