@@ -18,7 +18,7 @@ The original codebase is by Sascha Springer (2004). Each subproject has its own 
 
 ## Hardware Reference
 
-For hardware behavior and register-level details, use the local [AHRM index](AHRM/INDEX.md), based on the Altirra Hardware Reference Manual.
+For hardware behavior and register-level details, use the local [AHRM index](AHRM/index.md), based on the Altirra Hardware Reference Manual.
 
 Special thanks to Avery Lee for creating the Altirra Hardware Reference Manual:
 https://www.virtualdub.org/downloads/Altirra%20Hardware%20Reference%20Manual.pdf
