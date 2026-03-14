@@ -16,6 +16,13 @@ The original codebase is by Sascha Springer (2004). Each subproject has its own 
 | `A8E/` | [Native C/SDL code and CMake project](A8E/README.md) |
 | `jsA8E/` | [Browser app (`index.html` + JavaScript modules + shaders)](jsA8E/README.md) |
 
+## Hardware Reference
+
+For hardware behavior and register-level details, use the local [AHRM index](AHRM/INDEX.md), based on the Altirra Hardware Reference Manual.
+
+Special thanks to Avery Lee for creating the Altirra Hardware Reference Manual:
+https://www.virtualdub.org/downloads/Altirra%20Hardware%20Reference%20Manual.pdf
+
 ## Current Emulation Status
 
 Recent raster-timing work landed in both cores:
