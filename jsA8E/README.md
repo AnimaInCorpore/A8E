@@ -1,5 +1,7 @@
 # jsA8E (Browser Port)
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 Browser-based Atari 800 XL emulator port of the native C/SDL `A8E` implementation.
 
 ## Runtime Overview

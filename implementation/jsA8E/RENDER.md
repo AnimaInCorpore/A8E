@@ -1,5 +1,7 @@
 # Rendering / CRT
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 - Files: `jsA8E/js/render/gl.js`, `jsA8E/js/render/software.js`, `jsA8E/js/render/palette.js`, `jsA8E/js/render/shaders/webgl2.vert.glsl`, `jsA8E/js/render/shaders/webgl2.decode.frag.glsl`, `jsA8E/js/render/shaders/webgl2.crt.frag.glsl`, `jsA8E/js/render/shaders/webgl1.vert.glsl`, `jsA8E/js/render/shaders/webgl1.decode.frag.glsl`, `jsA8E/js/render/shaders/webgl1.crt.frag.glsl`
 - Purpose: convert emulator frame data into display output.
 - Status: verified on 2026-02-23 (`implemented`).

@@ -1,5 +1,7 @@
 # jsA8E Automation API
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 Public automation reference for jsA8E.
 
 This is the user-facing API document for automation scripts, browser tooling, and external harnesses. Browser integrations use `window.A8EAutomation`; browser-less integrations use `createHeadlessAutomation(...)` from `jsA8E/headless.js`. Implementation details and ownership notes live in [../implementation/jsA8E/AUTOMATION.md](../implementation/jsA8E/AUTOMATION.md).

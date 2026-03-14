@@ -1,5 +1,7 @@
 # A8E (Native C/SDL Emulator)
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 A native Atari 800 XL emulator written in C, utilizing SDL 1.2 style headers (`<SDL/SDL.h>`).
 
 ## Table of Contents

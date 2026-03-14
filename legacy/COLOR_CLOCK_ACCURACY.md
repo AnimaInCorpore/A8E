@@ -1,5 +1,7 @@
 # Color-Clock Accuracy
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 Reference implementation: `legacy/A8E_experimental/Atari.c`
 
 This document tracks signoff status for `A8E/AtariIo.c` and `jsA8E/js/core/`

@@ -1,5 +1,7 @@
 # ANTIC
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 - Files: `A8E/Antic.c`, `A8E/Antic.h`, `A8E/AtariIo.c`, `A8E/AtariIo.h`
 - Purpose: handle display list processing, DMA timing, and display NMIs.
 - Status: verified on 2026-02-23 (`implemented`).

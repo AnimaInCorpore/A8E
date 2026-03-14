@@ -8,3 +8,4 @@
 - Make small, focused changes and avoid unnecessary abstractions.
 - Read `implementation/NOTES.md` before planning any improvement.
 - Keep `implementation/NOTES.md` updated after each code improvement.
+- Use the `AHRM` as a reference before implementing any Atari 800 XL PAL machine related hardware emulation.

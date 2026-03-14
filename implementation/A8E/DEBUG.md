@@ -1,5 +1,7 @@
 # Debug
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 - Files: `A8E/A8E.c`, `A8E/AtariIo.h`, `A8E/6502.c`, `A8E/AtariIo.c`, `A8E/Antic.c`, `A8E/Pokey.c`, `A8E/Pia.c`, `A8E/README.md`
 - Purpose: document native (`A8E/`) debugging entry points, compile-time log switches, and current runtime limits.
 - Status: verified on 2026-02-23 (`implemented`, with usability limits below).
