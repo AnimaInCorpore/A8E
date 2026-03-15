@@ -477,6 +477,7 @@ async function createHeadlessAutomation(options) {
       audioEnabled: !!opts.audioEnabled,
       turbo: !!opts.turbo,
       sioTurbo: opts.sioTurbo !== false,
+      skipRendering: opts.skipRendering !== false,
       optionOnStart: !!opts.optionOnStart,
       keyboardMappingMode:
         opts.keyboardMappingMode === "original" ? "original" : "translated",

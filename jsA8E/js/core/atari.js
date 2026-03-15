@@ -530,6 +530,7 @@
     let audioEnabled = !!opts.audioEnabled;
     let turbo = !!opts.turbo;
     let sioTurbo = opts.sioTurbo !== false;
+    let skipRendering = !!opts.skipRendering;
     let optionOnStart = !!opts.optionOnStart;
     let keyboardMappingMode =
       opts.keyboardMappingMode === "original" ? "original" : "translated";
@@ -1416,7 +1417,7 @@
       }
 
       if (completedFrames > 0 && !faulted) {
-        paint();
+        if (!skipRendering) paint();
         updateDebug("frame");
       }
 
@@ -1481,7 +1482,7 @@
       if (!isReady()) return;
       debugRuntime.resetExecutionState();
       hardResetWithInputRelease(options || null);
-      paint();
+      if (!skipRendering) paint();
       updateDebug("reset");
     }
 
@@ -1551,6 +1552,7 @@
       getTurbo: function () { return turbo; },
       setSioTurbo: setSioTurbo,
       getSioTurbo: function () { return sioTurbo; },
+      getSkipRendering: function () { return skipRendering; },
       setAudioEnabled: setAudioEnabled,
       getAudioEnabled: function () { return audioEnabled; },
       setOptionOnStart: setOptionOnStart,
