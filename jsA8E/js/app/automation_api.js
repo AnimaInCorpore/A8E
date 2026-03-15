@@ -40,14 +40,29 @@
     const n = parseFloat(m[1]);
     const unit = (m[2] || "").toLowerCase();
     if (!unit || unit === "cycle" || unit === "cycles") return Math.max(0, Math.round(n));
-    if (unit === "s" || unit === "sec" || unit === "secs" || unit === "second" || unit === "seconds")
+    if (
+      unit === "s" ||
+      unit === "sec" ||
+      unit === "secs" ||
+      unit === "second" ||
+      unit === "seconds"
+    ) {
       return Math.max(0, Math.round(n * ATARI_CPU_HZ_PAL));
-    if (unit === "ms" || unit === "millisecond" || unit === "milliseconds")
+    }
+    if (unit === "ms" || unit === "millisecond" || unit === "milliseconds") {
       return Math.max(0, Math.round(n * ATARI_CPU_HZ_PAL / 1000));
-    if (unit === "us" || unit === "µs" || unit === "microsecond" || unit === "microseconds")
+    }
+    if (
+      unit === "us" ||
+      unit === "µs" ||
+      unit === "microsecond" ||
+      unit === "microseconds"
+    ) {
       return Math.max(0, Math.round(n * ATARI_CPU_HZ_PAL / 1000000));
-    if (unit === "frame" || unit === "frames")
+    }
+    if (unit === "frame" || unit === "frames") {
       return Math.max(0, Math.round(n * CYCLES_PER_FRAME));
+    }
     return 0;
   }
 
@@ -63,10 +78,23 @@
     if (!m) return 0;
     const n = parseFloat(m[1]);
     const unit = (m[2] || "ms").toLowerCase();
-    if (unit === "s" || unit === "sec" || unit === "secs" || unit === "second" || unit === "seconds")
+    if (
+      unit === "s" ||
+      unit === "sec" ||
+      unit === "secs" ||
+      unit === "second" ||
+      unit === "seconds"
+    ) {
       return Math.max(0, Math.round(n * 1000));
-    if (unit === "us" || unit === "µs" || unit === "microsecond" || unit === "microseconds")
+    }
+    if (
+      unit === "us" ||
+      unit === "µs" ||
+      unit === "microsecond" ||
+      unit === "microseconds"
+    ) {
       return Math.max(0, Math.round(n / 1000));
+    }
     return Math.max(0, Math.round(n)); // ms (default)
   }
 

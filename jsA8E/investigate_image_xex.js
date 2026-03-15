@@ -4,6 +4,22 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { createHeadlessAutomation } = require("./headless");
 
+function resolveInputXexPath() {
+  const cliArg = process.argv[2] ? path.resolve(process.cwd(), process.argv[2]) : "";
+  const candidates = [
+    cliArg,
+    path.resolve(__dirname, "..", "image.xex"),
+    path.resolve(__dirname, "..", "build", "image.xex"),
+  ].filter(Boolean);
+  for (let i = 0; i < candidates.length; i++) {
+    if (fs.existsSync(candidates[i])) return candidates[i];
+  }
+  throw new Error(
+    "No input XEX found. Pass a path as first argument, for example: " +
+      "node jsA8E/investigate_image_xex.js build/image.xex",
+  );
+}
+
 async function main() {
   const runtime = await createHeadlessAutomation({
     roms: {
@@ -18,11 +34,13 @@ async function main() {
     const api = runtime.api;
     await api.whenReady();
 
-    const xexData = fs.readFileSync(path.resolve(__dirname, "..", "image.xex"));
+    const inputXexPath = resolveInputXexPath();
+    console.log(`Input XEX: ${inputXexPath}`);
+    const xexData = fs.readFileSync(inputXexPath);
     // Disable tight-loop detection and raise cycle limit for large demo XEX
     const xexResult = await api.dev.runXex({
       bytes: xexData,
-      name: "image.xex",
+      name: path.basename(inputXexPath),
       detectTightLoop: false,
       maxBootCycles: "17s",
     });

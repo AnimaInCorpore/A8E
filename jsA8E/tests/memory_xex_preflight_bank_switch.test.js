@@ -192,10 +192,71 @@ function testSelfTestWriteStillFailsWithoutBankSwitch() {
   );
 }
 
+function testInitadTraceCanDisableBasicFromAlreadyLoadedCode() {
+  const runtime = createRuntime();
+  const xex = buildXex([
+    { start: 0x3000, data: Uint8Array.from([0xa9, 0xff, 0x8d, 0x01, 0xd3, 0x60]) },
+    { start: 0x02e2, data: Uint8Array.from([0x00, 0x30]) },
+    { start: 0xa000, data: Uint8Array.from([0x99]) },
+  ]);
+  const result = runtime.loadDiskToDeviceSlotDetailed(
+    xex.buffer,
+    "INIT_BASIC_OFF.XEX",
+    0,
+    null,
+  );
+
+  assert.equal(result.xexPreflight.code, "xex_preflight_passed");
+  assert.equal(result.xexPreflight.overlaps.length, 0);
+}
+
+function testInitadTraceIgnoresNonAccumulatorLoadsBeforeSta() {
+  const runtime = createRuntime();
+  const xex = buildXex([
+    { start: 0x3000, data: Uint8Array.from([0xa9, 0x00, 0xa2, 0xff, 0x8d, 0x01, 0xd3, 0x60]) },
+    { start: 0x02e2, data: Uint8Array.from([0x00, 0x30]) },
+    { start: 0xa000, data: Uint8Array.from([0x99]) },
+  ]);
+
+  assert.throws(
+    function () {
+      runtime.loadDiskToDeviceSlotDetailed(xex.buffer, "INIT_LDX_FALSE_PASS.XEX", 0, null);
+    },
+    function (err) {
+      assert.equal(err.code, "xex_protected_memory_overlap");
+      assert.match(err.message, /BASIC ROM/);
+      return true;
+    },
+  );
+}
+
+function testInitadTraceDoesNotUseFutureSegments() {
+  const runtime = createRuntime();
+  const xex = buildXex([
+    { start: 0x02e2, data: Uint8Array.from([0x00, 0x30]) },
+    { start: 0xa000, data: Uint8Array.from([0x99]) },
+    { start: 0x3000, data: Uint8Array.from([0xa9, 0xff, 0x8d, 0x01, 0xd3, 0x60]) },
+  ]);
+
+  assert.throws(
+    function () {
+      runtime.loadDiskToDeviceSlotDetailed(xex.buffer, "INIT_FUTURE_SEGMENT.XEX", 0, null);
+    },
+    function (err) {
+      assert.equal(err.code, "xex_protected_memory_overlap");
+      assert.match(err.message, /BASIC ROM/);
+      return true;
+    },
+  );
+}
+
 testPortBWriteSegmentIsAllowed();
 testPortBSwitchCanOpenSelfTestRam();
 testPortBSwitchCanOpenBasicRam();
 testOptionOnStartDisablesBasicForPreflight();
 testSelfTestWriteStillFailsWithoutBankSwitch();
+testInitadTraceCanDisableBasicFromAlreadyLoadedCode();
+testInitadTraceIgnoresNonAccumulatorLoadsBeforeSta();
+testInitadTraceDoesNotUseFutureSegments();
 
 console.log("memory_xex_preflight_bank_switch.test.js passed");

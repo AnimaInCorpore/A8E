@@ -530,7 +530,7 @@
     let audioEnabled = !!opts.audioEnabled;
     let turbo = !!opts.turbo;
     let sioTurbo = opts.sioTurbo !== false;
-    let skipRendering = !!opts.skipRendering;
+    const skipRendering = !!opts.skipRendering;
     let optionOnStart = !!opts.optionOnStart;
     let keyboardMappingMode =
       opts.keyboardMappingMode === "original" ? "original" : "translated";

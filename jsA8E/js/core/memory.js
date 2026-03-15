@@ -542,29 +542,35 @@
     return null;
   }
 
-  // Scan init code at initAddr across segments for a STA $D301 preceded by LDA/LDX/LDY #imm.
+  // Trace loaded INIT code for STA $D301 preceded by LDA #imm.
+  // Uses only bytes already loaded so future segments cannot affect preflight.
   // Returns the immediate value (future portB) if found, or null if not determinable.
-  function tracePortBFromInitCode(segments, initAddr) {
+  function tracePortBFromInitCode(loadedRam, loadedMask, initAddr) {
     if (typeof initAddr !== "number" || initAddr <= 0 || initAddr > 0xffff) return null;
-    for (let si = 0; si < segments.length; si++) {
-      const seg = segments[si];
-      if (!seg || !(seg.data instanceof Uint8Array)) continue;
-      if (initAddr < seg.start || initAddr > seg.end) continue;
-      const bytes = seg.data;
-      const startOff = initAddr - seg.start;
-      const scanEnd = Math.min(bytes.length, startOff + 256);
-      for (let k = startOff; k + 2 < scanEnd; k++) {
-        if (bytes[k] === 0x8D && bytes[k + 1] === 0x01 && bytes[k + 2] === 0xD3) {
-          // STA $D301 — look back for LDA #imm (A9), LDX #imm (A2), or LDY #imm (A0)
-          for (let j = k - 2; j >= Math.max(startOff, k - 16); j--) {
-            if (bytes[j] === 0xA9 || bytes[j] === 0xA2 || bytes[j] === 0xA0) {
-              return bytes[j + 1] & 0xff;
-            }
+    if (!loadedRam || !loadedMask) return null;
+
+    const scanLimit = 256;
+    for (let k = 0; k < scanLimit; k++) {
+      const pc = (initAddr + k) & 0xffff;
+      const pc1 = (pc + 1) & 0xffff;
+      const pc2 = (pc + 2) & 0xffff;
+      if (!loadedMask[pc] || !loadedMask[pc1] || !loadedMask[pc2]) return null;
+      if (
+        loadedRam[pc] === 0x8d &&
+        loadedRam[pc1] === 0x01 &&
+        loadedRam[pc2] === 0xd3
+      ) {
+        // STA $D301 stores register A, so only LDA #imm is a valid source.
+        for (let back = 1; back <= 16; back++) {
+          const prev = (pc - back) & 0xffff;
+          const prev1 = (prev + 1) & 0xffff;
+          if (!loadedMask[prev] || !loadedMask[prev1]) continue;
+          if (loadedRam[prev] === 0xa9) {
+            return loadedRam[prev1] & 0xff;
           }
-          return null;
         }
+        return null;
       }
-      return null;
     }
     return null;
   }
@@ -574,6 +580,8 @@
     let currentPortB = sanitizePortB(initialPortB | 0);
     let currentInitAddrLo = 0;
     let currentInitAddrHi = 0;
+    const loadedRam = new Uint8Array(0x10000);
+    const loadedMask = new Uint8Array(0x10000);
 
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
@@ -618,6 +626,10 @@
         if (addr === 0xd301 && bytes && offset < bytes.length) {
           currentPortB = sanitizePortB(bytes[offset] | 0);
         }
+        if (bytes && offset < bytes.length) {
+          loadedRam[addr] = bytes[offset] & 0xff;
+          loadedMask[addr] = 1;
+        }
         if (addr === 0x02e2 && bytes && offset < bytes.length) {
           currentInitAddrLo = bytes[offset] & 0xff;
           initAddrChanged = true;
@@ -634,7 +646,7 @@
       if (initAddrChanged) {
         const initAddr = (currentInitAddrLo & 0xff) | ((currentInitAddrHi & 0xff) << 8);
         if (initAddr > 0) {
-          const newPortB = tracePortBFromInitCode(segments, initAddr);
+          const newPortB = tracePortBFromInitCode(loadedRam, loadedMask, initAddr);
           if (newPortB !== null) currentPortB = sanitizePortB(newPortB);
         }
         // Boot loader clears INITAD after calling it.
