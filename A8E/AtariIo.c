@@ -2706,6 +2706,12 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			FIXED_ADD(pIoData->sDisplayListAddress, 0x03ff, 1);
 			_6502_STALL(1);
 
+			// LMS (bit 6) or JUMP (instruction 01) steal 2 more cycles for the address (AHRM 4.14).
+			if((pIoData->cCurrentDisplayListCommand & 0x40) || (pIoData->cCurrentDisplayListCommand & 0x0f) == 0x01)
+			{
+				_6502_STALL(2);
+			}
+
 			// Calculate next fetch line
 			if((pIoData->cCurrentDisplayListCommand & 0x0f) <= 0x01)
 			{
