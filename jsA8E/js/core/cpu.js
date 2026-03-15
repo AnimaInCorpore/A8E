@@ -75,6 +75,7 @@
       instructionCounter: 0,
       instructionTraceHook: null,
       illegalOpcodeHook: null,
+      stealDmaReentrancyGuard: false,
       // Set by outside modules (Atari IO).
       ioData: null,
       // PC hooks: address -> function(ctx).  Return true to skip normal execution.
@@ -143,6 +144,25 @@
   function stall(ctx, cycles) {
     const target = ctx.cycleCounter + cycles;
     if (target > ctx.stallCycleCounter) ctx.stallCycleCounter = target;
+  }
+
+  function stealDma(ctx, cycles) {
+    ctx.cycleCounter += cycles;
+    if (ctx.cycleCounter > ctx.stallCycleCounter) {
+      ctx.stallCycleCounter = ctx.cycleCounter;
+    }
+    if (
+      !ctx.stealDmaReentrancyGuard &&
+      ctx.ioCycleTimedEventFunction &&
+      ctx.cycleCounter >= ctx.ioCycleTimedEventCycle
+    ) {
+      ctx.stealDmaReentrancyGuard = true;
+      try {
+        ctx.ioCycleTimedEventFunction(ctx);
+      } finally {
+        ctx.stealDmaReentrancyGuard = false;
+      }
+    }
   }
 
   function accumulatorAccess(ctx, value) {
@@ -1093,6 +1113,7 @@
     run: run,
     executeOne: executeOne,
     stall: stall,
+    stealDma: stealDma,
     setPcHook: setPcHook,
     clearPcHook: clearPcHook,
     // exposed for debugging/tests

@@ -61,6 +61,17 @@
     const decodeTextModeCharacter = cfg.decodeTextModeCharacter;
     const fillLine = cfg.fillLine;
     const DLI_HORIZONTAL_OFFSET = 14;
+    // ANTIC display list command bits
+    const ANTIC_DLI_BIT = 0x80;
+    const ANTIC_LMS_BIT = 0x40;
+    const ANTIC_VSCROL_BITS = 0x70;
+    const ANTIC_MODE_BITS = 0x0f;
+    const ANTIC_JUMP_INSTRUCTION = 0x01;
+    const ANTIC_JVB_INSTRUCTION = 0x41;
+    const ANTIC_JVB_DLI_INSTRUCTION = 0xc1;
+    const ANTIC_LMS_MIN_INSTRUCTION = 0x42;
+    const ANTIC_CMD_MASK_DLI_JMP = 0x4f; // Isolates DLI, LMS, and instruction bits
+    const ANTIC_CMD_MASK_JVB_DLI = 0xcf; // Isolates replayed JVB+DLI pattern
     const playfieldApi =
       window.A8EPlayfield && window.A8EPlayfield.createApi
         ? window.A8EPlayfield.createApi({
@@ -110,6 +121,7 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
+      // Nine cycles of refresh DMA occur on every scan line (AHRM 4.14).
       CPU.stall(ctx, 9);
 
       if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 1)
@@ -126,12 +138,18 @@
             0x03ff,
             1,
           );
+          // One cycle for the instruction byte.
           CPU.stall(ctx, 1);
 
           const cmd = io.currentDisplayListCommand;
-          const mode = cmd & 0x0f;
+
+          // LMS (bit 6) or JUMP (instruction 01) steal 2 more cycles for the address.
+          if ((cmd & ANTIC_LMS_BIT) || (cmd & ANTIC_MODE_BITS) === ANTIC_JUMP_INSTRUCTION) {
+            CPU.stall(ctx, 2);
+          }
+          const mode = cmd & ANTIC_MODE_BITS;
           if (mode <= 0x01) {
-            io.nextDisplayListLine += ((cmd & 0x70) >> 4) + 1;
+            io.nextDisplayListLine += ((cmd & ANTIC_VSCROL_BITS) >> 4) + 1;
           } else {
             io.nextDisplayListLine += ANTIC_MODE_INFO[mode].lines;
           }
@@ -155,8 +173,8 @@
           }
 
           // DLI scheduling
-          if (cmd & 0x80) {
-            if ((cmd & 0x4f) === 0x41) {
+          if (cmd & ANTIC_DLI_BIT) {
+            if ((cmd & ANTIC_CMD_MASK_DLI_JMP) === ANTIC_JVB_INSTRUCTION) {
               // Replayed JVB has one-scanline height.
               io.dliCycle = io.clock + DLI_HORIZONTAL_OFFSET;
             } else {
@@ -170,17 +188,17 @@
           }
 
           // JMP
-          if ((cmd & 0x0f) === 0x01) {
+          if ((cmd & ANTIC_MODE_BITS) === ANTIC_JUMP_INSTRUCTION) {
             io.displayListAddress =
               ram[io.displayListAddress & 0xffff] |
               (ram[(io.displayListAddress + 1) & 0xffff] << 8);
           }
 
           // Wait for VBL (JVB)
-          if ((cmd & 0x4f) === 0x41) io.nextDisplayListLine = 8;
+          if ((cmd & ANTIC_CMD_MASK_DLI_JMP) === ANTIC_JVB_INSTRUCTION) io.nextDisplayListLine = 8;
 
           // Load memory scan (LMS)
-          if ((cmd & 0x4f) >= 0x42) {
+          if ((cmd & ANTIC_CMD_MASK_DLI_JMP) >= ANTIC_LMS_MIN_INSTRUCTION) {
             io.displayMemoryAddress =
               ram[io.displayListAddress & 0xffff] & 0xff;
             io.displayListAddress = Util.fixedAdd(
@@ -230,7 +248,7 @@
 
       // Replayed JVB+DLI ($C1) issues one DLI per scanline until VBL.
       if (
-        (io.currentDisplayListCommand & 0xcf) === 0xc1 &&
+        (io.currentDisplayListCommand & ANTIC_CMD_MASK_JVB_DLI) === ANTIC_JVB_DLI_INSTRUCTION &&
         io.video.currentDisplayLine >= FIRST_VISIBLE_LINE &&
         io.video.currentDisplayLine <= LAST_VISIBLE_LINE
       ) {

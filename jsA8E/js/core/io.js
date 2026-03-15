@@ -364,18 +364,23 @@
             break;
 
           case IO_WSYNC: {
-            // Stall until next scanline boundary (closest display list fetch cycle).
-            let nextLine = io.displayListFetchCycle;
-            const fallback =
-              (((ctx.cycleCounter / CYCLES_PER_LINE) | 0) + 1) *
-              CYCLES_PER_LINE;
-            if (nextLine <= ctx.cycleCounter) {
-              nextLine = fallback;
-            } else if (nextLine - ctx.cycleCounter > CYCLES_PER_LINE) {
-              // WSYNC is line-local on hardware: never sleep multiple lines.
-              nextLine = fallback;
+            // Stall until cycle 105 of the current scanline (0-indexed: cycle 104).
+            // AHRM 4.9: A write to WSYNC halts CPU execution until cycle 105 on the current line.
+            const WSYNC_CYCLE = 105;
+            const WSYNC_BOUNDARY = WSYNC_CYCLE - 1; // 104: if past this, wait for next line
+            const lineStart =
+              ((ctx.cycleCounter / CYCLES_PER_LINE) | 0) * CYCLES_PER_LINE;
+            const target = lineStart + WSYNC_CYCLE;
+
+            // If we are already at or past cycle 104, wait for the next line's cycle 105.
+            if (ctx.cycleCounter >= lineStart + WSYNC_BOUNDARY) {
+              ctx.stallCycleCounter = Math.max(
+                ctx.stallCycleCounter,
+                target + CYCLES_PER_LINE,
+              );
+            } else {
+              ctx.stallCycleCounter = Math.max(ctx.stallCycleCounter, target);
             }
-            ctx.stallCycleCounter = Math.max(ctx.stallCycleCounter, nextLine);
             break;
           }
 
