@@ -542,14 +542,44 @@
     return null;
   }
 
+  // Scan init code at initAddr across segments for a STA $D301 preceded by LDA/LDX/LDY #imm.
+  // Returns the immediate value (future portB) if found, or null if not determinable.
+  function tracePortBFromInitCode(segments, initAddr) {
+    if (typeof initAddr !== "number" || initAddr <= 0 || initAddr > 0xffff) return null;
+    for (let si = 0; si < segments.length; si++) {
+      const seg = segments[si];
+      if (!seg || !(seg.data instanceof Uint8Array)) continue;
+      if (initAddr < seg.start || initAddr > seg.end) continue;
+      const bytes = seg.data;
+      const startOff = initAddr - seg.start;
+      const scanEnd = Math.min(bytes.length, startOff + 256);
+      for (let k = startOff; k + 2 < scanEnd; k++) {
+        if (bytes[k] === 0x8D && bytes[k + 1] === 0x01 && bytes[k + 2] === 0xD3) {
+          // STA $D301 — look back for LDA #imm (A9), LDX #imm (A2), or LDY #imm (A0)
+          for (let j = k - 2; j >= Math.max(startOff, k - 16); j--) {
+            if (bytes[j] === 0xA9 || bytes[j] === 0xA2 || bytes[j] === 0xA0) {
+              return bytes[j + 1] & 0xff;
+            }
+          }
+          return null;
+        }
+      }
+      return null;
+    }
+    return null;
+  }
+
   function collectBlockedXexWrites(segments, mediaState, initialPortB) {
     const overlaps = [];
     let currentPortB = sanitizePortB(initialPortB | 0);
+    let currentInitAddrLo = 0;
+    let currentInitAddrHi = 0;
 
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
       const bytes = segment && segment.data instanceof Uint8Array ? segment.data : null;
       let activeOverlap = null;
+      let initAddrChanged = false;
 
       for (let offset = 0; offset < segment.length; offset++) {
         const addr = (segment.start + offset) & 0xffff;
@@ -588,6 +618,28 @@
         if (addr === 0xd301 && bytes && offset < bytes.length) {
           currentPortB = sanitizePortB(bytes[offset] | 0);
         }
+        if (addr === 0x02e2 && bytes && offset < bytes.length) {
+          currentInitAddrLo = bytes[offset] & 0xff;
+          initAddrChanged = true;
+        }
+        if (addr === 0x02e3 && bytes && offset < bytes.length) {
+          currentInitAddrHi = bytes[offset] & 0xff;
+          initAddrChanged = true;
+        }
+      }
+
+      // Simulate INITAD call after the segment loads, as the XEX boot loader does.
+      // This allows INIT code (e.g., disabling BASIC via STA $D301) to affect
+      // portB for subsequent segment overlap checks.
+      if (initAddrChanged) {
+        const initAddr = (currentInitAddrLo & 0xff) | ((currentInitAddrHi & 0xff) << 8);
+        if (initAddr > 0) {
+          const newPortB = tracePortBFromInitCode(segments, initAddr);
+          if (newPortB !== null) currentPortB = sanitizePortB(newPortB);
+        }
+        // Boot loader clears INITAD after calling it.
+        currentInitAddrLo = 0;
+        currentInitAddrHi = 0;
       }
     }
 

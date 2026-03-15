@@ -25,6 +25,51 @@
     typeof hwApi.LINES_PER_SCREEN_PAL === "number"
       ? (hwApi.CYCLES_PER_LINE | 0) * (hwApi.LINES_PER_SCREEN_PAL | 0)
       : 35568;
+
+  // Parse a cycle count that may be expressed as a plain number or a time/frame string.
+  // Supported units: s/sec/seconds, ms/milliseconds, us/µs/microseconds,
+  //                  frames/frame, cycles/cycle (or bare number).
+  // Returns an integer cycle count, or 0 for unrecognised input.
+  function parseCycleDuration(value) {
+    if (typeof value === "number") return Math.max(0, Math.round(value));
+    if (typeof value !== "string") return 0;
+    const m = value.trim().match(
+      /^([0-9]*\.?[0-9]+)\s*(s|sec|secs|second|seconds|ms|millisecond|milliseconds|us|µs|microsecond|microseconds|frames?|cycles?)?$/i,
+    );
+    if (!m) return 0;
+    const n = parseFloat(m[1]);
+    const unit = (m[2] || "").toLowerCase();
+    if (!unit || unit === "cycle" || unit === "cycles") return Math.max(0, Math.round(n));
+    if (unit === "s" || unit === "sec" || unit === "secs" || unit === "second" || unit === "seconds")
+      return Math.max(0, Math.round(n * ATARI_CPU_HZ_PAL));
+    if (unit === "ms" || unit === "millisecond" || unit === "milliseconds")
+      return Math.max(0, Math.round(n * ATARI_CPU_HZ_PAL / 1000));
+    if (unit === "us" || unit === "µs" || unit === "microsecond" || unit === "microseconds")
+      return Math.max(0, Math.round(n * ATARI_CPU_HZ_PAL / 1000000));
+    if (unit === "frame" || unit === "frames")
+      return Math.max(0, Math.round(n * CYCLES_PER_FRAME));
+    return 0;
+  }
+
+  // Parse a millisecond value that may be expressed as a plain number or a time string.
+  // Supported units: s/sec/seconds, ms/milliseconds (default), us/µs/microseconds.
+  // Returns an integer millisecond count, or 0 for unrecognised input.
+  function parseMs(value) {
+    if (typeof value === "number") return Math.max(0, Math.round(value));
+    if (typeof value !== "string") return 0;
+    const m = value.trim().match(
+      /^([0-9]*\.?[0-9]+)\s*(s|sec|secs|second|seconds|ms|millisecond|milliseconds|us|µs|microsecond|microseconds)?$/i,
+    );
+    if (!m) return 0;
+    const n = parseFloat(m[1]);
+    const unit = (m[2] || "ms").toLowerCase();
+    if (unit === "s" || unit === "sec" || unit === "secs" || unit === "second" || unit === "seconds")
+      return Math.max(0, Math.round(n * 1000));
+    if (unit === "us" || unit === "µs" || unit === "microsecond" || unit === "microseconds")
+      return Math.max(0, Math.round(n / 1000));
+    return Math.max(0, Math.round(n)); // ms (default)
+  }
+
   const CODE_TABLE =
     window.A8ECpuTables && typeof window.A8ECpuTables.buildCodeTable === "function"
       ? window.A8ECpuTables.buildCodeTable()
@@ -888,8 +933,8 @@
   async function waitForCounterDelta(counterKey, count, options) {
     const opts = options || {};
     const targetCount = Math.max(0, count | 0);
-    const intervalMs = Math.max(10, opts.pollIntervalMs | 0 || 20);
-    const timeoutMs = opts.timeoutMs | 0;
+    const intervalMs = Math.max(1, opts.pollIntervalMs | 0 || 20);
+    const timeoutMs = normalizeTimeoutMs(opts.timeoutMs);
     const startedAt = Date.now();
     const initial = await api.getCounters();
     if (!initial) {
@@ -2378,7 +2423,7 @@
         ),
         maxCycles: Math.max(
           1,
-          raw.maxBootCycles | 0 || raw.maxCycles | 0 || 4000000,
+          parseCycleDuration(raw.maxBootCycles) || parseCycleDuration(raw.maxCycles) || 4000000,
         ),
         detectTightLoop: raw.detectTightLoop !== false,
         tightLoopWindow: Math.max(1, raw.tightLoopWindow | 0 || 32),
@@ -3062,8 +3107,9 @@
     },
     waitForPause: waitForPause,
     waitForTime: async function (options) {
-      const opts = options || {};
-      const ms = Math.max(0, opts.ms | 0);
+      const isBare = typeof options === "number" || typeof options === "string";
+      const opts = isBare || !options ? {} : options;
+      const ms = Math.max(0, parseMs(isBare ? options : opts.ms));
       const clock = opts.clock === "emulated" ? "emulated" : "real";
       if (clock === "real") return waitForRealTime(ms, opts);
       const cycles = Math.max(0, Math.round((ms / 1000) * ATARI_CPU_HZ_PAL));
@@ -3073,8 +3119,9 @@
       return result;
     },
     waitForFrames: async function (options) {
-      const opts = options || {};
-      const frames = Math.max(0, opts.count | 0);
+      const isBare = typeof options === "number";
+      const opts = isBare || !options ? {} : options;
+      const frames = Math.max(0, isBare ? (options | 0) : (opts.count | 0));
       const result = await waitForCounterDelta(
         "cycleCounter",
         frames * CYCLES_PER_FRAME,
@@ -3084,8 +3131,10 @@
       return result;
     },
     waitForCycles: function (options) {
-      const opts = options || {};
-      return waitForCounterDelta("cycleCounter", opts.count | 0, opts);
+      const isBare = typeof options === "number" || typeof options === "string";
+      const opts = isBare || !options ? {} : options;
+      const rawCount = isBare ? options : opts.count;
+      return waitForCounterDelta("cycleCounter", parseCycleDuration(rawCount), opts);
     },
     setBreakpoints: async function (addresses) {
       const app = await getApp();
@@ -3279,7 +3328,7 @@
         opts.value !== undefined && opts.value !== null ? opts.value : 0;
       const expected = size === 2 ? clamp16(expectedRaw) : clamp8(expectedRaw);
       const pollIntervalMs = Math.max(1, opts.pollIntervalMs | 0 || 20);
-      const timeoutMs = Math.max(0, opts.timeoutMs | 0 || 0);
+      const timeoutMs = normalizeTimeoutMs(opts.timeoutMs);
       const startedAt = Date.now();
       while (true) {
         const currentValue = await readMemorySized(address, size, opts);
@@ -3353,14 +3402,14 @@
     tapKey: async function (eventLike, options) {
       const opts = options || {};
       await api.keyDown(eventLike);
-      if (opts.holdMs) await sleep(opts.holdMs | 0);
+      if (opts.holdMs) await sleep(parseMs(opts.holdMs));
       await api.keyUp(eventLike);
-      if (opts.afterMs) await sleep(opts.afterMs | 0);
+      if (opts.afterMs) await sleep(parseMs(opts.afterMs));
       return true;
     },
     typeText: async function (text, options) {
       const opts = options || {};
-      const interKeyDelayMs = opts.interKeyDelayMs | 0;
+      const interKeyDelayMs = parseMs(opts.interKeyDelayMs);
       const rawText = String(text || "");
       for (let i = 0; i < rawText.length; i++) {
         const ch = rawText[i];
@@ -3430,13 +3479,13 @@
       const downState = {};
       downState[normalized] = true;
       await api.setConsoleKeys(downState);
-      if (opts.holdMs) await sleep(opts.holdMs | 0);
+      if (opts.holdMs) await sleep(parseMs(opts.holdMs));
       if (opts.release !== false) {
         const upState = {};
         upState[normalized] = false;
         await api.setConsoleKeys(upState);
       }
-      if (opts.afterMs) await sleep(opts.afterMs | 0);
+      if (opts.afterMs) await sleep(parseMs(opts.afterMs));
       return api.getConsoleKeyState();
     },
     releaseAllKeys: async function () {
