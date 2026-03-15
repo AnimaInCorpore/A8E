@@ -176,17 +176,17 @@ async function main() {
 
   api.attach({ app: app });
 
-  const started = await api.start();
+  const started = await api.system.start();
   assert.equal(startResolved, true);
   assert.equal(started.running, true);
   assert.equal(started.reason, "start");
 
-  const paused = await api.pause();
+  const paused = await api.system.pause();
   assert.equal(pauseResolved, true);
   assert.equal(paused.running, false);
   assert.equal(paused.reason, "pause");
 
-  const reset = await api.reset({ portB: 0xff });
+  const reset = await api.system.reset({ portB: 0xff });
   assert.equal(resetResolved, true);
   assert.equal(reset.debugState.reason, "reset");
 

@@ -3,14 +3,18 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { createHeadlessAutomation } = require("./headless");
+const { createRuntime, resolveDiskPath } = require("./script_runtime");
+
+const DISK_CANDIDATES = [
+  "Schraenker3.atr",
+  "schraenker3.atr",
+  "schreckenstein.atr",
+  "archon2.atr",
+  "archon 2.atr",
+];
 
 async function main() {
-  const runtime = await createHeadlessAutomation({
-    roms: {
-      os: path.resolve(__dirname, "..", "ATARIXL.ROM"),
-      basic: path.resolve(__dirname, "..", "ATARIBAS.ROM"),
-    },
+  const runtime = await createRuntime({
     turbo: true,
     sioTurbo: false,
     frameDelayMs: 0,
@@ -20,8 +24,9 @@ async function main() {
     const api = runtime.api;
     await api.whenReady();
 
-    const diskData = fs.readFileSync(path.resolve(__dirname, "..", "Schraenker3.atr"));
-    await api.media.mountDisk(diskData, { name: "Schraenker3.atr" });
+    const diskPath = resolveDiskPath(DISK_CANDIDATES, 2);
+    const diskData = fs.readFileSync(diskPath);
+    await api.media.mountDisk(diskData, { name: path.basename(diskPath) });
     await api.system.boot();
 
     // Run until just before corruption (step 255)

@@ -120,7 +120,7 @@ async function main() {
   assert.equal(capabilities.memoryWait, true);
 
   assert.equal(await api.debug.readWord(0x1000), 0x1234);
-  assert.equal(await api.readWord(0x1000, { littleEndian: false }), 0x3412);
+  assert.equal(await api.debug.readWord(0x1000, { littleEndian: false }), 0x3412);
   assert.equal(await api.debug.readWordSigned(0x2000), -32768);
   assert.equal(
     await api.debug.readWordSigned(0x2002, { littleEndian: false }),

@@ -2,32 +2,28 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { createHeadlessAutomation } = require("./headless");
+const {
+  createRuntime,
+  resolveBuildPath,
+  resolveExistingPath,
+  resolveProjectPath,
+} = require("./script_runtime");
 
 function resolveInputXexPath() {
   const cliArg = process.argv[2] ? path.resolve(process.cwd(), process.argv[2]) : "";
-  const candidates = [
-    cliArg,
-    path.resolve(__dirname, "..", "image.xex"),
-    path.resolve(__dirname, "..", "build", "image.xex"),
-  ].filter(Boolean);
-  for (let i = 0; i < candidates.length; i++) {
-    if (fs.existsSync(candidates[i])) return candidates[i];
-  }
-  throw new Error(
-    "No input XEX found. Pass a path as first argument, for example: " +
-      "node jsA8E/investigate_image_xex.js build/image.xex",
+  return resolveExistingPath(
+    [
+      cliArg,
+      resolveProjectPath("image.xex"),
+      resolveProjectPath("build", "image.xex"),
+    ],
+    "input XEX (pass a path, for example: node jsA8E/tests/investigate_image_xex.js build/image.xex)",
   );
 }
 
 async function main() {
-  const runtime = await createHeadlessAutomation({
-    roms: {
-      os: path.resolve(__dirname, "..", "ATARIXL.ROM"),
-      basic: path.resolve(__dirname, "..", "ATARIBAS.ROM"),
-    },
+  const runtime = await createRuntime({
     turbo: true,
-    frameDelayMs: 0,
   });
 
   try {
@@ -68,13 +64,13 @@ async function main() {
     // Run to just before the garble starts (frame ~550)
     await api.system.waitForCycles("550frames");
     const ss1 = await api.artifacts.captureScreenshot({ encoding: "bytes" });
-    fs.writeFileSync(path.resolve(__dirname, "..", "build", "image-diag-f550.png"), Buffer.from(ss1.bytes));
+    fs.writeFileSync(resolveBuildPath("image-diag-f550.png"), Buffer.from(ss1.bytes));
     console.log("Screenshot saved at frame ~550");
 
     // Run 70 more frames (to ~620)
     await api.system.waitForCycles("70frames");
     const ss2 = await api.artifacts.captureScreenshot({ encoding: "bytes" });
-    fs.writeFileSync(path.resolve(__dirname, "..", "build", "image-diag-f620.png"), Buffer.from(ss2.bytes));
+    fs.writeFileSync(resolveBuildPath("image-diag-f620.png"), Buffer.from(ss2.bytes));
     console.log("Screenshot saved at frame ~620");
 
     // Read hardware state
@@ -150,7 +146,7 @@ async function main() {
     // Run a bit more to see the stable demo
     await api.system.waitForCycles("100frames");
     const ss3 = await api.artifacts.captureScreenshot({ encoding: "bytes" });
-    fs.writeFileSync(path.resolve(__dirname, "..", "build", "image-diag-f720.png"), Buffer.from(ss3.bytes));
+    fs.writeFileSync(resolveBuildPath("image-diag-f720.png"), Buffer.from(ss3.bytes));
     console.log("\nScreenshot saved at frame ~720");
 
   } catch (err) {

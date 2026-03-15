@@ -3,7 +3,7 @@
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { createHeadlessAutomation } = require("./headless");
+const { createRuntime, resolveDiskPath } = require("./script_runtime");
 
 // SIO DCB addresses
 const SIO_BUF_LO = 0x0304;
@@ -16,13 +16,16 @@ const DLISTL = 0xD402;
 const DLISTH = 0xD403;
 // The address to watch
 const WATCH_ADDR = 0x1F3A;
+const DISK_CANDIDATES = [
+  "Schraenker3.atr",
+  "schraenker3.atr",
+  "schreckenstein.atr",
+  "archon2.atr",
+  "archon 2.atr",
+];
 
 async function main() {
-  const runtime = await createHeadlessAutomation({
-    roms: {
-      os: path.resolve(__dirname, "..", "ATARIXL.ROM"),
-      basic: path.resolve(__dirname, "..", "ATARIBAS.ROM"),
-    },
+  const runtime = await createRuntime({
     turbo: true,
     sioTurbo: false,
     frameDelayMs: 0,
@@ -32,9 +35,10 @@ async function main() {
     const api = runtime.api;
     await api.whenReady();
 
-    console.log("Loading Schraenker3.atr...");
-    const diskData = fs.readFileSync(path.resolve(__dirname, "..", "Schraenker3.atr"));
-    await api.media.mountDisk(diskData, { name: "Schraenker3.atr" });
+    const diskPath = resolveDiskPath(DISK_CANDIDATES, 2);
+    console.log(`Loading ${path.basename(diskPath)}...`);
+    const diskData = fs.readFileSync(diskPath);
+    await api.media.mountDisk(diskData, { name: path.basename(diskPath) });
 
     console.log("Booting...");
     await api.system.boot();
