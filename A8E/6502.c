@@ -1665,6 +1665,9 @@ void _6502_RTI(_6502_Context_t *pContext)
 	CPU.pc = RAM[0x100 + CPU.sp];
 	CPU.sp++;
 	CPU.pc |= RAM[0x100 + CPU.sp] << 8;
+	/* Clear NMI-active guard on every RTI. This is safe because _6502_ServiceInterrupt
+	 * sets PS.i=1, which blocks IRQs for the duration of the NMI handler unless the
+	 * handler explicitly executes CLI. No known Atari code does this. */
 	pContext->cNmiActiveFlag = 0;
 }
 

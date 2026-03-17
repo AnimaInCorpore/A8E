@@ -649,6 +649,9 @@
     cpu.pc = ctx.ram[0x100 + cpu.sp] & 0xff;
     cpu.sp = (cpu.sp + 1) & 0xff;
     cpu.pc |= (ctx.ram[0x100 + cpu.sp] & 0xff) << 8;
+    // Clear NMI-active guard on every RTI. This is safe because serviceInterrupt
+    // sets FLAG_I, blocking IRQs for the duration of the NMI handler unless the
+    // handler explicitly executes CLI. No known Atari code does this.
     ctx.nmiActive = 0;
   }
   function opRTS(ctx) {
