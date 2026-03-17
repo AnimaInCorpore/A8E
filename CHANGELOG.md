@@ -1,10 +1,13 @@
 # Changelog
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
 ### Changed
+- Documentation now consistently states that Atari 800 XL PAL hardware-emulation implementation work should use `AHRM/index.md` as the reference baseline (applied across non-AHRM Markdown docs).
 - Native `A8E` build caption/version is now injected at compile time from `jsA8E/version.json` (with `dev` fallback when unavailable).
 - Browser `jsA8E` frame timing now accumulates CPU cycles and runs whole-frame steps with capped catch-up to reduce visible speed jitter.
 - Browser rendering now requests `desynchronized` WebGL contexts and hints `canvas` transforms for smoother presentation.

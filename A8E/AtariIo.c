@@ -45,6 +45,7 @@
 ********************************************************************/
 
 #define CLIP(a) MAX(0, MIN(255, a))
+#define DLI_HORIZONTAL_OFFSET 14u
 
 static void AtariIoAdvanceScanline(_6502_Context_t *pContext)
 {
@@ -55,6 +56,8 @@ static void AtariIoAdvanceScanline(_6502_Context_t *pContext)
 	if(pIoData->tVideoData.lCurrentDisplayLine == 248)
 	{
 		pIoData->llDliCycle = CYCLE_NEVER;
+		/* NMIST DLI is cleared at the start of VBL (line 248). */
+		RAM[IO_NMIRES_NMIST] &= ~NMI_DLI;
 	}
 
 	if(pIoData->tVideoData.lCurrentDisplayLine >= LINES_PER_SCREEN_PAL)
@@ -67,7 +70,14 @@ static void AtariIoAdvanceScanline(_6502_Context_t *pContext)
 	}
 
 	RAM[IO_VCOUNT] = pIoData->tVideoData.lCurrentDisplayLine >> 1;
-	RAM[IO_NMIRES_NMIST] &= ~NMI_DLI;
+
+	/* Replayed JVB+DLI ($C1) issues one DLI per scanline until VBL. */
+	if((pIoData->cCurrentDisplayListCommand & 0xcf) == 0xc1 &&
+	   pIoData->tVideoData.lCurrentDisplayLine >= 8 &&
+	   pIoData->tVideoData.lCurrentDisplayLine <= 247)
+	{
+		pIoData->llDliCycle = pIoData->llDisplayListFetchCycle + DLI_HORIZONTAL_OFFSET;
+	}
 
 	if(pIoData->tVideoData.lCurrentDisplayLine == 249)
 	{
@@ -1343,6 +1353,29 @@ static u8 AtariIo_ComputeActiveLineGeometry(
 		(ACTIVE_LINE_COLOR_BURST_CYCLES + lLeftBorderCycles) * 4;
 
 	return 1;
+}
+
+static void AtariIo_FillBackgroundSpan(
+	u8 *pDestination,
+	u8 *pPriorityData,
+	u32 lStartX,
+	u32 lEndX,
+	u8 cColor)
+{
+	u32 lClampedStart = MIN(PIXELS_PER_LINE, lStartX);
+	u32 lClampedEnd = MIN(PIXELS_PER_LINE, lEndX);
+	u32 lX;
+
+	if(lClampedEnd <= lClampedStart)
+	{
+		return;
+	}
+
+	for(lX = lClampedStart; lX < lClampedEnd; lX++)
+	{
+		pDestination[lX] = cColor;
+		pPriorityData[lX] = PRIO_BKG;
+	}
 }
 
 static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
@@ -2712,10 +2745,18 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			// DLI? (schedule after vertical scrolling adjustments)
 			if(pIoData->cCurrentDisplayListCommand & 0x80)
 			{
-				const u32 DLI_HORIZONTAL_OFFSET = 14;
-				pIoData->llDliCycle = pIoData->llCycle +
-									  (pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine - 1) * CYCLES_PER_LINE +
-									  DLI_HORIZONTAL_OFFSET;
+				if((pIoData->cCurrentDisplayListCommand & 0x4f) == 0x41)
+				{
+					/* JVB mode line height is one scanline while replayed. */
+					pIoData->llDliCycle = pIoData->llCycle + DLI_HORIZONTAL_OFFSET;
+				}
+				else
+				{
+					pIoData->llDliCycle =
+						pIoData->llCycle +
+						(pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine - 1) * CYCLES_PER_LINE +
+						DLI_HORIZONTAL_OFFSET;
+				}
 
 				AtariIoCycleTimedEventUpdate(pContext);
 			}
@@ -2729,7 +2770,7 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			}
 
 			// Wait for VBL?
-			if(pIoData->cCurrentDisplayListCommand == 0x41)
+			if((pIoData->cCurrentDisplayListCommand & 0x4f) == 0x41)
 			{
 				pIoData->lNextDisplayListLine = 8;
 			}
@@ -2821,6 +2862,8 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 		else
 		{
 			ActiveLineGeometry_t tGeometry;
+			ActiveLineGeometry_t tVisibleGeometry;
+			u8 bClipScrolledNonWide = 0;
 			u8 cMode = pIoData->cCurrentDisplayListCommand & 0x0f;
 			u32 lLineBaseOffset =
 				pIoData->tVideoData.lCurrentDisplayLine * PIXELS_PER_LINE;
@@ -2836,6 +2879,20 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 			{
 				AtariIo_DrawVisibleBlankLine(pContext, pLineDestination, pLinePriorityData);
 				return;
+			}
+
+			if((pIoData->cCurrentDisplayListCommand & 0x10) &&
+			   ((SRAM[IO_DMACTL] & 0x03) != 0x03))
+			{
+				if(AtariIo_ComputeActiveLineGeometry(
+					   pIoData->cCurrentDisplayListCommand & 0xef,
+					   SRAM[IO_DMACTL] & 0x03,
+					   0,
+					   m_aAnticModeInfoTable[cMode].lPixelsPerByte,
+					   &tVisibleGeometry))
+				{
+					bClipScrolledNonWide = 1;
+				}
 			}
 
 			cBaseColor = AtariIo_GetCurrentBackgroundColor(pContext);
@@ -2867,6 +2924,30 @@ void AtariIoDrawLine(_6502_Context_t *pContext)
 			pIoData->tDrawLineData.sDisplayMemoryAddress = pIoData->sRowDisplayMemoryAddress;
 
 			m_aAnticModeInfoTable[cMode].DrawFunction(pContext);
+
+			if(bClipScrolledNonWide)
+			{
+				u32 lFetchStartX = tGeometry.lPlayfieldStartX;
+				u32 lFetchEndX = lFetchStartX + tGeometry.lPlayfieldPixelWidth;
+				u32 lVisibleStartX = tVisibleGeometry.lPlayfieldStartX;
+				u32 lVisibleEndX =
+					lVisibleStartX + tVisibleGeometry.lPlayfieldPixelWidth;
+				u32 lLeftClipEnd = MIN(lFetchEndX, lVisibleStartX);
+				u32 lRightClipStart = MAX(lFetchStartX, lVisibleEndX);
+
+				AtariIo_FillBackgroundSpan(
+					pLineDestination,
+					pLinePriorityData,
+					lFetchStartX,
+					lLeftClipEnd,
+					cBaseColor);
+				AtariIo_FillBackgroundSpan(
+					pLineDestination,
+					pLinePriorityData,
+					lRightClipStart,
+					lFetchEndX,
+					cBaseColor);
+			}
 
 			if(pIoData->bFirstRowScanline)
 			{

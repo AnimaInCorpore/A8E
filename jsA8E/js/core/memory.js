@@ -1138,6 +1138,24 @@
         return out;
       }
 
+      function writeMemory(address, value) {
+        const addr = (address | 0) & 0xffff;
+        const next = value & 0xff;
+        machine.ctx.ram[addr] = next;
+        return next;
+      }
+
+      function writeRange(startAddress, data) {
+        const start = (startAddress | 0) & 0xffff;
+        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data || 0);
+        const size = bytes.length | 0;
+        const ram = machine.ctx.ram;
+        for (let i = 0; i < size; i++) {
+          ram[(start + i) & 0xffff] = bytes[i] & 0xff;
+        }
+        return size;
+      }
+
       function getBankState() {
         const portB = machine.ctx.sram[IO_PORTB] & 0xff;
         return {
@@ -1377,6 +1395,8 @@
         hasMountedDiskForDeviceSlot: hasMountedDiskForDeviceSlot,
         readMemory: readMemory,
         readRange: readRange,
+        writeMemory: writeMemory,
+        writeRange: writeRange,
         getBankState: getBankState,
         exportSnapshotState: exportSnapshotState,
         importSnapshotState: importSnapshotState,

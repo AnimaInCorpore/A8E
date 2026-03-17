@@ -1,5 +1,7 @@
 # jsA8E Automation API
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 Public automation reference for jsA8E.
 
 This is the user-facing API document for automation scripts, browser tooling, and external harnesses. Browser integrations use `window.A8EAutomation`; browser-less integrations use `createHeadlessAutomation(...)` from `jsA8E/headless.js`. Implementation details and ownership notes live in [../implementation/jsA8E/AUTOMATION.md](../implementation/jsA8E/AUTOMATION.md).
@@ -28,6 +30,7 @@ For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomati
 | `attach(opts)` | Advanced/internal helper used by the UI bootstrap. |
 | `detach()` | Detaches the live app and resets `whenReady()`. |
 | `getApp()` | Low-level escape hatch; most consumers should not need it. |
+| `events` | Event subscription helpers (`subscribe`, `unsubscribe`). |
 
 ## Capabilities and System State
 
@@ -37,7 +40,9 @@ For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomati
 - `urlMediaLoad`, `urlRomLoad`, `urlDiskLoad`, `urlXexLoad`
 - `trace`, `breakpoints`, `stepping`, `runUntilPc`
 - `sourceContext`, `disassembly`, `joystick`, `consoleKeys`, `consoleKeyState`
-- `failureSnapshots`, `progressEvents`, `cacheControl`, `waitPrimitives`, `snapshots`, `groupedApi`, `events`, `faultReporting`, `resetPortBOverride`
+- `screenshot`, `artifacts`, `failureSnapshots`, `progressEvents`, `cacheControl`
+- `waitPrimitives`, `snapshots`, `groupedApi`, `events`, `faultReporting`, `resetPortBOverride`
+- `memoryWrite`, `memoryWait`
 
 `getSystemState({ timeoutMs })` returns:
 
@@ -64,7 +69,7 @@ For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomati
 | `reload(options)` | Reloads the page using the shared cache-control URL logic. |
 | `dispose()` | Disposes the app and detaches the automation facade. |
 | `waitForPause(options)` | Waits for a pause event. Supports `reason`, `timeoutMs`, and `immediate`. |
-| `waitForTime(options)` | Waits by real time or emulated time. Use `clock: "real"` (wall clock) or `clock: "emulated"` (tied to 6502 cycles). **Note:** `real` is recommended when `turbo` is enabled or if the CPU might be in a tight loop. |
+| `waitForTime(options)` | Waits by real time or emulated time. Provide `ms`, and use `clock: "real"` (wall clock) or `clock: "emulated"` (tied to 6502 cycles). **Note:** `real` is recommended when `turbo` is enabled or if the CPU might be in a tight loop. |
 | `waitForFrames(options)` | Waits for `count` frames using cycle-counter progress. |
 | `waitForCycles(options)` | Waits for `count` emulated CPU cycles. |
 | `getSystemState(options)` | Same as the root method. |
@@ -79,7 +84,7 @@ For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomati
 | `loadRomFromUrl(kind, url, options)` | Fetches a ROM through the shared cache-control fetch path, then loads it. |
 | `loadOsRomFromUrl(url, options)` | URL helper for the OS ROM. |
 | `loadBasicRomFromUrl(url, options)` | URL helper for the BASIC ROM. |
-| `mountDisk(data, options)` | Mounts an ATR/XEX payload into a device slot. Important options: `name`, `slot`. |
+| `mountDisk(data, nameOrOptions?, slot?)` | Mounts an ATR/XEX payload into a device slot. Supports `{ name, slot }` or legacy `(name, slot)` arguments. |
 | `mountDiskFromUrl(url, options)` | Fetches and mounts media from a URL. |
 | `loadDisk(data, options)` | Compatibility alias for `mountDisk(...)`. |
 | `unmountDisk(slot)` | Unmounts a device slot. |
@@ -123,7 +128,13 @@ All URL loaders share the same fetch controls:
 | `getConsoleKeyState()` | Same console-key helper exposed in `input.*`. |
 | `getTraceTail(limit)` | Returns the most recent trace entries. |
 | `readMemory(address)` | Reads one byte from memory. |
-| `readRange(start, length, options)` | Reads a byte range; returns a `Uint8Array` by default. Use `format: "hex"` for a hex string. Highly efficient for dumping large structures like Display Lists or fonts. |
+| `readRange(start, length, options)` | Reads a byte range; returns a `Uint8Array` by default. Use `format: "hex"` for a hex string. Reads wrap across `$FFFF -> $0000`. Highly efficient for dumping large structures like Display Lists or fonts. |
+| `readWord(address, options)` | Reads a 16-bit value from memory. Default is little-endian; pass `{ littleEndian: false }` for big-endian. |
+| `readWordSigned(address, options)` | Reads a signed 16-bit value with the same endianness options as `readWord(...)`. |
+| `writeMemory(address, value)` | Writes one byte to memory and returns the written value. |
+| `writeRange(start, data)` | Writes a byte range from `ArrayBuffer`/typed array/byte array input. |
+| `writeWord(address, value, options)` | Writes a 16-bit value. Default is little-endian; pass `{ littleEndian: false }` for big-endian. |
+| `waitForMemory(options)` | Polls memory until a masked value match is observed. |
 | `getSourceContext(options)` | Returns mapped source lines around the current or requested PC from the last successful build. |
 | `disassemble(options)` | Returns structured disassembly around the current or requested PC. |
 
@@ -134,6 +145,16 @@ The `disassemble(options)` result contains:
   - `text`: The formatted assembly string (e.g., `LDA #$01`).
   - `bytes`: An array of the raw instruction bytes.
   - `mnemonic`, `mode`, `size`, `cycles`.
+
+`waitForMemory(options)` accepts:
+
+- `address` (required)
+- `value` (expected value, default `0`)
+- `mask` (default `0xFF` for byte mode, `0xFFFF` for word mode)
+- `size` (`1` or `2`, default `1`; `2` uses 16-bit reads)
+- `littleEndian` (for `size: 2`, default `true`)
+- `pollIntervalMs` (default `20`)
+- `timeoutMs` (optional)
 
 ### `dev.*`
 
@@ -207,6 +228,10 @@ Current event types:
 - `debugState`
 - `build`
 - `hostfs`
+
+## Flat Compatibility Aliases
+
+The grouped domains are the preferred contract, but the root object still exposes compatibility aliases for older scripts (for example `api.start()`, `api.readWord()`, `api.captureScreenshot()`, and `api.releaseAllKeys()`).
 
 ## Result Notes
 

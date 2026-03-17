@@ -460,7 +460,6 @@
           premultipliedAlpha: false,
           preserveDrawingBuffer: false,
           powerPreference: "high-performance",
-          desynchronized: true,
         }) ||
         screenCanvas.getContext("webgl", {
           alpha: true,
@@ -470,7 +469,6 @@
           premultipliedAlpha: false,
           preserveDrawingBuffer: false,
           powerPreference: "high-performance",
-          desynchronized: true,
         }) ||
         screenCanvas.getContext("experimental-webgl", {
           alpha: true,
@@ -479,7 +477,6 @@
           stencil: false,
           premultipliedAlpha: false,
           preserveDrawingBuffer: false,
-          desynchronized: true,
         });
     } catch {
       gl = null;
@@ -841,6 +838,26 @@
         }
         return {
           buffer: new ArrayBuffer(0),
+        };
+      case "writeMemory":
+        if (typeof app.writeMemory === "function") {
+          return {
+            value: app.writeMemory(data.address | 0, data.value | 0),
+          };
+        }
+        return { value: data.value | 0 };
+      case "writeRange":
+        if (typeof app.writeRange === "function") {
+          const bytes = data.buffer ? new Uint8Array(data.buffer) : new Uint8Array(0);
+          return {
+            length: app.writeRange(data.start | 0, bytes),
+          };
+        }
+        return {
+          length:
+            data.buffer && typeof data.buffer.byteLength === "number"
+              ? data.buffer.byteLength | 0
+              : 0,
         };
       case "getBankState":
         if (typeof app.getBankState === "function") return app.getBankState();

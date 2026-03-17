@@ -1,5 +1,7 @@
 # UI / Interface
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 - Files: `jsA8E/index.html`, `jsA8E/style.css`, `jsA8E/js/app/ui.js`, `jsA8E/js/app/hostfs_ui.js`, `jsA8E/js/app/assembler_ui.js`, `jsA8E/js/app/snapshot_ui.js`, `jsA8E/js/core/assembler_core.js`, `jsA8E/js/core/assembler/shared.js`, `jsA8E/js/core/assembler/lexer.js`, `jsA8E/js/core/assembler/preprocessor.js`, `jsA8E/js/core/assembler/parser.js`, `jsA8E/js/core/assembler/object_writer.js`, `jsA8E/js/core/assembler/assembler.js`, `jsA8E/js/app/a8e.js`, `jsA8E/js/app/version.js`
 - Purpose: provide browser controls and status for emulator operation.
 - Status: verified on 2026-03-09 (`implemented`).

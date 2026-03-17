@@ -1,5 +1,7 @@
 # Automation / Public Machine API
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 - Files: `jsA8E/js/app/automation_api.js`, `jsA8E/js/app/automation/utils.js`, `jsA8E/js/app/ui.js`, `jsA8E/js/core/app_proxy.js`, `jsA8E/emulator_worker.js`, `jsA8E/js/core/atari.js`, `jsA8E/js/core/debugger.js`, `jsA8E/js/core/memory.js`, `jsA8E/js/core/input.js`, `jsA8E/js/core/hostfs.js`, `jsA8E/js/core/assembler_core.js`, `jsA8E/js/core/snapshot_codec.js`, `jsA8E/headless.js`
 - Purpose: provide the stable shared control surface for jsA8E so UI code, in-browser tools, external automation, and browser-less harnesses all drive the same machine API, with headless Node bootstrap as the preferred path for non-interactive agent/CI automation.
 - Status: verified on 2026-03-12 (`implemented`).
@@ -11,19 +13,20 @@
 
 `window.A8EAutomation` currently exports:
 
-- Root: `whenReady()`, `attach(...)`, `detach()`, `getApp()`, `apiVersion`, `artifactSchemaVersion`, `getCapabilities()`, `getSystemState()`.
+- Root: `whenReady()`, `attach(...)`, `detach()`, `getApp()`, `apiVersion`, `artifactSchemaVersion`, `getCapabilities()`, `getSystemState()`, and `events.{subscribe,unsubscribe}`.
 - `system.*`: `start()`, `pause()`, `reset(options)`, `boot(options)`, `saveSnapshot(options)`, `loadSnapshot(data, options)`, `reload(options)`, `dispose()`, `waitForPause(options)`, `waitForTime(options)`, `waitForFrames(options)`, `waitForCycles(options)`, `getSystemState(options)`.
-- `media.*`: `loadRom(...)`, `loadOsRom(...)`, `loadBasicRom(...)`, `loadRomFromUrl(...)`, `loadOsRomFromUrl(...)`, `loadBasicRomFromUrl(...)`, `mountDisk(...)`, `mountDiskFromUrl(...)`, compatibility `loadDisk(...)`, `unmountDisk(slot)`, `getMountedMedia()`.
+- `media.*`: `loadRom(...)`, `loadOsRom(...)`, `loadBasicRom(...)`, `loadRomFromUrl(...)`, `loadOsRomFromUrl(...)`, `loadBasicRomFromUrl(...)`, `mountDisk(data, nameOrOpts, slot)` (plus object-form options), `mountDiskFromUrl(...)`, compatibility `loadDisk(...)`, `unmountDisk(slot)`, `getMountedMedia()`.
 - `input.*`: `focusDisplay()`, `keyDown(eventLike)`, `keyUp(eventLike)`, `tapKey(eventLike, options)`, `typeText(text, options)`, `setJoystick(state)`, `getConsoleKeyState()`, `setConsoleKeys(state)`, `pressConsoleKey(key, options)`, `releaseAllInputs()`.
-- `debug.*`: `setBreakpoints(addresses)`, `stepInstruction()`, `stepOver()`, `runUntilPc(targetPc, options)`, `runUntilPcOrSnapshot(targetPc, options)`, `waitForPc(targetPc, options)`, `waitForBreakpoint(options)`, `getDebugState()`, `getCounters()`, `getBankState()`, `getConsoleKeyState()`, `getTraceTail(limit)`, `readMemory(address)`, `readRange(start, length, options)`, `getSourceContext(options)`, `disassemble(options)`.
+- `debug.*`: `setBreakpoints(addresses)`, `stepInstruction()`, `stepOver()`, `runUntilPc(targetPc, options)`, `runUntilPcOrSnapshot(targetPc, options)`, `waitForPc(targetPc, options)`, `waitForBreakpoint(options)`, `getDebugState()`, `getCounters()`, `getBankState()`, `getConsoleKeyState()`, `getTraceTail(limit)`, `readMemory(address)`, `readRange(start, length, options)`, `readWord(address, options)`, `readWordSigned(address, options)`, `writeMemory(address, value)`, `writeRange(start, data)`, `writeWord(address, value, options)`, `waitForMemory(options)`, `getSourceContext(options)`, `disassemble(options)`.
 - `dev.*`: `listHostFiles()`, `readHostFile(name, options)`, `writeHostFile(name, data, options)`, `deleteHostFile(name)`, `renameHostFile(oldName, newName)`, `lockHostFile(name)`, `unlockHostFile(name)`, `getHostFileStatus(name)`, `waitForHostFsFile(name, options)`, `assembleSource(spec)`, `assembleHostFile(name, options)`, `getLastBuildResult(options)`, `runXexFromUrl(url, options)`, `runXex(spec)`.
 - `artifacts.*`: `captureScreenshot(options)`, `collectArtifacts(options)`, `captureFailureState(options)`.
 - `events.*`: `subscribe(handler)` for all events or `subscribe(type, handler)` for filtered events, plus `unsubscribe(token)`.
+- Flat aliases: root-level compatibility aliases still exist for grouped methods (for example `start`, `pause`, `reset`, `waitForPc`, `readWord`, `captureScreenshot`, and `releaseAllKeys`).
 
 ## Behavior Notes
 
 - `whenReady()` resolves once `ui.js` has attached a live emulator app to the facade.
-- `getCapabilities()` reports both `apiVersion` and `artifactSchemaVersion`, plus feature flags such as `worker`, `hostfs`, `assembler`, `disk`, `romLoad`, `urlRomLoad`, `urlDiskLoad`, `urlXexLoad`, `trace`, `breakpoints`, `stepping`, `runUntilPc`, `sourceContext`, `disassembly`, `consoleKeys`, `failureSnapshots`, `progressEvents`, `snapshots`, `events`, and `resetPortBOverride`.
+- `getCapabilities()` reports both `apiVersion` and `artifactSchemaVersion`, plus feature flags such as `worker`, `hostfs`, `assembler`, `disk`, `romLoad`, `urlRomLoad`, `urlDiskLoad`, `urlXexLoad`, `trace`, `breakpoints`, `stepping`, `runUntilPc`, `sourceContext`, `disassembly`, `joystick`, `consoleKeys`, `consoleKeyState`, `screenshot`, `artifacts`, `failureSnapshots`, `progressEvents`, `cacheControl`, `waitPrimitives`, `snapshots`, `groupedApi`, `events`, `faultReporting`, `resetPortBOverride`, `memoryWrite`, and `memoryWait`.
 - `getSystemState({ timeoutMs })` reads mounted media, counters, debug state, console keys, and bank state with per-part timeouts. If one read stalls, the call returns partial state plus `error.code = "system_state_partial"` and structured per-part failure details instead of hanging.
 - Worker-backed `start()`, `pause()`, and `reset()` resolve only after the worker acknowledges the requested transition. The no-worker fallback remains available through `?a8e_worker=0` or `window.A8E_BOOT_OPTIONS.worker = false`.
 - URL-based loaders share the same fetch/cache controls through the common utility layer: `cacheBust`, `cacheBustParam`, `cache`, `credentials`, `mode`, and custom `fetch` / `requestInit`.
@@ -31,6 +34,7 @@
 - Artifact helpers return schema-versioned JSON bundles (`artifactSchemaVersion: "2"`). Timeout-oriented wait flows and XEX bring-up failures reuse those bundles so failure reporting includes debug state, counters, trace, bank/media state, console keys, optional memory ranges, optional disassembly/source context, and optional screenshots.
 - `dev.runXex(...)` now emits progress checkpoints such as `xex_mount_started`, runs the structured XEX preflight, honors reset-time `portB` overrides, and turns preflight/boot failures into explicit `xex_boot_failed` artifacts rather than generic wait timeouts.
 - HostFS automation is broader than the initial read/write pass: callers can now rename, lock, unlock, query status, and wait for files in addition to listing, reading, writing, deleting, assembling, and launching XEX output.
+- Debug memory automation now supports both read and write primitives. `writeMemory`/`writeRange`/`writeWord` update the live machine RAM view directly (with range wrap at `$FFFF`), and `waitForMemory(options)` provides masked byte/word polling with timeout-based failure artifacts.
 
 ## Event Model
 

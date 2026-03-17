@@ -105,7 +105,6 @@
             premultipliedAlpha: false,
             preserveDrawingBuffer: false,
             powerPreference: "high-performance",
-            desynchronized: true,
           }) ||
           canvas.getContext("webgl", {
             alpha: true,
@@ -115,7 +114,6 @@
             premultipliedAlpha: false,
             preserveDrawingBuffer: false,
             powerPreference: "high-performance",
-            desynchronized: true,
           }) ||
           canvas.getContext("experimental-webgl", {
             alpha: true,
@@ -124,7 +122,6 @@
             stencil: false,
             premultipliedAlpha: false,
             preserveDrawingBuffer: false,
-            desynchronized: true,
           });
       } catch {
         gl = null;

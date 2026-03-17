@@ -1059,6 +1059,29 @@
     return out;
   }
 
+  async function readWordValue(address, options) {
+    const opts = options && typeof options === "object" ? options : {};
+    const bytes = await readRangeBytes(address, 2);
+    const littleEndian = opts.littleEndian !== false;
+    const value = littleEndian
+      ? (bytes[0] & 0xff) | ((bytes[1] & 0xff) << 8)
+      : ((bytes[0] & 0xff) << 8) | (bytes[1] & 0xff);
+    if (opts.signed) return value >= 0x8000 ? value - 0x10000 : value;
+    return value & 0xffff;
+  }
+
+  function normalizeWaitMemorySize(value) {
+    return value === 2 ? 2 : 1;
+  }
+
+  async function readMemorySized(address, size, options) {
+    const normalizedSize = normalizeWaitMemorySize(size);
+    if (normalizedSize === 2) {
+      return readWordValue(address, options || null);
+    }
+    return api.readMemory(address);
+  }
+
   function getOpcodeMeta(opcode) {
     if (!CODE_TABLE) return null;
     return CODE_TABLE[opcode & 0xff] || null;
@@ -1832,6 +1855,10 @@
       events: true,
       faultReporting: true,
       resetPortBOverride: typeof app.reset === "function",
+      memoryWrite:
+        typeof app.writeMemory === "function" &&
+        typeof app.writeRange === "function",
+      memoryWait: typeof app.readMemory === "function",
     };
   }
 
@@ -3196,6 +3223,92 @@
       if (options && options.format === "hex") return bytesToHex(bytes);
       return Array.from(bytes);
     },
+    readWord: async function (address, options) {
+      return readWordValue(address, options);
+    },
+    readWordSigned: async function (address, options) {
+      return readWordValue(
+        address,
+        Object.assign({}, options || {}, {
+          signed: true,
+        }),
+      );
+    },
+    writeMemory: async function (address, value) {
+      const app = await getApp();
+      if (typeof app.writeMemory !== "function") {
+        throw new Error("A8EAutomation.writeMemory is unavailable");
+      }
+      return clamp8(await Promise.resolve(app.writeMemory(address | 0, value | 0)));
+    },
+    writeRange: async function (start, data) {
+      const app = await getApp();
+      if (typeof app.writeRange !== "function") {
+        throw new Error("A8EAutomation.writeRange is unavailable");
+      }
+      const bytes = toUint8Array(data);
+      const written = await Promise.resolve(app.writeRange(start | 0, bytes));
+      return {
+        start: clamp16(start),
+        length:
+          typeof written === "number" ? Math.max(0, written | 0) : bytes.length | 0,
+      };
+    },
+    writeWord: async function (address, value, options) {
+      const opts = options && typeof options === "object" ? options : {};
+      const word = value & 0xffff;
+      const littleEndian = opts.littleEndian !== false;
+      const bytes = littleEndian
+        ? new Uint8Array([word & 0xff, (word >> 8) & 0xff])
+        : new Uint8Array([(word >> 8) & 0xff, word & 0xff]);
+      const result = await api.writeRange(address, bytes);
+      return {
+        start: result.start,
+        length: result.length | 0,
+        value: word,
+      };
+    },
+    waitForMemory: async function (options) {
+      const opts = options && typeof options === "object" ? options : {};
+      const address = clamp16(opts.address);
+      const size = normalizeWaitMemorySize(opts.size | 0);
+      const mask = size === 2 ? clamp16(opts.mask === undefined ? 0xffff : opts.mask) : clamp8(opts.mask === undefined ? 0xff : opts.mask);
+      const expectedRaw =
+        opts.value !== undefined && opts.value !== null ? opts.value : 0;
+      const expected = size === 2 ? clamp16(expectedRaw) : clamp8(expectedRaw);
+      const pollIntervalMs = Math.max(1, opts.pollIntervalMs | 0 || 20);
+      const timeoutMs = Math.max(0, opts.timeoutMs | 0 || 0);
+      const startedAt = Date.now();
+      while (true) {
+        const currentValue = await readMemorySized(address, size, opts);
+        if (((currentValue & mask) >>> 0) === ((expected & mask) >>> 0)) {
+          return {
+            ok: true,
+            reason: "memory",
+            address: address,
+            size: size,
+            value: currentValue,
+            expected: expected,
+            mask: mask,
+            debugState: await api.getDebugState(),
+          };
+        }
+        if (timeoutMs > 0 && Date.now() - startedAt >= timeoutMs) {
+          return buildWaitFailureSnapshot("waitForMemory", opts, {
+            reason: "timeout",
+            message: "Memory wait timed out",
+            timedOut: true,
+            timeoutMs: timeoutMs,
+            address: address,
+            size: size,
+            expected: expected,
+            mask: mask,
+            currentValue: currentValue,
+          });
+        }
+        await sleep(pollIntervalMs);
+      }
+    },
     getSourceContext: getSourceContext,
     disassemble: disassemble,
     captureScreenshot: async function (options) {
@@ -3490,6 +3603,12 @@
     getTraceTail: api.getTraceTail,
     readMemory: api.readMemory,
     readRange: api.readRange,
+    readWord: api.readWord,
+    readWordSigned: api.readWordSigned,
+    writeMemory: api.writeMemory,
+    writeRange: api.writeRange,
+    writeWord: api.writeWord,
+    waitForMemory: api.waitForMemory,
     getSourceContext: api.getSourceContext,
     disassemble: api.disassemble,
   };

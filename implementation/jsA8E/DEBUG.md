@@ -1,5 +1,7 @@
 # Debug
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 - Files: `jsA8E/js/app/ui.js`, `jsA8E/js/core/debugger.js`, `jsA8E/js/core/atari.js`, `jsA8E/js/core/app_proxy.js`, `jsA8E/emulator_worker.js`, `jsA8E/js/render/gl.js`, `jsA8E/js/core/cpu.js`, `jsA8E/js/core/hostfs.js`, `jsA8E/index.html`
 - Purpose: document browser (`jsA8E/`) debug/diagnostic hooks, error-reporting paths, and current runtime limits.
 - Status: verified on 2026-03-09 (`implemented`, with usability limits below).

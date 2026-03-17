@@ -1,5 +1,7 @@
 # Input and Host/Device Integration
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 - Files: `jsA8E/js/core/input.js`, `jsA8E/js/core/keys.js`, `jsA8E/js/core/hdevice.js`, `jsA8E/js/core/hostfs.js`, `jsA8E/js/core/app_proxy.js`
 - Purpose: map browser input and host file/device interactions into emulator signals.
 - Status: verified on 2026-02-23 (`implemented`).

@@ -1,5 +1,7 @@
 # Atari I/O and System Glue
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 - Files: `A8E/AtariIo.c`, `A8E/AtariIo.h`, `A8E/A8E.c`
 - Purpose: connect chips, run main emulation loop, and handle boot/device I/O flow.
 - Status: verified on 2026-02-23 (`implemented`).

@@ -1,5 +1,7 @@
 # A8E (Atari 800 XL Emulator)
 
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+
 <img src="jsA8E/a8e.webp" alt="A8E Logo" width="800">
 
 Atari 800 XL emulator with two implementations in this repository:
@@ -15,6 +17,13 @@ The original codebase is by Sascha Springer (2004). Each subproject has its own 
 |-----------|-------------|
 | `A8E/` | [Native C/SDL code and CMake project](A8E/README.md) |
 | `jsA8E/` | [Browser app (`index.html` + JavaScript modules + shaders)](jsA8E/README.md) |
+
+## Hardware Reference
+
+For hardware behavior and register-level details, use the local [AHRM index](AHRM/index.md), based on the Altirra Hardware Reference Manual.
+
+Special thanks to Avery Lee for creating the Altirra Hardware Reference Manual:
+https://www.virtualdub.org/downloads/Altirra%20Hardware%20Reference%20Manual.pdf
 
 ## Current Emulation Status
 
