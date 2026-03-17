@@ -24,7 +24,7 @@ For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomati
 | `artifactSchemaVersion` | Current artifact/failure bundle schema version string. |
 | `whenReady()` | Resolves with the API once `ui.js` has attached a live app instance. |
 | `getCapabilities()` | Returns feature flags and version fields for runtime discovery. |
-| `getSystemState(options)` | Returns a structured machine summary; accepts `timeoutMs`. |
+| `getSystemState(options)` | Returns a structured machine summary; accepts `timeoutMs`. Includes current PC, registers, banking state, and media status. |
 | `attach(opts)` | Advanced/internal helper used by the UI bootstrap. |
 | `detach()` | Detaches the live app and resets `whenReady()`. |
 | `getApp()` | Low-level escape hatch; most consumers should not need it. |
@@ -46,6 +46,7 @@ For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomati
 - media state: `media.deviceSlots`
 - HostFS summary: `hostfs.available`, `hostfs.fileCount`
 - debug state: `consoleKeys`, `counters`, `debugState`, `bankState`, `lastBuild`
+  - `debugState`: contains `pc`, `a`, `x`, `y`, `sp`, `p`, `cycleCounter`, and `instructionCounter`.
 - partial-read diagnostics: `error.code = "system_state_partial"` plus structured per-part failures when one backend read times out
 
 ## Domain API
@@ -63,7 +64,7 @@ For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomati
 | `reload(options)` | Reloads the page using the shared cache-control URL logic. |
 | `dispose()` | Disposes the app and detaches the automation facade. |
 | `waitForPause(options)` | Waits for a pause event. Supports `reason`, `timeoutMs`, and `immediate`. |
-| `waitForTime(options)` | Waits by real time or emulated time. Use `clock: "real"` or `clock: "emulated"`. |
+| `waitForTime(options)` | Waits by real time or emulated time. Use `clock: "real"` (wall clock) or `clock: "emulated"` (tied to 6502 cycles). **Note:** `real` is recommended when `turbo` is enabled or if the CPU might be in a tight loop. |
 | `waitForFrames(options)` | Waits for `count` frames using cycle-counter progress. |
 | `waitForCycles(options)` | Waits for `count` emulated CPU cycles. |
 | `getSystemState(options)` | Same as the root method. |
@@ -122,9 +123,17 @@ All URL loaders share the same fetch controls:
 | `getConsoleKeyState()` | Same console-key helper exposed in `input.*`. |
 | `getTraceTail(limit)` | Returns the most recent trace entries. |
 | `readMemory(address)` | Reads one byte from memory. |
-| `readRange(start, length, options)` | Reads a byte range; use `format: "hex"` for a hex string. |
+| `readRange(start, length, options)` | Reads a byte range; returns a `Uint8Array` by default. Use `format: "hex"` for a hex string. Highly efficient for dumping large structures like Display Lists or fonts. |
 | `getSourceContext(options)` | Returns mapped source lines around the current or requested PC from the last successful build. |
 | `disassemble(options)` | Returns structured disassembly around the current or requested PC. |
+
+The `disassemble(options)` result contains:
+- `pc`: The starting address.
+- `instructions`: An array of instruction objects, each containing:
+  - `address`: The memory address of the instruction.
+  - `text`: The formatted assembly string (e.g., `LDA #$01`).
+  - `bytes`: An array of the raw instruction bytes.
+  - `mnemonic`, `mode`, `size`, `cycles`.
 
 ### `dev.*`
 
@@ -148,17 +157,28 @@ All URL loaders share the same fetch controls:
 Important `runXex(...)` options:
 
 - input source: `hostFile`, `build`, `bytes`, `base64`, `buffer`, `data`
-- launch config: `name`, `slot`, `reset`, `start`, `awaitEntry`
+- launch config: `name`, `slot`, `reset`, `start`
+- `awaitEntry` (Boolean): Defaults to `true`. If `true`, the API waits until the XEX entry point (or `RUNAD`) is reached before resolving. Set to `false` for programs that have complex loaders or stay in `INITAD` routines for a long time.
 - reset/banking: `resetOptions`, top-level `portB`
 - entry handling: `entryPc`, `expectedEntryPc`
-- boot guards: `maxBootInstructions`, `maxBootCycles`, `detectTightLoop`, `tightLoopWindow`, `tightLoopMinInstructions`, `tightLoopUniquePcLimit`
+- boot guards: Controls for the `awaitEntry` phase.
+  - `maxBootInstructions` (Number): Maximum instructions to execute during boot (default 500,000).
+  - `maxBootCycles` (Number): Maximum cycles to execute during boot (default 4,000,000).
+  - `detectTightLoop` (Boolean): If true, aborts if a tight loop is detected (default true).
+  - `tightLoopWindow`, `tightLoopMinInstructions`, `tightLoopUniquePcLimit`
 - misc: `saveHostFile`, `sourceUrl`
 
 ### `artifacts.*`
 
 | Method | Purpose / key options |
 |---|---|
-| `captureScreenshot(options)` | Returns a PNG screenshot. Default payload is base64; use `encoding: "bytes"` for byte arrays. |
+| `captureScreenshot(options)` | Returns a PNG screenshot. |
+
+`captureScreenshot(options)` returns:
+- `mimeType`: "image/png"
+- `width`, `height`: Image dimensions.
+- `base64`: The PNG data as a base64 string (default).
+- `bytes`: The raw PNG data as a `Uint8Array` (if `encoding: "bytes"` is passed). **Node.js Note:** Use `Buffer.from(result.bytes)` to convert this for `fs.writeFileSync`.
 | `collectArtifacts(options)` | Captures a schema-versioned artifact bundle with debug state, counters, trace, media state, and optional extras. |
 | `captureFailureState(options)` | Captures a schema-versioned failure bundle with the same base artifact data plus failure metadata. |
 
@@ -266,3 +286,25 @@ await api.dev.writeHostFile("TEST.TXT", { text: "hello" });
 const file = await api.dev.readHostFile("TEST.TXT", { encoding: "text" });
 await api.dev.renameHostFile("TEST.TXT", "HELLO.TXT");
 ```
+
+## Troubleshooting
+
+### Blank Screenshots or Background-Only Output
+
+If `captureScreenshot()` returns an image that only shows the background color:
+
+1.  **Check DMACTL**: Use `await api.debug.readMemory(0xD400)` to ensure DMA is enabled (should be non-zero, usually `$22` or `$3E`).
+2.  **Check SDLIST**: Ensure the shadow Display List pointer at `$230/$231` is valid.
+    ```js
+    const sdlists = await api.debug.readRange(0x230, 2);
+    const sdlist = sdlists[0] | (sdlists[1] << 8);
+    ```
+3.  **Wait for VBL**: Many Atari programs wait for the Real Time Clock at `$14` to increment before they start rendering. Use `await api.system.waitForTime({ ms: 1000, clock: "real" })` to allow several vertical blanks to pass.
+
+### XEX Fails to Boot or Timeouts
+
+If `runXex(...)` times out:
+
+1.  **Disable Entry Wait**: Set `awaitEntry: false` to return immediately after triggering the load, then use `waitForTime` or `waitForPc` to monitor progress manually.
+2.  **Increase Limits**: If the program is just slow to initialize, increase `maxBootInstructions` and `maxBootCycles`.
+3.  **Monitor PC**: Use a loop with `getSystemState()` and `disassemble()` to see if the CPU is stuck in a loop or executing expected code.
