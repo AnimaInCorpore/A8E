@@ -250,6 +250,7 @@
       // Upload indexed framebuffer.
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, indexTex);
+      const srcPixels = video.presentPixels || video.pixels;
       if (gl2)
         {gl.texSubImage2D(
           gl.TEXTURE_2D,
@@ -260,7 +261,7 @@
           texH,
           gl.RED,
           gl.UNSIGNED_BYTE,
-          video.pixels,
+          srcPixels,
         );}
       else
         {gl.texSubImage2D(
@@ -272,7 +273,7 @@
           texH,
           gl.LUMINANCE,
           gl.UNSIGNED_BYTE,
-          video.pixels,
+          srcPixels,
         );}
 
       // Pass 1: index + palette -> scene texture (at internal sceneScaleX/sceneScaleY resolution).

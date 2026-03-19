@@ -678,6 +678,7 @@
       isReady: isReady,
       start: start,
       afterStep: function (reason) {
+        publishVideoFrame();
         paint();
         updateDebug(reason || "step");
       },
@@ -782,6 +783,10 @@
 
     function hardReset(options) {
       memoryHardReset(options || null);
+      video.pixels.fill(0);
+      video.priority.fill(0);
+      if (video.presentPixels) video.presentPixels.fill(0);
+      if (video.presentPriority) video.presentPriority.fill(0);
       debugRuntime.resetExecutionState();
       if (hDevice) {
         hDevice.resetChannels();
@@ -845,6 +850,15 @@
       renderer.paint(video);
     }
 
+    function publishVideoFrame() {
+      if (video.presentPixels && video.presentPixels !== video.pixels) {
+        video.presentPixels.set(video.pixels);
+      }
+      if (video.presentPriority && video.presentPriority !== video.priority) {
+        video.presentPriority.set(video.priority);
+      }
+    }
+
     function getRendererBackend() {
       return renderer && renderer.backend ? renderer.backend : "unknown";
     }
@@ -882,6 +896,10 @@
       return {
         pixels: new Uint8Array(video.pixels),
         priority: new Uint16Array(video.priority),
+        presentPixels: new Uint8Array(video.presentPixels || video.pixels),
+        presentPriority: new Uint16Array(
+          video.presentPriority || video.priority,
+        ),
         playfieldScratchPixels: new Uint8Array(video.playfieldScratchPixels),
         playfieldScratchPriority: new Uint16Array(video.playfieldScratchPriority),
       };
@@ -922,6 +940,8 @@
 
       video.pixels.fill(0);
       video.priority.fill(0);
+      if (video.presentPixels) video.presentPixels.fill(0);
+      if (video.presentPriority) video.presentPriority.fill(0);
       video.playfieldScratchPixels.fill(0);
       video.playfieldScratchPriority.fill(0);
       if (state.pixels) {
@@ -932,6 +952,25 @@
       }
       if (state.priority) {
         restorePriorityBuffer(video.priority, state.priority);
+      }
+      if (state.presentPixels && video.presentPixels) {
+        video.presentPixels.set(
+          new Uint8Array(state.presentPixels).subarray(
+            0,
+            video.presentPixels.length,
+          ),
+          0,
+        );
+      } else if (state.pixels && video.presentPixels) {
+        video.presentPixels.set(
+          new Uint8Array(state.pixels).subarray(0, video.presentPixels.length),
+          0,
+        );
+      }
+      if (state.presentPriority && video.presentPriority) {
+        restorePriorityBuffer(video.presentPriority, state.presentPriority);
+      } else if (state.priority && video.presentPriority) {
+        restorePriorityBuffer(video.presentPriority, state.priority);
       }
       if (state.playfieldScratchPixels) {
         video.playfieldScratchPixels.set(
@@ -1051,6 +1090,7 @@
 
       machine.frameCycleAccum =
         (frameRemainder + executed) % CYCLES_PER_FRAME;
+      publishVideoFrame();
       paint();
       updateDebug("snapshot_save");
       return {
@@ -1176,6 +1216,7 @@
       if (machine.audioCtx) {
         stopAudio();
       }
+      publishVideoFrame();
       paint();
       updateDebug("snapshot_load");
       const resume =
@@ -1441,6 +1482,7 @@
             debugRuntime.onExecutionError(err);
           }
           pauseInternal("fault_execution_error");
+          publishVideoFrame();
           paint();
           updateDebug("fault_execution_error");
           faulted = true;
@@ -1464,6 +1506,7 @@
       }
 
       if (completedFrames > 0 && !faulted) {
+        publishVideoFrame();
         if (!skipRendering) paint();
         updateDebug("frame");
       }
@@ -1529,6 +1572,7 @@
       if (!isReady()) return;
       debugRuntime.resetExecutionState();
       hardResetWithInputRelease(options || null);
+      publishVideoFrame();
       if (!skipRendering) paint();
       updateDebug("reset");
     }
@@ -1588,6 +1632,7 @@
       return machine.basicRomLoaded;
     }
     // Initial paint (black).
+    publishVideoFrame();
     paint();
     updateDebug("init");
 

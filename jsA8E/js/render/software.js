@@ -33,6 +33,8 @@
       return {
         pixels: new Uint8Array(PIXELS_PER_LINE * LINES_PER_SCREEN_PAL),
         priority: new Uint16Array(PIXELS_PER_LINE * LINES_PER_SCREEN_PAL),
+        presentPixels: new Uint8Array(PIXELS_PER_LINE * LINES_PER_SCREEN_PAL),
+        presentPriority: new Uint16Array(PIXELS_PER_LINE * LINES_PER_SCREEN_PAL),
         playfieldScratchPixels: new Uint8Array(
           PLAYFIELD_SCRATCH_WIDTH * LINES_PER_SCREEN_PAL,
         ),
@@ -52,7 +54,7 @@
         VIEW_W * VIEW_H,
       );
       const pal32 = video.paletteRgba32;
-      const srcPixels = video.pixels;
+      const srcPixels = video.presentPixels || video.pixels;
 
       let dstIdx = 0;
       for (let y = 0; y < VIEW_H; y++) {
