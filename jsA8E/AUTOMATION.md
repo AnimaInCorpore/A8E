@@ -30,7 +30,32 @@ For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomati
 | `attach(opts)` | Advanced/internal helper used by the UI bootstrap. |
 | `detach()` | Detaches the live app and resets `whenReady()`. |
 | `getApp()` | Low-level escape hatch; most consumers should not need it. |
+| `sym(name, fallback?)` | **Synchronous.** Returns the address of a symbol from the last successful build, or `fallback` (default `null`) if not found. Also on `api.debug.sym` and `api.dev.sym`. |
+| `peek(address)` | Single-byte read shorthand for `readMemory(address)`. Also on `api.debug.peek`. |
+| `poke(address, value)` | Single-byte write shorthand for `writeMemory(address, value)`. Also on `api.debug.poke`. |
+| `buildAndRun(source, options)` | Assembles source and immediately runs the resulting XEX. Same as `api.dev.buildAndRun`. |
 | `events` | Event subscription helpers (`subscribe`, `unsubscribe`). |
+
+## Duration Arguments
+
+Many methods accept duration arguments (`ms`, `holdMs`, `afterMs`, `interKeyDelayMs`, `count`, `maxBootCycles`, etc.). All of these accept either a plain number or a string with a unit suffix.
+
+**Cycle-based durations** (`waitForCycles`, `maxBootCycles`, `count` in `waitForFrames`):
+
+| String form | Meaning |
+|---|---|
+| `1000` or `"1000"` or `"1000cycles"` | 1000 CPU cycles |
+| `"10ms"` | 10 milliseconds of emulated time |
+| `"2s"` | 2 seconds of emulated time |
+| `"3frames"` | 3 PAL frames |
+
+**Millisecond-based durations** (`holdMs`, `afterMs`, `interKeyDelayMs`, `ms` in `waitForTime`):
+
+| String form | Meaning |
+|---|---|
+| `500` or `"500"` or `"500ms"` | 500 milliseconds |
+| `"2s"` | 2 seconds |
+| `"1000us"` | 1000 microseconds (1 ms) |
 
 ## Capabilities and System State
 
@@ -69,9 +94,9 @@ For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomati
 | `reload(options)` | Reloads the page using the shared cache-control URL logic. |
 | `dispose()` | Disposes the app and detaches the automation facade. |
 | `waitForPause(options)` | Waits for a pause event. Supports `reason`, `timeoutMs`, and `immediate`. |
-| `waitForTime(options)` | Waits by real time or emulated time. Provide `ms`, and use `clock: "real"` (wall clock) or `clock: "emulated"` (tied to 6502 cycles). **Note:** `real` is recommended when `turbo` is enabled or if the CPU might be in a tight loop. |
-| `waitForFrames(options)` | Waits for `count` frames using cycle-counter progress. |
-| `waitForCycles(options)` | Waits for `count` emulated CPU cycles. |
+| `waitForTime(msOrOptions)` | Waits by real or emulated time. Pass a bare number/string (`500`, `"500ms"`, `"2s"`) or `{ ms, clock, timeoutMs }`. Use `clock: "emulated"` for emulated-time waits; default is `"real"`. Real-time waits are the safer choice when `turbo` is enabled or the CPU may be in a tight loop. |
+| `waitForFrames(countOrOptions)` | Waits for N PAL frames using cycle-counter progress. Pass a bare frame count or `{ count, timeoutMs }`. |
+| `waitForCycles(countOrOptions)` | Waits for N emulated CPU cycles. Pass a bare number, a unit string (`"10ms"`, `"3frames"`), or `{ count, timeoutMs }`. |
 | `getSystemState(options)` | Same as the root method. |
 
 ### `media.*`
@@ -103,19 +128,19 @@ All URL loaders share the same fetch controls:
 | `focusDisplay()` | Focuses the emulator display/canvas when possible. |
 | `keyDown(eventLike)` | Sends a key-down event to the emulator input path. |
 | `keyUp(eventLike)` | Sends a key-up event to the emulator input path. |
-| `tapKey(eventLike, options)` | Convenience key press with optional `holdMs` and `afterMs`. |
-| `typeText(text, options)` | Types text through repeated key events. Supports `interKeyDelayMs`. |
+| `tapKey(eventLike, options)` | Convenience key press. `holdMs` and `afterMs` accept plain numbers or time strings (`"50ms"`, `"1s"`). |
+| `typeText(text, options)` | Types text through repeated key events. `interKeyDelayMs` accepts plain numbers or time strings. |
 | `setJoystick(state)` | Sets joystick directions and trigger using `{ up, down, left, right, trigger }`. |
 | `getConsoleKeyState()` | Reads current console-key state as `{ raw, option, select, start }`. |
 | `setConsoleKeys(state)` | Sets console keys using `{ option, select, start }`. |
-| `pressConsoleKey(key, options)` | Presses one console key with optional `holdMs`, `release`, and `afterMs`. |
+| `pressConsoleKey(key, options)` | Presses one console key (`"option"`, `"select"`, `"start"`). `holdMs` and `afterMs` accept time strings. `release` defaults to `true`. |
 | `releaseAllInputs()` | Releases all pressed keys/inputs. |
 
 ### `debug.*`
 
 | Method | Purpose / key options |
 |---|---|
-| `setBreakpoints(addresses)` | Replaces the active breakpoint set. |
+| `setBreakpoints(addresses)` | Replaces the active breakpoint set. Accepts a single address number or an array of addresses. |
 | `stepInstruction()` | Executes one instruction in paused mode. |
 | `stepOver()` | Steps over a subroutine call in paused mode. |
 | `runUntilPc(targetPc, options)` | Runs until a PC address is reached or a stop condition occurs. |
@@ -134,27 +159,29 @@ All URL loaders share the same fetch controls:
 | `writeMemory(address, value)` | Writes one byte to memory and returns the written value. |
 | `writeRange(start, data)` | Writes a byte range from `ArrayBuffer`/typed array/byte array input. |
 | `writeWord(address, value, options)` | Writes a 16-bit value. Default is little-endian; pass `{ littleEndian: false }` for big-endian. |
-| `waitForMemory(options)` | Polls memory until a masked value match is observed. |
+| `waitForMemory(addressOrOptions, value?, options?)` | Polls memory until a condition is met. Accepts object form or positional `(address, value, options?)`. Supports `predicate` for custom match logic. |
 | `getSourceContext(options)` | Returns mapped source lines around the current or requested PC from the last successful build. |
 | `disassemble(options)` | Returns structured disassembly around the current or requested PC. |
+| `sym(name, fallback?)` | **Synchronous.** Symbol address lookup from the last build. |
+| `peek(address)` | Single-byte read shorthand for `readMemory`. |
+| `poke(address, value)` | Single-byte write shorthand for `writeMemory`. |
 
 The `disassemble(options)` result contains:
 - `pc`: The starting address.
-- `instructions`: An array of instruction objects, each containing:
-  - `address`: The memory address of the instruction.
-  - `text`: The formatted assembly string (e.g., `LDA #$01`).
-  - `bytes`: An array of the raw instruction bytes.
-  - `mnemonic`, `mode`, `size`, `cycles`.
+- `instructions`: An array of instruction objects, each containing `address`, `text`, `bytes`, `mnemonic`, `mode`, `size`, and `cycles`.
 
-`waitForMemory(options)` accepts:
+`waitForMemory(addressOrOptions, value?, options?)` accepts:
 
-- `address` (required)
-- `value` (expected value, default `0`)
-- `mask` (default `0xFF` for byte mode, `0xFFFF` for word mode)
-- `size` (`1` or `2`, default `1`; `2` uses 16-bit reads)
-- `littleEndian` (for `size: 2`, default `true`)
-- `pollIntervalMs` (default `20`)
-- `timeoutMs` (optional)
+- `address` (required in object form)
+- `value` (expected value, default `0`; ignored when `predicate` is set)
+- `mask` (default `0xFF` byte / `0xFFFF` word; ignored when `predicate` is set)
+- `predicate` — `(currentValue) => boolean`; when provided, `value` and `mask` are ignored and the result omits `expected`/`mask`
+- `size` — `1` (default) or `2` for 16-bit reads
+- `littleEndian` — for `size: 2`, default `true`
+- `pollIntervalMs` — default `20`
+- `timeoutMs` — optional; on timeout returns a failure artifact bundle rather than throwing
+
+Positional shorthand: `waitForMemory(address, value, options?)` is equivalent to `waitForMemory({ address, value, ...options })`.
 
 ### `dev.*`
 
@@ -174,6 +201,8 @@ The `disassemble(options)` result contains:
 | `getLastBuildResult(options)` | Returns the normalized last build record. |
 | `runXex(spec)` | Launches a XEX from `hostFile`, `build`, raw bytes, or the last successful build. Supports reset/entry-wait/boot-limit options. |
 | `runXexFromUrl(url, options)` | Fetches a XEX from a URL, then routes through `runXex(...)`. |
+| `buildAndRun(source, options)` | Assembles source (same forms as `assembleSource`) and immediately runs the resulting XEX. Throws with a structured error (`code: "assemble_failed"`) if assembly fails. All `runXex` options are accepted and merged via `options`. |
+| `sym(name, fallback?)` | **Synchronous.** Symbol address lookup from the last build. |
 
 Important `runXex(...)` options:
 
@@ -182,11 +211,7 @@ Important `runXex(...)` options:
 - `awaitEntry` (Boolean): Defaults to `true`. If `true`, the API waits until the XEX entry point (or `RUNAD`) is reached before resolving. Set to `false` for programs that have complex loaders or stay in `INITAD` routines for a long time.
 - reset/banking: `resetOptions`, top-level `portB`
 - entry handling: `entryPc`, `expectedEntryPc`
-- boot guards: Controls for the `awaitEntry` phase.
-  - `maxBootInstructions` (Number): Maximum instructions to execute during boot (default 500,000).
-  - `maxBootCycles` (Number): Maximum cycles to execute during boot (default 4,000,000).
-  - `detectTightLoop` (Boolean): If true, aborts if a tight loop is detected (default true).
-  - `tightLoopWindow`, `tightLoopMinInstructions`, `tightLoopUniquePcLimit`
+- boot guards: Controls for the `awaitEntry` phase. `maxBootInstructions`, `maxBootCycles` (accepts unit strings, e.g. `"2s"`, `"50frames"`), `detectTightLoop`, `tightLoopWindow`, `tightLoopMinInstructions`, `tightLoopUniquePcLimit`
 - misc: `saveHostFile`, `sourceUrl`
 
 ### `artifacts.*`
@@ -231,15 +256,18 @@ Current event types:
 
 ## Flat Compatibility Aliases
 
-The grouped domains are the preferred contract, but the root object still exposes compatibility aliases for older scripts (for example `api.start()`, `api.readWord()`, `api.captureScreenshot()`, and `api.releaseAllKeys()`).
+The grouped domains are the preferred contract, but the root object still exposes compatibility aliases for older scripts (for example `api.start()`, `api.readWord()`, `api.captureScreenshot()`, and `api.releaseAllKeys()`). The convenience methods `sym`, `peek`, `poke`, and `buildAndRun` are also present at the root.
 
 ## Result Notes
 
 - `captureScreenshot()` returns `{ mimeType, width, height, base64 }` by default, or `{ ..., bytes }` with `encoding: "bytes"`.
 - `saveSnapshot()` returns `{ type, version, mimeType, savedAt, savedRunning, byteLength, buffer, bytes, timing }`.
 - Successful build results include `ok`, `format`, `sourceName`, `timestamp`, `byteLength`, `runAddr`, `symbols`, line/address maps, and output bytes or base64.
+- `sym(name)` is synchronous and reads directly from the in-memory last-build record — no `await` needed.
+- `waitForMemory` with `predicate` omits `expected` and `mask` from success and failure results.
 - Wait helpers and XEX bring-up failures can return failure artifacts instead of throwing generic timeout strings.
 - `runXex(...)` reports structured XEX preflight and boot failures, including `xexPreflight`, `xexLaunch`, `bootDiagnostics`, and schema-versioned artifact data.
+- `buildAndRun(...)` throws an automation error (`code: "assemble_failed"`, `details.errors`) rather than returning a failed build object.
 
 ## Pause and Fault Semantics
 
@@ -270,7 +298,39 @@ await api.media.loadBasicRomFromUrl("/roms/ATARIBAS.ROM", {
 await api.system.boot();
 ```
 
-### Assemble, run, and inspect
+### Assemble, run, and inspect (short form)
+
+```js
+const api = await window.A8EAutomation.whenReady();
+
+const src = `
+  .ORG $2000
+  RESULT = $0600
+START:
+  LDA #42
+  STA RESULT
+  JMP START
+  .RUN START
+`;
+
+// Build and launch in one call — throws on assembly error
+await api.dev.buildAndRun(src);
+
+// sym() is synchronous: no await needed
+const resultAddr = api.sym("RESULT");  // → 0x0600
+
+// Wait with a predicate (any non-zero value)
+await api.debug.waitForMemory({ address: resultAddr, predicate: v => v !== 0, timeoutMs: 3000 });
+
+// Or positional shorthand: waitForMemory(address, expectedValue, options?)
+await api.debug.waitForMemory(resultAddr, 42, { timeoutMs: 3000 });
+
+// Single-byte read/write shorthands
+const val = await api.peek(resultAddr);
+await api.poke(resultAddr, 0);
+```
+
+### Assemble, run, and inspect (full form)
 
 ```js
 const api = await window.A8EAutomation.whenReady();
@@ -280,7 +340,8 @@ const build = await api.dev.assembleSource({
   text: ".ORG $2000\nSTART: JMP START\n.RUN START\n",
 });
 
-await api.debug.setBreakpoints([0x2000]);
+// setBreakpoints accepts a bare address or an array
+await api.debug.setBreakpoints(0x2000);
 await api.dev.runXex({ build });
 const stop = await api.debug.waitForBreakpoint({ timeoutMs: 5000 });
 
@@ -291,6 +352,25 @@ const disassembly = await api.debug.disassemble({
   beforeInstructions: 8,
   afterInstructions: 8,
 });
+```
+
+### Wait helpers with duration strings
+
+```js
+// Real-time waits
+await api.system.waitForTime("500ms");
+await api.system.waitForTime("2s");
+
+// Emulated-time waits
+await api.system.waitForTime({ ms: "500ms", clock: "emulated" });
+await api.system.waitForFrames(3);
+await api.system.waitForCycles("10ms");
+await api.system.waitForCycles("2frames");
+
+// Input delays
+await api.input.tapKey("Return", { holdMs: "50ms", afterMs: "100ms" });
+await api.input.typeText("HELLO", { interKeyDelayMs: "80ms" });
+await api.input.pressConsoleKey("start", { holdMs: "200ms" });
 ```
 
 ### Snapshot round-trip

@@ -1268,6 +1268,20 @@
     };
   }
 
+  function sym(name, fallback) {
+    if (!lastBuildRecord || !lastBuildRecord.ok || !lastBuildRecord.result) {
+      return fallback !== undefined ? fallback : null;
+    }
+    const symbols = lastBuildRecord.result.symbols;
+    if (!symbols) return fallback !== undefined ? fallback : null;
+    const key = String(name || "");
+    if (!Object.prototype.hasOwnProperty.call(symbols, key)) {
+      return fallback !== undefined ? fallback : null;
+    }
+    const value = symbols[key];
+    return typeof value === "number" ? clamp16(value) : value;
+  }
+
   function normalizeBuildResult(record, options) {
     if (!record) return null;
     const opts = options || {};
@@ -2542,6 +2556,23 @@
     }));
   }
 
+  async function buildAndRun(source, options) {
+    const build = await assembleSource(source);
+    if (!build || !build.ok) {
+      throw createAutomationError({
+        operation: "buildAndRun",
+        phase: "assemble",
+        code: "assemble_failed",
+        message:
+          "Assembly failed" + (build && build.error ? ": " + String(build.error) : ""),
+        details: {
+          errors: build && Array.isArray(build.errors) ? build.errors : [],
+        },
+      });
+    }
+    return runXex(Object.assign({}, options || {}, { build }));
+  }
+
   async function getSourceContext(options) {
     const record = lastBuildRecord;
     if (
@@ -2896,6 +2927,13 @@
     getSystemState: getSystemState,
     saveSnapshot: saveSnapshot,
     loadSnapshot: loadSnapshot,
+    sym: sym,
+    peek: function (address) {
+      return api.readMemory(address);
+    },
+    poke: function (address, value) {
+      return api.writeMemory(address, value);
+    },
     focusDisplay: function () {
       if (typeof currentFocusCanvas === "function") {
         currentFocusCanvas(true);
@@ -3138,7 +3176,9 @@
     },
     setBreakpoints: async function (addresses) {
       const app = await getApp();
-      const list = Array.isArray(addresses) ? addresses.slice(0) : [];
+      const list = typeof addresses === "number"
+        ? [addresses]
+        : Array.isArray(addresses) ? addresses.slice(0) : [];
       const result =
         typeof app.setBreakpoints === "function" ? app.setBreakpoints(list) : 0;
       return typeof result === "number" ? result : list.length;
@@ -3319,11 +3359,21 @@
         value: word,
       };
     },
-    waitForMemory: async function (options) {
-      const opts = options && typeof options === "object" ? options : {};
+    waitForMemory: async function (addressOrOptions, valueArg, optionsArg) {
+      // Support waitForMemory(address, value, options) positional form
+      const opts =
+        typeof addressOrOptions === "number"
+          ? Object.assign(
+              { address: addressOrOptions, value: valueArg },
+              optionsArg || {},
+            )
+          : addressOrOptions && typeof addressOrOptions === "object"
+            ? addressOrOptions
+            : {};
       const address = clamp16(opts.address);
       const size = normalizeWaitMemorySize(opts.size | 0);
       const mask = size === 2 ? clamp16(opts.mask === undefined ? 0xffff : opts.mask) : clamp8(opts.mask === undefined ? 0xff : opts.mask);
+      const predicate = typeof opts.predicate === "function" ? opts.predicate : null;
       const expectedRaw =
         opts.value !== undefined && opts.value !== null ? opts.value : 0;
       const expected = size === 2 ? clamp16(expectedRaw) : clamp8(expectedRaw);
@@ -3332,15 +3382,18 @@
       const startedAt = Date.now();
       while (true) {
         const currentValue = await readMemorySized(address, size, opts);
-        if (((currentValue & mask) >>> 0) === ((expected & mask) >>> 0)) {
+        const matched = predicate
+          ? !!predicate(currentValue)
+          : ((currentValue & mask) >>> 0) === ((expected & mask) >>> 0);
+        if (matched) {
           return {
             ok: true,
             reason: "memory",
             address: address,
             size: size,
             value: currentValue,
-            expected: expected,
-            mask: mask,
+            expected: predicate ? undefined : expected,
+            mask: predicate ? undefined : mask,
             debugState: await api.getDebugState(),
           };
         }
@@ -3352,8 +3405,8 @@
             timeoutMs: timeoutMs,
             address: address,
             size: size,
-            expected: expected,
-            mask: mask,
+            expected: predicate ? undefined : expected,
+            mask: predicate ? undefined : mask,
             currentValue: currentValue,
           });
         }
@@ -3590,6 +3643,7 @@
     },
     runXexFromUrl: runXexFromUrl,
     runXex: runXex,
+    buildAndRun: buildAndRun,
     events: {
       subscribe: subscribeEvent,
       unsubscribe: unsubscribeEvent,
@@ -3662,6 +3716,9 @@
     waitForMemory: api.waitForMemory,
     getSourceContext: api.getSourceContext,
     disassemble: api.disassemble,
+    sym: api.sym,
+    peek: api.peek,
+    poke: api.poke,
   };
 
   api.dev = {
@@ -3679,6 +3736,8 @@
     getLastBuildResult: api.getLastBuildResult,
     runXexFromUrl: api.runXexFromUrl,
     runXex: api.runXex,
+    buildAndRun: buildAndRun,
+    sym: api.sym,
   };
 
   api.artifacts = {
