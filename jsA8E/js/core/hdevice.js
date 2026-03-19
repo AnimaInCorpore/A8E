@@ -91,6 +91,27 @@
         ram[IOCB_BASE + (x & 0xf0) + offset] = value & 0xff;
       }
 
+      function _writeRam(ctx, addr, value) {
+        const a = addr & 0xffff;
+        const v = value & 0xff;
+        ctx.ram[a] = v;
+        if (ctx && typeof ctx.memoryWriteHook === "function") {
+          try {
+            ctx.memoryWriteHook(
+              a,
+              v,
+              ctx.cycleCounter >>> 0,
+              ctx.instructionCounter >>> 0,
+              ctx.currentInstructionPc & 0xffff,
+              ctx.currentOpcode & 0xff,
+              ctx,
+            );
+          } catch {
+            // ignore hook errors
+          }
+        }
+      }
+
       /**
        * Read a null/EOL-terminated ATASCII string from Atari RAM.
        */
@@ -447,7 +468,7 @@
           const line = ch.dirListing[ch.dirIndex++];
           const count = Math.min(line.length, bufLen || line.length);
           for (let li = 0; li < count; li++) {
-            ctx.ram[(bufAddr + li) & 0xffff] = line[li] & 0xff;
+            _writeRam(ctx, (bufAddr + li) & 0xffff, line[li]);
           }
           _writeIocb(ctx.ram, x, IOCB_ICBLL, count & 0xff);
           _writeIocb(ctx.ram, x, IOCB_ICBLH, (count >> 8) & 0xff);
@@ -468,7 +489,7 @@
         const maxRead = bufLen || 256;
         while (written < maxRead && ch.position < readData.length) {
           const b = readData[ch.position++] & 0xff;
-          ctx.ram[(bufAddr + written) & 0xffff] = b;
+          _writeRam(ctx, (bufAddr + written) & 0xffff, b);
           written++;
           if (b === ATARI_EOL) break;
         }
@@ -507,7 +528,7 @@
         const remaining = readData.length - ch.position;
         const toRead = Math.min(reqLen, remaining);
         for (let ri = 0; ri < toRead; ri++) {
-          ctx.ram[(bufAddr + ri) & 0xffff] = readData[ch.position++] & 0xff;
+          _writeRam(ctx, (bufAddr + ri) & 0xffff, readData[ch.position++] & 0xff);
         }
         _writeIocb(ctx.ram, x, IOCB_ICBLL, toRead & 0xff);
         _writeIocb(ctx.ram, x, IOCB_ICBLH, (toRead >> 8) & 0xff);

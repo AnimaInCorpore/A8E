@@ -94,23 +94,58 @@
       const oldV = sram[IO_PORTB] & 0xff;
       const v = ((value & 0x83) | 0x7c) & 0xff;
 
+      function traceCopy(startAddr, source) {
+        if (!ctx || typeof ctx.memoryWriteHook !== "function") return;
+        const bytes = source instanceof Uint8Array ? source : new Uint8Array(source || 0);
+        for (let i = 0; i < bytes.length; i++) {
+          const addr = (startAddr + i) & 0xffff;
+          try {
+            ctx.memoryWriteHook(
+              addr,
+              bytes[i] & 0xff,
+              ctx.cycleCounter >>> 0,
+              ctx.instructionCounter >>> 0,
+              ctx.currentInstructionPc & 0xffff,
+              ctx.currentOpcode & 0xff,
+              ctx,
+            );
+          } catch {
+            // ignore hook errors
+          }
+        }
+      }
+
       // Bit 0: OS ROM enable (1=ROM, 0=RAM)
       if ((oldV & 0x01) !== (v & 0x01)) {
         if (v & 0x01) {
           // Enable OS ROM at $C000-$CFFF and FP ROM at $D800-$FFFF.
-          sram.set(ram.subarray(0xc000, 0xd000), 0xc000);
+          const osRamShadow = ram.subarray(0xc000, 0xd000);
+          sram.set(osRamShadow, 0xc000);
+          traceCopy(0xc000, osRamShadow);
           CPU.setRom(ctx, 0xc000, 0xcfff);
-          if (io.osRom) ram.set(io.osRom, 0xc000);
+          if (io.osRom) {
+            ram.set(io.osRom, 0xc000);
+            traceCopy(0xc000, io.osRom);
+          }
 
-          sram.set(ram.subarray(0xd800, 0x10000), 0xd800);
+          const fpRamShadow = ram.subarray(0xd800, 0x10000);
+          sram.set(fpRamShadow, 0xd800);
+          traceCopy(0xd800, fpRamShadow);
           CPU.setRom(ctx, 0xd800, 0xffff);
-          if (io.floatingPointRom) ram.set(io.floatingPointRom, 0xd800);
+          if (io.floatingPointRom) {
+            ram.set(io.floatingPointRom, 0xd800);
+            traceCopy(0xd800, io.floatingPointRom);
+          }
         } else {
           // Disable OS ROM.
-          ram.set(sram.subarray(0xc000, 0xd000), 0xc000);
+          const osRamVisible = sram.subarray(0xc000, 0xd000);
+          ram.set(osRamVisible, 0xc000);
+          traceCopy(0xc000, osRamVisible);
           CPU.setRam(ctx, 0xc000, 0xcfff);
 
-          ram.set(sram.subarray(0xd800, 0x10000), 0xd800);
+          const fpRamVisible = sram.subarray(0xd800, 0x10000);
+          ram.set(fpRamVisible, 0xd800);
+          traceCopy(0xd800, fpRamVisible);
           CPU.setRam(ctx, 0xd800, 0xffff);
         }
       }
@@ -118,24 +153,38 @@
       // Bit 1: BASIC ROM disable (1=disabled -> RAM, 0=enabled -> ROM)
       if ((oldV & 0x02) !== (v & 0x02)) {
         if (v & 0x02) {
-          ram.set(sram.subarray(0xa000, 0xc000), 0xa000);
+          const basicRamVisible = sram.subarray(0xa000, 0xc000);
+          ram.set(basicRamVisible, 0xa000);
+          traceCopy(0xa000, basicRamVisible);
           CPU.setRam(ctx, 0xa000, 0xbfff);
         } else {
-          sram.set(ram.subarray(0xa000, 0xc000), 0xa000);
+          const basicRamShadow = ram.subarray(0xa000, 0xc000);
+          sram.set(basicRamShadow, 0xa000);
+          traceCopy(0xa000, basicRamShadow);
           CPU.setRom(ctx, 0xa000, 0xbfff);
-          if (io.basicRom) ram.set(io.basicRom, 0xa000);
+          if (io.basicRom) {
+            ram.set(io.basicRom, 0xa000);
+            traceCopy(0xa000, io.basicRom);
+          }
         }
       }
 
       // Bit 7: Self-test ROM disable (1=disabled -> RAM, 0=enabled -> ROM)
       if ((oldV & 0x80) !== (v & 0x80)) {
         if (v & 0x80) {
-          ram.set(sram.subarray(0x5000, 0x5800), 0x5000);
+          const selfTestRamVisible = sram.subarray(0x5000, 0x5800);
+          ram.set(selfTestRamVisible, 0x5000);
+          traceCopy(0x5000, selfTestRamVisible);
           CPU.setRam(ctx, 0x5000, 0x57ff);
         } else {
-          sram.set(ram.subarray(0x5000, 0x5800), 0x5000);
+          const selfTestRamShadow = ram.subarray(0x5000, 0x5800);
+          sram.set(selfTestRamShadow, 0x5000);
+          traceCopy(0x5000, selfTestRamShadow);
           CPU.setRom(ctx, 0x5000, 0x57ff);
-          if (io.selfTestRom) ram.set(io.selfTestRom, 0x5000);
+          if (io.selfTestRom) {
+            ram.set(io.selfTestRom, 0x5000);
+            traceCopy(0x5000, io.selfTestRom);
+          }
         }
       }
 
