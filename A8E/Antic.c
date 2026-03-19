@@ -196,18 +196,29 @@ u8 *Antic_WSYNC(_6502_Context_t *pContext, u8 *pValue)
 
 	if(pValue)
 	{
-		u64 llNextLineCycle = pIoData->llDisplayListFetchCycle;
+		u64 llLineStartCycle = pIoData->llDisplayListFetchCycle;
+		u64 llTargetCycle;
 
-		/* Be robust if timing state is temporarily out-of-sync: WSYNC waits
-		 * for the next scanline boundary (end of current scanline).
+		/* AHRM 4.9:
+		 * - writes through cycle 103 wait for cycle 105 on current line
+		 * - writes on cycle 104+ wait for cycle 105 on next line
+		 * Keep a robust fallback when line state is temporarily out-of-sync.
 		 */
-		if(llNextLineCycle <= pContext->llCycleCounter)
+		if(llLineStartCycle > pContext->llCycleCounter ||
+		   pContext->llCycleCounter >= llLineStartCycle + CYCLES_PER_LINE)
 		{
-			llNextLineCycle = ((pContext->llCycleCounter / CYCLES_PER_LINE) + 1) * CYCLES_PER_LINE;
+			llLineStartCycle =
+				(pContext->llCycleCounter / CYCLES_PER_LINE) * CYCLES_PER_LINE;
+		}
+
+		llTargetCycle = llLineStartCycle + 105u;
+		if(pContext->llCycleCounter >= llLineStartCycle + 104u)
+		{
+			llTargetCycle += CYCLES_PER_LINE;
 		}
 
 		pContext->llStallCycleCounter =
-			MAX(llNextLineCycle, pContext->llStallCycleCounter);
+			MAX(llTargetCycle, pContext->llStallCycleCounter);
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" WSYNC: %02X\n", *pValue);

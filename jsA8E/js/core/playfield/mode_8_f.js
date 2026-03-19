@@ -14,6 +14,11 @@
     const PRIO_PF0 = cfg.PRIO_PF0;
     const PRIO_PF1 = cfg.PRIO_PF1;
     const PRIO_PF2 = cfg.PRIO_PF2;
+    const PRIO_PF3 = cfg.PRIO_PF3;
+    const PRIO_M10_PM0 = cfg.PRIO_M10_PM0;
+    const PRIO_M10_PM1 = cfg.PRIO_M10_PM1;
+    const PRIO_M10_PM2 = cfg.PRIO_M10_PM2;
+    const PRIO_M10_PM3 = cfg.PRIO_M10_PM3;
 
     const SCRATCH_GTIA_COLOR_TABLE = cfg.SCRATCH_GTIA_COLOR_TABLE;
     const SCRATCH_COLOR_TABLE_A = cfg.SCRATCH_COLOR_TABLE_A;
@@ -23,6 +28,9 @@
     const PRIORITY_TABLE_BKG_PF012 = cfg.PRIORITY_TABLE_BKG_PF012;
 
     const clockAction = cfg.clockAction;
+    const stealDma = cfg.stealDma || function (ctx, cycles) {
+      ctx.cycleCounter += cycles | 0;
+    };
 
     function drawLineMode8(ctx) {
       const io = ctx.ioData;
@@ -46,7 +54,7 @@
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           if (io.firstRowScanline) {
-            ctx.cycleCounter++;
+            stealDma(ctx, 1);
           }
           phase = 0;
         }
@@ -88,7 +96,7 @@
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           if (io.firstRowScanline) {
-            ctx.cycleCounter++;
+            stealDma(ctx, 1);
           }
           mask = 0x80;
         }
@@ -133,7 +141,7 @@
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           if (io.firstRowScanline) {
-            ctx.cycleCounter++;
+            stealDma(ctx, 1);
           }
           phase = 0;
         }
@@ -179,7 +187,7 @@
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           if (io.firstRowScanline) {
-            ctx.cycleCounter++;
+            stealDma(ctx, 1);
           }
           mask = 0x80;
         }
@@ -233,7 +241,7 @@
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           if (io.firstRowScanline) {
-            ctx.cycleCounter++;
+            stealDma(ctx, 1);
           }
           phase = 0;
         }
@@ -290,7 +298,7 @@
         if (mask === 0x00) {
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          ctx.cycleCounter++;
+          stealDma(ctx, 1);
           mask = 0x80;
         }
 
@@ -327,19 +335,29 @@
           }
           mask >>= 4;
         } else if (priorMode === 2) {
+          const m10prio = [
+            PRIO_M10_PM0, PRIO_M10_PM1, PRIO_M10_PM2, PRIO_M10_PM3,
+            PRIO_PF0, PRIO_PF1, PRIO_PF2, PRIO_PF3,
+            PRIO_BKG, PRIO_BKG, PRIO_BKG, PRIO_BKG,
+            PRIO_PF0, PRIO_PF1, PRIO_PF2, PRIO_PF3
+          ];
           fillGtiaColorTable(sram, colorTable);
           if (mask > 0x08) {
-            const hi2 = colorTable[data >> 4] & 0xff;
-            dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
+            const hi_i = data >> 4;
+            const hi2 = colorTable[hi_i] & 0xff;
+            const p2 = m10prio[hi_i];
+            dst[dstIndex] = hi2; prio[dstIndex++] = p2;
+            dst[dstIndex] = hi2; prio[dstIndex++] = p2;
+            dst[dstIndex] = hi2; prio[dstIndex++] = p2;
+            dst[dstIndex] = hi2; prio[dstIndex++] = p2;
           } else {
-            const lo2 = colorTable[data & 0x0f] & 0xff;
-            dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
+            const lo_i = data & 0x0f;
+            const lo2 = colorTable[lo_i] & 0xff;
+            const p2 = m10prio[lo_i];
+            dst[dstIndex] = lo2; prio[dstIndex++] = p2;
+            dst[dstIndex] = lo2; prio[dstIndex++] = p2;
+            dst[dstIndex] = lo2; prio[dstIndex++] = p2;
+            dst[dstIndex] = lo2; prio[dstIndex++] = p2;
           }
           mask >>= 4;
         } else {

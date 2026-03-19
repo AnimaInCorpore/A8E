@@ -32,11 +32,11 @@
       const palette = Palette.createAtariPaletteRgb();
       return {
         pixels: new Uint8Array(PIXELS_PER_LINE * LINES_PER_SCREEN_PAL),
-        priority: new Uint8Array(PIXELS_PER_LINE * LINES_PER_SCREEN_PAL),
+        priority: new Uint16Array(PIXELS_PER_LINE * LINES_PER_SCREEN_PAL),
         playfieldScratchPixels: new Uint8Array(
           PLAYFIELD_SCRATCH_WIDTH * LINES_PER_SCREEN_PAL,
         ),
-        playfieldScratchPriority: new Uint8Array(
+        playfieldScratchPriority: new Uint16Array(
           PLAYFIELD_SCRATCH_WIDTH * LINES_PER_SCREEN_PAL,
         ),
         playfieldScratchWidth: PLAYFIELD_SCRATCH_WIDTH,
@@ -74,7 +74,7 @@
         return;
       }
       const pr = video.priority;
-      const p = priority & 0xff;
+      const p = priority & 0xffff;
       for (let j = 0; j < w; j++) {
         pixels[base + j] = c;
         pr[base + j] = p;

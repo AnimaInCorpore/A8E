@@ -38,10 +38,15 @@
     const PRIO_PF1 = cfg.PRIO_PF1;
     const PRIO_PF2 = cfg.PRIO_PF2;
     const PRIO_PF3 = cfg.PRIO_PF3;
+    const PRIO_BKG = cfg.PRIO_BKG;
     const PRIO_PM0 = cfg.PRIO_PM0;
     const PRIO_PM1 = cfg.PRIO_PM1;
     const PRIO_PM2 = cfg.PRIO_PM2;
     const PRIO_PM3 = cfg.PRIO_PM3;
+    const PRIO_M10_PM0 = cfg.PRIO_M10_PM0;
+    const PRIO_M10_PM1 = cfg.PRIO_M10_PM1;
+    const PRIO_M10_PM2 = cfg.PRIO_M10_PM2;
+    const PRIO_M10_PM3 = cfg.PRIO_M10_PM3;
 
     function drawPlayer(
       color,
@@ -59,9 +64,9 @@
       let collision = 0;
       let step;
       const cColor = color & 0xff;
-      const cPriorityMask = priorityMask & 0xff;
-      const cPriorityBit = priorityBit & 0xff;
-      const cOverlap = overlap & 0xff;
+      const cPriorityMask = priorityMask & 0xffff;
+      const cPriorityBit = priorityBit & 0xffff;
+      const cOverlap = overlap & 0xffff;
 
       if ((size & 0x03 & 0xff) === 0x01) step = 4;
       else if ((size & 0x03 & 0xff) === 0x03) step = 8;
@@ -72,7 +77,7 @@
         if (data & mask) {
           for (let o = 0; o < step; o++) {
             const pi = (idx + o) | 0;
-            const p = prio[pi] & 0xff;
+            const p = prio[pi] & 0xffff;
 
             if (cOverlap && p & cOverlap) {
               if (special && p & PRIO_PF1) {
@@ -88,8 +93,8 @@
               }
             }
 
-            prio[pi] = (prio[pi] | cPriorityBit) & 0xff;
-            collision |= prio[pi] & 0xff;
+            prio[pi] = (prio[pi] | cPriorityBit) & 0xffff;
+            collision |= prio[pi] & 0xffff;
           }
         }
 
@@ -103,7 +108,7 @@
           (collision & PRIO_PF1 ? PRIO_PF2 : 0);
       }
 
-      return collision & 0xff;
+      return collision & 0xffff;
     }
 
     function drawMissile(
@@ -116,10 +121,11 @@
       dst,
       startIndex,
       special,
+      prior,
     ) {
       let collision = 0;
       const cColor = color & 0xff;
-      const cPriorityMask = priorityMask & 0xff;
+      const cPriorityMask = priorityMask & 0xffff;
 
       const shifted = (number & 3) << 1;
       let mask = (0x02 << shifted) & 0xff;
@@ -131,11 +137,20 @@
       else width = 2;
 
       function drawPixel(pi) {
-        const p = prio[pi] & 0xff;
+        const p = prio[pi] & 0xffff;
         if (special && p & PRIO_PF1) {
           dst[pi] = ((dst[pi] & 0x0f) | (cColor & 0xf0)) & 0xff;
         } else if (!(p & cPriorityMask)) {
-          dst[pi] = cColor;
+          const priorMode = (prior >> 6) & 3;
+          if ((prior & 0x10) && (priorMode === 1 || priorMode === 3) && (p === PRIO_BKG)) {
+            if (priorMode === 3 && (dst[pi] & 0x0f) === 0x00) {
+              dst[pi] = ((cColor | dst[pi]) & 0xf0) & 0xff;
+            } else {
+              dst[pi] = (cColor | dst[pi]) & 0xff;
+            }
+          } else {
+            dst[pi] = cColor;
+          }
         }
         collision |= p;
       }
@@ -156,7 +171,7 @@
           (collision & PRIO_PF1 ? PRIO_PF2 : 0);
       }
 
-      return collision & 0xff;
+      return collision & 0xffff;
     }
 
     function playerStep(size) {
@@ -188,9 +203,9 @@
       overlap,
     ) {
       const cColor = color & 0xff;
-      const cPriorityMask = priorityMask & 0xff;
-      const cPriorityBit = priorityBit & 0xff;
-      const cOverlap = overlap & 0xff;
+      const cPriorityMask = priorityMask & 0xffff;
+      const cPriorityBit = priorityBit & 0xffff;
+      const cOverlap = overlap & 0xffff;
       const step = playerStep(size);
       let collision = 0;
       let idx = startIndex | 0;
@@ -202,7 +217,7 @@
         const drawStart = segStart > spanStart ? segStart : spanStart;
         const drawEnd = segEnd < spanEnd ? segEnd : spanEnd;
         for (let pi = drawStart; pi < drawEnd; pi++) {
-          const p = prio[pi] & 0xff;
+          const p = prio[pi] & 0xffff;
           if (cOverlap && p & cOverlap) {
             if (special && p & PRIO_PF1) {
               dst[pi] = (dst[pi] | (cColor & 0xf0)) & 0xff;
@@ -216,8 +231,8 @@
               dst[pi] = cColor;
             }
           }
-          prio[pi] = (p | cPriorityBit) & 0xff;
-          collision |= prio[pi] & 0xff;
+          prio[pi] = (p | cPriorityBit) & 0xffff;
+          collision |= prio[pi] & 0xffff;
         }
       }
 
@@ -226,7 +241,7 @@
           (collision & ~(PRIO_PF1 | PRIO_PF2)) |
           (collision & PRIO_PF1 ? PRIO_PF2 : 0);
       }
-      return collision & 0xff;
+      return collision & 0xffff;
     }
 
     function drawMissileSpan(
@@ -241,9 +256,10 @@
       spanStart,
       spanEnd,
       special,
+      prior,
     ) {
       const cColor = color & 0xff;
-      const cPriorityMask = priorityMask & 0xff;
+      const cPriorityMask = priorityMask & 0xffff;
       const width = missileWidth(number, size);
       const shifted = (number & 3) << 1;
       let collision = 0;
@@ -257,11 +273,20 @@
           const drawStart = segStart > spanStart ? segStart : spanStart;
           const drawEnd = segEnd < spanEnd ? segEnd : spanEnd;
           for (let pi = drawStart; pi < drawEnd; pi++) {
-            const p = prio[pi] & 0xff;
+            const p = prio[pi] & 0xffff;
             if (special && p & PRIO_PF1) {
               dst[pi] = ((dst[pi] & 0x0f) | (cColor & 0xf0)) & 0xff;
             } else if (!(p & cPriorityMask)) {
-              dst[pi] = cColor;
+              const priorMode = (prior >> 6) & 3;
+              if ((prior & 0x10) && (priorMode === 1 || priorMode === 3) && (p === PRIO_BKG)) {
+                if (priorMode === 3 && (dst[pi] & 0x0f) === 0x00) {
+                  dst[pi] = ((cColor | dst[pi]) & 0xf0) & 0xff;
+                } else {
+                  dst[pi] = (cColor | dst[pi]) & 0xff;
+                }
+              } else {
+                dst[pi] = cColor;
+              }
             }
             collision |= p;
           }
@@ -275,30 +300,30 @@
           (collision & ~(PRIO_PF1 | PRIO_PF2)) |
           (collision & PRIO_PF1 ? PRIO_PF2 : 0);
       }
-      return collision & 0xff;
+      return collision & 0xffff;
     }
 
     function playerPriorityMask(prior, number) {
       switch (number | 0) {
         case 3:
-          if (prior & 0x01) return PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
+          if (prior & 0x01) return PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;
           if (prior & 0x02)
-            {return PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM2;}
+            {return PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;}
           if (prior & 0x04)
-            {return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;}
-          if (prior & 0x08) return PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
+            {return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;}
+          if (prior & 0x08) return PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;
           return 0x00;
         case 2:
-          if (prior & 0x01) return PRIO_PM0 | PRIO_PM1;
-          if (prior & 0x02) return PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
-          if (prior & 0x04) return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1;
-          if (prior & 0x08) return PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1;
+          if (prior & 0x01) return PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1;
+          if (prior & 0x02) return PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_M10_PM0 | PRIO_M10_PM1;
+          if (prior & 0x04) return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1;
+          if (prior & 0x08) return PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1;
           return 0x00;
         case 1:
-          if (prior & 0x01) return PRIO_PM0;
-          if (prior & 0x02) return PRIO_PM0;
-          if (prior & 0x04) return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0;
-          if (prior & 0x08) return PRIO_PF0 | PRIO_PF1 | PRIO_PM0;
+          if (prior & 0x01) return PRIO_PM0 | PRIO_M10_PM0;
+          if (prior & 0x02) return PRIO_PM0 | PRIO_M10_PM0;
+          if (prior & 0x04) return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_M10_PM0;
+          if (prior & 0x08) return PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_M10_PM0;
           return 0x00;
         default:
           if (prior & 0x04) return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
@@ -310,33 +335,77 @@
     function missilePriorityMask(prior, number) {
       switch (number | 0) {
         case 3:
-          if (prior & 0x01) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
+          if (prior & 0x01) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2 | PRIO_M10_PM3 : PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;
           if (prior & 0x02)
-            {return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 : PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM2;}
+            {return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1 : PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;}
           if (prior & 0x04)
-            {return prior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;}
+            {return prior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;}
           if (prior & 0x08)
-            {return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;}
+            {return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2 | PRIO_M10_PM3 : PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;}
           return 0x00;
         case 2:
-          if (prior & 0x01) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PM0 | PRIO_PM1;
-          if (prior & 0x02) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 : PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
-          if (prior & 0x04) return prior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1;
-          if (prior & 0x08) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1;
+          if (prior & 0x01) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2 | PRIO_M10_PM3 : PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1;
+          if (prior & 0x02) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1 : PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_M10_PM0 | PRIO_M10_PM1;
+          if (prior & 0x04) return prior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1;
+          if (prior & 0x08) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2 | PRIO_M10_PM3 : PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1;
           return 0x00;
         case 1:
-          if (prior & 0x01) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PM0;
-          if (prior & 0x02) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 : PRIO_PM0;
-          if (prior & 0x04) return prior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0;
-          if (prior & 0x08) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PF0 | PRIO_PF1 | PRIO_PM0;
+          if (prior & 0x01) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2 | PRIO_M10_PM3 : PRIO_PM0 | PRIO_M10_PM0;
+          if (prior & 0x02) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1 : PRIO_PM0 | PRIO_M10_PM0;
+          if (prior & 0x04) return prior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_M10_PM0;
+          if (prior & 0x08) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2 | PRIO_M10_PM3 : PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_M10_PM0;
           return 0x00;
         default:
-          if (prior & 0x01) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : 0x00;
-          if (prior & 0x02) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 : 0x00;
+          if (prior & 0x01) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2 | PRIO_M10_PM3 : 0x00;
+          if (prior & 0x02) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1 : 0x00;
           if (prior & 0x04) return prior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
-          if (prior & 0x08) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PF0 | PRIO_PF1;
+          if (prior & 0x08) return prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2 | PRIO_M10_PM3 : PRIO_PF0 | PRIO_PF1;
           return 0x00;
       }
+    }
+
+    function fetchPmgDmaCycle(ctx, lineCycle, y) {
+      if (y >= 248) return 0;
+
+      const sram = ctx.sram;
+      const dmactl = sram[IO_DMACTL] & 0xff;
+
+      const pmDmaPlayers = dmactl & 0x08 && sram[IO_GRACTL] & 0x02;
+      const pmDmaMissiles = dmactl & 0x04 && sram[IO_GRACTL] & 0x01;
+
+      if (!pmDmaPlayers && !pmDmaMissiles) return 0;
+
+      const pmbaseHi = (sram[IO_PMBASE] & 0xff) << 8;
+      const hires = (dmactl & 0x10) !== 0;
+
+      function fetchPmAddr(offset, vdelayMask) {
+        const lineIndex = hires
+          ? (y - (sram[IO_VDELAY] & vdelayMask ? 1 : 0))
+          : ((y >> 1) - (sram[IO_VDELAY] & vdelayMask ? 1 : 0));
+        const base = hires ? (pmbaseHi & 0xf800) : (pmbaseHi & 0xfc00);
+        return (base + offset + (lineIndex & 0xffff)) & 0xffff;
+      }
+
+      if (lineCycle === 0 && pmDmaMissiles) {
+        sram[IO_GRAFM_TRIG1] = ctx.ram[fetchPmAddr(hires ? 768 : 384, 0x08)];
+        return 1;
+      }
+      if (pmDmaPlayers) {
+        if (lineCycle === 2) {
+          sram[IO_GRAFP0_P1PL] = ctx.ram[fetchPmAddr(hires ? 1024 : 512, 0x10)];
+          return 1;
+        } else if (lineCycle === 3) {
+          sram[IO_GRAFP1_P2PL] = ctx.ram[fetchPmAddr(hires ? 1280 : 640, 0x20)];
+          return 1;
+        } else if (lineCycle === 4) {
+          sram[IO_GRAFP2_P3PL] = ctx.ram[fetchPmAddr(hires ? 1536 : 768, 0x40)];
+          return 1;
+        } else if (lineCycle === 5) {
+          sram[IO_GRAFP3_TRIG0] = ctx.ram[fetchPmAddr(hires ? 1792 : 896, 0x80)];
+          return 1;
+        }
+      }
+      return 0;
     }
 
     function drawPlayerMissilesClock(ctx, spanStart) {
@@ -367,33 +436,11 @@
       const clipEnd = lineBase + (spanPixelEnd < PIXELS_PER_LINE ? spanPixelEnd : PIXELS_PER_LINE);
       if (clipEnd <= clipStart) return;
 
-      const dmactl = sram[IO_DMACTL] & 0xff;
-      const pmDmaPlayers = dmactl & 0x08 && sram[IO_GRACTL] & 0x02;
-      const pmDmaMissiles = dmactl & 0x04 && sram[IO_GRACTL] & 0x01;
-      const pmbaseHi = (sram[IO_PMBASE] & 0xff) << 8;
-
-      function pmAddrHiRes(offset, vdelayMask) {
-        const lineIndex = y - (sram[IO_VDELAY] & vdelayMask ? 1 : 0);
-        return ((pmbaseHi & 0xf800) + offset + (lineIndex & 0xffff)) & 0xffff;
-      }
-
-      function pmAddrLoRes(offset, vdelayMask) {
-        const lineIndex = (y >> 1) - (sram[IO_VDELAY] & vdelayMask ? 1 : 0);
-        return ((pmbaseHi & 0xfc00) + offset + (lineIndex & 0xffff)) & 0xffff;
-      }
-
       let data;
       let hpos;
       let collision;
 
-      if (pmDmaPlayers) {
-        data =
-          dmactl & 0x10
-            ? ram[pmAddrHiRes(1792, 0x80)] & 0xff
-            : ram[pmAddrLoRes(896, 0x80)] & 0xff;
-      } else {
-        data = sram[IO_GRAFP3_TRIG0] & 0xff;
-      }
+      data = sram[IO_GRAFP3_TRIG0] & 0xff;
       hpos = sram[IO_HPOSP3_M3PF] & 0xff;
       if (data && hpos) {
         collision = drawPlayerSpan(
@@ -413,14 +460,7 @@
         ram[IO_HPOSM3_P3PF] |= collision & 0x0f;
       }
 
-      if (pmDmaPlayers) {
-        data =
-          dmactl & 0x10
-            ? ram[pmAddrHiRes(1536, 0x40)] & 0xff
-            : ram[pmAddrLoRes(768, 0x40)] & 0xff;
-      } else {
-        data = sram[IO_GRAFP2_P3PL] & 0xff;
-      }
+      data = sram[IO_GRAFP2_P3PL] & 0xff;
       hpos = sram[IO_HPOSP2_M2PF] & 0xff;
       if (data && hpos) {
         collision = drawPlayerSpan(
@@ -439,17 +479,10 @@
         );
         ram[IO_HPOSM2_P2PF] |= collision & 0x0f;
         if (collision & PRIO_PM3) ram[IO_GRAFP2_P3PL] |= 0x04;
-        ram[IO_GRAFP1_P2PL] |= (collision >> 4) & ~0x04 & 0xff;
+        ram[IO_GRAFP1_P2PL] |= (collision >> 4) & ~0x04 & 0x0f;
       }
 
-      if (pmDmaPlayers) {
-        data =
-          dmactl & 0x10
-            ? ram[pmAddrHiRes(1280, 0x20)] & 0xff
-            : ram[pmAddrLoRes(640, 0x20)] & 0xff;
-      } else {
-        data = sram[IO_GRAFP1_P2PL] & 0xff;
-      }
+      data = sram[IO_GRAFP1_P2PL] & 0xff;
       hpos = sram[IO_HPOSP1_M1PF] & 0xff;
       if (data && hpos) {
         collision = drawPlayerSpan(
@@ -469,17 +502,10 @@
         ram[IO_HPOSM1_P1PF] |= collision & 0x0f;
         if (collision & PRIO_PM3) ram[IO_GRAFP2_P3PL] |= 0x02;
         if (collision & PRIO_PM2) ram[IO_GRAFP1_P2PL] |= 0x02;
-        ram[IO_GRAFP0_P1PL] |= (collision >> 4) & ~0x02 & 0xff;
+        ram[IO_GRAFP0_P1PL] |= (collision >> 4) & ~0x02 & 0x0f;
       }
 
-      if (pmDmaPlayers) {
-        data =
-          dmactl & 0x10
-            ? ram[pmAddrHiRes(1024, 0x10)] & 0xff
-            : ram[pmAddrLoRes(512, 0x10)] & 0xff;
-      } else {
-        data = sram[IO_GRAFP0_P1PL] & 0xff;
-      }
+      data = sram[IO_GRAFP0_P1PL] & 0xff;
       hpos = sram[IO_HPOSP0_M0PF] & 0xff;
       if (data && hpos) {
         collision = drawPlayerSpan(
@@ -500,17 +526,10 @@
         if (collision & PRIO_PM3) ram[IO_GRAFP2_P3PL] |= 0x01;
         if (collision & PRIO_PM2) ram[IO_GRAFP1_P2PL] |= 0x01;
         if (collision & PRIO_PM1) ram[IO_GRAFP0_P1PL] |= 0x01;
-        ram[IO_SIZEM_P0PL] |= (collision >> 4) & ~0x01 & 0xff;
+        ram[IO_SIZEM_P0PL] |= (collision >> 4) & ~0x01 & 0x0f;
       }
 
-      if (pmDmaMissiles) {
-        data =
-          dmactl & 0x10
-            ? ram[pmAddrHiRes(768, 0x08)] & 0xff
-            : ram[pmAddrLoRes(384, 0x08)] & 0xff;
-      } else {
-        data = sram[IO_GRAFM_TRIG1] & 0xff;
-      }
+      data = sram[IO_GRAFM_TRIG1] & 0xff;
 
       hpos = sram[IO_HPOSM3_P3PF] & 0xff;
       if ((data & 0xc0) && hpos) {
@@ -526,9 +545,10 @@
           clipStart,
           clipEnd,
           special,
+          prior,
         );
         ram[IO_HPOSP3_M3PF] |= collision & 0x0f;
-        ram[IO_SIZEP3_M3PL] |= (collision >> 4) & 0xff;
+        ram[IO_SIZEP3_M3PL] |= (collision >> 4) & 0x0f;
       }
 
       hpos = sram[IO_HPOSM2_P2PF] & 0xff;
@@ -545,9 +565,10 @@
           clipStart,
           clipEnd,
           special,
+          prior,
         );
         ram[IO_HPOSP2_M2PF] |= collision & 0x0f;
-        ram[IO_SIZEP2_M2PL] |= (collision >> 4) & 0xff;
+        ram[IO_SIZEP2_M2PL] |= (collision >> 4) & 0x0f;
       }
 
       hpos = sram[IO_HPOSM1_P1PF] & 0xff;
@@ -564,9 +585,10 @@
           clipStart,
           clipEnd,
           special,
+          prior,
         );
         ram[IO_HPOSP1_M1PF] |= collision & 0x0f;
-        ram[IO_SIZEP1_M1PL] |= (collision >> 4) & 0xff;
+        ram[IO_SIZEP1_M1PL] |= (collision >> 4) & 0x0f;
       }
 
       hpos = sram[IO_HPOSM0_P0PF] & 0xff;
@@ -583,9 +605,10 @@
           clipStart,
           clipEnd,
           special,
+          prior,
         );
         ram[IO_HPOSP0_M0PF] |= collision & 0x0f;
-        ram[IO_SIZEP0_M0PL] |= (collision >> 4) & 0xff;
+        ram[IO_SIZEP0_M0PL] |= (collision >> 4) & 0x0f;
       }
     }
 
@@ -605,60 +628,27 @@
         (mode === 0x02 || mode === 0x03 || mode === 0x0f) &&
         (prior & 0xc0) === 0;
 
-      const dmactl = sram[IO_DMACTL] & 0xff;
-      const pmDmaPlayers = dmactl & 0x08 && sram[IO_GRACTL] & 0x02;
-      const pmDmaMissiles = dmactl & 0x04 && sram[IO_GRACTL] & 0x01;
-
-      const pmbaseHi = (sram[IO_PMBASE] & 0xff) << 8;
-
-      function pmAddrHiRes(offset, vdelayMask) {
-        const lineIndex = y - (sram[IO_VDELAY] & vdelayMask ? 1 : 0);
-        return ((pmbaseHi & 0xf800) + offset + (lineIndex & 0xffff)) & 0xffff;
-      }
-
-      function pmAddrLoRes(offset, vdelayMask) {
-        const lineIndex = (y >> 1) - (sram[IO_VDELAY] & vdelayMask ? 1 : 0);
-        return ((pmbaseHi & 0xfc00) + offset + (lineIndex & 0xffff)) & 0xffff;
-      }
-
       // Keep the order of the players being drawn!
 
       // Player 3
       let data;
       let mask;
-      if (pmDmaPlayers) {
-        data =
-          dmactl & 0x10
-            ? ram[pmAddrHiRes(1792, 0x80)] & 0xff
-            : ram[pmAddrLoRes(896, 0x80)] & 0xff;
-      } else {
-        data = sram[IO_GRAFP3_TRIG0] & 0xff;
-      }
+      data = sram[IO_GRAFP3_TRIG0] & 0xff;
 
       let hpos = sram[IO_HPOSP3_M3PF] & 0xff;
       if (data && hpos) {
         const start = y * PIXELS_PER_LINE + hpos * 2;
-        if (prior & 0x01) mask = PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
+        if (prior & 0x01) mask = PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;
         else if (prior & 0x02)
           {mask =
-            PRIO_PM0 |
-            PRIO_PM1 |
-            PRIO_PF0 |
-            PRIO_PF1 |
-            PRIO_PF2 |
-            PRIO_PF3 |
-            PRIO_PM2;}
+            PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM2 |
+            PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;}
         else if (prior & 0x04)
           {mask =
-            PRIO_PF0 |
-            PRIO_PF1 |
-            PRIO_PF2 |
-            PRIO_PF3 |
-            PRIO_PM0 |
-            PRIO_PM1 |
-            PRIO_PM2;}
+            PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2 |
+            PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;}
         else if (prior & 0x08)
-          {mask = PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;}
+          {mask = PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;}
         else mask = 0x00;
 
         const col = drawPlayer(
@@ -678,26 +668,19 @@
       }
 
       // Player 2
-      if (pmDmaPlayers) {
-        data =
-          dmactl & 0x10
-            ? ram[pmAddrHiRes(1536, 0x40)] & 0xff
-            : ram[pmAddrLoRes(768, 0x40)] & 0xff;
-      } else {
-        data = sram[IO_GRAFP2_P3PL] & 0xff;
-      }
+      data = sram[IO_GRAFP2_P3PL] & 0xff;
 
       hpos = sram[IO_HPOSP2_M2PF] & 0xff;
       if (data && hpos) {
         const start2 = y * PIXELS_PER_LINE + hpos * 2;
-        if (prior & 0x01) mask = PRIO_PM0 | PRIO_PM1;
+        if (prior & 0x01) mask = PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1;
         else if (prior & 0x02)
           {mask =
-            PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;}
+            PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_M10_PM0 | PRIO_M10_PM1;}
         else if (prior & 0x04)
           {mask =
-            PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1;}
-        else if (prior & 0x08) mask = PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1;
+            PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1;}
+        else if (prior & 0x08) mask = PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1;
         else mask = 0x00;
 
         const col2 = drawPlayer(
@@ -715,27 +698,20 @@
 
         ram[IO_HPOSM2_P2PF] |= col2 & 0x0f;
         if (col2 & PRIO_PM3) ram[IO_GRAFP2_P3PL] |= 0x04;
-        ram[IO_GRAFP1_P2PL] |= (col2 >> 4) & ~0x04 & 0xff;
+        ram[IO_GRAFP1_P2PL] |= (col2 >> 4) & ~0x04 & 0x0f;
       }
 
       // Player 1
-      if (pmDmaPlayers) {
-        data =
-          dmactl & 0x10
-            ? ram[pmAddrHiRes(1280, 0x20)] & 0xff
-            : ram[pmAddrLoRes(640, 0x20)] & 0xff;
-      } else {
-        data = sram[IO_GRAFP1_P2PL] & 0xff;
-      }
+      data = sram[IO_GRAFP1_P2PL] & 0xff;
 
       hpos = sram[IO_HPOSP1_M1PF] & 0xff;
       if (data && hpos) {
         const start1 = y * PIXELS_PER_LINE + hpos * 2;
-        if (prior & 0x01) mask = PRIO_PM0;
-        else if (prior & 0x02) mask = PRIO_PM0;
+        if (prior & 0x01) mask = PRIO_PM0 | PRIO_M10_PM0;
+        else if (prior & 0x02) mask = PRIO_PM0 | PRIO_M10_PM0;
         else if (prior & 0x04)
-          {mask = PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0;}
-        else if (prior & 0x08) mask = PRIO_PF0 | PRIO_PF1 | PRIO_PM0;
+          {mask = PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_M10_PM0;}
+        else if (prior & 0x08) mask = PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_M10_PM0;
         else mask = 0x00;
 
         const col1 = drawPlayer(
@@ -754,18 +730,11 @@
         ram[IO_HPOSM1_P1PF] |= col1 & 0x0f;
         if (col1 & PRIO_PM3) ram[IO_GRAFP2_P3PL] |= 0x02;
         if (col1 & PRIO_PM2) ram[IO_GRAFP1_P2PL] |= 0x02;
-        ram[IO_GRAFP0_P1PL] |= (col1 >> 4) & ~0x02 & 0xff;
+        ram[IO_GRAFP0_P1PL] |= (col1 >> 4) & ~0x02 & 0x0f;
       }
 
       // Player 0
-      if (pmDmaPlayers) {
-        data =
-          dmactl & 0x10
-            ? ram[pmAddrHiRes(1024, 0x10)] & 0xff
-            : ram[pmAddrLoRes(512, 0x10)] & 0xff;
-      } else {
-        data = sram[IO_GRAFP0_P1PL] & 0xff;
-      }
+      data = sram[IO_GRAFP0_P1PL] & 0xff;
 
       hpos = sram[IO_HPOSP0_M0PF] & 0xff;
       if (data && hpos) {
@@ -793,56 +762,17 @@
         if (col0 & PRIO_PM3) ram[IO_GRAFP2_P3PL] |= 0x01;
         if (col0 & PRIO_PM2) ram[IO_GRAFP1_P2PL] |= 0x01;
         if (col0 & PRIO_PM1) ram[IO_GRAFP0_P1PL] |= 0x01;
-        ram[IO_SIZEM_P0PL] |= (col0 >> 4) & ~0x01 & 0xff;
+        ram[IO_SIZEM_P0PL] |= (col0 >> 4) & ~0x01 & 0x0f;
       }
 
       // All missiles
-      if (pmDmaMissiles) {
-        data =
-          dmactl & 0x10
-            ? ram[pmAddrHiRes(768, 0x08)] & 0xff
-            : ram[pmAddrLoRes(384, 0x08)] & 0xff;
-      } else {
-        data = sram[IO_GRAFM_TRIG1] & 0xff;
-      }
+      data = sram[IO_GRAFM_TRIG1] & 0xff;
 
       // Missile 3
       hpos = sram[IO_HPOSM3_P3PF] & 0xff;
       if (data & 0xc0 && hpos) {
         const startM3 = y * PIXELS_PER_LINE + hpos * 2;
-        if (prior & 0x01)
-          {mask =
-            prior & 0x10
-              ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3
-              : PRIO_PM0 | PRIO_PM1 | PRIO_PM2;}
-        else if (prior & 0x02)
-          {mask =
-            prior & 0x10
-              ? PRIO_PM0 | PRIO_PM1
-              : PRIO_PM0 |
-                PRIO_PM1 |
-                PRIO_PF0 |
-                PRIO_PF1 |
-                PRIO_PF2 |
-                PRIO_PF3 |
-                PRIO_PM2;}
-        else if (prior & 0x04)
-          {mask =
-            prior & 0x10
-              ? 0x00
-              : PRIO_PF0 |
-                PRIO_PF1 |
-                PRIO_PF2 |
-                PRIO_PF3 |
-                PRIO_PM0 |
-                PRIO_PM1 |
-                PRIO_PM2;}
-        else if (prior & 0x08)
-          {mask =
-            prior & 0x10
-              ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3
-              : PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;}
-        else mask = 0x00;
+        mask = missilePriorityMask(prior, 3);
 
         const colM3 = drawMissile(
           3,
@@ -854,37 +784,18 @@
           dst,
           startM3,
           special,
+          prior,
         );
 
         ram[IO_HPOSP3_M3PF] |= colM3 & 0x0f;
-        ram[IO_SIZEP3_M3PL] |= (colM3 >> 4) & 0xff;
+        ram[IO_SIZEP3_M3PL] |= (colM3 >> 4) & 0x0f;
       }
 
       // Missile 2
       hpos = sram[IO_HPOSM2_P2PF] & 0xff;
       if (data & 0x30 && hpos) {
         const startM2 = y * PIXELS_PER_LINE + hpos * 2;
-        if (prior & 0x01)
-          {mask =
-            prior & 0x10
-              ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3
-              : PRIO_PM0 | PRIO_PM1;}
-        else if (prior & 0x02)
-          {mask =
-            prior & 0x10
-              ? PRIO_PM0 | PRIO_PM1
-              : PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;}
-        else if (prior & 0x04)
-          {mask =
-            prior & 0x10
-              ? 0x00
-              : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1;}
-        else if (prior & 0x08)
-          {mask =
-            prior & 0x10
-              ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3
-              : PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1;}
-        else mask = 0x00;
+        mask = missilePriorityMask(prior, 2);
 
         const colM2 = drawMissile(
           2,
@@ -896,32 +807,18 @@
           dst,
           startM2,
           special,
+          prior,
         );
 
         ram[IO_HPOSP2_M2PF] |= colM2 & 0x0f;
-        ram[IO_SIZEP2_M2PL] |= (colM2 >> 4) & 0xff;
+        ram[IO_SIZEP2_M2PL] |= (colM2 >> 4) & 0x0f;
       }
 
       // Missile 1
       hpos = sram[IO_HPOSM1_P1PF] & 0xff;
       if (data & 0x0c && hpos) {
         const startM1 = y * PIXELS_PER_LINE + hpos * 2;
-        if (prior & 0x01)
-          {mask =
-            prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PM0;}
-        else if (prior & 0x02)
-          {mask = prior & 0x10 ? PRIO_PM0 | PRIO_PM1 : PRIO_PM0;}
-        else if (prior & 0x04)
-          {mask =
-            prior & 0x10
-              ? 0x00
-              : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0;}
-        else if (prior & 0x08)
-          {mask =
-            prior & 0x10
-              ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3
-              : PRIO_PF0 | PRIO_PF1 | PRIO_PM0;}
-        else mask = 0x00;
+        mask = missilePriorityMask(prior, 1);
 
         const colM1 = drawMissile(
           1,
@@ -933,29 +830,18 @@
           dst,
           startM1,
           special,
+          prior,
         );
 
         ram[IO_HPOSP1_M1PF] |= colM1 & 0x0f;
-        ram[IO_SIZEP1_M1PL] |= (colM1 >> 4) & 0xff;
+        ram[IO_SIZEP1_M1PL] |= (colM1 >> 4) & 0x0f;
       }
 
       // Missile 0
       hpos = sram[IO_HPOSM0_P0PF] & 0xff;
       if (data & 0x03 && hpos) {
         const startM0 = y * PIXELS_PER_LINE + hpos * 2;
-        if (prior & 0x01)
-          {mask =
-            prior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : 0x00;}
-        else if (prior & 0x02) mask = prior & 0x10 ? PRIO_PM0 | PRIO_PM1 : 0x00;
-        else if (prior & 0x04)
-          {mask =
-            prior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;}
-        else if (prior & 0x08)
-          {mask =
-            prior & 0x10
-              ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3
-              : PRIO_PF0 | PRIO_PF1;}
-        else mask = 0x00;
+        mask = missilePriorityMask(prior, 0);
 
         const colM0 = drawMissile(
           0,
@@ -967,15 +853,17 @@
           dst,
           startM0,
           special,
+          prior,
         );
 
         ram[IO_HPOSP0_M0PF] |= colM0 & 0x0f;
-        ram[IO_SIZEP0_M0PL] |= (colM0 >> 4) & 0xff;
+        ram[IO_SIZEP0_M0PL] |= (colM0 >> 4) & 0x0f;
       }
     }
 
     return {
       drawPlayerMissilesClock: drawPlayerMissilesClock,
+      fetchPmgDmaCycle: fetchPmgDmaCycle,
       drawPlayerMissiles: drawPlayerMissiles,
     };
   }

@@ -14,7 +14,6 @@
 
     const ANTIC_MODE_INFO = cfg.ANTIC_MODE_INFO;
 
-    const PRIO_BKG = cfg.PRIO_BKG;
     const rendererApi =
       window.A8EPlayfieldRenderer &&
       typeof window.A8EPlayfieldRenderer.createApi === "function"
@@ -122,12 +121,12 @@
       };
     }
 
-    function fillBackgroundSpan(linePixels, linePriority, startX, endX, color) {
+    function fillBackgroundSpan(linePixels, linePriority, startX, endX, color, bPrio) {
       const clampedStart = Math.max(0, startX | 0);
       const clampedEnd = Math.min(PIXELS_PER_LINE, endX | 0);
       if (clampedEnd <= clampedStart) return;
       linePixels.fill(color, clampedStart, clampedEnd);
-      linePriority.fill(PRIO_BKG, clampedStart, clampedEnd);
+      linePriority.fill(bPrio, clampedStart, clampedEnd);
     }
 
     function computeHscrollVisibleAperture(cmd, pfWidth, ppb) {
@@ -161,12 +160,15 @@
       }
 
       const dmactl = sram[IO_DMACTL] & 0xff;
+      const hscrol = sram[IO_HSCROL] & 0x0f;
       const pfWidth = dmactl & 0x03;
       const pfDma = dmactl & 0x20;
 
       if (pfDma && pfWidth) {
         const cmd = io.currentDisplayListCommand & 0xff;
         const mode = cmd & 0x0f;
+        
+        rendererApi.initScanline(ctx, mode, dmactl, hscrol);
 
         if (mode < 2) {
           rendererApi.drawInterleavedVisibleBlankLine(
@@ -183,7 +185,7 @@
           cmd,
           pfWidth,
           ppb,
-          sram[IO_HSCROL] & 0x0f,
+          hscrol,
         );
         const hscrollVisibleAperture = computeHscrollVisibleAperture(
           cmd,
@@ -208,8 +210,9 @@
 
         const lineBase = y * scratchWidth + PLAYFIELD_SCRATCH_VIEW_X;
         const baseColor = rendererApi.currentBackgroundColor(sram);
+        const basePrio = rendererApi.currentBackgroundPriority(sram);
         video.playfieldScratchPixels.fill(baseColor, lineBase, lineBase + PIXELS_PER_LINE);
-        video.playfieldScratchPriority.fill(PRIO_BKG, lineBase, lineBase + PIXELS_PER_LINE);
+        video.playfieldScratchPriority.fill(basePrio, lineBase, lineBase + PIXELS_PER_LINE);
 
         io.drawLine.bytesPerLine = geometry.bytesPerLine;
         io.drawLine.destIndex = lineBase + geometry.playfieldStartX;
@@ -231,9 +234,10 @@
           const dst = video.playfieldScratchPixels;
           const prio = video.playfieldScratchPriority;
           const color = rendererApi.currentBackgroundColor(sram);
+          const bgPrio = rendererApi.currentBackgroundPriority(sram);
           for (let i = 0; i < pixelsToFill; i++) {
             dst[start + i] = color;
-            prio[start + i] = PRIO_BKG;
+            prio[start + i] = bgPrio;
           }
           rendererApi.stepClockActions(ctx, geometry.playfieldCycles);
         }
@@ -263,6 +267,7 @@
             fetchStartX,
             Math.min(fetchEndX, visibleStartX),
             baseColor,
+            rendererApi.currentBackgroundPriority(sram),
           );
           fillBackgroundSpan(
             linePixels,
@@ -270,6 +275,7 @@
             Math.max(fetchStartX, visibleEndX),
             fetchEndX,
             baseColor,
+            rendererApi.currentBackgroundPriority(sram),
           );
         }
 

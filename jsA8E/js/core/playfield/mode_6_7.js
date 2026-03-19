@@ -18,6 +18,9 @@
     const clockAction = cfg.clockAction;
     const fetchCharacterRow8 = cfg.fetchCharacterRow8;
     const fetchCharacterRow16 = cfg.fetchCharacterRow16;
+    const stealDma = cfg.stealDma || function (ctx, cycles) {
+      ctx.cycleCounter += cycles | 0;
+    };
 
     function drawLineMode6(ctx) {
       const io = ctx.ioData;
@@ -50,10 +53,10 @@
         if (mask === 0x00) {
           let ch = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          ctx.cycleCounter++;
+          stealDma(ctx, 1);
 
           if (io.firstRowScanline) {
-            ctx.cycleCounter++;
+            stealDma(ctx, 1);
           }
 
           colorIndex = ch >> 6;
@@ -136,11 +139,11 @@
           let ch = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           if ((vScrollLine & 1) === 0) {
-            ctx.cycleCounter++;
+            stealDma(ctx, 1);
           }
 
           if (io.firstRowScanline) {
-            ctx.cycleCounter++;
+            stealDma(ctx, 1);
           }
 
           colorIndex = ch >> 6;

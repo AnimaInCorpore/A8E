@@ -368,8 +368,14 @@
             // AHRM 4.9: A write to WSYNC halts CPU execution until cycle 105 on the current line.
             const WSYNC_CYCLE = 105;
             const WSYNC_BOUNDARY = WSYNC_CYCLE - 1; // 104: if past this, wait for next line
-            const lineStart =
-              ((ctx.cycleCounter / CYCLES_PER_LINE) | 0) * CYCLES_PER_LINE;
+            let lineStart = io.displayListFetchCycle;
+            if (
+              lineStart > ctx.cycleCounter ||
+              ctx.cycleCounter >= lineStart + CYCLES_PER_LINE
+            ) {
+              lineStart =
+                ((ctx.cycleCounter / CYCLES_PER_LINE) | 0) * CYCLES_PER_LINE;
+            }
             const target = lineStart + WSYNC_CYCLE;
 
             // If we are already at or past cycle 104, wait for the next line's cycle 105.

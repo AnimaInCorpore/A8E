@@ -114,6 +114,10 @@
   const PRIO_PM1 = hwApi.PRIO_PM1;
   const PRIO_PM2 = hwApi.PRIO_PM2;
   const PRIO_PM3 = hwApi.PRIO_PM3;
+  const PRIO_M10_PM0 = hwApi.PRIO_M10_PM0;
+  const PRIO_M10_PM1 = hwApi.PRIO_M10_PM1;
+  const PRIO_M10_PM2 = hwApi.PRIO_M10_PM2;
+  const PRIO_M10_PM3 = hwApi.PRIO_M10_PM3;
   const PRIORITY_TABLE_BKG_PF012 = hwApi.PRIORITY_TABLE_BKG_PF012;
   const PRIORITY_TABLE_BKG_PF013 = hwApi.PRIORITY_TABLE_BKG_PF013;
   const PRIORITY_TABLE_PF0123 = hwApi.PRIORITY_TABLE_PF0123;
@@ -431,6 +435,10 @@
           PRIO_PF1: PRIO_PF1,
           PRIO_PF2: PRIO_PF2,
           PRIO_PF3: PRIO_PF3,
+          PRIO_M10_PM0: PRIO_M10_PM0,
+          PRIO_M10_PM1: PRIO_M10_PM1,
+          PRIO_M10_PM2: PRIO_M10_PM2,
+          PRIO_M10_PM3: PRIO_M10_PM3,
           PRIO_PM0: PRIO_PM0,
           PRIO_PM1: PRIO_PM1,
           PRIO_PM2: PRIO_PM2,
@@ -479,6 +487,7 @@
           IO_HSCROL: IO_HSCROL,
           ANTIC_MODE_INFO: ANTIC_MODE_INFO,
           drawPlayerMissilesClock: drawPlayerMissilesClock,
+          fetchPmgDmaCycle: gtiaApi.fetchPmgDmaCycle,
           drawPlayerMissiles: drawPlayerMissiles,
           pokeyTimerPeriodCpuCycles: pokeyTimerPeriodCpuCycles,
           cycleTimedEventUpdate: cycleTimedEventUpdate,
@@ -486,6 +495,11 @@
           PRIO_PF0: PRIO_PF0,
           PRIO_PF1: PRIO_PF1,
           PRIO_PF2: PRIO_PF2,
+          PRIO_PF3: PRIO_PF3,
+          PRIO_M10_PM0: PRIO_M10_PM0,
+          PRIO_M10_PM1: PRIO_M10_PM1,
+          PRIO_M10_PM2: PRIO_M10_PM2,
+          PRIO_M10_PM3: PRIO_M10_PM3,
           PRIORITY_TABLE_BKG_PF012: PRIORITY_TABLE_BKG_PF012,
           PRIORITY_TABLE_BKG_PF013: PRIORITY_TABLE_BKG_PF013,
           PRIORITY_TABLE_PF0123: PRIORITY_TABLE_PF0123,
@@ -856,14 +870,45 @@
     function cloneVideoState() {
       return {
         pixels: new Uint8Array(video.pixels),
-        priority: new Uint8Array(video.priority),
+        priority: new Uint16Array(video.priority),
         playfieldScratchPixels: new Uint8Array(video.playfieldScratchPixels),
-        playfieldScratchPriority: new Uint8Array(video.playfieldScratchPriority),
+        playfieldScratchPriority: new Uint16Array(video.playfieldScratchPriority),
       };
     }
 
     function restoreVideoState(snapshot) {
       const state = snapshot && typeof snapshot === "object" ? snapshot : {};
+      function restorePriorityBuffer(target, source) {
+        if (!source) return;
+
+        const isView =
+          typeof ArrayBuffer !== "undefined" &&
+          typeof ArrayBuffer.isView === "function" &&
+          ArrayBuffer.isView(source);
+
+        if (source instanceof Uint16Array) {
+          target.set(source.subarray(0, target.length), 0);
+          return;
+        }
+
+        const bytes = isView
+          ? new Uint8Array(source.buffer, source.byteOffset | 0, source.byteLength | 0)
+          : new Uint8Array(source);
+
+        if (bytes.byteLength >= target.length * 2 && (bytes.byteLength & 1) === 0) {
+          const words = new Uint16Array(
+            bytes.buffer,
+            bytes.byteOffset | 0,
+            (bytes.byteLength / 2) | 0,
+          );
+          target.set(words.subarray(0, target.length), 0);
+          return;
+        }
+
+        const count = Math.min(bytes.length, target.length);
+        for (let i = 0; i < count; i++) target[i] = bytes[i] & 0xff;
+      }
+
       video.pixels.fill(0);
       video.priority.fill(0);
       video.playfieldScratchPixels.fill(0);
@@ -875,10 +920,7 @@
         );
       }
       if (state.priority) {
-        video.priority.set(
-          new Uint8Array(state.priority).subarray(0, video.priority.length),
-          0,
-        );
+        restorePriorityBuffer(video.priority, state.priority);
       }
       if (state.playfieldScratchPixels) {
         video.playfieldScratchPixels.set(
@@ -890,13 +932,7 @@
         );
       }
       if (state.playfieldScratchPriority) {
-        video.playfieldScratchPriority.set(
-          new Uint8Array(state.playfieldScratchPriority).subarray(
-            0,
-            video.playfieldScratchPriority.length,
-          ),
-          0,
-        );
+        restorePriorityBuffer(video.playfieldScratchPriority, state.playfieldScratchPriority);
       }
     }
 

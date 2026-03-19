@@ -19,10 +19,20 @@
 
     const fillGtiaColorTable = cfg.fillGtiaColorTable;
     const decodeTextModeCharacter = cfg.decodeTextModeCharacter;
-
     const clockAction = cfg.clockAction;
     const fetchCharacterRow8 = cfg.fetchCharacterRow8;
     const fetchCharacterRow10 = cfg.fetchCharacterRow10;
+    const stealDma = cfg.stealDma || function (ctx, cycles) {
+      ctx.cycleCounter += cycles | 0;
+    };
+
+    function writeBackgroundQuad(dst, prio, dstIndex, color) {
+      dst[dstIndex] = color; prio[dstIndex++] = PRIO_BKG;
+      dst[dstIndex] = color; prio[dstIndex++] = PRIO_BKG;
+      dst[dstIndex] = color; prio[dstIndex++] = PRIO_BKG;
+      dst[dstIndex] = color; prio[dstIndex++] = PRIO_BKG;
+      return dstIndex;
+    }
 
     function drawLineMode2(ctx) {
       const io = ctx.ioData;
@@ -40,7 +50,8 @@
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
       const colorTable = SCRATCH_GTIA_COLOR_TABLE;
 
-      const chBase = (sram[IO_CHBASE] << 8) & 0xfc00 & 0xffff;
+      const chBase = ((sram[IO_CHBASE] << 8) & 0xfc00) & 0xffff;
+      const chactl = sram[IO_CHACTL] & 0x03;
 
       let mask = 0x00;
       let data = 0;
@@ -50,15 +61,14 @@
         const priorMode = (sram[IO_PRIOR] >> 6) & 3;
 
         if (mask === 0x00) {
-          const chactl = sram[IO_CHACTL] & 0x03;
           const decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
           const ch = decoded & 0xff;
           inverse = (decoded & 0x100) !== 0;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          ctx.cycleCounter++;
+          stealDma(ctx, 1);
 
           if (io.firstRowScanline) {
-            ctx.cycleCounter++;
+            stealDma(ctx, 1);
           }
 
           data = fetchCharacterRow8(ram, chBase, ch, vScrollOffset);
@@ -67,79 +77,87 @@
 
         const outputData = priorMode !== 0 && inverse ? (data ^ 0xff) : data;
 
-        fillGtiaColorTable(sram, colorTable);
-        const colPf1 = sram[IO_COLPF1] & 0xff;
-        const colPf2 = sram[IO_COLPF2] & 0xff;
-        const colBk = sram[IO_COLBK] & 0xff;
-        const c0Inverse = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
-        const c1Inverse = colPf2 & 0xff;
-        const c0Normal = colPf2 & 0xff;
-        const c1Normal = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
-
         if (priorMode === 0) {
-          const c0 = inverse ? c0Inverse : c0Normal;
-          const c1 = inverse ? c1Inverse : c1Normal;
+          const colPf1 = sram[IO_COLPF1] & 0xff;
+          const colPf2 = sram[IO_COLPF2] & 0xff;
+          const colorA = colPf2 & 0xff;
+          const colorB = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
+          const c0 = inverse ? colorB : colorA;
+          const c1 = inverse ? colorA : colorB;
           const p0 = inverse ? PRIO_PF1 : PRIO_PF2;
           const p1 = inverse ? PRIO_PF2 : PRIO_PF1;
 
-          for (let k = 0; k < 4; k++) {
-            if (outputData & mask) {
-              dst[dstIndex] = c1;
-              prio[dstIndex] = p1;
-            } else {
-              dst[dstIndex] = c0;
-              prio[dstIndex] = p0;
-            }
-            dstIndex++;
-            mask >>= 1;
+          if (outputData & mask) {
+            dst[dstIndex] = c1;
+            prio[dstIndex] = p1;
+          } else {
+            dst[dstIndex] = c0;
+            prio[dstIndex] = p0;
           }
+          dstIndex++;
+          mask >>= 1;
+
+          if (outputData & mask) {
+            dst[dstIndex] = c1;
+            prio[dstIndex] = p1;
+          } else {
+            dst[dstIndex] = c0;
+            prio[dstIndex] = p0;
+          }
+          dstIndex++;
+          mask >>= 1;
+
+          if (outputData & mask) {
+            dst[dstIndex] = c1;
+            prio[dstIndex] = p1;
+          } else {
+            dst[dstIndex] = c0;
+            prio[dstIndex] = p0;
+          }
+          dstIndex++;
+          mask >>= 1;
+
+          if (outputData & mask) {
+            dst[dstIndex] = c1;
+            prio[dstIndex] = p1;
+          } else {
+            dst[dstIndex] = c0;
+            prio[dstIndex] = p0;
+          }
+          dstIndex++;
+          mask >>= 1;
         } else if (priorMode === 1) {
+          const colBk = sram[IO_COLBK] & 0xff;
           if (mask > 0x08) {
             const hi = (colBk | (outputData >> 4)) & 0xff;
-            dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, hi);
           } else {
             const lo = (colBk | (outputData & 0x0f)) & 0xff;
-            dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, lo);
           }
           mask >>= 4;
         } else if (priorMode === 2) {
+          fillGtiaColorTable(sram, colorTable);
           if (mask > 0x08) {
             const hi2 = colorTable[outputData >> 4] & 0xff;
-            dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, hi2);
           } else {
             const lo2 = colorTable[outputData & 0x0f] & 0xff;
-            dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, lo2);
           }
           mask >>= 4;
         } else {
+          const colBk = sram[IO_COLBK] & 0xff;
           if (mask > 0x08) {
             const hi3 = outputData & 0xf0
               ? colBk | (outputData & 0xf0)
               : colBk & 0xf0;
-            dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, hi3);
           } else {
             const lo3 = outputData & 0x0f
               ? colBk | ((outputData << 4) & 0xf0)
               : colBk & 0xf0;
-            dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, lo3);
           }
           mask >>= 4;
         }
@@ -164,6 +182,8 @@
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
       const colorTable = SCRATCH_GTIA_COLOR_TABLE;
+      const chBase = ((sram[IO_CHBASE] << 8) & 0xfc00) & 0xffff;
+      const chactl = sram[IO_CHACTL] & 0x03;
 
       let mask = 0x00;
       let data = 0;
@@ -173,16 +193,14 @@
         const priorMode = (sram[IO_PRIOR] >> 6) & 3;
 
         if (mask === 0x00) {
-          const chactl = sram[IO_CHACTL] & 0x03;
-          const chBase = (((sram[IO_CHBASE] & 0xff) << 8) & 0xfc00) & 0xffff;
           const decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
           const ch = decoded & 0xff;
           inverse = (decoded & 0x100) !== 0;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          ctx.cycleCounter++;
+          stealDma(ctx, 1);
 
           if (io.firstRowScanline) {
-            ctx.cycleCounter++;
+            stealDma(ctx, 1);
           }
 
           data = fetchCharacterRow10(ram, chBase, ch, vScrollOffset);
@@ -194,12 +212,10 @@
         if (priorMode === 0) {
           const colPf1 = sram[IO_COLPF1] & 0xff;
           const colPf2 = sram[IO_COLPF2] & 0xff;
-          const c0Inverse = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
-          const c1Inverse = colPf2 & 0xff;
-          const c0Normal = colPf2 & 0xff;
-          const c1Normal = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
-          const c0 = inverse ? c0Inverse : c0Normal;
-          const c1 = inverse ? c1Inverse : c1Normal;
+          const colorA = colPf2 & 0xff;
+          const colorB = ((colPf2 & 0xf0) | (colPf1 & 0x0f)) & 0xff;
+          const c0 = inverse ? colorB : colorA;
+          const c1 = inverse ? colorA : colorB;
           const p0 = inverse ? PRIO_PF1 : PRIO_PF2;
           const p1 = inverse ? PRIO_PF2 : PRIO_PF1;
 
@@ -246,50 +262,32 @@
           const colBk = sram[IO_COLBK] & 0xff;
           if (mask > 0x08) {
             const hi = (colBk | (outputData >> 4)) & 0xff;
-            dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, hi);
           } else {
             const lo = (colBk | (outputData & 0x0f)) & 0xff;
-            dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, lo);
           }
           mask >>= 4;
         } else if (priorMode === 2) {
           fillGtiaColorTable(sram, colorTable);
           if (mask > 0x08) {
             const hi2 = colorTable[outputData >> 4] & 0xff;
-            dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi2; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, hi2);
           } else {
             const lo2 = colorTable[outputData & 0x0f] & 0xff;
-            dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo2; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, lo2);
           }
           mask >>= 4;
         } else {
           const colBk = sram[IO_COLBK] & 0xff;
           if (mask > 0x08) {
             const hi3 = outputData & 0xf0 ? colBk | (outputData & 0xf0) : colBk & 0xf0;
-            dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, hi3);
           } else {
             const lo3 = outputData & 0x0f
               ? colBk | ((outputData << 4) & 0xf0)
               : colBk & 0xf0;
-            dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, lo3);
           }
           mask >>= 4;
         }

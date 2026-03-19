@@ -1292,6 +1292,12 @@
                 displayMemoryAddress: io.drawLine.displayMemoryAddress | 0,
                 bytesPerLine: io.drawLine.bytesPerLine | 0,
                 destIndex: io.drawLine.destIndex | 0,
+                playfieldDmaStealCount: io.drawLine.playfieldDmaStealCount | 0,
+                refreshDmaPending: io.drawLine.refreshDmaPending | 0,
+                displayListInstructionDmaPending:
+                  io.drawLine.displayListInstructionDmaPending | 0,
+                displayListAddressDmaRemaining:
+                  io.drawLine.displayListAddressDmaRemaining | 0,
               }
             : null,
           keyPressCounter: io.keyPressCounter | 0,
@@ -1348,6 +1354,14 @@
           io.drawLine.displayMemoryAddress = state.drawLine.displayMemoryAddress | 0;
           io.drawLine.bytesPerLine = state.drawLine.bytesPerLine | 0;
           io.drawLine.destIndex = state.drawLine.destIndex | 0;
+          io.drawLine.playfieldDmaStealCount =
+            state.drawLine.playfieldDmaStealCount | 0;
+          io.drawLine.refreshDmaPending =
+            state.drawLine.refreshDmaPending | 0;
+          io.drawLine.displayListInstructionDmaPending =
+            state.drawLine.displayListInstructionDmaPending | 0;
+          io.drawLine.displayListAddressDmaRemaining =
+            state.drawLine.displayListAddressDmaRemaining | 0;
         }
         io.keyPressCounter = state.keyPressCounter | 0;
         io.optionOnStart = !!state.optionOnStart;

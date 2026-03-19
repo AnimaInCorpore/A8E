@@ -87,6 +87,10 @@ typedef struct
 	u8 *pPriorityData;
 	u16 sDisplayMemoryAddress;
 	u32 lBytesPerLine;
+	u8 cPlayfieldDmaStealCount;
+	u8 cRefreshDmaPending;
+	u8 cDisplayListInstructionDmaPending;
+	u8 cDisplayListAddressDmaRemaining;
 } DrawLineData_t;
 
 typedef struct

@@ -3,7 +3,6 @@
 
   function createApi(cfg) {
     const CPU = cfg.CPU;
-    const CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
     const CYCLE_NEVER = cfg.CYCLE_NEVER;
     const IO_INIT_VALUES = cfg.IO_INIT_VALUES;
 
@@ -61,6 +60,10 @@
           displayMemoryAddress: 0,
           bytesPerLine: 0,
           destIndex: 0,
+          playfieldDmaStealCount: 0,
+          refreshDmaPending: 0,
+          displayListInstructionDmaPending: 0,
+          displayListAddressDmaRemaining: 0,
         },
         keyPressCounter: 0,
         // Shim from the C version: optionally force OPTION held during the OS boot check

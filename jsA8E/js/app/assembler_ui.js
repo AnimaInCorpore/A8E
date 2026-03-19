@@ -281,6 +281,7 @@
     const focusCanvas = typeof opts.focusCanvas === "function"
       ? opts.focusCanvas
       : null;
+    const resetOptions = opts.resetOptions || null;
     if (!panel || !button || !app || !app.hDevice) return;
     if (panel.__a8eAssemblerInitialized) return;
     panel.__a8eAssemblerInitialized = true;
@@ -1039,7 +1040,7 @@
         return;
       }
 
-      if (typeof app.reset === "function") app.reset();
+      if (typeof app.reset === "function") app.reset(resetOptions || undefined);
       if (typeof app.start === "function") app.start();
       if (onMediaChanged) onMediaChanged();
       if (focusCanvas) focusCanvas(false);

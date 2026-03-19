@@ -895,6 +895,12 @@ static void AtariIo_DrawPlayerMissilesClock(_6502_Context_t *pContext);
 
 #define ACTIVE_LINE_HSYNC_PIXELS 32u
 #define ACTIVE_LINE_COLOR_BURST_CYCLES 6u
+#define REFRESH_FIRST_CYCLE 25u
+#define REFRESH_LAST_CYCLE 57u
+#define REFRESH_INTERVAL_CYCLE 4u
+#define DISPLAY_LIST_INSTRUCTION_CYCLE 1u
+#define DISPLAY_LIST_ADDRESS_CYCLE_0 6u
+#define DISPLAY_LIST_ADDRESS_CYCLE_1 7u
 
 typedef struct
 {
@@ -908,9 +914,78 @@ typedef struct
 	u32 lPlayfieldStartX;
 } ActiveLineGeometry_t;
 
+static void AtariIo_StealPlayfieldDma(_6502_Context_t *pContext, u32 lCycles)
+{
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+
+	pContext->llCycleCounter += lCycles;
+	pIoData->tDrawLineData.cPlayfieldDmaStealCount =
+		(u8)MIN(
+			255u,
+			(u32)pIoData->tDrawLineData.cPlayfieldDmaStealCount + lCycles);
+}
+
 static void AtariIo_DrawClockAction(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+	u64 llLineStartCycle = pIoData->llDisplayListFetchCycle;
+	u32 lCycleInLine = (u32)(pIoData->llCycle - llLineStartCycle);
+	u8 cPlayfieldDmaStealCount = pIoData->tDrawLineData.cPlayfieldDmaStealCount;
+	u8 cDidRefreshDma = 0;
+
+	if(pIoData->llCycle >= llLineStartCycle + 100u)
+	{
+		u32 lNextDisplayLine = pIoData->tVideoData.lCurrentDisplayLine + 1;
+		if(lNextDisplayLine >= LINES_PER_SCREEN_PAL)
+		{
+			lNextDisplayLine = 0;
+		}
+		RAM[IO_VCOUNT] = (u8)((lNextDisplayLine >> 1) & 0xff);
+	}
+
+	if(pIoData->tDrawLineData.cDisplayListInstructionDmaPending &&
+	   lCycleInLine == DISPLAY_LIST_INSTRUCTION_CYCLE)
+	{
+		pContext->llCycleCounter++;
+		pIoData->tDrawLineData.cDisplayListInstructionDmaPending = 0;
+	}
+
+	if(pIoData->tDrawLineData.cDisplayListAddressDmaRemaining &&
+	   (lCycleInLine == DISPLAY_LIST_ADDRESS_CYCLE_0 ||
+		lCycleInLine == DISPLAY_LIST_ADDRESS_CYCLE_1))
+	{
+		pContext->llCycleCounter++;
+		pIoData->tDrawLineData.cDisplayListAddressDmaRemaining--;
+	}
+
+	if(pIoData->tDrawLineData.cRefreshDmaPending &&
+	   cPlayfieldDmaStealCount == 0)
+	{
+		pContext->llCycleCounter++;
+		pIoData->tDrawLineData.cRefreshDmaPending = 0;
+		cDidRefreshDma = 1;
+	}
+
+	if(!cDidRefreshDma &&
+	   lCycleInLine >= REFRESH_FIRST_CYCLE &&
+	   lCycleInLine <= REFRESH_LAST_CYCLE &&
+	   ((lCycleInLine - REFRESH_FIRST_CYCLE) % REFRESH_INTERVAL_CYCLE) == 0)
+	{
+		if(cPlayfieldDmaStealCount == 0)
+		{
+			pContext->llCycleCounter++;
+		}
+		else if(!pIoData->tDrawLineData.cRefreshDmaPending)
+		{
+			/* Only one refresh cycle may be deferred; further blocked
+			 * refresh slots while pending are dropped.
+			 */
+			pIoData->tDrawLineData.cRefreshDmaPending = 1;
+		}
+	}
+
+	pIoData->tDrawLineData.cPlayfieldDmaStealCount = 0;
+
 	if(pContext->llIoBeamTimedEventCycle <= pIoData->llCycle ||
 	   pContext->llIoMasterTimedEventCycle <= pContext->llCycleCounter)
 	{
@@ -1406,11 +1481,11 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 		{
 			cCharacter = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-			pContext->llCycleCounter++; /* DMA steal: pattern */
+			AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: pattern */
 
 			if(pIoData->bFirstRowScanline)
 			{
-				pContext->llCycleCounter++; /* DMA steal: name */
+				AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: name */
 			}
 
 			cInverse = cCharacter & 0x80;
@@ -1650,11 +1725,11 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 
 			cCharacter = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-			pContext->llCycleCounter++; /* DMA steal: pattern */
+			AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: pattern */
 
 			if(pIoData->bFirstRowScanline)
 			{
-				pContext->llCycleCounter++; /* DMA steal: name */
+				AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: name */
 			}
 
 			cInverse = cCharacter & 0x80;
@@ -1889,11 +1964,11 @@ static void AtariIo_DrawLineMode4(_6502_Context_t *pContext)
 		{
 			cCharacter = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-			pContext->llCycleCounter++; /* DMA steal: pattern */
+			AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: pattern */
 
 			if(pIoData->bFirstRowScanline)
 			{
-				pContext->llCycleCounter++; /* DMA steal: name */
+				AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: name */
 			}
 
 			cInverse = cCharacter & 0x80;
@@ -1976,12 +2051,12 @@ static void AtariIo_DrawLineMode5(_6502_Context_t *pContext)
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
 			if((lVerticalScrollLine & 1) == 0)
 			{
-				pContext->llCycleCounter++; /* DMA steal: pattern */
+				AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: pattern */
 			}
 
 			if(pIoData->bFirstRowScanline)
 			{
-				pContext->llCycleCounter++; /* DMA steal: name */
+				AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: name */
 			}
 
 			cInverse = cCharacter & 0x80;
@@ -2061,11 +2136,11 @@ static void AtariIo_DrawLineMode6(_6502_Context_t *pContext)
 		{
 			cCharacter = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-			pContext->llCycleCounter++; /* DMA steal: pattern */
+			AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: pattern */
 
 			if(pIoData->bFirstRowScanline)
 			{
-				pContext->llCycleCounter++; /* DMA steal: name */
+				AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: name */
 			}
 
 			cColorIndex = cCharacter >> 6;
@@ -2148,12 +2223,12 @@ static void AtariIo_DrawLineMode7(_6502_Context_t *pContext)
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
 			if((lVerticalScrollLine & 1) == 0)
 			{
-				pContext->llCycleCounter++; /* DMA steal: pattern */
+				AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: pattern */
 			}
 
 			if(pIoData->bFirstRowScanline)
 			{
-				pContext->llCycleCounter++; /* DMA steal: name */
+				AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: name */
 			}
 
 			cColorIndex = cCharacter >> 6;
@@ -2232,7 +2307,7 @@ static void AtariIo_DrawLineMode8(_6502_Context_t *pContext)
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
 			if(pIoData->bFirstRowScanline)
 			{
-				pContext->llCycleCounter++; /* DMA steal: display */
+				AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: display */
 			}
 			cPhase = 0x00;
 		}
@@ -2281,7 +2356,7 @@ static void AtariIo_DrawLineMode9(_6502_Context_t *pContext)
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
 			if(pIoData->bFirstRowScanline)
 			{
-				pContext->llCycleCounter++; /* DMA steal: display */
+				AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: display */
 			}
 			cMask = 0x80;
 		}
@@ -2332,7 +2407,7 @@ static void AtariIo_DrawLineModeA(_6502_Context_t *pContext)
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
 			if(pIoData->bFirstRowScanline)
 			{
-				pContext->llCycleCounter++; /* DMA steal: display */
+				AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: display */
 			}
 			cPhase = 0x00;
 		}
@@ -2380,7 +2455,7 @@ static void AtariIo_DrawLineModeB(_6502_Context_t *pContext)
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
 			if(pIoData->bFirstRowScanline)
 			{
-				pContext->llCycleCounter++; /* DMA steal: display */
+				AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: display */
 			}
 			cMask = 0x80;
 		}
@@ -2450,7 +2525,7 @@ static void AtariIo_DrawLineModeD(_6502_Context_t *pContext)
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
 			if(pIoData->bFirstRowScanline)
 			{
-				pContext->llCycleCounter++; /* DMA steal: display */
+				AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: display */
 			}
 			cPhase = 0x00;
 		}
@@ -2512,7 +2587,7 @@ static void AtariIo_DrawLineModeF(_6502_Context_t *pContext)
 		{
 			cData = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
 			FIXED_ADD(pIoData->tDrawLineData.sDisplayMemoryAddress, 0x0fff, 1);
-			pContext->llCycleCounter++; /* DMA steal: display */
+			AtariIo_StealPlayfieldDma(pContext, 1); /* DMA steal: display */
 			cMask = 0x80;
 		}
 
@@ -2677,8 +2752,6 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
 
-	_6502_STALL(9);
-
 	if(pIoData->tVideoData.lCurrentDisplayLine == LAST_VISIBLE_LINE + 1)
 	{
 		pIoData->lNextDisplayListLine = 8;
@@ -2691,6 +2764,7 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 		if(pIoData->tVideoData.lCurrentDisplayLine == pIoData->lNextDisplayListLine)
 		{
 			u8 cOldDisplayListCommand = pIoData->cCurrentDisplayListCommand;
+			pIoData->tDrawLineData.cDisplayListInstructionDmaPending = 1;
 #ifdef VERBOSE_DL
 			if(pIoData->tVideoData.lCurrentDisplayLine == 8)
 			{
@@ -2704,12 +2778,12 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			// Fetch new display list command
 			pIoData->cCurrentDisplayListCommand = RAM[pIoData->sDisplayListAddress];
 			FIXED_ADD(pIoData->sDisplayListAddress, 0x03ff, 1);
-			_6502_STALL(1);
 
-			// LMS (bit 6) or JUMP (instruction 01) steal 2 more cycles for the address (AHRM 4.14).
+			// LMS (bit 6) or JUMP (instruction 01) schedule 2 more DMA steals
+			// for the address on cycles 6 and 7 (AHRM 4.14).
 			if((pIoData->cCurrentDisplayListCommand & 0x40) || (pIoData->cCurrentDisplayListCommand & 0x0f) == 0x01)
 			{
-				_6502_STALL(2);
+				pIoData->tDrawLineData.cDisplayListAddressDmaRemaining = 2;
 			}
 
 			// Calculate next fetch line
@@ -4654,6 +4728,11 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		{
 			pIoData->llCycle = pIoData->llDisplayListFetchCycle;
 		}
+
+		pIoData->tDrawLineData.cPlayfieldDmaStealCount = 0;
+		pIoData->tDrawLineData.cRefreshDmaPending = 0;
+		pIoData->tDrawLineData.cDisplayListInstructionDmaPending = 0;
+		pIoData->tDrawLineData.cDisplayListAddressDmaRemaining = 0;
 
 		AtariIoFetchLine(pContext);
 

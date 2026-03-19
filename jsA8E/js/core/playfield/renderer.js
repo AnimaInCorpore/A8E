@@ -3,15 +3,15 @@
 
   function createApi(cfg) {
     if (!window.A8EPlayfieldRendererBase || typeof window.A8EPlayfieldRendererBase.createApi !== "function")
-      throw new Error("A8EPlayfieldRendererBase is not loaded");
+      {throw new Error("A8EPlayfieldRendererBase is not loaded");}
     if (!window.A8EPlayfieldMode23 || typeof window.A8EPlayfieldMode23.createApi !== "function")
-      throw new Error("A8EPlayfieldMode23 is not loaded");
+      {throw new Error("A8EPlayfieldMode23 is not loaded");}
     if (!window.A8EPlayfieldMode45 || typeof window.A8EPlayfieldMode45.createApi !== "function")
-      throw new Error("A8EPlayfieldMode45 is not loaded");
+      {throw new Error("A8EPlayfieldMode45 is not loaded");}
     if (!window.A8EPlayfieldMode67 || typeof window.A8EPlayfieldMode67.createApi !== "function")
-      throw new Error("A8EPlayfieldMode67 is not loaded");
+      {throw new Error("A8EPlayfieldMode67 is not loaded");}
     if (!window.A8EPlayfieldMode8F || typeof window.A8EPlayfieldMode8F.createApi !== "function")
-      throw new Error("A8EPlayfieldMode8F is not loaded");
+      {throw new Error("A8EPlayfieldMode8F is not loaded");}
 
     const base = window.A8EPlayfieldRendererBase.createApi(cfg);
     const modeCfg = Object.assign({}, cfg, base);
@@ -44,9 +44,11 @@
 
     return {
       currentBackgroundColor: base.currentBackgroundColor,
+      currentBackgroundPriority: base.currentBackgroundPriority,
       drawBackgroundClipped: base.drawBackgroundClipped,
       drawInterleavedVisibleBlankLine: base.drawInterleavedVisibleBlankLine,
       drawModeLine,
+      initScanline: base.initScanline,
       stepClockActions: base.stepClockActions,
     };
   }

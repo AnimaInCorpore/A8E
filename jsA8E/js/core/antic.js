@@ -42,6 +42,7 @@
 
     const ANTIC_MODE_INFO = cfg.ANTIC_MODE_INFO;
     const drawPlayerMissilesClock = cfg.drawPlayerMissilesClock;
+    const fetchPmgDmaCycle = cfg.fetchPmgDmaCycle;
     const drawPlayerMissiles = cfg.drawPlayerMissiles;
     const pokeyTimerPeriodCpuCycles = cfg.pokeyTimerPeriodCpuCycles;
     const cycleTimedEventUpdate = cfg.cycleTimedEventUpdate;
@@ -49,6 +50,11 @@
     const PRIO_PF0 = cfg.PRIO_PF0;
     const PRIO_PF1 = cfg.PRIO_PF1;
     const PRIO_PF2 = cfg.PRIO_PF2;
+    const PRIO_PF3 = cfg.PRIO_PF3;
+    const PRIO_M10_PM0 = cfg.PRIO_M10_PM0;
+    const PRIO_M10_PM1 = cfg.PRIO_M10_PM1;
+    const PRIO_M10_PM2 = cfg.PRIO_M10_PM2;
+    const PRIO_M10_PM3 = cfg.PRIO_M10_PM3;
     const PRIORITY_TABLE_BKG_PF012 = cfg.PRIORITY_TABLE_BKG_PF012;
     const PRIORITY_TABLE_BKG_PF013 = cfg.PRIORITY_TABLE_BKG_PF013;
     const PRIORITY_TABLE_PF0123 = cfg.PRIORITY_TABLE_PF0123;
@@ -79,8 +85,10 @@
             Util: Util,
             PIXELS_PER_LINE: PIXELS_PER_LINE,
             CYCLES_PER_LINE: CYCLES_PER_LINE,
+            LINES_PER_SCREEN_PAL: LINES_PER_SCREEN_PAL,
             FIRST_VISIBLE_LINE: FIRST_VISIBLE_LINE,
             LAST_VISIBLE_LINE: LAST_VISIBLE_LINE,
+            IO_VCOUNT: IO_VCOUNT,
             IO_CHACTL: IO_CHACTL,
             IO_CHBASE: IO_CHBASE,
             IO_COLBK: IO_COLBK,
@@ -97,6 +105,11 @@
             PRIO_PF0: PRIO_PF0,
             PRIO_PF1: PRIO_PF1,
             PRIO_PF2: PRIO_PF2,
+            PRIO_PF3: PRIO_PF3,
+            PRIO_M10_PM0: PRIO_M10_PM0,
+            PRIO_M10_PM1: PRIO_M10_PM1,
+            PRIO_M10_PM2: PRIO_M10_PM2,
+            PRIO_M10_PM3: PRIO_M10_PM3,
             PRIORITY_TABLE_BKG_PF012: PRIORITY_TABLE_BKG_PF012,
             PRIORITY_TABLE_BKG_PF013: PRIORITY_TABLE_BKG_PF013,
             PRIORITY_TABLE_PF0123: PRIORITY_TABLE_PF0123,
@@ -109,6 +122,7 @@
             decodeTextModeCharacter: decodeTextModeCharacter,
             fillLine: fillLine,
             drawPlayerMissilesClock: drawPlayerMissilesClock,
+            fetchPmgDmaCycle: fetchPmgDmaCycle,
             ioCycleTimedEvent: function (c) {
               ioCycleTimedEvent(c);
             },
@@ -121,15 +135,13 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
-      // Nine cycles of refresh DMA occur on every scan line (AHRM 4.14).
-      CPU.stall(ctx, 9);
-
       if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 1)
         {io.nextDisplayListLine = 8;}
 
       // Playfield DMA active?
       if (sram[IO_DMACTL] & 0x20) {
         if (io.video.currentDisplayLine === io.nextDisplayListLine) {
+          io.drawLine.displayListInstructionDmaPending = 1;
           const oldCmd = io.currentDisplayListCommand & 0xff;
           io.currentDisplayListCommand =
             ram[io.displayListAddress & 0xffff] & 0xff;
@@ -138,14 +150,13 @@
             0x03ff,
             1,
           );
-          // One cycle for the instruction byte.
-          CPU.stall(ctx, 1);
 
           const cmd = io.currentDisplayListCommand;
 
-          // LMS (bit 6) or JUMP (instruction 01) steal 2 more cycles for the address.
+          // LMS (bit 6) or JUMP (instruction 01) schedule 2 more DMA steals
+          // for the address on cycles 6 and 7 (AHRM 4.14).
           if ((cmd & ANTIC_LMS_BIT) || (cmd & ANTIC_MODE_BITS) === ANTIC_JUMP_INSTRUCTION) {
-            CPU.stall(ctx, 2);
+            io.drawLine.displayListAddressDmaRemaining = 2;
           }
           const mode = cmd & ANTIC_MODE_BITS;
           if (mode <= 0x01) {
@@ -270,6 +281,10 @@
         if (io.video.currentDisplayLine === 0) {
           io.clock = io.displayListFetchCycle;
         }
+        io.drawLine.playfieldDmaStealCount = 0;
+        io.drawLine.refreshDmaPending = 0;
+        io.drawLine.displayListInstructionDmaPending = 0;
+        io.drawLine.displayListAddressDmaRemaining = 0;
         fetchLine(ctx);
         io.inDrawLine = true;
         cycleTimedEventUpdate(ctx);
