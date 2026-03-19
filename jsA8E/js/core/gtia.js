@@ -370,8 +370,10 @@
       const sram = ctx.sram;
       const dmactl = sram[IO_DMACTL] & 0xff;
 
-      const pmDmaPlayers = dmactl & 0x08 && sram[IO_GRACTL] & 0x02;
-      const pmDmaMissiles = dmactl & 0x04 && sram[IO_GRACTL] & 0x01;
+      const pmDmaPlayers = (dmactl & 0x08) !== 0;
+      const pmDmaMissiles = ((dmactl & 0x04) !== 0) || pmDmaPlayers;
+      const pmReceivePlayers = (sram[IO_GRACTL] & 0x02) !== 0;
+      const pmReceiveMissiles = (sram[IO_GRACTL] & 0x01) !== 0;
 
       if (!pmDmaPlayers && !pmDmaMissiles) return 0;
 
@@ -379,29 +381,46 @@
       const hires = (dmactl & 0x10) !== 0;
 
       function fetchPmAddr(offset, vdelayMask) {
-        const lineIndex = hires
-          ? (y - (sram[IO_VDELAY] & vdelayMask ? 1 : 0))
-          : ((y >> 1) - (sram[IO_VDELAY] & vdelayMask ? 1 : 0));
+        const lineIndex = hires ? y : (y >> 1);
         const base = hires ? (pmbaseHi & 0xf800) : (pmbaseHi & 0xfc00);
         return (base + offset + (lineIndex & 0xffff)) & 0xffff;
       }
 
+      function vdelayAllowsFetch(vdelayMask) {
+        return ((sram[IO_VDELAY] & vdelayMask) === 0) || ((y & 0x01) !== 0);
+      }
+
       if (lineCycle === 0 && pmDmaMissiles) {
-        sram[IO_GRAFM_TRIG1] = ctx.ram[fetchPmAddr(hires ? 768 : 384, 0x08)];
+        if (!vdelayAllowsFetch(0x08)) return 0;
+        if (pmReceiveMissiles) {
+          sram[IO_GRAFM_TRIG1] = ctx.ram[fetchPmAddr(hires ? 768 : 384, 0x08)];
+        }
         return 1;
       }
       if (pmDmaPlayers) {
         if (lineCycle === 2) {
-          sram[IO_GRAFP0_P1PL] = ctx.ram[fetchPmAddr(hires ? 1024 : 512, 0x10)];
+          if (!vdelayAllowsFetch(0x10)) return 0;
+          if (pmReceivePlayers) {
+            sram[IO_GRAFP0_P1PL] = ctx.ram[fetchPmAddr(hires ? 1024 : 512, 0x10)];
+          }
           return 1;
         } else if (lineCycle === 3) {
-          sram[IO_GRAFP1_P2PL] = ctx.ram[fetchPmAddr(hires ? 1280 : 640, 0x20)];
+          if (!vdelayAllowsFetch(0x20)) return 0;
+          if (pmReceivePlayers) {
+            sram[IO_GRAFP1_P2PL] = ctx.ram[fetchPmAddr(hires ? 1280 : 640, 0x20)];
+          }
           return 1;
         } else if (lineCycle === 4) {
-          sram[IO_GRAFP2_P3PL] = ctx.ram[fetchPmAddr(hires ? 1536 : 768, 0x40)];
+          if (!vdelayAllowsFetch(0x40)) return 0;
+          if (pmReceivePlayers) {
+            sram[IO_GRAFP2_P3PL] = ctx.ram[fetchPmAddr(hires ? 1536 : 768, 0x40)];
+          }
           return 1;
         } else if (lineCycle === 5) {
-          sram[IO_GRAFP3_TRIG0] = ctx.ram[fetchPmAddr(hires ? 1792 : 896, 0x80)];
+          if (!vdelayAllowsFetch(0x80)) return 0;
+          if (pmReceivePlayers) {
+            sram[IO_GRAFP3_TRIG0] = ctx.ram[fetchPmAddr(hires ? 1792 : 896, 0x80)];
+          }
           return 1;
         }
       }

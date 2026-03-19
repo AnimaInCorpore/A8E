@@ -14,8 +14,24 @@
     const IO_PRIOR = cfg.IO_PRIOR;
     const IO_VCOUNT = cfg.IO_VCOUNT;
 
-    const PRIO_BKG = cfg.PRIO_BKG;
-    const PRIO_M10_PM0 = cfg.PRIO_M10_PM0;
+    const PRIO_BKG = cfg.PRIO_BKG | 0;
+    const PRIO_PM0 = cfg.PRIO_PM0 | 0;
+    const PRIO_PM1 = cfg.PRIO_PM1 | 0;
+    const PRIO_PM2 = cfg.PRIO_PM2 | 0;
+    const PRIO_PM3 = cfg.PRIO_PM3 | 0;
+    const PRIO_M10_PM0 = cfg.PRIO_M10_PM0 | 0;
+    const PRIO_M10_PM1 = cfg.PRIO_M10_PM1 | 0;
+    const PRIO_M10_PM2 = cfg.PRIO_M10_PM2 | 0;
+    const PRIO_M10_PM3 = cfg.PRIO_M10_PM3 | 0;
+    const PMG_PRIORITY_MASK =
+      PRIO_PM0 |
+      PRIO_PM1 |
+      PRIO_PM2 |
+      PRIO_PM3 |
+      PRIO_M10_PM0 |
+      PRIO_M10_PM1 |
+      PRIO_M10_PM2 |
+      PRIO_M10_PM3;
 
     const ioCycleTimedEvent = cfg.ioCycleTimedEvent;
     const drawPlayerMissilesClock = cfg.drawPlayerMissilesClock;
@@ -217,8 +233,10 @@
         for (let pixel = 0; pixel < 4; pixel++, x++) {
           if (x >= 0 && x < PIXELS_PER_LINE) {
             const index = dstIndex + x;
-            dst[index] = color;
-            prio[index] = priority;
+            if ((prio[index] & PMG_PRIORITY_MASK) === 0) {
+              dst[index] = color;
+              prio[index] = priority;
+            }
           }
         }
         clockAction(ctx);

@@ -2,7 +2,7 @@
   "name": "jsa8e",
   "private": true,
   "scripts": {
-    "test:automation": "node tests/automation_xex_boot_failure.test.js && node tests/automation_url_media_loading.test.js && node tests/automation_system_state_resilience.test.js && node tests/automation_snapshot_api.test.js && node tests/automation_memory_helpers.test.js && node tests/snapshot_codec_roundtrip.test.js && node tests/memory_xex_preflight_bank_switch.test.js && node tests/hdevice_snapshot_state.test.js && node tests/snapshot_save_timing.test.js && node tests/antic_display_list_nmi.test.js && node tests/playfield_mode_2_3_rendering.test.js && node tests/playfield_vcount_timing.test.js && node tests/software_priority_width.test.js && node tests/headless_automation.test.js",
+    "test:automation": "node tests/automation_xex_boot_failure.test.js && node tests/automation_url_media_loading.test.js && node tests/automation_system_state_resilience.test.js && node tests/automation_snapshot_api.test.js && node tests/automation_memory_helpers.test.js && node tests/snapshot_codec_roundtrip.test.js && node tests/memory_xex_preflight_bank_switch.test.js && node tests/hdevice_snapshot_state.test.js && node tests/snapshot_save_timing.test.js && node tests/antic_display_list_nmi.test.js && node tests/playfield_mode_2_3_rendering.test.js && node tests/playfield_hscroll_priority_preservation.test.js && node tests/playfield_vcount_timing.test.js && node tests/gtia_pmg_dma_regression.test.js && node tests/software_priority_width.test.js && node tests/headless_automation.test.js",
     "lint": "eslint \"js/**/*.js\"",
     "lint:fix": "eslint \"js/**/*.js\" --fix"
   },

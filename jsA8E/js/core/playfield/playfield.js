@@ -24,6 +24,8 @@
     const PLAYFIELD_SCRATCH_VIEW_X = 64;
     const ACTIVE_LINE_HSYNC_PIXELS = 32;
     const ACTIVE_LINE_COLOR_BURST_CYCLES = 6;
+    const PMG_PRIORITY_MASK =
+      0x10 | 0x20 | 0x40 | 0x80 | 0x100 | 0x200 | 0x400 | 0x800;
 
     function advanceDisplayMemoryRow(io) {
       io.displayMemoryAddress = Util.fixedAdd(
@@ -121,10 +123,27 @@
       };
     }
 
-    function fillBackgroundSpan(linePixels, linePriority, startX, endX, color, bPrio) {
+    function fillBackgroundSpan(
+      linePixels,
+      linePriority,
+      startX,
+      endX,
+      color,
+      bPrio,
+      preservePmgPixels,
+    ) {
       const clampedStart = Math.max(0, startX | 0);
       const clampedEnd = Math.min(PIXELS_PER_LINE, endX | 0);
       if (clampedEnd <= clampedStart) return;
+      if (preservePmgPixels) {
+        for (let x = clampedStart; x < clampedEnd; x++) {
+          if ((linePriority[x] & PMG_PRIORITY_MASK) === 0) {
+            linePixels[x] = color;
+            linePriority[x] = bPrio;
+          }
+        }
+        return;
+      }
       linePixels.fill(color, clampedStart, clampedEnd);
       linePriority.fill(bPrio, clampedStart, clampedEnd);
     }
@@ -268,6 +287,7 @@
             Math.min(fetchEndX, visibleStartX),
             baseColor,
             rendererApi.currentBackgroundPriority(sram),
+            true,
           );
           fillBackgroundSpan(
             linePixels,
@@ -276,6 +296,7 @@
             fetchEndX,
             baseColor,
             rendererApi.currentBackgroundPriority(sram),
+            true,
           );
         }
 
