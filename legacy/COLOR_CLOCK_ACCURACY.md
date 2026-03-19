@@ -70,8 +70,12 @@ These items are implemented in both modern ports:
   (fetch window delayed by one cycle per two HSCROL increments) instead of
   introducing extra-byte fetch behavior.
 - ANTIC modes `2–F` use per-clock playfield loops with inline DMA steals at
-  the AHRM-specified cycle positions.
-- Visible player/missile rendering is interleaved on the scanline timing path.
+  the AHRM-specified cycle positions. Character modes 2-7 and bitmap modes
+  8-F consume playfield DMA through `stealDma()` for refresh contention
+  tracking (one-cycle defer, further blocked drops per AHRM 4.14).
+- Visible player/missile rendering is interleaved on the scanline timing path,
+  with 16-bit priority buffers preserving GTIA Mode 10 pixel identity
+  (`PRIO_M10_PM0-3`) through the full collision/priority pipeline.
 - Blank lines and active-line background borders use live background color
   reads instead of a single scanline snapshot.
 - Visible blank/background-only lines spend the first 6 color-burst clocks
