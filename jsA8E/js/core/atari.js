@@ -717,6 +717,8 @@
     const readRangeRuntime = memoryRuntime.readRange;
     const writeMemoryRuntime = memoryRuntime.writeMemory;
     const writeRangeRuntime = memoryRuntime.writeRange;
+    const setMemoryWriteHookRuntime = memoryRuntime.setMemoryWriteHook;
+    const setCpuMemoryWriteHookRuntime = CPU.setMemoryWriteHook;
     const getBankStateRuntime = memoryRuntime.getBankState;
 
     // H: device -- create instance and install CIO hook(s)
@@ -861,6 +863,15 @@
 
     function writeRange(startAddress, data) {
       return writeRangeRuntime(startAddress, data);
+    }
+
+    function setMemoryWriteHook(fn) {
+      if (typeof setMemoryWriteHookRuntime === "function") {
+        setMemoryWriteHookRuntime(fn);
+      }
+      if (typeof setCpuMemoryWriteHookRuntime === "function") {
+        setCpuMemoryWriteHookRuntime(machine.ctx, fn);
+      }
     }
 
     function getBankState() {
@@ -1608,6 +1619,7 @@
       readRange: readRange,
       writeMemory: writeMemory,
       writeRange: writeRange,
+      setMemoryWriteHook: setMemoryWriteHook,
       getBankState: getBankState,
       saveSnapshot: saveSnapshot,
       loadSnapshot: loadSnapshot,

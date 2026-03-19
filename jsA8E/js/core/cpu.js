@@ -73,6 +73,9 @@
       irqPending: 0,
       breakRun: false,
       instructionCounter: 0,
+      currentInstructionPc: 0,
+      currentOpcode: 0,
+      memoryWriteHook: null,
       instructionTraceHook: null,
       illegalOpcodeHook: null,
       stealDmaReentrancyGuard: false,
@@ -130,11 +133,11 @@
   function serviceInterrupt(ctx, vectorAddr, breakFlag, pcToPush) {
     const cpu = ctx.cpu;
     // Stack always in RAM ($0100-$01FF).
-    ctx.ram[0x100 + cpu.sp] = (pcToPush >> 8) & 0xff;
+    writeRam(ctx, 0x100 + cpu.sp, (pcToPush >> 8) & 0xff);
     cpu.sp = (cpu.sp - 1) & 0xff;
-    ctx.ram[0x100 + cpu.sp] = pcToPush & 0xff;
+    writeRam(ctx, 0x100 + cpu.sp, pcToPush & 0xff);
     cpu.sp = (cpu.sp - 1) & 0xff;
-    ctx.ram[0x100 + cpu.sp] = getPsWithB(ctx, breakFlag);
+    writeRam(ctx, 0x100 + cpu.sp, getPsWithB(ctx, breakFlag));
     cpu.sp = (cpu.sp - 1) & 0xff;
 
     cpu.ps |= FLAG_I;
@@ -172,8 +175,27 @@
 
   function ramAccess(ctx, value) {
     const addr = ctx.accessAddress & 0xffff;
-    if (value != null) ctx.ram[addr] = value & 0xff;
+    if (value != null) writeRam(ctx, addr, value & 0xff);
     return ctx.ram[addr] & 0xff;
+  }
+
+  function writeRam(ctx, addr, value) {
+    const a = addr & 0xffff;
+    const v = value & 0xff;
+    ctx.ram[a] = v;
+    const hook = ctx.memoryWriteHook;
+    if (typeof hook === "function") {
+      hook(
+        a,
+        v,
+        ctx.cycleCounter >>> 0,
+        ctx.instructionCounter >>> 0,
+        ctx.currentInstructionPc & 0xffff,
+        ctx.currentOpcode & 0xff,
+        ctx,
+      );
+    }
+    return v;
   }
 
   function romAccess(ctx, value) {
@@ -347,7 +369,7 @@
     const addr = ctx.accessAddress & 0xffff;
     const v = value & 0xff;
     if (ctx.accessMode === ACCESS_MODE_RAM) {
-      ctx.ram[addr] = v;
+      writeRam(ctx, addr, v);
       return v;
     }
     if (ctx.accessMode === ACCESS_MODE_ROM) {
@@ -650,9 +672,9 @@
   function opJSR(ctx) {
     const cpu = ctx.cpu;
     const ret = (cpu.pc - 1) & 0xffff;
-    ctx.ram[0x100 + cpu.sp] = (ret >> 8) & 0xff;
+    writeRam(ctx, 0x100 + cpu.sp, (ret >> 8) & 0xff);
     cpu.sp = (cpu.sp - 1) & 0xff;
-    ctx.ram[0x100 + cpu.sp] = ret & 0xff;
+    writeRam(ctx, 0x100 + cpu.sp, ret & 0xff);
     cpu.sp = (cpu.sp - 1) & 0xff;
     cpu.pc = ctx.accessAddress & 0xffff;
   }
@@ -705,12 +727,12 @@
   }
   function opPHA(ctx) {
     const cpu = ctx.cpu;
-    ctx.ram[0x100 + cpu.sp] = cpu.a & 0xff;
+    writeRam(ctx, 0x100 + cpu.sp, cpu.a & 0xff);
     cpu.sp = (cpu.sp - 1) & 0xff;
   }
   function opPHP(ctx) {
     const cpu = ctx.cpu;
-    ctx.ram[0x100 + cpu.sp] = getPsWithB(ctx, 1);
+    writeRam(ctx, 0x100 + cpu.sp, getPsWithB(ctx, 1));
     cpu.sp = (cpu.sp - 1) & 0xff;
   }
   function opPLA(ctx) {
@@ -947,6 +969,8 @@
 
     const opcode = ram[cpu.pc & 0xffff] & 0xff;
     if (onIllegalOpcode(ctx, opcode)) return;
+    ctx.currentInstructionPc = cpu.pc & 0xffff;
+    ctx.currentOpcode = opcode & 0xff;
     cpu.pc = (cpu.pc + 1) & 0xffff;
 
     ctx.accessFunctionOverride = null;
@@ -1030,6 +1054,8 @@
             cycles: ctx.cycleCounter >>> 0,
           };
         }
+        ctx.currentInstructionPc = cpu.pc & 0xffff;
+        ctx.currentOpcode = opcode & 0xff;
         let nextEvent = cycleTarget;
         if (
           ctx.ioCycleTimedEventFunction &&
@@ -1102,6 +1128,10 @@
     delete ctx.pcHooks[addr & 0xffff];
   }
 
+  function setMemoryWriteHook(ctx, fn) {
+    ctx.memoryWriteHook = typeof fn === "function" ? fn : null;
+  }
+
   window.A8E6502 = {
     makeContext: makeContext,
     setRom: setRom,
@@ -1116,6 +1146,7 @@
     stealDma: stealDma,
     setPcHook: setPcHook,
     clearPcHook: clearPcHook,
+    setMemoryWriteHook: setMemoryWriteHook,
     // exposed for debugging/tests
     getPs: getPs,
     setPs: setPs,

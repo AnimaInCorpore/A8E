@@ -806,6 +806,7 @@
       const getTurbo = opts.getTurbo;
       const pokeyAudioResetState = opts.pokeyAudioResetState;
       const pokeyAudioSetTurbo = opts.pokeyAudioSetTurbo;
+      let memoryWriteHook = null;
 
       function makeDefaultDeviceSlots() {
         const slots = new Int16Array(DEVICE_SLOT_COUNT);
@@ -1206,7 +1207,23 @@
         const addr = (address | 0) & 0xffff;
         const next = value & 0xff;
         machine.ctx.ram[addr] = next;
+        if (memoryWriteHook) {
+          try {
+            memoryWriteHook(
+              addr,
+              next,
+              machine.ctx.cycleCounter >>> 0,
+              machine.ctx.instructionCounter >>> 0,
+            );
+          } catch {
+            // ignore hook errors
+          }
+        }
         return next;
+      }
+
+      function setMemoryWriteHook(fn) {
+        memoryWriteHook = typeof fn === "function" ? fn : null;
       }
 
       function writeRange(startAddress, data) {
@@ -1475,6 +1492,7 @@
         readRange: readRange,
         writeMemory: writeMemory,
         writeRange: writeRange,
+        setMemoryWriteHook: setMemoryWriteHook,
         getBankState: getBankState,
         exportSnapshotState: exportSnapshotState,
         importSnapshotState: importSnapshotState,
