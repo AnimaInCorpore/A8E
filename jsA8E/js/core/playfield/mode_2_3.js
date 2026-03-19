@@ -19,6 +19,11 @@
 
     const fillGtiaColorTable = cfg.fillGtiaColorTable;
     const decodeTextModeCharacter = cfg.decodeTextModeCharacter;
+    const currentCharacterBaseRegister =
+      cfg.currentCharacterBaseRegister ||
+      function (io, sram) {
+        return sram[IO_CHBASE] & 0xff;
+      };
     const clockAction = cfg.clockAction;
     const fetchCharacterRow8 = cfg.fetchCharacterRow8;
     const fetchCharacterRow10 = cfg.fetchCharacterRow10;
@@ -50,15 +55,14 @@
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
       const colorTable = SCRATCH_GTIA_COLOR_TABLE;
 
-      const chBase = ((sram[IO_CHBASE] << 8) & 0xfc00) & 0xffff;
-      const chactl = sram[IO_CHACTL] & 0x03;
-
       let mask = 0x00;
       let data = 0;
       let inverse = false;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
+        const chBase = ((currentCharacterBaseRegister(io, sram) << 8) & 0xfc00) & 0xffff;
         const priorMode = (sram[IO_PRIOR] >> 6) & 3;
+        const chactl = sram[IO_CHACTL] & 0x07;
 
         if (mask === 0x00) {
           const decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
@@ -71,7 +75,7 @@
             stealDma(ctx, 1);
           }
 
-          data = fetchCharacterRow8(ram, chBase, ch, vScrollOffset);
+          data = fetchCharacterRow8(ram, chBase, ch, vScrollOffset, chactl);
           mask = 0x80;
         }
 
@@ -182,15 +186,15 @@
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
       const colorTable = SCRATCH_GTIA_COLOR_TABLE;
-      const chBase = ((sram[IO_CHBASE] << 8) & 0xfc00) & 0xffff;
-      const chactl = sram[IO_CHACTL] & 0x03;
 
       let mask = 0x00;
       let data = 0;
       let inverse = false;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
+        const chBase = ((currentCharacterBaseRegister(io, sram) << 8) & 0xfc00) & 0xffff;
         const priorMode = (sram[IO_PRIOR] >> 6) & 3;
+        const chactl = sram[IO_CHACTL] & 0x07;
 
         if (mask === 0x00) {
           const decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
@@ -203,7 +207,7 @@
             stealDma(ctx, 1);
           }
 
-          data = fetchCharacterRow10(ram, chBase, ch, vScrollOffset);
+          data = fetchCharacterRow10(ram, chBase, ch, vScrollOffset, chactl);
           mask = 0x80;
         }
 

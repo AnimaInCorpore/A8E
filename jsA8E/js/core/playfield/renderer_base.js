@@ -9,6 +9,7 @@
 
     const IO_COLBK = cfg.IO_COLBK;
     const IO_COLPM0_TRIG2 = cfg.IO_COLPM0_TRIG2;
+    const IO_CHBASE = cfg.IO_CHBASE;
     const IO_DMACTL = cfg.IO_DMACTL;
     const IO_HSCROL = cfg.IO_HSCROL;
     const IO_PRIOR = cfg.IO_PRIOR;
@@ -203,25 +204,71 @@
       return sram[IO_COLBK] & 0xf0;
     }
 
-    function fetchCharacterRow8(ram, chBase, ch, row) {
+    function ensureChbaseTiming(io) {
+      let timing = io.chbaseTiming;
+      if (!timing || typeof timing !== "object") {
+        timing = io.chbaseTiming = {
+          rawValue: 0,
+          activeValue: 0,
+          pendingValue: 0,
+          pendingClock: -1,
+          initialized: false,
+        };
+      }
+      return timing;
+    }
+
+    function currentCharacterBaseRegister(io, sram) {
+      const timing = ensureChbaseTiming(io);
+      if (sram) {
+        const rawValue = sram[IO_CHBASE] & 0xff;
+        if (!timing.initialized) {
+          timing.initialized = true;
+          timing.rawValue = rawValue;
+          timing.activeValue = rawValue;
+          timing.pendingValue = rawValue;
+          timing.pendingClock = -1;
+        } else if (rawValue !== timing.rawValue) {
+          timing.rawValue = rawValue;
+          timing.pendingValue = rawValue;
+          if (timing.pendingClock < 0) {
+            timing.pendingClock = (io.clock | 0) + 1;
+          }
+        }
+      }
+      if (timing.pendingClock >= 0 && (io.clock | 0) >= timing.pendingClock) {
+        timing.activeValue = timing.pendingValue & 0xff;
+        timing.pendingClock = -1;
+      }
+      return timing.activeValue & 0xff;
+    }
+
+    function resolveCharacterRow(row, chactl) {
       const glyphRow = row & 0xff;
-      if (glyphRow >= 8) return 0;
+      if (glyphRow >= 8) return -1;
+      if ((chactl & 0x04) === 0) return glyphRow;
+      return 7 - glyphRow;
+    }
+
+    function fetchCharacterRow8(ram, chBase, ch, row, chactl) {
+      const glyphRow = resolveCharacterRow(row, chactl);
+      if (glyphRow < 0) return 0;
       return ram[(chBase + ch * 8 + glyphRow) & 0xffff] & 0xff;
     }
 
-    function fetchCharacterRow10(ram, chBase, ch, row) {
+    function fetchCharacterRow10(ram, chBase, ch, row, chactl) {
       const glyphRow = row & 0xff;
-      if (ch < 0x60) return fetchCharacterRow8(ram, chBase, ch, glyphRow);
+      if (ch < 0x60) return fetchCharacterRow8(ram, chBase, ch, glyphRow, chactl);
       if (glyphRow < 2) return 0;
-      if (glyphRow < 8) return ram[(chBase + ch * 8 + glyphRow) & 0xffff] & 0xff;
-      if (glyphRow < 10) return ram[(chBase + ch * 8 + (glyphRow - 8)) & 0xffff] & 0xff;
+      if (glyphRow < 8) return fetchCharacterRow8(ram, chBase, ch, glyphRow, chactl);
+      if (glyphRow < 10) return fetchCharacterRow8(ram, chBase, ch, glyphRow - 8, chactl);
       return 0;
     }
 
-    function fetchCharacterRow16(ram, chBase, ch, row) {
+    function fetchCharacterRow16(ram, chBase, ch, row, chactl) {
       const glyphRow = row & 0xff;
       if (glyphRow >= 16) return 0;
-      return ram[(chBase + ch * 8 + (glyphRow >> 1)) & 0xffff] & 0xff;
+      return fetchCharacterRow8(ram, chBase, ch, glyphRow >> 1, chactl);
     }
 
     function drawBackgroundClipped(ctx, dst, prio, dstIndex, startX, cycles) {
@@ -271,6 +318,7 @@
       stepClockActions,
       currentBackgroundColor,
       currentBackgroundPriority,
+      currentCharacterBaseRegister,
       fetchCharacterRow8,
       fetchCharacterRow10,
       fetchCharacterRow16,

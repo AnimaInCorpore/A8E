@@ -4,6 +4,7 @@
   function createApi(cfg) {
     const Util = cfg.Util;
 
+    const IO_CHACTL = cfg.IO_CHACTL;
     const IO_CHBASE = cfg.IO_CHBASE;
     const IO_COLBK = cfg.IO_COLBK;
     const IO_COLPF0 = cfg.IO_COLPF0;
@@ -16,6 +17,11 @@
     const PRIORITY_TABLE_PF0123 = cfg.PRIORITY_TABLE_PF0123;
 
     const clockAction = cfg.clockAction;
+    const currentCharacterBaseRegister =
+      cfg.currentCharacterBaseRegister ||
+      function (io, sram) {
+        return sram[IO_CHBASE] & 0xff;
+      };
     const fetchCharacterRow8 = cfg.fetchCharacterRow8;
     const fetchCharacterRow16 = cfg.fetchCharacterRow16;
     const stealDma = cfg.stealDma || function (ctx, cycles) {
@@ -42,7 +48,6 @@
       const prio = io.videoOut.priority;
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
-      const chBase = ((sram[IO_CHBASE] & 0xff) << 8) & 0xfe00 & 0xffff;
 
       let mask = 0x00;
       let data = 0;
@@ -50,6 +55,8 @@
       let p = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
+        const chBase = ((currentCharacterBaseRegister(io, sram) << 8) & 0xfe00) & 0xffff;
+        const chactl = sram[IO_CHACTL] & 0x07;
         if (mask === 0x00) {
           let ch = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
@@ -63,7 +70,7 @@
           p = PRIORITY_TABLE_PF0123[colorIndex] & 0xff;
           ch &= 0x3f;
 
-          data = fetchCharacterRow8(ram, chBase, ch, vScrollOffset);
+          data = fetchCharacterRow8(ram, chBase, ch, vScrollOffset, chactl);
           mask = 0x80;
         }
 
@@ -127,7 +134,6 @@
       const prio = io.videoOut.priority;
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
-      const chBase = ((sram[IO_CHBASE] & 0xff) << 8) & 0xfe00 & 0xffff;
 
       let mask = 0x00;
       let data = 0;
@@ -135,6 +141,8 @@
       let p = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
+        const chBase = ((currentCharacterBaseRegister(io, sram) << 8) & 0xfe00) & 0xffff;
+        const chactl = sram[IO_CHACTL] & 0x07;
         if (mask === 0x00) {
           let ch = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
@@ -150,7 +158,7 @@
           p = PRIORITY_TABLE_PF0123[colorIndex] & 0xff;
           ch &= 0x3f;
 
-          data = fetchCharacterRow16(ram, chBase, ch, vScrollLine);
+          data = fetchCharacterRow16(ram, chBase, ch, vScrollLine, chactl);
           mask = 0x80;
         }
 

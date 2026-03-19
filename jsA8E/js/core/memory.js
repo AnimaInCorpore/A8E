@@ -1304,6 +1304,15 @@
           rowDisplayMemoryAddress: io.rowDisplayMemoryAddress | 0,
           displayMemoryAddress: io.displayMemoryAddress | 0,
           firstRowScanline: !!io.firstRowScanline,
+          chbaseTiming: io.chbaseTiming
+            ? {
+                rawValue: io.chbaseTiming.rawValue | 0,
+                activeValue: io.chbaseTiming.activeValue | 0,
+                pendingValue: io.chbaseTiming.pendingValue | 0,
+                pendingClock: io.chbaseTiming.pendingClock | 0,
+                initialized: !!io.chbaseTiming.initialized,
+              }
+            : null,
           drawLine: io.drawLine
             ? {
                 displayMemoryAddress: io.drawLine.displayMemoryAddress | 0,
@@ -1367,6 +1376,13 @@
         io.rowDisplayMemoryAddress = state.rowDisplayMemoryAddress | 0;
         io.displayMemoryAddress = state.displayMemoryAddress | 0;
         io.firstRowScanline = !!state.firstRowScanline;
+        if (state.chbaseTiming && typeof state.chbaseTiming === "object") {
+          io.chbaseTiming.rawValue = state.chbaseTiming.rawValue | 0;
+          io.chbaseTiming.activeValue = state.chbaseTiming.activeValue | 0;
+          io.chbaseTiming.pendingValue = state.chbaseTiming.pendingValue | 0;
+          io.chbaseTiming.pendingClock = state.chbaseTiming.pendingClock | 0;
+          io.chbaseTiming.initialized = !!state.chbaseTiming.initialized;
+        }
         if (state.drawLine && typeof state.drawLine === "object") {
           io.drawLine.displayMemoryAddress = state.drawLine.displayMemoryAddress | 0;
           io.drawLine.bytesPerLine = state.drawLine.bytesPerLine | 0;

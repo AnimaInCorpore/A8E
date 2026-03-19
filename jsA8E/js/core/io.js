@@ -344,9 +344,26 @@
 
           case IO_CHACTL:
           case IO_PMBASE:
-          case IO_CHBASE:
             sram[addr] = v;
             break;
+
+          case IO_CHBASE: {
+            sram[addr] = v;
+            const chbaseTiming =
+              io.chbaseTiming ||
+              (io.chbaseTiming = {
+                rawValue: 0,
+                activeValue: 0,
+                pendingValue: 0,
+                pendingClock: -1,
+                initialized: false,
+              });
+            chbaseTiming.initialized = true;
+            chbaseTiming.rawValue = v & 0xff;
+            chbaseTiming.pendingValue = v & 0xff;
+            chbaseTiming.pendingClock = (io.clock | 0) + 2;
+            break;
+          }
 
           case IO_DLISTL:
             sram[addr] = v;

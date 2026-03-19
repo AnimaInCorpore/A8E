@@ -56,6 +56,13 @@
         rowDisplayMemoryAddress: 0,
         displayMemoryAddress: 0,
         firstRowScanline: false,
+        chbaseTiming: {
+          rawValue: 0,
+          activeValue: 0,
+          pendingValue: 0,
+          pendingClock: -1,
+          initialized: false,
+        },
         drawLine: {
           displayMemoryAddress: 0,
           bytesPerLine: 0,
