@@ -1283,6 +1283,7 @@
       imports: raw.imports,
       externals: raw.externals,
       deferAsserts: raw.deferAsserts,
+      suppressRunAddress: raw.suppressRunAddress,
     };
   }
 
@@ -1342,6 +1343,7 @@
     if (spec.imports !== undefined) out.imports = spec.imports;
     if (spec.externals !== undefined) out.externals = spec.externals;
     if (spec.deferAsserts !== undefined) out.deferAsserts = !!spec.deferAsserts;
+    if (spec.suppressRunAddress !== undefined) out.suppressRunAddress = !!spec.suppressRunAddress;
     return out;
   }
 

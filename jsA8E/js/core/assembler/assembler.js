@@ -180,6 +180,7 @@
       let firstEmitPc = null;
       let runAddr = null;
       let explicitRun = false;
+      const suppressRunAddress = !!(options && options.suppressRunAddress);
       const lineAddressMap = Object.create(null);
       const addressLineMap = Object.create(null);
       const lineBytesMap = Object.create(null);
@@ -432,12 +433,14 @@
         throw new Error("Source does not emit any code/data.");
       }
 
-      if (runAddr === null && firstEmitPc !== null) runAddr = firstEmitPc;
-      if (runAddr !== null && (explicitRun || !ns.segmentHasRunAddress(segments))) {
-        segments.push({
-          start: 0x02e0,
-          data: [runAddr & 0xff, (runAddr >> 8) & 0xff],
-        });
+      if (!suppressRunAddress) {
+        if (runAddr === null && firstEmitPc !== null) runAddr = firstEmitPc;
+        if (runAddr !== null && (explicitRun || !ns.segmentHasRunAddress(segments))) {
+          segments.push({
+            start: 0x02e0,
+            data: [runAddr & 0xff, (runAddr >> 8) & 0xff],
+          });
+        }
       }
 
       const xex = ns.buildXex(segments);
