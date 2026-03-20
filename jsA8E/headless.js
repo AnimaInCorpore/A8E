@@ -51,6 +51,7 @@ const SCRIPT_PATHS = [
   "js/app/automation/media.js",
   "js/app/automation/artifacts.js",
   "js/app/automation/xex.js",
+  "js/app/automation/build.js",
   "js/app/automation_api.js",
 ];
 
