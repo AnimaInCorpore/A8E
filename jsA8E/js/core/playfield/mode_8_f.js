@@ -70,6 +70,12 @@
       return dstIndex + 2;
     }
 
+    function writePixel(dst, prio, dstIndex, color, priority) {
+      dst[dstIndex] = color;
+      prio[dstIndex] = priority;
+      return dstIndex + 1;
+    }
+
     function drawLineMode8Like(ctx, bytesPerLineFactor, initialPhase) {
       const io = ctx.ioData;
       const ram = ctx.ram;
@@ -279,9 +285,9 @@
 
           for (let k = 0; k < 4; k++) {
             if (data & mask) {
-              dstIndex = writePixelPair(dst, prio, dstIndex, cColor1, PRIO_PF1);
+              dstIndex = writePixel(dst, prio, dstIndex, cColor1, PRIO_PF1);
             } else {
-              dstIndex = writePixelPair(dst, prio, dstIndex, cColor0, PRIO_PF2);
+              dstIndex = writePixel(dst, prio, dstIndex, cColor0, PRIO_PF2);
             }
             mask >>= 1;
           }

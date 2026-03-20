@@ -39,14 +39,6 @@
       return dstIndex;
     }
 
-    function writePixelPair(dst, prio, dstIndex, color, priority) {
-      dst[dstIndex] = color;
-      prio[dstIndex] = priority;
-      dst[dstIndex + 1] = color;
-      prio[dstIndex + 1] = priority;
-      return dstIndex + 2;
-    }
-
     function drawLineMode23Common(ctx, fetchCharacterRow, vScrollBase) {
       const io = ctx.ioData;
       const ram = ctx.ram;
@@ -101,31 +93,43 @@
           const p1 = inverse ? PRIO_PF2 : PRIO_PF1;
 
           if (outputData & mask) {
-            dstIndex = writePixelPair(dst, prio, dstIndex, c1, p1);
+            dst[dstIndex] = c1;
+            prio[dstIndex] = p1;
           } else {
-            dstIndex = writePixelPair(dst, prio, dstIndex, c0, p0);
+            dst[dstIndex] = c0;
+            prio[dstIndex] = p0;
           }
+          dstIndex++;
           mask >>= 1;
 
           if (outputData & mask) {
-            dstIndex = writePixelPair(dst, prio, dstIndex, c1, p1);
+            dst[dstIndex] = c1;
+            prio[dstIndex] = p1;
           } else {
-            dstIndex = writePixelPair(dst, prio, dstIndex, c0, p0);
+            dst[dstIndex] = c0;
+            prio[dstIndex] = p0;
           }
+          dstIndex++;
           mask >>= 1;
 
           if (outputData & mask) {
-            dstIndex = writePixelPair(dst, prio, dstIndex, c1, p1);
+            dst[dstIndex] = c1;
+            prio[dstIndex] = p1;
           } else {
-            dstIndex = writePixelPair(dst, prio, dstIndex, c0, p0);
+            dst[dstIndex] = c0;
+            prio[dstIndex] = p0;
           }
+          dstIndex++;
           mask >>= 1;
 
           if (outputData & mask) {
-            dstIndex = writePixelPair(dst, prio, dstIndex, c1, p1);
+            dst[dstIndex] = c1;
+            prio[dstIndex] = p1;
           } else {
-            dstIndex = writePixelPair(dst, prio, dstIndex, c0, p0);
+            dst[dstIndex] = c0;
+            prio[dstIndex] = p0;
           }
+          dstIndex++;
           mask >>= 1;
         } else if (priorMode === 1) {
           const colBk = sram[IO_COLBK] & 0xff;

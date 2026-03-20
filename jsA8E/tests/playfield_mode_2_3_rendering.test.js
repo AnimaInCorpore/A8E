@@ -195,7 +195,46 @@ function testMode2Mode3Prior0OutputParity() {
   assert.deepEqual(mode2Inverse, mode3Inverse);
 }
 
+function testMode2Mode3Prior0WidthIsNotDoubled() {
+  const api = loadMode23Api({
+    fetchCharacterRow8: function () {
+      return 0xa0;
+    },
+    fetchCharacterRow10: function () {
+      return 0xa0;
+    },
+  });
+
+  function assertLineWidth(drawFnName) {
+    const ctx = createCtx();
+    ctx.ioData.drawLine.bytesPerLine = 1;
+    ctx.sram[IO_PRIOR] = 0x00;
+    ctx.sram[IO_COLPF1] = 0x0b;
+    ctx.sram[IO_COLPF2] = 0xa0;
+    ctx.ram[0] = 0x00;
+    ctx.ioData.videoOut.pixels.fill(0xee);
+    ctx.ioData.videoOut.priority.fill(0xee);
+
+    api[drawFnName](ctx);
+
+    assert.equal(
+      ctx.ioData.videoOut.pixels[8],
+      0xee,
+      drawFnName + " should not write past the expected 8 pixels",
+    );
+    assert.equal(
+      ctx.ioData.videoOut.priority[8],
+      0xee,
+      drawFnName + " should not write past the expected 8 pixels",
+    );
+  }
+
+  assertLineWidth("drawLineMode2");
+  assertLineWidth("drawLineMode3");
+}
+
 testMode2GtiaColorTableOnlyWhenPriorMode2();
 testMode2AndMode3UseSameChbaseMasking();
 testMode2Mode3Prior0OutputParity();
+testMode2Mode3Prior0WidthIsNotDoubled();
 console.log("playfield_mode_2_3_rendering tests passed");
