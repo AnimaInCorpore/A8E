@@ -97,11 +97,16 @@
   let lastDebugState = null;
   let lastPauseSignature = "";
   let lastBuildRecord = null;
+  let artifactHelpers = null;
   let nextSubscriptionId = 1;
   const eventSubscriptions = new Map();
   const AutomationUtil = window.A8EAutomationUtil;
   if (!AutomationUtil) {
     throw new Error("A8EAutomationUtil is unavailable");
+  }
+  const AutomationArtifacts = window.A8EAutomationArtifacts;
+  if (!AutomationArtifacts) {
+    throw new Error("A8EAutomationArtifacts is unavailable");
   }
   const clamp16 = AutomationUtil.clamp16;
   const clamp8 = AutomationUtil.clamp8;
@@ -905,81 +910,11 @@
   }
 
   async function buildWaitFailureSnapshot(operation, options, failure) {
-    const opts = options || {};
-    const rawFailure = failure && typeof failure === "object" ? failure : {};
-    const runConfiguration = Object.assign({}, normalizeRunConfiguration(opts.runConfiguration) || {});
-    if (rawFailure.counterKey) {
-      runConfiguration.counterKey = rawFailure.counterKey;
-      runConfiguration.targetCount = rawFailure.targetCount;
-    }
-    if (rawFailure.targetPc !== undefined && rawFailure.targetPc !== null) {
-      runConfiguration.targetPc = clamp16(rawFailure.targetPc);
-    }
-    const snapshot = await captureFailureState(
-      Object.assign({}, opts, {
-        operation: operation,
-        runConfiguration: runConfiguration,
-        failure: Object.assign({}, rawFailure, {
-          operation: operation,
-        }),
-      }),
-    );
-    snapshot.ok = false;
-    snapshot.reason =
-      rawFailure.reason !== undefined && rawFailure.reason !== null
-        ? String(rawFailure.reason)
-        : "timeout";
-    if (typeof rawFailure.executedInstructions === "number") {
-      snapshot.executedInstructions = rawFailure.executedInstructions >>> 0;
-    }
-    if (typeof rawFailure.executedCycles === "number") {
-      snapshot.executedCycles = rawFailure.executedCycles >>> 0;
-    }
-    if (typeof rawFailure.targetPc === "number") {
-      snapshot.targetPc = clamp16(rawFailure.targetPc);
-    }
-    if (typeof rawFailure.currentDelta === "number") {
-      snapshot.currentDelta = rawFailure.currentDelta >>> 0;
-    }
-    emitProgress(operation, snapshot.phase || "wait_timeout", {
-      reason: snapshot.reason,
-      targetPc:
-        typeof snapshot.targetPc === "number" ? snapshot.targetPc & 0xffff : undefined,
-      timeoutMs:
-        snapshot.failure && typeof snapshot.failure.timeoutMs === "number"
-          ? snapshot.failure.timeoutMs | 0
-          : undefined,
-    });
-    return snapshot;
+    return artifactHelpers.buildWaitFailureSnapshot(operation, options, failure);
   }
 
   async function finalizeWaitForPcResult(targetPc, result, options, operation) {
-    const normalizedTarget = clamp16(targetPc);
-    if (didReachTargetPc(result, normalizedTarget)) {
-      emitProgress(operation, "entry_pc_reached", {
-        targetPc: normalizedTarget,
-      });
-      return result;
-    }
-    return buildWaitFailureSnapshot(operation, options || {}, {
-      reason:
-        result && result.reason !== undefined && result.reason !== null
-          ? String(result.reason)
-          : "timeout",
-      message:
-        result && result.reason === "breakpoint"
-          ? "Execution stopped at a different breakpoint before reaching target PC"
-          : "Execution did not reach the requested PC",
-      targetPc: normalizedTarget,
-      executedInstructions:
-        result && typeof result.executedInstructions === "number"
-          ? result.executedInstructions >>> 0
-          : undefined,
-      executedCycles:
-        result && typeof result.executedCycles === "number"
-          ? result.executedCycles >>> 0
-          : undefined,
-    });
+    return artifactHelpers.finalizeWaitForPcResult(targetPc, result, options, operation);
   }
 
   async function readRangeBytes(start, length) {
@@ -1296,161 +1231,12 @@
     }
   }
 
-  function buildBootStateSnapshot(app, debugState, bankState, mountedMedia, consoleKeys, renderer) {
-    return {
-      ready: typeof app.isReady === "function" ? !!app.isReady() : false,
-      running: !!(debugState && debugState.running),
-      rendererBackend: renderer ? String(renderer) : "unknown",
-      currentPc:
-        debugState && typeof debugState.pc === "number" ? clamp16(debugState.pc) : null,
-      stopReason:
-        debugState && debugState.reason ? String(debugState.reason) : null,
-      bankState: bankState ? Object.assign({}, bankState) : null,
-      mountedMedia: cloneMountedMediaState(mountedMedia),
-      consoleKeys: consoleKeys ? Object.assign({}, consoleKeys) : null,
-    };
-  }
-
   async function buildArtifactBundle(options) {
-    const opts = options || {};
-    const traceTailLimit = Math.max(1, opts.traceTailLimit | 0 || 32);
-    const artifactRequest = {
-      ranges: Array.isArray(opts.ranges)
-        ? opts.ranges
-        : Array.isArray(opts.memoryRanges)
-          ? opts.memoryRanges
-          : [],
-      labels: Array.isArray(opts.labels) ? opts.labels : [],
-      traceTailLimit: traceTailLimit,
-    };
-    const app = await getApp();
-    let base = null;
-    if (typeof app.collectArtifacts === "function") {
-      base = await Promise.resolve(app.collectArtifacts(artifactRequest));
-    }
-    const debugState =
-      base && base.debugState ? cloneDebugState(base.debugState) : await api.getDebugState();
-    const pc =
-      opts.pc !== undefined && opts.pc !== null
-        ? clamp16(opts.pc)
-        : debugState
-          ? clamp16(debugState.pc)
-          : 0;
-    let disassemblyResult = null;
-    if (opts.disassembly !== false && CODE_TABLE && debugState) {
-      try {
-        disassemblyResult = await disassemble({
-          pc: pc,
-          beforeInstructions: Math.max(0, opts.beforeInstructions | 0 || 8),
-          afterInstructions: Math.max(0, opts.afterInstructions | 0 || 8),
-        });
-      } catch {
-        disassemblyResult = null;
-      }
-    }
-    let sourceContext = null;
-    if (opts.sourceContext !== false) {
-      try {
-        sourceContext = await getSourceContext({
-          pc: pc,
-          beforeLines: Math.max(0, opts.beforeLines | 0 || 8),
-          afterLines: Math.max(0, opts.afterLines | 0 || 8),
-        });
-      } catch {
-        sourceContext = null;
-      }
-    }
-    let screenshot = null;
-    if (opts.screenshot) {
-      try {
-        screenshot = await api.captureScreenshot({
-          encoding: opts.screenshotEncoding === "bytes" ? "bytes" : "base64",
-        });
-      } catch (err) {
-        screenshot = {
-          error: serializeAutomationError(err),
-        };
-      }
-    }
-    const counters =
-      base && base.counters !== undefined ? base.counters : await api.getCounters();
-    const bankState =
-      base && base.bankState !== undefined ? base.bankState : await api.getBankState();
-    const traceTail =
-      base && Array.isArray(base.traceTail)
-        ? cloneTraceEntries(base.traceTail)
-        : cloneTraceEntries(await api.getTraceTail(traceTailLimit));
-    const mountedMedia = await getMountedMedia();
-    const consoleKeys = await api.getConsoleKeyState();
-    const rendererBackend =
-      base && base.rendererBackend
-        ? String(base.rendererBackend)
-        : typeof app.getRendererBackend === "function"
-          ? String(app.getRendererBackend() || "unknown")
-          : "unknown";
-    return {
-      type: "a8e.artifactBundle",
-      schemaVersion: ARTIFACT_SCHEMA_VERSION,
-      artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
-      apiVersion: API_VERSION,
-      capturedAt: new Date().toISOString(),
-      capturedAtMs: Date.now(),
-      operation: opts.operation ? String(opts.operation) : null,
-      rendererBackend: rendererBackend,
-      capabilities: await getCapabilities(),
-      runConfiguration: normalizeRunConfiguration(opts.runConfiguration),
-      debugState: debugState,
-      counters: counters,
-      bankState: bankState,
-      breakpointHit:
-        base && base.breakpointHit !== undefined
-          ? base.breakpointHit
-          : debugState && typeof debugState.breakpointHit === "number"
-            ? debugState.breakpointHit & 0xffff
-            : null,
-      traceTail: traceTail,
-      disassembly: disassemblyResult,
-      sourceContext: sourceContext,
-      mountedMedia: mountedMedia,
-      consoleKeys: consoleKeys,
-      bootState: buildBootStateSnapshot(
-        app,
-        debugState,
-        bankState,
-        mountedMedia,
-        consoleKeys,
-        rendererBackend,
-      ),
-      xexPreflight: cloneXexPreflightReport(opts.xexPreflight),
-      xexLaunch:
-        opts.xexLaunch && typeof opts.xexLaunch === "object"
-          ? Object.assign({}, opts.xexLaunch)
-          : null,
-      memoryRanges:
-        base && Array.isArray(base.memoryRanges)
-          ? base.memoryRanges.map(function (entry) {
-              return entry && typeof entry === "object"
-                ? Object.assign({}, entry)
-                : entry;
-            })
-          : [],
-      scenarioMarkers:
-        opts.scenarioMarkers && typeof opts.scenarioMarkers === "object"
-          ? Object.assign({}, opts.scenarioMarkers)
-          : opts.markers && typeof opts.markers === "object"
-            ? Object.assign({}, opts.markers)
-            : null,
-      screenshot: screenshot,
-    };
+    return artifactHelpers.buildArtifactBundle(options);
   }
 
   async function captureFailureState(options) {
-    const bundle = await buildArtifactBundle(options || {});
-    const failure = buildFailureDescriptor(options || {}, bundle);
-    bundle.type = "a8e.failureArtifact";
-    bundle.phase = failure.phase;
-    bundle.failure = failure;
-    return bundle;
+    return artifactHelpers.captureFailureState(options);
   }
 
   async function getCapabilities() {
@@ -1649,66 +1435,7 @@
   }
 
   async function captureXexBootFailure(operation, context, failure, options) {
-    const failureInfo = Object.assign({}, failure || {});
-    const launch = buildXexLaunchSummary(context);
-    const snapshot = await captureFailureState(
-      Object.assign({}, options || {}, {
-        operation: operation,
-        runConfiguration: buildXexRunConfiguration(context, options || {}),
-        xexPreflight: context.xexPreflight || null,
-        xexLaunch: launch,
-        failure: {
-          operation: operation,
-          phase: failureInfo.phase || "xex_boot_failed",
-          reason: failureInfo.reason || "xex_boot_failed",
-          code: failureInfo.code || "xex_boot_failed",
-          message: failureInfo.message || "XEX boot failed",
-          targetPc:
-            typeof context.entryPc === "number" ? clamp16(context.entryPc) : undefined,
-          error: failureInfo.error || null,
-        },
-      }),
-    );
-    snapshot.type = "a8e.xexBootFailure";
-    snapshot.ok = false;
-    snapshot.phase = "xex_boot_failed";
-    snapshot.reason = failureInfo.reason || "xex_boot_failed";
-    snapshot.code = failureInfo.code || "xex_boot_failed";
-    snapshot.xexLaunch = launch;
-    snapshot.xexPreflight = cloneXexPreflightReport(context.xexPreflight);
-    snapshot.bootDiagnostics = {
-      currentPc:
-        snapshot.bootState && typeof snapshot.bootState.currentPc === "number"
-          ? snapshot.bootState.currentPc & 0xffff
-          : null,
-      bankState: snapshot.bankState ? Object.assign({}, snapshot.bankState) : null,
-      mountedMedia: cloneMountedMediaState(snapshot.mountedMedia),
-      traceTail: cloneTraceEntries(snapshot.traceTail),
-      disassembly:
-        snapshot.disassembly && typeof snapshot.disassembly === "object"
-          ? Object.assign({}, snapshot.disassembly)
-          : null,
-    };
-    if (typeof failureInfo.executedInstructions === "number") {
-      snapshot.executedInstructions = failureInfo.executedInstructions >>> 0;
-    }
-    if (typeof failureInfo.executedCycles === "number") {
-      snapshot.executedCycles = failureInfo.executedCycles >>> 0;
-    }
-    if (failureInfo.tightLoop) snapshot.tightLoop = failureInfo.tightLoop;
-    emitProgress(operation, "boot_failed", {
-      name: launch.name,
-      slot: launch.slot,
-      reason: snapshot.reason,
-      code: snapshot.code,
-      targetPc:
-        typeof launch.entryPc === "number" ? launch.entryPc & 0xffff : undefined,
-      currentPc:
-        snapshot.bootState && typeof snapshot.bootState.currentPc === "number"
-          ? snapshot.bootState.currentPc & 0xffff
-          : undefined,
-    });
-    return snapshot;
+    return artifactHelpers.captureXexBootFailure(operation, context, failure, options);
   }
 
   async function runXex(spec) {
@@ -3135,6 +2862,25 @@
       unsubscribe: unsubscribeEvent,
     },
   };
+
+  artifactHelpers = AutomationArtifacts.createApi({
+    api: api,
+    apiVersion: API_VERSION,
+    artifactSchemaVersion: ARTIFACT_SCHEMA_VERSION,
+    getApp: getApp,
+    emitProgress: emitProgress,
+    normalizeRunConfiguration: normalizeRunConfiguration,
+    buildFailureDescriptor: buildFailureDescriptor,
+    buildXexLaunchSummary: buildXexLaunchSummary,
+    buildXexRunConfiguration: buildXexRunConfiguration,
+    cloneDebugState: cloneDebugState,
+    cloneMountedMediaState: cloneMountedMediaState,
+    cloneTraceEntries: cloneTraceEntries,
+    cloneXexPreflightReport: cloneXexPreflightReport,
+    clamp16: clamp16,
+    didReachTargetPc: didReachTargetPc,
+    serializeAutomationError: serializeAutomationError,
+  });
 
   api.system = {
     start: api.start,
