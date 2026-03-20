@@ -99,6 +99,7 @@
   let lastBuildRecord = null;
   let artifactHelpers = null;
   let mediaHelpers = null;
+  let xexHelpers = null;
   let nextSubscriptionId = 1;
   const eventSubscriptions = new Map();
   const AutomationUtil = window.A8EAutomationUtil;
@@ -112,6 +113,10 @@
   const AutomationMedia = window.A8EAutomationMedia;
   if (!AutomationMedia) {
     throw new Error("A8EAutomationMedia is unavailable");
+  }
+  const AutomationXex = window.A8EAutomationXex;
+  if (!AutomationXex) {
+    throw new Error("A8EAutomationXex is unavailable");
   }
   const clamp16 = AutomationUtil.clamp16;
   const clamp8 = AutomationUtil.clamp8;
@@ -137,7 +142,6 @@
   const cloneTraceEntries = AutomationUtil.cloneTraceEntries;
   const cloneXexPreflightReport = AutomationUtil.cloneXexPreflightReport;
   const counterDelta = AutomationUtil.counterDelta;
-  const describeXexBootFailure = AutomationUtil.describeXexBootFailure;
   const didReachTargetPc = AutomationUtil.didReachTargetPc;
   const normalizeBuildResult = AutomationUtil.normalizeBuildResult;
   const normalizeBuildSpec = AutomationUtil.normalizeBuildSpec;
@@ -146,7 +150,6 @@
   const normalizeTimeoutMs = AutomationUtil.normalizeTimeoutMs;
   const parseCycleDuration = AutomationUtil.parseCycleDuration;
   const parseMs = AutomationUtil.parseMs;
-  const resolveXexEntryPc = AutomationUtil.resolveXexEntryPc;
   const sleep = AutomationUtil.sleep;
   const withTimeout = AutomationUtil.withTimeout;
 
@@ -1201,295 +1204,11 @@
     return assembleSource(spec);
   }
 
-  async function captureXexBootFailure(operation, context, failure, options) {
-    return artifactHelpers.captureXexBootFailure(operation, context, failure, options);
-  }
-
   async function runXex(spec) {
-    const app = await getApp();
-    const hostFs = getCurrentHostFs();
-    const raw = spec && typeof spec === "object" ? spec : {};
-    const operation = raw.operation ? String(raw.operation) : "runXex";
-    const resetOptions = normalizeResetOptions(
-      raw.resetOptions && typeof raw.resetOptions === "object"
-        ? raw.resetOptions
-        : raw,
-    );
-    let bytes = null;
-    let name = raw.name ? String(raw.name) : "PROGRAM.XEX";
-    let runAddr = null;
-
-    if (raw.hostFile) {
-      if (!hostFs || typeof hostFs.readFile !== "function") {
-        throw new Error("A8EAutomation HostFS is unavailable");
-      }
-      const normalized =
-        typeof hostFs.normalizeName === "function"
-          ? hostFs.normalizeName(raw.hostFile)
-          : String(raw.hostFile || "").toUpperCase();
-      bytes = toUint8Array(hostFs.readFile(normalized));
-      if (!bytes.length) throw new Error("HostFS file not found: " + normalized);
-      name = normalized;
-    } else if (raw.build && raw.build.bytes) {
-      bytes = toUint8Array(raw.build.bytes);
-      if (raw.build.name) name = String(raw.build.name);
-      if (raw.build.runAddr !== undefined && raw.build.runAddr !== null) {
-        runAddr = clamp16(raw.build.runAddr);
-      }
-    } else if (raw.bytes || raw.base64 || raw.buffer || raw.data) {
-      bytes = toUint8Array(raw);
-    } else if (
-      lastBuildRecord &&
-      lastBuildRecord.ok &&
-      lastBuildRecord.result &&
-      lastBuildRecord.result.bytes
-    ) {
-      bytes = toUint8Array(lastBuildRecord.result.bytes);
-      if (lastBuildRecord.sourceName) {
-        name = lastBuildRecord.sourceName.replace(/\.[^.]+$/, ".XEX");
-      }
-      if (
-        lastBuildRecord.result.runAddr !== undefined &&
-        lastBuildRecord.result.runAddr !== null
-      ) {
-        runAddr = clamp16(lastBuildRecord.result.runAddr);
-      }
+    if (!xexHelpers) {
+      throw new Error("A8EAutomationXex is unavailable");
     }
-
-    if (!bytes || !bytes.length) {
-      throw createAutomationError({
-        operation: operation,
-        phase: "xex_loader_start",
-        message: "A8EAutomation.dev.runXex requires XEX bytes or a HostFS file",
-      });
-    }
-
-    if (raw.saveHostFile && hostFs && typeof hostFs.writeFile === "function") {
-      hostFs.writeFile(name, bytes);
-    }
-
-    const slotIndex = raw.slot !== undefined ? raw.slot | 0 : 0;
-    let mountResult = null;
-    let xexPreflight = null;
-    emitProgress(operation, "xex_mount_started", {
-      name: name,
-      slot: slotIndex,
-      byteLength: bytes.length | 0,
-    });
-    try {
-      if (typeof app.loadDiskToDeviceSlotDetailed === "function") {
-        mountResult = await Promise.resolve(
-          app.loadDiskToDeviceSlotDetailed(toArrayBuffer(bytes), name, slotIndex, {
-            portB: resetOptions && resetOptions.portB,
-          }),
-        );
-      } else {
-        app.loadDiskToDeviceSlot(toArrayBuffer(bytes), name, slotIndex);
-        mountResult = {
-          deviceSlot: slotIndex,
-          format: "xex",
-          sourceByteLength: bytes.length | 0,
-          mountedByteLength: bytes.length | 0,
-          xexPreflight: null,
-        };
-      }
-      xexPreflight = cloneXexPreflightReport(
-        mountResult && mountResult.xexPreflight ? mountResult.xexPreflight : null,
-      );
-      emitProgress(operation, "xex_preflight_passed", {
-        name: name,
-        slot: slotIndex,
-        byteLength: bytes.length | 0,
-        segmentCount:
-          xexPreflight && typeof xexPreflight.segmentCount === "number"
-            ? xexPreflight.segmentCount | 0
-            : undefined,
-        bufferAddress:
-          xexPreflight && typeof xexPreflight.bufferAddress === "number"
-            ? xexPreflight.bufferAddress & 0xffff
-            : undefined,
-        entryPc:
-          xexPreflight && typeof xexPreflight.runAddress === "number"
-            ? xexPreflight.runAddress & 0xffff
-            : undefined,
-      });
-    } catch (err) {
-      xexPreflight = cloneXexPreflightReport(
-        err && err.details && err.details.xexPreflight
-          ? err.details.xexPreflight
-          : err && err.details && err.details.preflight
-            ? err.details.preflight
-            : null,
-      );
-      emitProgress(operation, "xex_preflight_failed", {
-        name: name,
-        slot: slotIndex,
-        code: err && err.code ? String(err.code) : "xex_preflight_failed",
-      });
-      return captureXexBootFailure(
-        operation,
-        {
-          name: name,
-          slot: slotIndex,
-          byteLength: bytes.length | 0,
-          mountedByteLength: 0,
-          reset: raw.reset !== false,
-          started: false,
-          resetOptions: resetOptions,
-          runAddr: runAddr,
-          entryPc: null,
-          sourceUrl: raw.sourceUrl ? String(raw.sourceUrl) : null,
-          format: "xex",
-          xexPreflight: xexPreflight,
-        },
-        {
-          phase: err && err.phase ? String(err.phase) : "xex_preflight_failed",
-          reason: "xex_boot_failed",
-          code: err && err.code ? String(err.code) : "xex_preflight_failed",
-          message:
-            err && err.message ? String(err.message) : "XEX preflight failed",
-          error: err,
-        },
-        raw,
-      );
-    }
-
-    const entryPc = resolveXexEntryPc(raw, runAddr, xexPreflight);
-    const launchContext = {
-      name: name,
-      slot: slotIndex,
-      byteLength: bytes.length | 0,
-      mountedByteLength:
-        mountResult && typeof mountResult.mountedByteLength === "number"
-          ? mountResult.mountedByteLength | 0
-          : bytes.length | 0,
-      reset: raw.reset !== false,
-      started: false,
-      resetOptions: resetOptions,
-      runAddr: runAddr,
-      entryPc: entryPc,
-      sourceUrl: raw.sourceUrl ? String(raw.sourceUrl) : null,
-      format:
-        mountResult && mountResult.format ? String(mountResult.format) : "xex",
-      xexPreflight: xexPreflight,
-    };
-
-    if (raw.reset !== false && typeof app.reset === "function") {
-      emitProgress(operation, "boot_reset_started", {
-        name: name,
-        slot: slotIndex,
-      });
-      try {
-        await Promise.resolve(app.reset(resetOptions));
-      } catch (err) {
-        return captureXexBootFailure(
-          operation,
-          launchContext,
-          {
-            phase: "system_reset",
-            reason: "xex_boot_failed",
-            code: "xex_reset_failed",
-            message:
-              err && err.message
-                ? String(err.message)
-                : "Failed to reset emulator for XEX boot",
-            error: err,
-          },
-          raw,
-        );
-      }
-      emitProgress(operation, "boot_reset", {
-        name: name,
-        slot: slotIndex,
-      });
-    }
-
-    const shouldAwaitEntry =
-      raw.awaitEntry !== false &&
-      raw.start !== false &&
-      entryPc !== null &&
-      typeof app.runUntilPc === "function";
-    if (shouldAwaitEntry) {
-      const runOptions = {
-        maxInstructions: Math.max(
-          1,
-          raw.maxBootInstructions | 0 || raw.maxInstructions | 0 || 500000,
-        ),
-        maxCycles: Math.max(
-          1,
-          parseCycleDuration(raw.maxBootCycles) || parseCycleDuration(raw.maxCycles) || 4000000,
-        ),
-        detectTightLoop: raw.detectTightLoop !== false,
-        tightLoopWindow: Math.max(1, raw.tightLoopWindow | 0 || 32),
-        tightLoopMinInstructions: Math.max(
-          1,
-          raw.tightLoopMinInstructions | 0 || 256,
-        ),
-        tightLoopUniquePcLimit: Math.max(
-          1,
-          raw.tightLoopUniquePcLimit | 0 || 4,
-        ),
-      };
-      const result = await Promise.resolve(app.runUntilPc(entryPc, runOptions));
-      if (didReachTargetPc(result, entryPc)) {
-        emitProgress(operation, "entry_breakpoint_hit", {
-          name: name,
-          slot: slotIndex,
-          entryPc: entryPc & 0xffff,
-        });
-        notifyStatus();
-        return Object.assign({}, buildXexLaunchSummary(launchContext), {
-          ok: true,
-          phase: "entry_breakpoint_hit",
-          debugState:
-            result && result.debugState ? result.debugState : await api.getDebugState(),
-          counters: result && result.counters ? result.counters : await api.getCounters(),
-          traceTail:
-            result && Array.isArray(result.traceTail)
-              ? cloneTraceEntries(result.traceTail)
-              : await api.getTraceTail(32),
-          xexPreflight: xexPreflight,
-        });
-      }
-      return captureXexBootFailure(
-        operation,
-        launchContext,
-        describeXexBootFailure(result, entryPc),
-        Object.assign({}, raw, runOptions),
-      );
-    }
-
-    if (raw.start !== false && typeof app.start === "function") {
-      try {
-        await Promise.resolve(app.start());
-        launchContext.started = true;
-      } catch (err) {
-        return captureXexBootFailure(
-          operation,
-          launchContext,
-          {
-            phase: "xex_boot_start",
-            reason: "xex_boot_failed",
-            code: "xex_start_failed",
-            message:
-              err && err.message
-                ? String(err.message)
-                : "Failed to start emulator after XEX setup",
-            error: err,
-          },
-          raw,
-        );
-      }
-    }
-    notifyStatus();
-    return Object.assign({}, buildXexLaunchSummary(launchContext), {
-      ok: true,
-      phase:
-        launchContext.started && entryPc === null
-          ? "boot_started"
-          : "xex_preflight_passed",
-      xexPreflight: xexPreflight,
-    });
+    return xexHelpers.runXex(spec);
   }
 
   async function mountDiskFromUrl(url, options) {
@@ -2631,6 +2350,25 @@
     clamp16: clamp16,
     didReachTargetPc: didReachTargetPc,
     serializeAutomationError: serializeAutomationError,
+  });
+
+  xexHelpers = AutomationXex.createApi({
+    api: api,
+    getApp: getApp,
+    getCurrentHostFs: getCurrentHostFs,
+    emitProgress: emitProgress,
+    notifyStatus: notifyStatus,
+    clamp16: clamp16,
+    toArrayBuffer: toArrayBuffer,
+    toUint8Array: toUint8Array,
+    createAutomationError: createAutomationError,
+    normalizeResetOptions: normalizeResetOptions,
+    parseCycleDuration: parseCycleDuration,
+    buildXexLaunchSummary: buildXexLaunchSummary,
+    buildXexRunConfiguration: buildXexRunConfiguration,
+    cloneTraceEntries: cloneTraceEntries,
+    cloneXexPreflightReport: cloneXexPreflightReport,
+    didReachTargetPc: didReachTargetPc,
   });
 
   api.system = {

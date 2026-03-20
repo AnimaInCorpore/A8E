@@ -18,6 +18,10 @@ function loadAutomationApi() {
     path.join(__dirname, "..", "js", "app", "automation", "artifacts.js"),
     "utf8",
   );
+  const xexSource = fs.readFileSync(
+    path.join(__dirname, "..", "js", "app", "automation", "xex.js"),
+    "utf8",
+  );
   const source = fs.readFileSync(
     path.join(__dirname, "..", "js", "app", "automation_api.js"),
     "utf8",
@@ -85,6 +89,9 @@ function loadAutomationApi() {
   });
   vm.runInContext(artifactsSource, context, {
     filename: "automation/artifacts.js",
+  });
+  vm.runInContext(xexSource, context, {
+    filename: "automation/xex.js",
   });
   vm.runInContext(source, context, {
     filename: "automation_api.js",
