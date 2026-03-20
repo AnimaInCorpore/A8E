@@ -337,6 +337,7 @@
       "js/core/hdevice.js",
       "js/core/debugger.js",
       "js/core/atari_support.js",
+      "js/core/atari_snapshot.js",
       "js/core/atari.js",
     );
     coreLoaded = true;

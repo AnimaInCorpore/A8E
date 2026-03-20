@@ -12,6 +12,7 @@
   const PIXELS_PER_LINE = hwApi.PIXELS_PER_LINE;
   const LINES_PER_SCREEN_PAL = hwApi.LINES_PER_SCREEN_PAL;
   const CYCLES_PER_LINE = hwApi.CYCLES_PER_LINE;
+  const CYCLES_PER_FRAME = LINES_PER_SCREEN_PAL * CYCLES_PER_LINE;
   const ATARI_CPU_HZ_PAL = hwApi.ATARI_CPU_HZ_PAL;
   const CYCLE_NEVER = hwApi.CYCLE_NEVER;
   const FIRST_VISIBLE_LINE = hwApi.FIRST_VISIBLE_LINE;
@@ -129,6 +130,8 @@
   const IO_INIT_VALUES = hwApi.IO_INIT_VALUES;
   const AtariSupport = window.A8EAtariSupport;
   if (!AtariSupport) throw new Error("A8EAtariSupport is not loaded");
+  const AtariSnapshot = window.A8EAtariSnapshot;
+  if (!AtariSnapshot) throw new Error("A8EAtariSnapshot is not loaded");
   const bytesToHex = AtariSupport.bytesToHex;
   const captureScreenshotRuntime = AtariSupport.captureScreenshot;
   const cloneVideoState = AtariSupport.cloneVideoState;
@@ -900,233 +903,91 @@
       return getBankStateRuntime();
     }
 
-    function buildCoreSnapshot(savedRunning) {
+    function getSnapshotConfig() {
       return {
-        type: "a8e.snapshot",
-        version: snapshotCodec.formatVersion | 0,
-        savedAt: Date.now(),
-        savedRunning: !!savedRunning,
-        config: {
-          audioEnabled: !!audioEnabled,
-          turbo: !!turbo,
-          sioTurbo: !!sioTurbo,
-          optionOnStart: !!optionOnStart,
-          keyboardMappingMode: keyboardMappingMode,
-        },
-        machine: {
-          cpu: {
-            a: machine.ctx.cpu.a & 0xff,
-            x: machine.ctx.cpu.x & 0xff,
-            y: machine.ctx.cpu.y & 0xff,
-            sp: machine.ctx.cpu.sp & 0xff,
-            pc: machine.ctx.cpu.pc & 0xffff,
-            ps: CPU.getPs(machine.ctx) & 0xff,
-          },
-          cycleCounter: machine.ctx.cycleCounter,
-          stallCycleCounter: machine.ctx.stallCycleCounter,
-          ioCycleTimedEventCycle: machine.ctx.ioCycleTimedEventCycle,
-          nmiPending: machine.ctx.nmiPending | 0,
-          nmiActive: machine.ctx.nmiActive | 0,
-          irqPending: machine.ctx.irqPending | 0,
-          instructionCounter: machine.ctx.instructionCounter >>> 0,
-          cycleAccum: +machine.cycleAccum || 0,
-          frameCycleAccum: machine.frameCycleAccum | 0,
-          video: cloneVideoState(video),
-          memory: memoryRuntime.exportSnapshotState(),
-          debug: debugRuntime.exportSnapshotState(),
-          input: inputRuntime.exportSnapshotState(),
-          hDevice:
-            hDevice && typeof hDevice.exportSnapshotState === "function"
-              ? hDevice.exportSnapshotState()
-              : null,
-        },
+        audioEnabled: !!audioEnabled,
+        turbo: !!turbo,
+        sioTurbo: !!sioTurbo,
+        optionOnStart: !!optionOnStart,
+        keyboardMappingMode: keyboardMappingMode,
       };
     }
 
-    function saveSnapshot(options) {
-      if (machine.running) {
-        throw new Error("A8E snapshot save requires paused emulation");
+    function setSnapshotConfig(snapshotConfig) {
+      const config =
+        snapshotConfig && typeof snapshotConfig === "object" ? snapshotConfig : {};
+      if (config.audioEnabled !== undefined) {
+        audioEnabled = !!config.audioEnabled;
       }
-      const opts = options && typeof options === "object" ? options : {};
-      const alignment = alignSnapshotToFrameBoundary(
-        {
-          machine: machine,
-          CPU: CPU,
-          CYCLES_PER_FRAME: CYCLES_PER_FRAME,
-          debugRuntime: debugRuntime,
-          publishVideoFrame: publishVideoFrame,
-          paint: paint,
-          updateDebug: updateDebug,
-        },
-        opts,
-      );
-      const snapshot = buildCoreSnapshot(
-        opts.savedRunning !== undefined ? !!opts.savedRunning : false,
-      );
-      const buffer = snapshotCodec.encodeSnapshot(snapshot);
-      return {
-        type: "a8e.snapshot",
-        version: snapshot.version | 0,
-        savedAt: snapshot.savedAt,
-        savedRunning: snapshot.savedRunning,
-        mimeType: "application/x-a8e-snapshot",
-        byteLength: buffer.byteLength | 0,
-        buffer: buffer,
-        timing: alignment.timing,
-      };
-    }
-
-    function loadSnapshot(arrayBuffer, options) {
-      const bytes = snapshotCodec.toUint8Array(arrayBuffer);
-      const payload = snapshotCodec.decodeSnapshot(bytes);
-      if (!payload || payload.type !== "a8e.snapshot") {
-        throw new Error("A8E snapshot is invalid");
+      if (config.turbo !== undefined) {
+        turbo = !!config.turbo;
       }
-      const snapshot = payload.machine || {};
-      const opts = options && typeof options === "object" ? options : {};
-      pauseInternal("pause");
-      if (debugRuntime && typeof debugRuntime.removeStepOverHook === "function") {
-        debugRuntime.removeStepOverHook();
+      if (config.sioTurbo !== undefined) {
+        sioTurbo = !!config.sioTurbo;
       }
-      if (typeof opts.audioEnabled === "boolean") {
-        audioEnabled = !!opts.audioEnabled;
-      } else if (payload.config && typeof payload.config.audioEnabled === "boolean") {
-        audioEnabled = !!payload.config.audioEnabled;
+      if (config.optionOnStart !== undefined) {
+        optionOnStart = !!config.optionOnStart;
       }
-      if (payload.config && typeof payload.config.turbo === "boolean") {
-        turbo = !!payload.config.turbo;
-      }
-      if (payload.config && typeof payload.config.sioTurbo === "boolean") {
-        sioTurbo = !!payload.config.sioTurbo;
-      }
-      if (payload.config && typeof payload.config.optionOnStart === "boolean") {
-        optionOnStart = !!payload.config.optionOnStart;
-      }
-      if (payload.config && payload.config.keyboardMappingMode) {
+      if (config.keyboardMappingMode !== undefined) {
         keyboardMappingMode =
-          payload.config.keyboardMappingMode === "original"
-            ? "original"
-            : "translated";
+          config.keyboardMappingMode === "original" ? "original" : "translated";
         if (setKeysKeyboardMappingMode) {
           setKeysKeyboardMappingMode(keyboardMappingMode);
         }
       }
-      machine.cycleAccum =
-        typeof snapshot.cycleAccum === "number" ? +snapshot.cycleAccum : 0;
-      machine.frameCycleAccum = snapshot.frameCycleAccum | 0;
-      machine.ctx.cpu.a =
-        snapshot.cpu && typeof snapshot.cpu.a === "number"
-          ? snapshot.cpu.a & 0xff
-          : 0;
-      machine.ctx.cpu.x =
-        snapshot.cpu && typeof snapshot.cpu.x === "number"
-          ? snapshot.cpu.x & 0xff
-          : 0;
-      machine.ctx.cpu.y =
-        snapshot.cpu && typeof snapshot.cpu.y === "number"
-          ? snapshot.cpu.y & 0xff
-          : 0;
-      machine.ctx.cpu.sp =
-        snapshot.cpu && typeof snapshot.cpu.sp === "number"
-          ? snapshot.cpu.sp & 0xff
-          : 0;
-      machine.ctx.cpu.pc =
-        snapshot.cpu && typeof snapshot.cpu.pc === "number"
-          ? snapshot.cpu.pc & 0xffff
-          : 0;
-      CPU.setPs(
-        machine.ctx,
-        snapshot.cpu && typeof snapshot.cpu.ps === "number"
-          ? snapshot.cpu.ps & 0xff
-          : 0,
-      );
-      machine.ctx.cycleCounter =
-        typeof snapshot.cycleCounter === "number" ? snapshot.cycleCounter : 0;
-      machine.ctx.stallCycleCounter =
-        typeof snapshot.stallCycleCounter === "number"
-          ? snapshot.stallCycleCounter
-          : 0;
-      machine.ctx.ioCycleTimedEventCycle = snapshot.ioCycleTimedEventCycle;
-      machine.ctx.ioMasterTimedEventCycle = Infinity;
-      machine.ctx.ioBeamTimedEventCycle = Infinity;
-      machine.ctx.nmiPending = snapshot.nmiPending ? 1 : 0;
-      machine.ctx.nmiActive = snapshot.nmiActive ? 1 : 0;
-      machine.ctx.irqPending = snapshot.irqPending | 0;
-      machine.ctx.instructionCounter = snapshot.instructionCounter >>> 0;
-      machine.ctx.breakRun = false;
-      machine.ctx.pcHooks = Object.create(null);
-      memoryRuntime.importSnapshotState(snapshot.memory);
-      restoreVideoState(snapshot.video);
-      cycleTimedEventUpdate(machine.ctx);
-      if (hDevice && typeof hDevice.importSnapshotState === "function") {
-        hDevice.importSnapshotState(snapshot.hDevice);
-      }
-      installHDeviceCioHooks();
-      if (typeof inputRuntime.importSnapshotState === "function") {
-        inputRuntime.importSnapshotState(snapshot.input);
-      }
-      if (typeof debugRuntime.importSnapshotState === "function") {
-        debugRuntime.importSnapshotState(snapshot.debug);
-      }
-      if (machine.audioCtx) {
-        stopAudio();
-      }
-      publishVideoFrame();
-      paint();
-      updateDebug("snapshot_load");
-      const resume =
-        opts.resume === true ||
-        (opts.resume !== false && payload.savedRunning === true);
-      if (resume) start();
-      return {
-        command: "loadSnapshot",
-        snapshotVersion: payload.version | 0,
-        savedAt: payload.savedAt || 0,
-        savedRunning: !!payload.savedRunning,
-        resumed: !!resume,
-        state: {
-          running: !!machine.running,
-          debug: getDebugState(),
-        },
-        debugState: getDebugState(),
-      };
     }
 
-    async function captureScreenshot() {
-      return captureScreenshotRuntime(video, blitViewportToImageData, VIEW_W, VIEW_H);
+    const snapshotHelpers = AtariSnapshot.createApi({
+      machine: machine,
+      video: video,
+      CPU: CPU,
+      snapshotCodec: snapshotCodec,
+      getSnapshotConfig: getSnapshotConfig,
+      setSnapshotConfig: setSnapshotConfig,
+      cloneVideoState: cloneVideoState,
+      restoreVideoState: restoreVideoState,
+      alignSnapshotToFrameBoundary: alignSnapshotToFrameBoundary,
+      captureScreenshotRuntime: captureScreenshotRuntime,
+      blitViewportToImageData: blitViewportToImageData,
+      VIEW_W: VIEW_W,
+      VIEW_H: VIEW_H,
+      normalizeArtifactRange: normalizeArtifactRange,
+      bytesToHex: bytesToHex,
+      readRangeRuntime: readRangeRuntime,
+      memoryRuntime: memoryRuntime,
+      debugRuntime: debugRuntime,
+      inputRuntime: inputRuntime,
+      hDevice: hDevice,
+      pauseInternal: pauseInternal,
+      start: start,
+      stopAudio: stopAudio,
+      cycleTimedEventUpdate: cycleTimedEventUpdate,
+      installHDeviceCioHooks: installHDeviceCioHooks,
+      getDebugState: getDebugState,
+      getCounters: getCounters,
+      getBankState: getBankState,
+      getTraceTail: getTraceTail,
+      getRendererBackend: getRendererBackend,
+      publishVideoFrame: publishVideoFrame,
+      paint: paint,
+      updateDebug: updateDebug,
+      CYCLES_PER_FRAME: CYCLES_PER_FRAME,
+    });
+
+    function saveSnapshot(options) {
+      return snapshotHelpers.saveSnapshot(options);
+    }
+
+    function loadSnapshot(arrayBuffer, options) {
+      return snapshotHelpers.loadSnapshot(arrayBuffer, options);
     }
 
     function collectArtifacts(options) {
-      const config = options || {};
-      const ranges = Array.isArray(config.ranges) ? config.ranges : [];
-      const labels = Array.isArray(config.labels) ? config.labels : [];
-      const memoryRanges = [];
-      for (let i = 0; i < ranges.length; i++) {
-        const normalized = normalizeArtifactRange(ranges[i], labels[i]);
-        if (!normalized) continue;
-        const bytes = readRangeRuntime(normalized.start, normalized.length);
-        memoryRanges.push({
-          label: normalized.label,
-          start: normalized.start,
-          end: normalized.end,
-          length: bytes.length | 0,
-          hex: bytesToHex(bytes),
-        });
-      }
+      return snapshotHelpers.collectArtifacts(options);
+    }
 
-      const debugState = getDebugState();
-      return {
-        rendererBackend: getRendererBackend(),
-        debugState: debugState,
-        counters: getCounters(),
-        bankState: getBankState(),
-        breakpointHit:
-          debugState && typeof debugState.breakpointHit === "number"
-            ? debugState.breakpointHit & 0xffff
-            : null,
-        traceTail: getTraceTail(config.traceTailLimit || 32),
-        memoryRanges: memoryRanges,
-      };
+    async function captureScreenshot() {
+      return snapshotHelpers.captureScreenshot();
     }
 
     function updateDebug(reason) {
@@ -1155,8 +1016,6 @@
       machine.frameCycleAccum = 0;
       hardReset(options || null);
     }
-
-    const CYCLES_PER_FRAME = LINES_PER_SCREEN_PAL * CYCLES_PER_LINE; // 35568
 
     function frame(ts) {
       if (!machine.running) return;

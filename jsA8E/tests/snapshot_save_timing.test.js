@@ -10,6 +10,10 @@ function loadAppHarness() {
     path.join(__dirname, "..", "js", "core", "atari_support.js"),
     "utf8",
   );
+  const snapshotSource = fs.readFileSync(
+    path.join(__dirname, "..", "js", "core", "atari_snapshot.js"),
+    "utf8",
+  );
   const source = fs.readFileSync(
     path.join(__dirname, "..", "js", "core", "atari.js"),
     "utf8",
@@ -490,6 +494,9 @@ function loadAppHarness() {
   vm.createContext(context);
   vm.runInContext(supportSource, context, {
     filename: "atari_support.js",
+  });
+  vm.runInContext(snapshotSource, context, {
+    filename: "atari_snapshot.js",
   });
   vm.runInContext(source, context, {
     filename: "atari.js",
