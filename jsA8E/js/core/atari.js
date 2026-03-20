@@ -127,6 +127,14 @@
   const SCRATCH_BACKGROUND_TABLE = hwApi.SCRATCH_BACKGROUND_TABLE;
   const ANTIC_MODE_INFO = hwApi.ANTIC_MODE_INFO;
   const IO_INIT_VALUES = hwApi.IO_INIT_VALUES;
+  const AtariSupport = window.A8EAtariSupport;
+  if (!AtariSupport) throw new Error("A8EAtariSupport is not loaded");
+  const bytesToHex = AtariSupport.bytesToHex;
+  const captureScreenshotRuntime = AtariSupport.captureScreenshot;
+  const cloneVideoState = AtariSupport.cloneVideoState;
+  const normalizeArtifactRange = AtariSupport.normalizeArtifactRange;
+  const alignSnapshotToFrameBoundary = AtariSupport.alignSnapshotToFrameBoundary;
+  const restoreVideoState = AtariSupport.restoreVideoState;
   const PLAYFIELD_SCRATCH_VIEW_X = 64;
   const DEFAULT_PORTB = (function () {
     for (let i = 0; i < IO_INIT_VALUES.length; i++) {
@@ -892,100 +900,6 @@
       return getBankStateRuntime();
     }
 
-    function cloneVideoState() {
-      return {
-        pixels: new Uint8Array(video.pixels),
-        priority: new Uint16Array(video.priority),
-        presentPixels: new Uint8Array(video.presentPixels || video.pixels),
-        presentPriority: new Uint16Array(
-          video.presentPriority || video.priority,
-        ),
-        playfieldScratchPixels: new Uint8Array(video.playfieldScratchPixels),
-        playfieldScratchPriority: new Uint16Array(video.playfieldScratchPriority),
-      };
-    }
-
-    function restoreVideoState(snapshot) {
-      const state = snapshot && typeof snapshot === "object" ? snapshot : {};
-      function restorePriorityBuffer(target, source) {
-        if (!source) return;
-
-        const isView =
-          typeof ArrayBuffer !== "undefined" &&
-          typeof ArrayBuffer.isView === "function" &&
-          ArrayBuffer.isView(source);
-
-        if (source instanceof Uint16Array) {
-          target.set(source.subarray(0, target.length), 0);
-          return;
-        }
-
-        const bytes = isView
-          ? new Uint8Array(source.buffer, source.byteOffset | 0, source.byteLength | 0)
-          : new Uint8Array(source);
-
-        if (bytes.byteLength >= target.length * 2 && (bytes.byteLength & 1) === 0) {
-          const words = new Uint16Array(
-            bytes.buffer,
-            bytes.byteOffset | 0,
-            (bytes.byteLength / 2) | 0,
-          );
-          target.set(words.subarray(0, target.length), 0);
-          return;
-        }
-
-        const count = Math.min(bytes.length, target.length);
-        for (let i = 0; i < count; i++) target[i] = bytes[i] & 0xff;
-      }
-
-      video.pixels.fill(0);
-      video.priority.fill(0);
-      if (video.presentPixels) video.presentPixels.fill(0);
-      if (video.presentPriority) video.presentPriority.fill(0);
-      video.playfieldScratchPixels.fill(0);
-      video.playfieldScratchPriority.fill(0);
-      if (state.pixels) {
-        video.pixels.set(
-          new Uint8Array(state.pixels).subarray(0, video.pixels.length),
-          0,
-        );
-      }
-      if (state.priority) {
-        restorePriorityBuffer(video.priority, state.priority);
-      }
-      if (state.presentPixels && video.presentPixels) {
-        video.presentPixels.set(
-          new Uint8Array(state.presentPixels).subarray(
-            0,
-            video.presentPixels.length,
-          ),
-          0,
-        );
-      } else if (state.pixels && video.presentPixels) {
-        video.presentPixels.set(
-          new Uint8Array(state.pixels).subarray(0, video.presentPixels.length),
-          0,
-        );
-      }
-      if (state.presentPriority && video.presentPriority) {
-        restorePriorityBuffer(video.presentPriority, state.presentPriority);
-      } else if (state.priority && video.presentPriority) {
-        restorePriorityBuffer(video.presentPriority, state.priority);
-      }
-      if (state.playfieldScratchPixels) {
-        video.playfieldScratchPixels.set(
-          new Uint8Array(state.playfieldScratchPixels).subarray(
-            0,
-            video.playfieldScratchPixels.length,
-          ),
-          0,
-        );
-      }
-      if (state.playfieldScratchPriority) {
-        restorePriorityBuffer(video.playfieldScratchPriority, state.playfieldScratchPriority);
-      }
-    }
-
     function buildCoreSnapshot(savedRunning) {
       return {
         type: "a8e.snapshot",
@@ -1017,7 +931,7 @@
           instructionCounter: machine.ctx.instructionCounter >>> 0,
           cycleAccum: +machine.cycleAccum || 0,
           frameCycleAccum: machine.frameCycleAccum | 0,
-          video: cloneVideoState(),
+          video: cloneVideoState(video),
           memory: memoryRuntime.exportSnapshotState(),
           debug: debugRuntime.exportSnapshotState(),
           input: inputRuntime.exportSnapshotState(),
@@ -1029,82 +943,23 @@
       };
     }
 
-    function normalizeSnapshotTiming(options) {
-      const opts = options && typeof options === "object" ? options : null;
-      return opts && opts.timing === "exact" ? "exact" : "frame";
-    }
-
-    function alignSnapshotToFrameBoundary(options) {
-      const timing = normalizeSnapshotTiming(options);
-      if (timing === "exact") {
-        return {
-          timing: timing,
-          advancedCycles: 0,
-        };
-      }
-
-      const frameRemainder = machine.frameCycleAccum | 0;
-      if (frameRemainder <= 0) {
-        return {
-          timing: timing,
-          advancedCycles: 0,
-        };
-      }
-
-      const remainingCycles = CYCLES_PER_FRAME - frameRemainder;
-      if (remainingCycles <= 0) {
-        machine.frameCycleAccum = 0;
-        return {
-          timing: timing,
-          advancedCycles: 0,
-        };
-      }
-
-      const debugState =
-        debugRuntime && typeof debugRuntime.suspendBreakpoints === "function"
-          ? debugRuntime.suspendBreakpoints()
-          : null;
-      const startCycle = machine.ctx.cycleCounter | 0;
-      let endCycle = startCycle;
-      try {
-        endCycle = CPU.run(machine.ctx, startCycle + remainingCycles) | 0;
-      } catch (err) {
-        if (debugRuntime && typeof debugRuntime.onExecutionError === "function") {
-          debugRuntime.onExecutionError(err);
-        }
-        throw err;
-      } finally {
-        if (debugRuntime && typeof debugRuntime.restoreBreakpoints === "function") {
-          debugRuntime.restoreBreakpoints(debugState);
-        }
-      }
-
-      let executed = (endCycle - startCycle) | 0;
-      if (executed < 0) executed = 0;
-      if (executed > remainingCycles) executed = remainingCycles;
-      if (executed !== remainingCycles) {
-        throw new Error(
-          "A8E snapshot frame alignment stopped before the next frame boundary",
-        );
-      }
-
-      machine.frameCycleAccum =
-        (frameRemainder + executed) % CYCLES_PER_FRAME;
-      publishVideoFrame();
-      paint();
-      updateDebug("snapshot_save");
-      return {
-        timing: timing,
-        advancedCycles: executed,
-      };
-    }
-
     function saveSnapshot(options) {
       if (machine.running) {
         throw new Error("A8E snapshot save requires paused emulation");
       }
       const opts = options && typeof options === "object" ? options : {};
-      const alignment = alignSnapshotToFrameBoundary(opts);
+      const alignment = alignSnapshotToFrameBoundary(
+        {
+          machine: machine,
+          CPU: CPU,
+          CYCLES_PER_FRAME: CYCLES_PER_FRAME,
+          debugRuntime: debugRuntime,
+          publishVideoFrame: publishVideoFrame,
+          paint: paint,
+          updateDebug: updateDebug,
+        },
+        opts,
+      );
       const snapshot = buildCoreSnapshot(
         opts.savedRunning !== undefined ? !!opts.savedRunning : false,
       );
@@ -1237,138 +1092,8 @@
       };
     }
 
-    function createCaptureCanvas(width, height) {
-      if (typeof OffscreenCanvas === "function") {
-        return new OffscreenCanvas(width, height);
-      }
-      if (typeof document !== "undefined" && document.createElement) {
-        const canvasEl = document.createElement("canvas");
-        canvasEl.width = width;
-        canvasEl.height = height;
-        return canvasEl;
-      }
-      return null;
-    }
-
-    function dataUrlToArrayBuffer(dataUrl) {
-      if (!dataUrl || typeof dataUrl !== "string") {
-        return new ArrayBuffer(0);
-      }
-      const comma = dataUrl.indexOf(",");
-      const base64 = comma >= 0 ? dataUrl.substring(comma + 1) : dataUrl;
-      const binary = atob(base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i) & 0xff;
-      }
-      return bytes.buffer;
-    }
-
-    function bytesToHex(bytes) {
-      let out = "";
-      for (let i = 0; i < bytes.length; i++) {
-        out += Util.toHex2(bytes[i]);
-      }
-      return out;
-    }
-
-    function normalizeArtifactRange(entry, fallbackLabel) {
-      if (entry === null || entry === undefined) return null;
-      let start = 0;
-      let length = 0;
-      let label = fallbackLabel || "";
-      if (Array.isArray(entry)) {
-        if (entry.length < 2) return null;
-        start = Number(entry[0]);
-        length = Number(entry[1]);
-        if (entry.length > 2 && typeof entry[2] === "string") {
-          label = entry[2];
-        }
-      } else if (typeof entry === "object") {
-        start = Number(entry.start);
-        if (entry.length !== undefined && entry.length !== null) {
-          length = Number(entry.length);
-        } else if (entry.end !== undefined && entry.end !== null) {
-          length = Number(entry.end) - start + 1;
-        }
-        if (typeof entry.label === "string" && entry.label.length) {
-          label = entry.label;
-        }
-      } else {
-        return null;
-      }
-      if (!isFinite(start) || !isFinite(length)) return null;
-      start = start | 0;
-      length = length | 0;
-      if (start < 0 || start > 0xffff || length <= 0) return null;
-      if (length > 0x10000) length = 0x10000;
-      return {
-        label: label || "range_" + Util.toHex4(start),
-        start: start & 0xffff,
-        end: (start + length - 1) & 0xffff,
-        length: length,
-      };
-    }
-
     async function captureScreenshot() {
-      const captureCanvas = createCaptureCanvas(VIEW_W, VIEW_H);
-      if (!captureCanvas) {
-        throw new Error("A8E: screenshot capture canvas unavailable");
-      }
-      const captureCtx = captureCanvas.getContext("2d", { alpha: false });
-      if (!captureCtx || typeof captureCtx.createImageData !== "function") {
-        throw new Error("A8E: screenshot capture context unavailable");
-      }
-      const imageData = captureCtx.createImageData(VIEW_W, VIEW_H);
-      blitViewportToImageData(video, imageData);
-      captureCtx.putImageData(imageData, 0, 0);
-
-      if (typeof captureCanvas.convertToBlob === "function") {
-        const blob = await captureCanvas.convertToBlob({ type: "image/png" });
-        return {
-          mimeType: "image/png",
-          width: VIEW_W,
-          height: VIEW_H,
-          buffer: await blob.arrayBuffer(),
-        };
-      }
-
-      if (typeof captureCanvas.toBlob === "function") {
-        return new Promise(function (resolve, reject) {
-          captureCanvas.toBlob(
-            function (blob) {
-              if (!blob) {
-                reject(new Error("A8E: screenshot capture failed"));
-                return;
-              }
-              blob
-                .arrayBuffer()
-                .then(function (buffer) {
-                  resolve({
-                    mimeType: "image/png",
-                    width: VIEW_W,
-                    height: VIEW_H,
-                    buffer: buffer,
-                  });
-                })
-                .catch(reject);
-            },
-            "image/png",
-            1.0,
-          );
-        });
-      }
-
-      if (typeof captureCanvas.toDataURL === "function") {
-        return {
-          mimeType: "image/png",
-          width: VIEW_W,
-          height: VIEW_H,
-          buffer: dataUrlToArrayBuffer(captureCanvas.toDataURL("image/png")),
-        };
-      }
-
-      throw new Error("A8E: screenshot capture unsupported in this runtime");
+      return captureScreenshotRuntime(video, blitViewportToImageData, VIEW_W, VIEW_H);
     }
 
     function collectArtifacts(options) {

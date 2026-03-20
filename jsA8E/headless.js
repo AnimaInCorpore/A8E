@@ -45,6 +45,7 @@ const SCRIPT_PATHS = [
   "js/core/hostfs.js",
   "js/core/hdevice.js",
   "js/core/debugger.js",
+  "js/core/atari_support.js",
   "js/core/atari.js",
   "js/app/automation/utils.js",
   "js/app/automation_api.js",

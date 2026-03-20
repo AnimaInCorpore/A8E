@@ -46,6 +46,7 @@ Process rule: review this file before planning any improvement, and update it af
 - [Debug](jsA8E/DEBUG.md)
 
 ## Recent Improvements
+- 2026-03-20: `jsA8E/js/core/{atari.js,atari_support.js}`, `jsA8E/index.html`, `jsA8E/emulator_worker.js`, `jsA8E/headless.js`: split the snapshot/video/artifact helper cluster out of `atari.js` into a shared support module. `atari.js` now keeps boot/runtime orchestration, while the new helper file owns reusable video cloning/restoration, frame-alignment, artifact range normalization, and screenshot capture logic.
 - 2026-03-20: `jsA8E/js/core/playfield/mode_8_f.js`: reduced the repeated ANTIC 8/F scanline write blocks by introducing small pair/quad write helpers and a shared mode 8/A body. The helper cuts keep the hot-path structure explicit while removing the largest duplicated pixel-write fragments in the file.
 - 2026-03-20: `jsA8E/js/core/playfield/mode_2_3.js`: reduced the duplicated ANTIC mode 2/3 text scanline bodies with a shared helper that takes the character-row fetch function and scroll base as parameters. The wrappers are now thin mode selectors, which keeps the mode-specific differences obvious while removing repeated pixel-write code.
 - 2026-03-20: `jsA8E/js/core/playfield/mode_{4_5,6_7}.js`: reduced duplicated text-mode scanline bodies by introducing per-file common render helpers for the paired ANTIC modes. The wrappers now only select the fetch function and scroll/DMA variant, which makes the inner loops easier to follow without changing behavior.

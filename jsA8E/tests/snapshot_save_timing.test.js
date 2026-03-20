@@ -6,6 +6,10 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 function loadAppHarness() {
+  const supportSource = fs.readFileSync(
+    path.join(__dirname, "..", "js", "core", "atari_support.js"),
+    "utf8",
+  );
   const source = fs.readFileSync(
     path.join(__dirname, "..", "js", "core", "atari.js"),
     "utf8",
@@ -484,6 +488,9 @@ function loadAppHarness() {
   };
 
   vm.createContext(context);
+  vm.runInContext(supportSource, context, {
+    filename: "atari_support.js",
+  });
   vm.runInContext(source, context, {
     filename: "atari.js",
   });
