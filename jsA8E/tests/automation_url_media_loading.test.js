@@ -10,6 +10,10 @@ function loadAutomationApi(fetchImpl) {
     path.join(__dirname, "..", "js", "app", "automation", "utils.js"),
     "utf8",
   );
+  const mediaSource = fs.readFileSync(
+    path.join(__dirname, "..", "js", "app", "automation", "media.js"),
+    "utf8",
+  );
   const artifactsSource = fs.readFileSync(
     path.join(__dirname, "..", "js", "app", "automation", "artifacts.js"),
     "utf8",
@@ -70,6 +74,9 @@ function loadAutomationApi(fetchImpl) {
   vm.createContext(context);
   vm.runInContext(utilSource, context, {
     filename: "automation/utils.js",
+  });
+  vm.runInContext(mediaSource, context, {
+    filename: "automation/media.js",
   });
   vm.runInContext(artifactsSource, context, {
     filename: "automation/artifacts.js",

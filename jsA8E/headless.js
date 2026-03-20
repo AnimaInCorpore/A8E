@@ -48,6 +48,7 @@ const SCRIPT_PATHS = [
   "js/core/atari_support.js",
   "js/core/atari.js",
   "js/app/automation/utils.js",
+  "js/app/automation/media.js",
   "js/app/automation/artifacts.js",
   "js/app/automation_api.js",
 ];
