@@ -46,6 +46,7 @@ Process rule: review this file before planning any improvement, and update it af
 - [Debug](jsA8E/DEBUG.md)
 
 ## Recent Improvements
+- 2026-03-20: `jsA8E/js/core/playfield/mode_8_f.js`: reduced the repeated ANTIC 8/F scanline write blocks by introducing small pair/quad write helpers and a shared mode 8/A body. The helper cuts keep the hot-path structure explicit while removing the largest duplicated pixel-write fragments in the file.
 - 2026-03-20: `jsA8E/js/core/playfield/mode_2_3.js`: reduced the duplicated ANTIC mode 2/3 text scanline bodies with a shared helper that takes the character-row fetch function and scroll base as parameters. The wrappers are now thin mode selectors, which keeps the mode-specific differences obvious while removing repeated pixel-write code.
 - 2026-03-20: `jsA8E/js/core/playfield/mode_{4_5,6_7}.js`: reduced duplicated text-mode scanline bodies by introducing per-file common render helpers for the paired ANTIC modes. The wrappers now only select the fetch function and scroll/DMA variant, which makes the inner loops easier to follow without changing behavior.
 - 2026-03-20: `jsA8E/js/app/automation/{utils,automation_api}.js`: split out shared automation helpers for XEX launch, failure normalization, timeout parsing, and state cloning. `automation_api.js` now keeps orchestration only, while `utils.js` owns the reusable helper layer, including the preflight range clone used by XEX snapshots.

@@ -50,7 +50,27 @@
       ctx.cycleCounter += cycles | 0;
     };
 
-    function drawLineMode8(ctx) {
+    function writePixelQuad(dst, prio, dstIndex, color, priority) {
+      dst[dstIndex] = color;
+      prio[dstIndex] = priority;
+      dst[dstIndex + 1] = color;
+      prio[dstIndex + 1] = priority;
+      dst[dstIndex + 2] = color;
+      prio[dstIndex + 2] = priority;
+      dst[dstIndex + 3] = color;
+      prio[dstIndex + 3] = priority;
+      return dstIndex + 4;
+    }
+
+    function writePixelPair(dst, prio, dstIndex, color, priority) {
+      dst[dstIndex] = color;
+      prio[dstIndex] = priority;
+      dst[dstIndex + 1] = color;
+      prio[dstIndex + 1] = priority;
+      return dstIndex + 2;
+    }
+
+    function drawLineMode8Like(ctx, bytesPerLineFactor, initialPhase) {
       const io = ctx.ioData;
       const ram = ctx.ram;
       const sram = ctx.sram;
@@ -58,17 +78,17 @@
       const aColorTable = SCRATCH_COLOR_TABLE_A;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
-      const playfieldCycles = bytesPerLine * 8;
+      const playfieldCycles = bytesPerLine * bytesPerLineFactor;
       const dst = io.videoOut.pixels;
       const prio = io.videoOut.priority;
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
 
       let data = 0;
-      let phase = 8;
+      let phase = initialPhase;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
-        if (phase === 8) {
+        if (phase === initialPhase) {
           data = ram[dispAddr] & 0xff;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           if (io.firstRowScanline) {
@@ -81,17 +101,17 @@
         const idx = (data >> (6 - ((phase >> 1) * 2))) & 0x03;
         const c = aColorTable[idx] & 0xff;
         const p = PRIORITY_TABLE_BKG_PF012[idx] & 0xff;
-        for (let k = 0; k < 4; k++) {
-          dst[dstIndex] = c;
-          prio[dstIndex] = p;
-          dstIndex++;
-        }
+        dstIndex = writePixelQuad(dst, prio, dstIndex, c, p);
 
         phase++;
         clockAction(ctx);
       }
 
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
+    }
+
+    function drawLineMode8(ctx) {
+      return drawLineMode8Like(ctx, 8, 8);
     }
 
     function drawLineMode9(ctx) {
@@ -121,15 +141,7 @@
 
         const c = data & mask ? (sram[IO_COLPF0] & 0xff) : (sram[IO_COLBK] & 0xff);
         const p = data & mask ? PRIO_PF0 : PRIO_BKG;
-        dst[dstIndex] = c;
-        prio[dstIndex] = p;
-        dst[dstIndex + 1] = c;
-        prio[dstIndex + 1] = p;
-        dst[dstIndex + 2] = c;
-        prio[dstIndex + 2] = p;
-        dst[dstIndex + 3] = c;
-        prio[dstIndex + 3] = p;
-        dstIndex += 4;
+        dstIndex = writePixelQuad(dst, prio, dstIndex, c, p);
         mask >>= 1;
         clockAction(ctx);
       }
@@ -138,51 +150,7 @@
     }
 
     function drawLineModeA(ctx) {
-      const io = ctx.ioData;
-      const ram = ctx.ram;
-      const sram = ctx.sram;
-
-      const aColorTable = SCRATCH_COLOR_TABLE_A;
-
-      const bytesPerLine = io.drawLine.bytesPerLine | 0;
-      const playfieldCycles = bytesPerLine * 4;
-      const dst = io.videoOut.pixels;
-      const prio = io.videoOut.priority;
-      let dstIndex = io.drawLine.destIndex | 0;
-      let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
-
-      let phase = 4;
-      let data = 0;
-
-      for (let cycle = 0; cycle < playfieldCycles; cycle++) {
-        if (phase === 4) {
-          data = ram[dispAddr] & 0xff;
-          dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          if (io.firstRowScanline) {
-            stealDma(ctx, 1);
-          }
-          phase = 0;
-        }
-
-        fillBkgPf012ColorTable(sram, aColorTable);
-        const idx = (data >> (6 - (phase * 2))) & 0x03;
-        const c = aColorTable[idx] & 0xff;
-        const p = PRIORITY_TABLE_BKG_PF012[idx] & 0xff;
-        dst[dstIndex] = c;
-        prio[dstIndex] = p;
-        dst[dstIndex + 1] = c;
-        prio[dstIndex + 1] = p;
-        dst[dstIndex + 2] = c;
-        prio[dstIndex + 2] = p;
-        dst[dstIndex + 3] = c;
-        prio[dstIndex + 3] = p;
-        dstIndex += 4;
-
-        phase++;
-        clockAction(ctx);
-      }
-
-      io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
+      return drawLineMode8Like(ctx, 4, 4);
     }
 
     function drawLineModeB(ctx) {
@@ -212,20 +180,12 @@
 
         let c = data & mask ? (sram[IO_COLPF0] & 0xff) : (sram[IO_COLBK] & 0xff);
         let p = data & mask ? PRIO_PF0 : PRIO_BKG;
-        dst[dstIndex] = c;
-        prio[dstIndex] = p;
-        dst[dstIndex + 1] = c;
-        prio[dstIndex + 1] = p;
-        dstIndex += 2;
+        dstIndex = writePixelPair(dst, prio, dstIndex, c, p);
         mask >>= 1;
 
         c = data & mask ? (sram[IO_COLPF0] & 0xff) : (sram[IO_COLBK] & 0xff);
         p = data & mask ? PRIO_PF0 : PRIO_BKG;
-        dst[dstIndex] = c;
-        prio[dstIndex] = p;
-        dst[dstIndex + 1] = c;
-        prio[dstIndex + 1] = p;
-        dstIndex += 2;
+        dstIndex = writePixelPair(dst, prio, dstIndex, c, p);
         mask >>= 1;
         clockAction(ctx);
       }
@@ -267,21 +227,13 @@
         fillBkgPf012ColorTable(sram, aColorTable);
         let c = aColorTable[(data >> 6) & 0x3] & 0xff;
         let p = PRIORITY_TABLE_BKG_PF012[(data >> 6) & 0x3] & 0xff;
-        dst[dstIndex] = c;
-        prio[dstIndex] = p;
-        dst[dstIndex + 1] = c;
-        prio[dstIndex + 1] = p;
-        dstIndex += 2;
+        dstIndex = writePixelPair(dst, prio, dstIndex, c, p);
 
         data = (data << 2) & 0xff;
 
         c = aColorTable[(data >> 6) & 0x3] & 0xff;
         p = PRIORITY_TABLE_BKG_PF012[(data >> 6) & 0x3] & 0xff;
-        dst[dstIndex] = c;
-        prio[dstIndex] = p;
-        dst[dstIndex + 1] = c;
-        prio[dstIndex + 1] = p;
-        dstIndex += 2;
+        dstIndex = writePixelPair(dst, prio, dstIndex, c, p);
 
         data = (data << 2) & 0xff;
         phase++;
@@ -327,29 +279,20 @@
 
           for (let k = 0; k < 4; k++) {
             if (data & mask) {
-              dst[dstIndex] = cColor1;
-              prio[dstIndex] = PRIO_PF1;
+              dstIndex = writePixelPair(dst, prio, dstIndex, cColor1, PRIO_PF1);
             } else {
-              dst[dstIndex] = cColor0;
-              prio[dstIndex] = PRIO_PF2;
+              dstIndex = writePixelPair(dst, prio, dstIndex, cColor0, PRIO_PF2);
             }
-            dstIndex++;
             mask >>= 1;
           }
         } else if (priorMode === 1) {
           const colBk = sram[IO_COLBK] & 0xff;
           if (mask > 0x08) {
             const hi = (colBk | (data >> 4)) & 0xff;
-            dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writePixelQuad(dst, prio, dstIndex, hi, PRIO_BKG);
           } else {
             const lo = (colBk | (data & 0x0f)) & 0xff;
-            dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writePixelQuad(dst, prio, dstIndex, lo, PRIO_BKG);
           }
           mask >>= 4;
         } else if (priorMode === 2) {
@@ -358,34 +301,22 @@
             const hi_i = data >> 4;
             const hi2 = colorTable[hi_i] & 0xff;
             const p2 = M10_PRIORITY_TABLE[hi_i];
-            dst[dstIndex] = hi2; prio[dstIndex++] = p2;
-            dst[dstIndex] = hi2; prio[dstIndex++] = p2;
-            dst[dstIndex] = hi2; prio[dstIndex++] = p2;
-            dst[dstIndex] = hi2; prio[dstIndex++] = p2;
+            dstIndex = writePixelQuad(dst, prio, dstIndex, hi2, p2);
           } else {
             const lo_i = data & 0x0f;
             const lo2 = colorTable[lo_i] & 0xff;
             const p2 = M10_PRIORITY_TABLE[lo_i];
-            dst[dstIndex] = lo2; prio[dstIndex++] = p2;
-            dst[dstIndex] = lo2; prio[dstIndex++] = p2;
-            dst[dstIndex] = lo2; prio[dstIndex++] = p2;
-            dst[dstIndex] = lo2; prio[dstIndex++] = p2;
+            dstIndex = writePixelQuad(dst, prio, dstIndex, lo2, p2);
           }
           mask >>= 4;
         } else {
           const colBk = sram[IO_COLBK] & 0xff;
           if (mask > 0x08) {
             const hi3 = data & 0xf0 ? colBk | (data & 0xf0) : colBk & 0xf0;
-            dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = hi3; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writePixelQuad(dst, prio, dstIndex, hi3, PRIO_BKG);
           } else {
             const lo3 = data & 0x0f ? colBk | ((data << 4) & 0xf0) : colBk & 0xf0;
-            dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
-            dst[dstIndex] = lo3; prio[dstIndex++] = PRIO_BKG;
+            dstIndex = writePixelQuad(dst, prio, dstIndex, lo3, PRIO_BKG);
           }
           mask >>= 4;
         }
