@@ -30,21 +30,34 @@
       ctx.cycleCounter += cycles | 0;
     };
 
-    function drawLineMode4(ctx) {
+    function writePixelPair(dst, prio, dstIndex, color, priority) {
+      dst[dstIndex] = color;
+      prio[dstIndex] = priority;
+      dst[dstIndex + 1] = color;
+      prio[dstIndex + 1] = priority;
+      return dstIndex + 2;
+    }
+
+    function loadColorTables(sram, table0, table1) {
+      fillBkgPf012ColorTable(sram, table0);
+      table1[0] = sram[IO_COLBK] & 0xff;
+      table1[1] = sram[IO_COLPF0] & 0xff;
+      table1[2] = sram[IO_COLPF1] & 0xff;
+      table1[3] = sram[IO_COLPF3] & 0xff;
+    }
+
+    function drawLineMode45Common(ctx, fetchCharacterRow, vScrollBase, shouldStealDma) {
       const io = ctx.ioData;
       const ram = ctx.ram;
       const sram = ctx.sram;
 
       const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      const vScrollOffset = ((8 - lineDelta) - (io.video.verticalScrollOffset | 0)) & 0xff;
+      const vScrollLine =
+        ((vScrollBase - lineDelta) - (io.video.verticalScrollOffset | 0)) & 0xff;
 
       const aColorTable0 = SCRATCH_COLOR_TABLE_A;
       const aColorTable1 = SCRATCH_COLOR_TABLE_B;
-      fillBkgPf012ColorTable(sram, aColorTable0);
-      aColorTable1[0] = sram[IO_COLBK] & 0xff;
-      aColorTable1[1] = sram[IO_COLPF0] & 0xff;
-      aColorTable1[2] = sram[IO_COLPF1] & 0xff;
-      aColorTable1[3] = sram[IO_COLPF3] & 0xff;
+      loadColorTables(sram, aColorTable0, aColorTable1);
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 2;
@@ -65,21 +78,19 @@
           inverse = (raw & 0x80) !== 0;
           const ch = raw & 0x7f;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          stealDma(ctx, 1);
+          if (shouldStealDma(vScrollLine)) {
+            stealDma(ctx, 1);
+          }
 
           if (io.firstRowScanline) {
             stealDma(ctx, 1);
           }
 
-          data = fetchCharacterRow8(ram, chBase, ch, vScrollOffset, chactl);
+          data = fetchCharacterRow(ram, chBase, ch, vScrollLine, chactl);
           mask = 0x02;
         }
 
-        fillBkgPf012ColorTable(sram, aColorTable0);
-        aColorTable1[0] = sram[IO_COLBK] & 0xff;
-        aColorTable1[1] = sram[IO_COLPF0] & 0xff;
-        aColorTable1[2] = sram[IO_COLPF1] & 0xff;
-        aColorTable1[3] = sram[IO_COLPF3] & 0xff;
+        loadColorTables(sram, aColorTable0, aColorTable1);
         const colorTable = inverse ? aColorTable1 : aColorTable0;
         const prioTable = inverse
           ? PRIORITY_TABLE_BKG_PF013
@@ -87,21 +98,13 @@
 
         let c = colorTable[(data >> 6) & 0x3] & 0xff;
         let p = prioTable[(data >> 6) & 0x3] & 0xff;
-        dst[dstIndex] = c;
-        prio[dstIndex] = p;
-        dst[dstIndex + 1] = c;
-        prio[dstIndex + 1] = p;
-        dstIndex += 2;
+        dstIndex = writePixelPair(dst, prio, dstIndex, c, p);
 
         data = (data << 2) & 0xff;
 
         c = colorTable[(data >> 6) & 0x3] & 0xff;
         p = prioTable[(data >> 6) & 0x3] & 0xff;
-        dst[dstIndex] = c;
-        prio[dstIndex] = p;
-        dst[dstIndex + 1] = c;
-        prio[dstIndex + 1] = p;
-        dstIndex += 2;
+        dstIndex = writePixelPair(dst, prio, dstIndex, c, p);
 
         data = (data << 2) & 0xff;
         mask >>= 1;
@@ -111,87 +114,16 @@
       io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
     }
 
+    function drawLineMode4(ctx) {
+      return drawLineMode45Common(ctx, fetchCharacterRow8, 8, function () {
+        return true;
+      });
+    }
+
     function drawLineMode5(ctx) {
-      const io = ctx.ioData;
-      const ram = ctx.ram;
-      const sram = ctx.sram;
-
-      const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      const vScrollLine = ((16 - lineDelta) - (io.video.verticalScrollOffset | 0)) & 0xff;
-
-      const aColorTable0 = SCRATCH_COLOR_TABLE_A;
-      const aColorTable1 = SCRATCH_COLOR_TABLE_B;
-      fillBkgPf012ColorTable(sram, aColorTable0);
-      aColorTable1[0] = sram[IO_COLBK] & 0xff;
-      aColorTable1[1] = sram[IO_COLPF0] & 0xff;
-      aColorTable1[2] = sram[IO_COLPF1] & 0xff;
-      aColorTable1[3] = sram[IO_COLPF3] & 0xff;
-
-      const bytesPerLine = io.drawLine.bytesPerLine | 0;
-      const playfieldCycles = bytesPerLine * 2;
-      const dst = io.videoOut.pixels;
-      const prio = io.videoOut.priority;
-      let dstIndex = io.drawLine.destIndex | 0;
-      let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
-
-      let mask = 0x00;
-      let data = 0;
-      let inverse = false;
-
-      for (let cycle = 0; cycle < playfieldCycles; cycle++) {
-        const chBase = ((currentCharacterBaseRegister(io, sram) << 8) & 0xfc00) & 0xffff;
-        const chactl = sram[IO_CHACTL] & 0x07;
-        if (mask === 0x00) {
-          const raw = ram[dispAddr] & 0xff;
-          inverse = (raw & 0x80) !== 0;
-          const ch = raw & 0x7f;
-          dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          if ((vScrollLine & 1) === 0) {
-            stealDma(ctx, 1);
-          }
-
-          if (io.firstRowScanline) {
-            stealDma(ctx, 1);
-          }
-
-          data = fetchCharacterRow16(ram, chBase, ch, vScrollLine, chactl);
-          mask = 0x02;
-        }
-
-        fillBkgPf012ColorTable(sram, aColorTable0);
-        aColorTable1[0] = sram[IO_COLBK] & 0xff;
-        aColorTable1[1] = sram[IO_COLPF0] & 0xff;
-        aColorTable1[2] = sram[IO_COLPF1] & 0xff;
-        aColorTable1[3] = sram[IO_COLPF3] & 0xff;
-        const colorTable = inverse ? aColorTable1 : aColorTable0;
-        const prioTable = inverse
-          ? PRIORITY_TABLE_BKG_PF013
-          : PRIORITY_TABLE_BKG_PF012;
-
-        let c = colorTable[(data >> 6) & 0x3] & 0xff;
-        let p = prioTable[(data >> 6) & 0x3] & 0xff;
-        dst[dstIndex] = c;
-        prio[dstIndex] = p;
-        dst[dstIndex + 1] = c;
-        prio[dstIndex + 1] = p;
-        dstIndex += 2;
-
-        data = (data << 2) & 0xff;
-
-        c = colorTable[(data >> 6) & 0x3] & 0xff;
-        p = prioTable[(data >> 6) & 0x3] & 0xff;
-        dst[dstIndex] = c;
-        prio[dstIndex] = p;
-        dst[dstIndex + 1] = c;
-        prio[dstIndex + 1] = p;
-        dstIndex += 2;
-
-        data = (data << 2) & 0xff;
-        mask >>= 1;
-        clockAction(ctx);
-      }
-
-      io.drawLine.displayMemoryAddress = dispAddr & 0xffff;
+      return drawLineMode45Common(ctx, fetchCharacterRow16, 16, function (vScrollLine) {
+        return (vScrollLine & 1) === 0;
+      });
     }
 
     return { drawLineMode4, drawLineMode5 };

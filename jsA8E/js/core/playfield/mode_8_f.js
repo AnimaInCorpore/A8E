@@ -26,6 +26,24 @@
     const fillBkgPf012ColorTable = cfg.fillBkgPf012ColorTable;
     const fillGtiaColorTable = cfg.fillGtiaColorTable;
     const PRIORITY_TABLE_BKG_PF012 = cfg.PRIORITY_TABLE_BKG_PF012;
+    const M10_PRIORITY_TABLE = new Uint8Array([
+      PRIO_M10_PM0,
+      PRIO_M10_PM1,
+      PRIO_M10_PM2,
+      PRIO_M10_PM3,
+      PRIO_PF0,
+      PRIO_PF1,
+      PRIO_PF2,
+      PRIO_PF3,
+      PRIO_BKG,
+      PRIO_BKG,
+      PRIO_BKG,
+      PRIO_BKG,
+      PRIO_PF0,
+      PRIO_PF1,
+      PRIO_PF2,
+      PRIO_PF3,
+    ]);
 
     const clockAction = cfg.clockAction;
     const stealDma = cfg.stealDma || function (ctx, cycles) {
@@ -335,17 +353,11 @@
           }
           mask >>= 4;
         } else if (priorMode === 2) {
-          const m10prio = [
-            PRIO_M10_PM0, PRIO_M10_PM1, PRIO_M10_PM2, PRIO_M10_PM3,
-            PRIO_PF0, PRIO_PF1, PRIO_PF2, PRIO_PF3,
-            PRIO_BKG, PRIO_BKG, PRIO_BKG, PRIO_BKG,
-            PRIO_PF0, PRIO_PF1, PRIO_PF2, PRIO_PF3
-          ];
           fillGtiaColorTable(sram, colorTable);
           if (mask > 0x08) {
             const hi_i = data >> 4;
             const hi2 = colorTable[hi_i] & 0xff;
-            const p2 = m10prio[hi_i];
+            const p2 = M10_PRIORITY_TABLE[hi_i];
             dst[dstIndex] = hi2; prio[dstIndex++] = p2;
             dst[dstIndex] = hi2; prio[dstIndex++] = p2;
             dst[dstIndex] = hi2; prio[dstIndex++] = p2;
@@ -353,7 +365,7 @@
           } else {
             const lo_i = data & 0x0f;
             const lo2 = colorTable[lo_i] & 0xff;
-            const p2 = m10prio[lo_i];
+            const p2 = M10_PRIORITY_TABLE[lo_i];
             dst[dstIndex] = lo2; prio[dstIndex++] = p2;
             dst[dstIndex] = lo2; prio[dstIndex++] = p2;
             dst[dstIndex] = lo2; prio[dstIndex++] = p2;

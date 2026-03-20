@@ -26,78 +26,6 @@
       ? (hwApi.CYCLES_PER_LINE | 0) * (hwApi.LINES_PER_SCREEN_PAL | 0)
       : 35568;
 
-  // Parse a cycle count that may be expressed as a plain number or a time/frame string.
-  // Supported units: s/sec/seconds, ms/milliseconds, us/µs/microseconds,
-  //                  frames/frame, cycles/cycle (or bare number).
-  // Returns an integer cycle count, or 0 for unrecognised input.
-  function parseCycleDuration(value) {
-    if (typeof value === "number") return Math.max(0, Math.round(value));
-    if (typeof value !== "string") return 0;
-    const m = value.trim().match(
-      /^([0-9]*\.?[0-9]+)\s*(s|sec|secs|second|seconds|ms|millisecond|milliseconds|us|µs|microsecond|microseconds|frames?|cycles?)?$/i,
-    );
-    if (!m) return 0;
-    const n = parseFloat(m[1]);
-    const unit = (m[2] || "").toLowerCase();
-    if (!unit || unit === "cycle" || unit === "cycles") return Math.max(0, Math.round(n));
-    if (
-      unit === "s" ||
-      unit === "sec" ||
-      unit === "secs" ||
-      unit === "second" ||
-      unit === "seconds"
-    ) {
-      return Math.max(0, Math.round(n * ATARI_CPU_HZ_PAL));
-    }
-    if (unit === "ms" || unit === "millisecond" || unit === "milliseconds") {
-      return Math.max(0, Math.round(n * ATARI_CPU_HZ_PAL / 1000));
-    }
-    if (
-      unit === "us" ||
-      unit === "µs" ||
-      unit === "microsecond" ||
-      unit === "microseconds"
-    ) {
-      return Math.max(0, Math.round(n * ATARI_CPU_HZ_PAL / 1000000));
-    }
-    if (unit === "frame" || unit === "frames") {
-      return Math.max(0, Math.round(n * CYCLES_PER_FRAME));
-    }
-    return 0;
-  }
-
-  // Parse a millisecond value that may be expressed as a plain number or a time string.
-  // Supported units: s/sec/seconds, ms/milliseconds (default), us/µs/microseconds.
-  // Returns an integer millisecond count, or 0 for unrecognised input.
-  function parseMs(value) {
-    if (typeof value === "number") return Math.max(0, Math.round(value));
-    if (typeof value !== "string") return 0;
-    const m = value.trim().match(
-      /^([0-9]*\.?[0-9]+)\s*(s|sec|secs|second|seconds|ms|millisecond|milliseconds|us|µs|microsecond|microseconds)?$/i,
-    );
-    if (!m) return 0;
-    const n = parseFloat(m[1]);
-    const unit = (m[2] || "ms").toLowerCase();
-    if (
-      unit === "s" ||
-      unit === "sec" ||
-      unit === "secs" ||
-      unit === "second" ||
-      unit === "seconds"
-    ) {
-      return Math.max(0, Math.round(n * 1000));
-    }
-    if (
-      unit === "us" ||
-      unit === "µs" ||
-      unit === "microsecond" ||
-      unit === "microseconds"
-    ) {
-      return Math.max(0, Math.round(n / 1000));
-    }
-    return Math.max(0, Math.round(n)); // ms (default)
-  }
-
   const CODE_TABLE =
     window.A8ECpuTables && typeof window.A8ECpuTables.buildCodeTable === "function"
       ? window.A8ECpuTables.buildCodeTable()
@@ -191,6 +119,26 @@
   const createAutomationError = AutomationUtil.createAutomationError;
   const buildUrlWithCacheControl = AutomationUtil.buildUrlWithCacheControl;
   const buildFetchInit = AutomationUtil.buildFetchInit;
+  const buildFailureDescriptor = AutomationUtil.buildFailureDescriptor;
+  const buildXexLaunchSummary = AutomationUtil.buildXexLaunchSummary;
+  const buildXexRunConfiguration = AutomationUtil.buildXexRunConfiguration;
+  const cloneDebugState = AutomationUtil.cloneDebugState;
+  const cloneMountedMediaState = AutomationUtil.cloneMountedMediaState;
+  const cloneTraceEntries = AutomationUtil.cloneTraceEntries;
+  const cloneXexPreflightReport = AutomationUtil.cloneXexPreflightReport;
+  const counterDelta = AutomationUtil.counterDelta;
+  const describeXexBootFailure = AutomationUtil.describeXexBootFailure;
+  const didReachTargetPc = AutomationUtil.didReachTargetPc;
+  const normalizeBuildResult = AutomationUtil.normalizeBuildResult;
+  const normalizeBuildSpec = AutomationUtil.normalizeBuildSpec;
+  const normalizeConsoleKeyState = AutomationUtil.normalizeConsoleKeyState;
+  const normalizeRunConfiguration = AutomationUtil.normalizeRunConfiguration;
+  const normalizeTimeoutMs = AutomationUtil.normalizeTimeoutMs;
+  const parseCycleDuration = AutomationUtil.parseCycleDuration;
+  const parseMs = AutomationUtil.parseMs;
+  const resolveXexEntryPc = AutomationUtil.resolveXexEntryPc;
+  const sleep = AutomationUtil.sleep;
+  const withTimeout = AutomationUtil.withTimeout;
 
   function resetReadyPromise() {
     readyPromise = new Promise(function (resolve) {
@@ -199,16 +147,6 @@
   }
 
   resetReadyPromise();
-
-  function sleep(ms) {
-    return new Promise(function (resolve) {
-      setTimeout(resolve, Math.max(0, ms | 0));
-    });
-  }
-
-  function counterDelta(startValue, endValue) {
-    return ((endValue >>> 0) - (startValue >>> 0)) >>> 0;
-  }
 
   async function getApp() {
     if (currentApp) return currentApp;
@@ -228,43 +166,6 @@
       return Promise.resolve(app.getDebugState());
     }
     return null;
-  }
-
-  function normalizeTimeoutMs(value, fallbackMs) {
-    if (value === undefined || value === null) return fallbackMs | 0;
-    const timeoutMs = value | 0;
-    if (timeoutMs <= 0) return 0;
-    return timeoutMs;
-  }
-
-  function withTimeout(promise, timeoutMs, onTimeout) {
-    const limit = normalizeTimeoutMs(timeoutMs, 0);
-    if (limit <= 0) return Promise.resolve(promise);
-    return new Promise(function (resolve, reject) {
-      let settled = false;
-      const timer = setTimeout(function () {
-        if (settled) return;
-        settled = true;
-        try {
-          reject(onTimeout());
-        } catch (err) {
-          reject(err);
-        }
-      }, limit);
-      Promise.resolve(promise)
-        .then(function (result) {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          resolve(result);
-        })
-        .catch(function (err) {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          reject(err);
-        });
-    });
   }
 
   async function readSystemStatePart(part, producer, fallbackValue, timeoutMs) {
@@ -487,32 +388,6 @@
           : "",
       bytes: bytes,
     };
-  }
-
-  function cloneDebugState(raw) {
-    if (!raw || typeof raw !== "object") return null;
-    const out = {
-      reason: raw.reason ? String(raw.reason) : "update",
-      running: !!raw.running,
-      pc: clamp16(raw.pc),
-      a: clamp8(raw.a),
-      x: clamp8(raw.x),
-      y: clamp8(raw.y),
-      sp: clamp8(raw.sp),
-      p: clamp8(raw.p),
-      cycleCounter: raw.cycleCounter >>> 0,
-      instructionCounter: raw.instructionCounter >>> 0,
-    };
-    if (typeof raw.breakpointHit === "number")
-      {out.breakpointHit = clamp16(raw.breakpointHit);}
-    if (typeof raw.stopAddress === "number")
-      {out.stopAddress = clamp16(raw.stopAddress);}
-    if (typeof raw.faultAddress === "number")
-      {out.faultAddress = clamp16(raw.faultAddress);}
-    if (typeof raw.opcode === "number") out.opcode = clamp8(raw.opcode);
-    if (raw.faultType) out.faultType = String(raw.faultType);
-    if (raw.faultMessage) out.faultMessage = String(raw.faultMessage);
-    return out;
   }
 
   function makePauseSignature(state) {
@@ -1310,70 +1185,6 @@
     return typeof value === "number" ? clamp16(value) : value;
   }
 
-  function normalizeBuildResult(record, options) {
-    if (!record) return null;
-    const opts = options || {};
-    const result = record.result || {};
-    const out = {
-      ok: !!record.ok,
-      format: record.format,
-      sourceName: record.sourceName,
-      timestamp: record.timestamp,
-    };
-    if (!record.ok) {
-      out.error = result.error || record.error || "";
-      out.errors = Array.isArray(result.errors) ? result.errors.slice(0) : [];
-      return out;
-    }
-
-    const rawBytes = toUint8Array(result.bytes || []);
-    out.byteLength = rawBytes.length | 0;
-    out.runAddr =
-      result.runAddr === null || result.runAddr === undefined
-        ? null
-        : clamp16(result.runAddr);
-    out.symbols = result.symbols || {};
-    out.importedSymbols = Array.isArray(result.importedSymbols)
-      ? result.importedSymbols.slice(0)
-      : [];
-    out.globalSymbols = Array.isArray(result.globalSymbols)
-      ? result.globalSymbols.slice(0)
-      : [];
-    out.lineAddressMap = result.lineAddressMap || {};
-    out.addressLineMap = result.addressLineMap || {};
-    out.lineBytesMap = result.lineBytesMap || {};
-    if (result.object) out.object = result.object;
-    if (opts.byteEncoding === "base64") out.base64 = bytesToBase64(rawBytes);
-    else out.bytes = Array.from(rawBytes);
-    return out;
-  }
-
-  function normalizeBuildSpec(spec) {
-    if (typeof spec === "string") {
-      return {
-        name: "SOURCE.ASM",
-        text: spec,
-        format: "xex",
-      };
-    }
-    const raw = spec && typeof spec === "object" ? spec : {};
-    return {
-      name: String(raw.name || raw.sourceName || "SOURCE.ASM"),
-      text: raw.text !== undefined ? String(raw.text) : "",
-      format: raw.format === "object" ? "object" : "xex",
-      includeResolver: raw.includeResolver,
-      byteEncoding: raw.byteEncoding,
-      defines: raw.defines,
-      preprocessorDefines: raw.preprocessorDefines,
-      initialDefines: raw.initialDefines,
-      importValues: raw.importValues,
-      imports: raw.imports,
-      externals: raw.externals,
-      deferAsserts: raw.deferAsserts,
-      suppressRunAddress: raw.suppressRunAddress,
-    };
-  }
-
   function resolveIncludeFromHostFs(hostFs, includePath) {
     if (!hostFs || typeof hostFs.readFile !== "function") return null;
     const rawPath = String(includePath || "").trim();
@@ -1483,256 +1294,6 @@
       const name = slash >= 0 ? clean.substring(slash + 1) : clean;
       return name || fallback;
     }
-  }
-
-  function cloneTraceEntries(entries) {
-    if (!Array.isArray(entries)) return [];
-    return entries.map(function (entry) {
-      return entry && typeof entry === "object" ? Object.assign({}, entry) : entry;
-    });
-  }
-
-  function normalizeConsoleKeyState(raw) {
-    const source = raw && typeof raw === "object" ? raw : {};
-    let register = 0x07;
-    if (typeof source.raw === "number") register = source.raw & 0x07;
-    else {
-      register = 0x07;
-      if (source.option) register &= ~0x04;
-      if (source.select) register &= ~0x02;
-      if (source.start) register &= ~0x01;
-    }
-    return {
-      raw: register & 0x07,
-      option: (register & 0x04) === 0,
-      select: (register & 0x02) === 0,
-      start: (register & 0x01) === 0,
-    };
-  }
-
-  function normalizeRunConfiguration(config) {
-    if (!config || typeof config !== "object") return null;
-    return Object.assign({}, config);
-  }
-
-  function isTimeoutLikeReason(reason) {
-    const value = String(reason || "");
-    return (
-      value === "timeout" ||
-      value === "instructionLimit" ||
-      value === "cycleLimit"
-    );
-  }
-
-  function didReachTargetPc(result, targetPc) {
-    if (!result || targetPc === null || targetPc === undefined) return false;
-    const normalizedTarget = clamp16(targetPc);
-    if (result.debugState && clamp16(result.debugState.pc) === normalizedTarget) {
-      return true;
-    }
-    if (typeof result.stopAddress === "number" && clamp16(result.stopAddress) === normalizedTarget) {
-      return true;
-    }
-    return false;
-  }
-
-  function getCurrentDisassemblyInstruction(disassemblyResult) {
-    if (
-      !disassemblyResult ||
-      !Array.isArray(disassemblyResult.instructions) ||
-      !disassemblyResult.instructions.length
-    ) {
-      return null;
-    }
-    for (let i = 0; i < disassemblyResult.instructions.length; i++) {
-      const entry = disassemblyResult.instructions[i];
-      if (entry && entry.current) return entry;
-    }
-    return disassemblyResult.instructions[0] || null;
-  }
-
-  function isConsolePollInstruction(disassemblyResult) {
-    const current = getCurrentDisassemblyInstruction(disassemblyResult);
-    if (!current) return false;
-    const text = String(current.text || "");
-    const operand = String(current.operand || "");
-    return text.indexOf("$D01F") >= 0 || operand.indexOf("$D01F") >= 0;
-  }
-
-  function inferFailurePhase(failure, bundle) {
-    if (failure && failure.phase) return String(failure.phase);
-    const reason =
-      failure && failure.reason
-        ? String(failure.reason)
-        : bundle && bundle.debugState && bundle.debugState.reason
-          ? String(bundle.debugState.reason)
-          : "";
-    if (reason.indexOf("fault_") === 0) return "cpu_fault";
-    if (
-      reason === "breakpoint" &&
-      failure &&
-      typeof failure.targetPc === "number" &&
-      bundle &&
-      bundle.debugState &&
-      clamp16(bundle.debugState.pc) !== clamp16(failure.targetPc)
-    ) {
-      return "breakpoint_mismatch";
-    }
-    if (reason === "pc") return "entry_pc_reached";
-    if (isTimeoutLikeReason(reason)) {
-      if (
-        bundle &&
-        bundle.disassembly &&
-        bundle.consoleKeys &&
-        !bundle.consoleKeys.option &&
-        !bundle.consoleKeys.select &&
-        !bundle.consoleKeys.start &&
-        isConsolePollInstruction(bundle.disassembly)
-      ) {
-        return "waiting_for_console_input";
-      }
-      return "wait_timeout";
-    }
-    return failure && failure.operation ? String(failure.operation) : "automation_failure";
-  }
-
-  function buildFailureDescriptor(options, bundle) {
-    const opts = options || {};
-    const raw = opts.failure && typeof opts.failure === "object" ? opts.failure : {};
-    const out = {
-      operation:
-        raw.operation !== undefined && raw.operation !== null
-          ? String(raw.operation)
-          : opts.operation
-            ? String(opts.operation)
-            : null,
-      reason:
-        raw.reason !== undefined && raw.reason !== null
-          ? String(raw.reason)
-          : bundle && bundle.debugState && bundle.debugState.reason
-            ? String(bundle.debugState.reason)
-            : null,
-      message:
-        raw.message !== undefined && raw.message !== null ? String(raw.message) : null,
-      phase:
-        raw.phase !== undefined && raw.phase !== null ? String(raw.phase) : null,
-      code:
-        raw.code !== undefined && raw.code !== null ? String(raw.code) : null,
-      timedOut: raw.timedOut === true || isTimeoutLikeReason(raw.reason),
-      timeoutMs:
-        raw.timeoutMs !== undefined && raw.timeoutMs !== null
-          ? Math.max(0, raw.timeoutMs | 0)
-          : opts.timeoutMs !== undefined && opts.timeoutMs !== null
-            ? Math.max(0, opts.timeoutMs | 0)
-            : undefined,
-      targetPc:
-        raw.targetPc !== undefined && raw.targetPc !== null
-          ? clamp16(raw.targetPc)
-          : opts.targetPc !== undefined && opts.targetPc !== null
-            ? clamp16(opts.targetPc)
-            : undefined,
-    };
-    if (raw.error) out.error = serializeAutomationError(raw.error);
-    out.phase = inferFailurePhase(out, bundle);
-    return out;
-  }
-
-  function cloneMountedMediaState(entries) {
-    if (!Array.isArray(entries)) return [];
-    return entries.map(function (entry) {
-      return entry && typeof entry === "object" ? Object.assign({}, entry) : entry;
-    });
-  }
-
-  function cloneXexPreflightReport(report) {
-    if (!report || typeof report !== "object") return null;
-    return {
-      ok: !!report.ok,
-      phase: report.phase ? String(report.phase) : null,
-      code: report.code ? String(report.code) : null,
-      message: report.message ? String(report.message) : null,
-      byteLength:
-        typeof report.byteLength === "number" ? report.byteLength >>> 0 : 0,
-      normalizedByteLength:
-        typeof report.normalizedByteLength === "number"
-          ? report.normalizedByteLength >>> 0
-          : 0,
-      segmentCount:
-        typeof report.segmentCount === "number" ? report.segmentCount >>> 0 : 0,
-      segments: Array.isArray(report.segments)
-        ? report.segments.map(function (segment) {
-            return {
-              index: segment.index | 0,
-              start: clamp16(segment.start),
-              end: clamp16(segment.end),
-              length: segment.length >>> 0,
-            };
-          })
-        : [],
-      loaderRange:
-        report.loaderRange && typeof report.loaderRange === "object"
-          ? {
-              start: clamp16(report.loaderRange.start),
-              end: clamp16(report.loaderRange.end),
-              length: report.loaderRange.length >>> 0,
-            }
-          : null,
-      bufferAddress:
-        typeof report.bufferAddress === "number" ? clamp16(report.bufferAddress) : null,
-      bufferRange:
-        report.bufferRange && typeof report.bufferRange === "object"
-          ? {
-              start: clamp16(report.bufferRange.start),
-              end: clamp16(report.bufferRange.end),
-              length: report.bufferRange.length >>> 0,
-            }
-          : null,
-      protectedRegions: Array.isArray(report.protectedRegions)
-        ? report.protectedRegions.map(function (region) {
-            return {
-              kind: region.kind ? String(region.kind) : "",
-              name: region.name ? String(region.name) : "",
-              start: clamp16(region.start),
-              end: clamp16(region.end),
-              length: region.length >>> 0,
-              protected: !!region.protected,
-              romBacked: !!region.romBacked,
-            };
-          })
-        : [],
-      overlaps: Array.isArray(report.overlaps)
-        ? report.overlaps.map(function (entry) {
-            return {
-              segmentIndex: entry.segmentIndex | 0,
-              segmentStart: clamp16(entry.segmentStart),
-              segmentEnd: clamp16(entry.segmentEnd),
-              regionKind: entry.regionKind ? String(entry.regionKind) : "",
-              regionName: entry.regionName ? String(entry.regionName) : "",
-              regionStart: clamp16(entry.regionStart),
-              regionEnd: clamp16(entry.regionEnd),
-              overlapStart: clamp16(entry.overlapStart),
-              overlapEnd: clamp16(entry.overlapEnd),
-              overlapLength: entry.overlapLength >>> 0,
-              protected: !!entry.protected,
-              romBacked: !!entry.romBacked,
-            };
-          })
-        : [],
-      runAddress:
-        typeof report.runAddress === "number" ? clamp16(report.runAddress) : null,
-      initAddress:
-        typeof report.initAddress === "number" ? clamp16(report.initAddress) : null,
-      portB: typeof report.portB === "number" ? clamp8(report.portB) : null,
-      bankState:
-        report.bankState && typeof report.bankState === "object"
-          ? Object.assign({}, report.bankState, {
-              portB:
-                typeof report.bankState.portB === "number"
-                  ? clamp8(report.bankState.portB)
-                  : null,
-            })
-          : null,
-    };
   }
 
   function buildBootStateSnapshot(app, debugState, bankState, mountedMedia, consoleKeys, renderer) {
@@ -2085,109 +1646,6 @@
       text: decodeText(toUint8Array(bytes)),
     });
     return assembleSource(spec);
-  }
-
-  function buildXexLaunchSummary(context) {
-    return {
-      name: String(context.name || "PROGRAM.XEX"),
-      slot: context.slot | 0,
-      byteLength: context.byteLength >>> 0,
-      mountedByteLength: context.mountedByteLength >>> 0,
-      reset: context.reset !== false,
-      started: !!context.started,
-      resetOptions: context.resetOptions || null,
-      runAddr:
-        typeof context.runAddr === "number" ? clamp16(context.runAddr) : null,
-      entryPc:
-        typeof context.entryPc === "number" ? clamp16(context.entryPc) : null,
-      sourceUrl: context.sourceUrl ? String(context.sourceUrl) : null,
-      format: context.format ? String(context.format) : "xex",
-    };
-  }
-
-  function buildXexRunConfiguration(context, options) {
-    const opts = options || {};
-    const out = {
-      slot: context.slot | 0,
-      xexName: String(context.name || "PROGRAM.XEX"),
-      byteLength: context.byteLength >>> 0,
-      mountedByteLength: context.mountedByteLength >>> 0,
-      reset: context.reset !== false,
-    };
-    if (context.resetOptions) out.resetOptions = context.resetOptions;
-    if (typeof context.entryPc === "number") out.targetPc = clamp16(context.entryPc);
-    if (typeof context.runAddr === "number") out.runAddr = clamp16(context.runAddr);
-    if (typeof opts.maxInstructions === "number") out.maxInstructions = opts.maxInstructions;
-    if (typeof opts.maxCycles === "number") out.maxCycles = opts.maxCycles;
-    if (opts.detectTightLoop) out.detectTightLoop = true;
-    return out;
-  }
-
-  function resolveXexEntryPc(raw, runAddr, xexPreflight) {
-    if (raw.entryPc !== undefined && raw.entryPc !== null) return clamp16(raw.entryPc);
-    if (raw.expectedEntryPc !== undefined && raw.expectedEntryPc !== null) {
-      return clamp16(raw.expectedEntryPc);
-    }
-    if (typeof runAddr === "number") return clamp16(runAddr);
-    if (
-      xexPreflight &&
-      typeof xexPreflight.runAddress === "number" &&
-      isFinite(xexPreflight.runAddress)
-    ) {
-      return clamp16(xexPreflight.runAddress);
-    }
-    return null;
-  }
-
-  function describeXexBootFailure(result, entryPc) {
-    const targetPc = typeof entryPc === "number" ? clamp16(entryPc) : null;
-    const reason =
-      result && result.reason !== undefined && result.reason !== null
-        ? String(result.reason)
-        : "xex_boot_failed";
-    const failure = {
-      phase: "xex_boot_failed",
-      reason: reason,
-      code: "xex_boot_failed",
-      message: "XEX boot failed before reaching the entry point",
-    };
-    if (targetPc !== null) failure.targetPc = targetPc;
-    if (result && typeof result.executedInstructions === "number") {
-      failure.executedInstructions = result.executedInstructions >>> 0;
-    }
-    if (result && typeof result.executedCycles === "number") {
-      failure.executedCycles = result.executedCycles >>> 0;
-    }
-    if (result && result.tightLoop) {
-      failure.reason = "tight_loop";
-      failure.code = "xex_boot_tight_loop";
-      failure.message = "XEX boot got stuck in a tight loop before reaching the entry point";
-      failure.tightLoop = result.tightLoop;
-      return failure;
-    }
-    if (reason === "instructionLimit" || reason === "cycleLimit") {
-      failure.code = "xex_boot_entry_not_reached";
-      failure.message = "XEX boot did not reach the entry point before execution limits";
-      return failure;
-    }
-    if (reason === "fault_illegal_opcode" || reason === "fault_execution_error") {
-      failure.code = reason === "fault_illegal_opcode"
-        ? "xex_boot_fault_illegal_opcode"
-        : "xex_boot_fault_execution_error";
-      failure.message = "XEX boot stopped on a CPU fault before reaching the entry point";
-      return failure;
-    }
-    if (reason === "breakpoint") {
-      failure.code = "xex_boot_breakpoint_mismatch";
-      failure.message = "XEX boot stopped at a different breakpoint before reaching the entry point";
-      return failure;
-    }
-    if (reason === "unsupported") {
-      failure.code = "xex_boot_unsupported";
-      failure.message = "Paused-mode XEX boot execution is unavailable";
-      return failure;
-    }
-    return failure;
   }
 
   async function captureXexBootFailure(operation, context, failure, options) {

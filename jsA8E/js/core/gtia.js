@@ -380,7 +380,7 @@
       const pmbaseHi = (sram[IO_PMBASE] & 0xff) << 8;
       const hires = (dmactl & 0x10) !== 0;
 
-      function fetchPmAddr(offset, vdelayMask) {
+      function fetchPmAddr(offset) {
         const lineIndex = hires ? y : (y >> 1);
         const base = hires ? (pmbaseHi & 0xf800) : (pmbaseHi & 0xfc00);
         return (base + offset + (lineIndex & 0xffff)) & 0xffff;
@@ -393,7 +393,7 @@
       if (lineCycle === 0 && pmDmaMissiles) {
         if (!vdelayAllowsFetch(0x08)) return 0;
         if (pmReceiveMissiles) {
-          sram[IO_GRAFM_TRIG1] = ctx.ram[fetchPmAddr(hires ? 768 : 384, 0x08)];
+          sram[IO_GRAFM_TRIG1] = ctx.ram[fetchPmAddr(hires ? 768 : 384)];
         }
         return 1;
       }
@@ -401,25 +401,25 @@
         if (lineCycle === 2) {
           if (!vdelayAllowsFetch(0x10)) return 0;
           if (pmReceivePlayers) {
-            sram[IO_GRAFP0_P1PL] = ctx.ram[fetchPmAddr(hires ? 1024 : 512, 0x10)];
+            sram[IO_GRAFP0_P1PL] = ctx.ram[fetchPmAddr(hires ? 1024 : 512)];
           }
           return 1;
         } else if (lineCycle === 3) {
           if (!vdelayAllowsFetch(0x20)) return 0;
           if (pmReceivePlayers) {
-            sram[IO_GRAFP1_P2PL] = ctx.ram[fetchPmAddr(hires ? 1280 : 640, 0x20)];
+            sram[IO_GRAFP1_P2PL] = ctx.ram[fetchPmAddr(hires ? 1280 : 640)];
           }
           return 1;
         } else if (lineCycle === 4) {
           if (!vdelayAllowsFetch(0x40)) return 0;
           if (pmReceivePlayers) {
-            sram[IO_GRAFP2_P3PL] = ctx.ram[fetchPmAddr(hires ? 1536 : 768, 0x40)];
+            sram[IO_GRAFP2_P3PL] = ctx.ram[fetchPmAddr(hires ? 1536 : 768)];
           }
           return 1;
         } else if (lineCycle === 5) {
           if (!vdelayAllowsFetch(0x80)) return 0;
           if (pmReceivePlayers) {
-            sram[IO_GRAFP3_TRIG0] = ctx.ram[fetchPmAddr(hires ? 1792 : 896, 0x80)];
+            sram[IO_GRAFP3_TRIG0] = ctx.ram[fetchPmAddr(hires ? 1792 : 896)];
           }
           return 1;
         }
