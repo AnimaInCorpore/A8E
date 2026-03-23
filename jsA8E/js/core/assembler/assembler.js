@@ -210,6 +210,15 @@
         }
         beginSegmentIfNeeded(outPc);
         if (firstEmitPc === null) firstEmitPc = outPc;
+        if (lineNo > 0) {
+          const key = String(lineNo | 0);
+          if (!Object.prototype.hasOwnProperty.call(lineAddressMap, key)) {
+            lineAddressMap[key] = outPc & 0xffff;
+          }
+          if (!Object.prototype.hasOwnProperty.call(addressLineMap, outPc)) {
+            addressLineMap[outPc] = lineNo | 0;
+          }
+        }
         currentSegment.data.push(v & 0xff);
         if (lineNo > 0) {
           const key = String(lineNo | 0);
