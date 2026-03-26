@@ -1756,8 +1756,10 @@ canvas.crtEnabled {
 /* ---- Assembler Editor Panel ---- */
 .assemblerPanel {
   width: min(100%, 1083px);
+  height: calc(100vh - 70px);
   min-height: 340px;
-  max-height: 90vh;
+  max-height: calc(100vh - 70px);
+  flex-shrink: 0;
   border: 1px solid var(--sub-panel-border);
   border-radius: 6px;
   background: var(--sub-panel-bg);

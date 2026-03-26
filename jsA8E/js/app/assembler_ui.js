@@ -3,7 +3,7 @@
 
   const SOURCE_EXTS = new Set(["ASM", "S", "SRC", "TXT", "INC", "MAC"]);
   const PANEL_MIN_HEIGHT = 340;
-  const PANEL_MAX_HEIGHT_RATIO = 0.9;
+  const PANEL_MAX_HEIGHT_RATIO = 1.0;
   const PANEL_DEFAULT_EXTRA_HEIGHT = 120;
   const DEFAULT_SOURCE_TEMPLATE = [
     "; Atari 8-bit 6502 source",
@@ -1142,13 +1142,10 @@
     }
 
     function sizePanelToViewport() {
-      const screenEl = document.querySelector(".screenPanel");
-      let h = screenEl ? screenEl.getBoundingClientRect().height : 0;
       const clientH = document.documentElement.clientHeight || window.innerHeight || 0;
-      const maxH = Math.floor(clientH * PANEL_MAX_HEIGHT_RATIO);
-      h += PANEL_DEFAULT_EXTRA_HEIGHT;
-      if (maxH > 0 && h > maxH) h = maxH;
-      if (h < PANEL_MIN_HEIGHT) h = PANEL_MIN_HEIGHT;
+      const topbar = document.querySelector(".topbar");
+      const topbarH = topbar ? topbar.getBoundingClientRect().height : 0;
+      const h = Math.max(PANEL_MIN_HEIGHT, clientH - topbarH);
       panel.style.height = h + "px";
     }
 
@@ -1220,7 +1217,9 @@
       function onResizeMove(e) {
         const dy = (e.clientY || e.touches && e.touches[0].clientY || 0) - dragStartY;
         const clientH = document.documentElement.clientHeight || window.innerHeight;
-        const newH = Math.max(PANEL_MIN_HEIGHT, Math.min(clientH * PANEL_MAX_HEIGHT_RATIO, dragStartH + dy));
+        const topbar = document.querySelector(".topbar");
+        const topbarH = topbar ? topbar.getBoundingClientRect().height : 0;
+        const newH = Math.max(PANEL_MIN_HEIGHT, Math.min(clientH - topbarH, dragStartH + dy));
         panel.style.height = newH + "px";
       }
 
