@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la /c/Arbeit/a8e/jsA8E/tests/*.test.js)",
+      "Bash(grep -l \"assembler\\\\|assemble\" /c/Arbeit/a8e/jsA8E/tests/*.js)",
+      "Bash(node tests/assembler_rept.test.js)"
+    ]
+  }
+}

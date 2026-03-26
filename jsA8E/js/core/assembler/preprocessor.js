@@ -11,6 +11,8 @@
     "MACRO",
     "ENDMACRO",
     "ENDM",
+    "REPT",
+    "ENDR",
     "LOCAL",
     "IF",
     "IFDEF",
@@ -797,6 +799,7 @@
       macroCapture: null,
       macroUnique: 0,
       macroDepth: 0,
+      reptCapture: null,
       conditionalStack: [],
       evalGuard: null,
       output: [],
@@ -837,6 +840,31 @@
               if (state.macroCapture.enabled) {
                 state.macroCapture.body.push(lineText);
               }
+            }
+            continue;
+          }
+
+          if (state.reptCapture) {
+            if (info && info.directive === "REPT") {
+              state.reptCapture.depth++;
+              state.reptCapture.body.push(lineText);
+            } else if (info && info.directive === "ENDR") {
+              state.reptCapture.depth--;
+              if (state.reptCapture.depth === 0) {
+                const reptCount = state.reptCapture.count;
+                const reptBody = state.reptCapture.body.slice();
+                state.reptCapture = null;
+                for (let rep = 0; rep < reptCount; rep++) {
+                  const reptEntries = reptBody.map(function (line) {
+                    return { file: entry.file, lineNo: entry.lineNo, text: line };
+                  });
+                  processEntries(reptEntries, currentFile, includeDepth);
+                }
+              } else {
+                state.reptCapture.body.push(lineText);
+              }
+            } else {
+              state.reptCapture.body.push(lineText);
             }
             continue;
           }
@@ -899,6 +927,25 @@
               continue;
             }
 
+            if (info.directive === "REPT") {
+              const reptCount = evalConditionalExpr(
+                info.operand,
+                state,
+                entry,
+                state.evalGuard,
+              ) | 0;
+              state.reptCapture = {
+                count: reptCount > 0 ? reptCount : 0,
+                body: [],
+                depth: 1,
+              };
+              continue;
+            }
+
+            if (info.directive === "ENDR") {
+              throw makePreError(entry, ".endr without matching .rept.");
+            }
+
           }
 
           let lineForOutput = lineText;
@@ -930,6 +977,9 @@
 
     if (state.macroCapture) {
       throw new Error("Line 0: unterminated .macro block.");
+    }
+    if (state.reptCapture) {
+      throw new Error("Line 0: unterminated .rept block.");
     }
     if (state.conditionalStack.length) {
       throw new Error("Line 0: unterminated conditional block (.if/.endif mismatch).");

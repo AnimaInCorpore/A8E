@@ -55,6 +55,8 @@
     "MACRO",
     "ENDMACRO",
     "ENDM",
+    "REPT",
+    "ENDR",
     "LOCAL",
     "IF",
     "IFDEF",
