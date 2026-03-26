@@ -36,6 +36,12 @@ For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomati
 | `buildAndRun(source, options)` | Assembles source and immediately runs the resulting XEX. Same as `api.dev.buildAndRun`. |
 | `events` | Event subscription helpers (`subscribe`, `unsubscribe`). |
 
+## MCP Bridge
+
+For Codex-style MCP clients, `mcp_server.js` exposes the same headless runtime through a local stdio bridge. The server advertises three tools: `get_capabilities`, `get_system_state`, and `call_automation`.
+
+`call_automation` accepts `{ domain, action, args }`. The supported domains are `system`, `media`, `input`, `debug`, `dev`, and `artifacts`. Actions mirror the grouped jsA8E methods documented below. Binary inputs should use base64 strings or local file paths, and `artifacts.captureScreenshot` returns an MCP image content block plus base64 data in `structuredContent`.
+
 ## Duration Arguments
 
 Many methods accept duration arguments (`ms`, `holdMs`, `afterMs`, `interKeyDelayMs`, `count`, `maxBootCycles`, etc.). All of these accept either a plain number or a string with a unit suffix.
@@ -413,3 +419,5 @@ If `runXex(...)` times out:
 1.  **Disable Entry Wait**: Set `awaitEntry: false` to return immediately after triggering the load, then use `waitForTime` or `waitForPc` to monitor progress manually.
 2.  **Increase Limits**: If the program is just slow to initialize, increase `maxBootInstructions` and `maxBootCycles`.
 3.  **Monitor PC**: Use a loop with `getSystemState()` and `disassemble()` to see if the CPU is stuck in a loop or executing expected code.
+
+

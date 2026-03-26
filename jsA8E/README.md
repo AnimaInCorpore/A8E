@@ -137,6 +137,12 @@ Worker-backed control calls now acknowledge completion before `system.start()`, 
 
 Flat compatibility aliases still exist, so earlier calls such as `start()`, `runUntilPc()`, or `captureScreenshot()` continue to work.
 
+### MCP server
+
+For Codex-style MCP clients, `mcp_server.js` exposes the same headless runtime through a local stdio bridge. Start it with `npm run mcp` from `jsA8E/`. It keeps the server surface small and maps grouped automation actions through `get_capabilities`, `get_system_state`, and `call_automation`.
+
+Binary inputs use base64 strings or local file paths, and screenshot results return an MCP image content block plus base64 data in `structuredContent`.
+
 ### Browser-less Node bootstrap
 
 jsA8E now also ships a supported Node bootstrap at `jsA8E/headless.js` for browser-less automation.
@@ -230,3 +236,6 @@ Additional helpers for tool-driven input:
 - `system.reload({ cacheBust: true })`
 - `events.subscribe(handler)` for all automation events
 - `events.subscribe("progress", handler)` for fetch/boot/wait checkpoints
+
+
+

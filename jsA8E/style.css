@@ -1198,26 +1198,128 @@ button:hover:not(:disabled) {
 @media (max-width: 780px) {
   .atariKeyboard {
     width: 100%;
+    /* mobile-tuned variables — scale proportionally with viewport */
+    --key-h: clamp(28px, 7vw, 44px);
+    --gap: clamp(1.5px, 0.5vw, 4px);
+    --radius: clamp(8px, 2.4vw, 16px);
+    --shell-pad-x: clamp(4px, 1.6vw, 12px);
+    --shell-pad-top: clamp(10px, 3.2vw, 28px);
+    --shell-pad-bottom: clamp(4px, 1.6vw, 12px);
+    --deck-pad-x: clamp(0px, 0.3vw, 3px);
+    --deck-pad-top: clamp(0px, 0.3vw, 3px);
+    --deck-pad-bottom: clamp(0px, 0.3vw, 3px);
+    --side-pad-x: clamp(3px, 1vw, 8px);
+    --key-font: clamp(7px, 2.6vw, 12px);
+    --key-font-wide: clamp(5.5px, 2vw, 10px);
   }
   .atariKeyboard .atari {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto auto auto;
+    box-shadow:
+      0 clamp(3px, 1vw, 8px) 0 #060603,
+      0 clamp(6px, 2vw, 16px) clamp(16px, 5vw, 50px) rgba(0, 0, 0, 0.9),
+      inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  }
+  /* collapse decorative spacers — reclaims ~1 key-unit of width per row */
+  .atariKeyboard .row > .spacer {
+    flex: 0 0 0;
+    min-width: 0;
   }
   .atariKeyboard .chassis-label {
     grid-column: 1;
-    height: clamp(16px, 6vw, 34px);
+    height: clamp(14px, 5vw, 28px);
   }
   .atariKeyboard .chassis-label .kbname {
+    font-size: clamp(6px, 1.8vw, 10px);
     letter-spacing: 0.22em;
   }
   .atariKeyboard .chassis-label .kbauthor {
+    font-size: clamp(6px, 1.5vw, 9px);
     letter-spacing: 0.07em;
+  }
+  .atariKeyboard .key {
+    font-size: clamp(7px, 2.6vw, 12px);
+    padding: clamp(2px, 0.5vw, 4px) clamp(1px, 0.5vw, 5px);
+    border-bottom-width: clamp(2px, 0.6vw, 4px);
+    border-radius: clamp(2px, 0.5vw, 5px);
+  }
+  .atariKeyboard .key::before {
+    inset: clamp(1px, 0.4vw, 3px) clamp(2px, 0.5vw, 5px) clamp(3px, 0.8vw, 7px) clamp(2px, 0.5vw, 5px);
+    border-radius: clamp(1px, 0.4vw, 3px);
+  }
+  .atariKeyboard .key::after {
+    inset: clamp(1px, 0.4vw, 3px) clamp(2px, 0.5vw, 5px) clamp(3px, 0.8vw, 7px) clamp(2px, 0.5vw, 5px);
+    border-radius: clamp(1px, 0.4vw, 3px);
+  }
+  /* contain text overflow inside each key */
+  .atariKeyboard .key .leg {
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+  }
+  .atariKeyboard .key .top,
+  .atariKeyboard .key .mainlbl,
+  .atariKeyboard .key .sublbl {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  /* primary label: numbers and single symbols — keep prominent */
+  .atariKeyboard .key .mainlbl {
+    font-size: clamp(8px, 2.8vw, 16px);
+  }
+  /* shifted chars on number keys (!, @, #) — readable single chars */
+  .atariKeyboard .key .top {
+    font-size: clamp(5.5px, 2vw, 10px);
+  }
+  /* word labels on .small keys (CLEAR, INSERT, DELETE) — smaller to fit */
+  .atariKeyboard .key.small .top {
+    font-size: clamp(3.5px, 1.2vw, 8px);
+  }
+  .atariKeyboard .key .sublbl {
+    font-size: clamp(3px, 1.2vw, 8px);
+  }
+  /* .small keys: symbols like <, >, _, | */
+  .atariKeyboard .key.small .mainlbl {
+    font-size: clamp(6px, 2.2vw, 13px);
+  }
+  /* small keys with direct text (ESC, BREAK) — slightly reduced */
+  .atariKeyboard .key.small {
+    font-size: clamp(5.5px, 2vw, 10px);
+  }
+  /* wide label keys (RETURN, SHIFT, CAPS) — compact text */
+  .atariKeyboard .key.wide {
+    font-size: clamp(5.5px, 2vw, 10px);
+    letter-spacing: 0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .atariKeyboard .key .leg-tl {
+    top: clamp(2px, 0.5vw, 6px);
+    left: clamp(2px, 0.6vw, 7px);
+  }
+  .atariKeyboard .whiteback {
+    font-size: clamp(4px, 1.2vw, 8px);
+    padding: 0.5px 2px;
+  }
+  .atariKeyboard .whiteback.arrowbadge {
+    min-width: 0.95em;
+    padding: 0.04em 0.1em;
+    border-radius: 1px;
+  }
+  .atariKeyboard .whiteback.arrowbadge .fa-solid {
+    font-size: clamp(3.5px, 1.1vw, 7px);
+  }
+  .atariKeyboard .key.pressed,
+  .atariKeyboard .key:active,
+  .atariKeyboard .key.active {
+    transform: translateY(clamp(1px, 0.4vw, 3px));
   }
   .atariKeyboard .case-side {
     grid-column: 1;
     grid-row: 3;
     width: auto;
-    padding: clamp(4px, 1.4vw, 16px) var(--side-pad-x) clamp(4px, 1.4vw, 16px);
+    padding: clamp(4px, 1.4vw, 12px) var(--side-pad-x) clamp(4px, 1.4vw, 12px);
     border-left: 0;
     border-bottom: 1px solid #888888;
     border-top: 1px solid rgba(0, 0, 0, 0.25);
@@ -1237,9 +1339,9 @@ button:hover:not(:disabled) {
   .atariKeyboard .case-side::after {
     top: 2px;
     right: 3px;
-    bottom: 5px;
+    bottom: clamp(2px, 0.6vw, 5px);
     left: 3px;
-    border-radius: 3px;
+    border-radius: 2px;
   }
   .atariKeyboard .case-keyboard {
     grid-row: 2;
@@ -1256,11 +1358,27 @@ button:hover:not(:disabled) {
     width: 100%;
     min-width: 0;
     flex: initial;
+    height: var(--key-h);
+    border-bottom-width: clamp(1px, 0.4vw, 3px);
+    border-radius: clamp(2px, 0.5vw, 4px);
+  }
+  .atariKeyboard .side-key::before {
+    inset: clamp(1px, 0.3vw, 2px) clamp(1px, 0.4vw, 3px) clamp(2px, 0.6vw, 5px) clamp(1px, 0.4vw, 3px);
+    border-radius: 2px;
+  }
+  .atariKeyboard .side-key::after {
+    inset: clamp(1px, 0.3vw, 2px) clamp(1px, 0.4vw, 3px) clamp(2px, 0.6vw, 5px) clamp(1px, 0.4vw, 3px);
+    border-radius: 2px;
+  }
+  .atariKeyboard .side-key.pressed,
+  .atariKeyboard .side-key:active,
+  .atariKeyboard .side-key.active {
+    transform: translateY(clamp(1px, 0.4vw, 3px));
   }
   .atariKeyboard .case-strip {
     grid-column: 1;
     grid-row: 4;
-    padding: 0 var(--side-pad-x) clamp(4px, 1.4vw, 16px);
+    padding: 0 var(--side-pad-x) clamp(4px, 1.4vw, 12px);
     border-radius: 0 0 var(--radius) var(--radius);
   }
   .atariKeyboard .strip {
@@ -1286,33 +1404,6 @@ button:hover:not(:disabled) {
     justify-content: center;
     padding: 0 2px;
     text-align: center;
-  }
-  .atariKeyboard .key .mainlbl {
-    font-size: clamp(6px, 2vw, 15px);
-  }
-  .atariKeyboard .key {
-    font-size: clamp(6px, 2vw, 11px);
-  }
-  .atariKeyboard .key.wide {
-    font-size: clamp(5px, 1.7vw, 10px);
-    letter-spacing: 0.02em;
-  }
-  .atariKeyboard .key.small .mainlbl {
-    font-size: clamp(5px, 1.8vw, 13px);
-  }
-  .atariKeyboard .key .top {
-    font-size: clamp(4px, 1.5vw, 10px);
-  }
-  .atariKeyboard .whiteback.arrowbadge {
-    min-width: 0.95em;
-    padding: 0.04em 0.1em;
-    border-radius: 1px;
-  }
-  .atariKeyboard .whiteback.arrowbadge .fa-solid {
-    font-size: clamp(3px, 0.95vw, 6px);
-  }
-  .atariKeyboard .key .sublbl {
-    font-size: clamp(3px, 1.2vw, 9px);
   }
 }
 

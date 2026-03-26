@@ -3,7 +3,11 @@
     "allow": [
       "Bash(ls -la /c/Arbeit/a8e/jsA8E/tests/*.test.js)",
       "Bash(grep -l \"assembler\\\\|assemble\" /c/Arbeit/a8e/jsA8E/tests/*.js)",
-      "Bash(node tests/assembler_rept.test.js)"
+      "Bash(node tests/assembler_rept.test.js)",
+      "WebFetch(domain:www.keyboard-layout-editor.com)",
+      "Bash(gh api:*)",
+      "Bash(curl -s https://api.github.com/gists/ae00e3345bad1435fd30eb58e81cfd9e)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(v[''''content'''']\\) for v in d[''''files''''].values\\(\\)]\")"
     ]
   }
 }
