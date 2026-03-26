@@ -133,7 +133,7 @@ void _6502_XXX(_6502_Context_t *);
 
 void _6502_LAX(_6502_Context_t *);
 void _6502_SLO(_6502_Context_t *);
-void _6502_ATX(_6502_Context_t *);
+void _6502_LXA(_6502_Context_t *);
 void _6502_AAX(_6502_Context_t *);
 void _6502_DOP(_6502_Context_t *);
 void _6502_TOP(_6502_Context_t *);
@@ -142,8 +142,16 @@ void _6502_ISC(_6502_Context_t *);
 void _6502_SRE(_6502_Context_t *);
 void _6502_RLA(_6502_Context_t *);
 void _6502_AAC(_6502_Context_t *);
-void _6502_XAA(_6502_Context_t *);
+void _6502_ANE(_6502_Context_t *);
 void _6502_DCP(_6502_Context_t *);
+void _6502_RRA(_6502_Context_t *);
+void _6502_SBX(_6502_Context_t *);
+void _6502_ARR(_6502_Context_t *);
+void _6502_LAS(_6502_Context_t *);
+void _6502_SHA(_6502_Context_t *);
+void _6502_SHX(_6502_Context_t *);
+void _6502_SHY(_6502_Context_t *);
+void _6502_TAS(_6502_Context_t *);
 
 void _6502_Implicit(_6502_Context_t *);
 void _6502_Immediate(_6502_Context_t *);
@@ -340,7 +348,7 @@ _6502_Code_t m_a6502CodeList[] =
 		{0x7a, 42, 2, AT_IMPLICIT},
 		{0xda, 42, 2, AT_IMPLICIT},
 		{0xfa, 42, 2, AT_IMPLICIT},
-		{0xab, 59, 2, AT_IMMEDIATE}, /* ATX */
+		{0xab, 59, 2, AT_IMMEDIATE}, /* LXA */
 		{0x87, 60, 3, AT_ZERO_PAGE}, /* AAX */
 		{0x97, 60, 4, AT_ZERO_PAGE_Y},
 		{0x83, 60, 6, AT_INDEXED_INDIRECT},
@@ -390,7 +398,7 @@ _6502_Code_t m_a6502CodeList[] =
 		{0x33, 66, 8, AT_INDIRECT_INDEXED},
 		{0x0b, 67, 2, AT_IMMEDIATE}, /* AAC */
 		{0x2b, 67, 2, AT_IMMEDIATE},
-		{0x8b, 68, 2, AT_IMMEDIATE}, /* XAA */
+		{0x8b, 68, 2, AT_IMMEDIATE}, /* ANE */
 		{0xc7, 69, 5, AT_ZERO_PAGE}, /* DCP */
 		{0xd7, 69, 6, AT_ZERO_PAGE_X},
 		{0xcf, 69, 6, AT_ABSOLUTE},
@@ -398,6 +406,21 @@ _6502_Code_t m_a6502CodeList[] =
 		{0xdb, 69, 7, AT_ABSOLUTE_Y},
 		{0xc3, 69, 8, AT_INDEXED_INDIRECT},
 		{0xd3, 69, 8, AT_INDIRECT_INDEXED},
+		{0x67, 70, 5, AT_ZERO_PAGE}, /* RRA */
+		{0x77, 70, 6, AT_ZERO_PAGE_X},
+		{0x6f, 70, 6, AT_ABSOLUTE},
+		{0x7f, 70, 7, AT_ABSOLUTE_X},
+		{0x7b, 70, 7, AT_ABSOLUTE_Y},
+		{0x63, 70, 8, AT_INDEXED_INDIRECT},
+		{0x73, 70, 8, AT_INDIRECT_INDEXED},
+		{0xcb, 71, 2, AT_IMMEDIATE}, /* SBX */
+		{0x6b, 72, 2, AT_IMMEDIATE}, /* ARR */
+		{0xbb, 73, 4, AT_ABSOLUTE_Y}, /* LAS */
+		{0x93, 74, 6, AT_INDIRECT_INDEXED}, /* SHA */
+		{0x9f, 74, 5, AT_ABSOLUTE_Y},
+		{0x9e, 75, 5, AT_ABSOLUTE_Y}, /* SHX */
+		{0x9c, 76, 4, AT_ABSOLUTE_X}, /* SHY */
+		{0x9b, 77, 5, AT_ABSOLUTE_Y}, /* TAS */
 };
 
 char *m_a6502MnemonicList[] =
@@ -413,8 +436,9 @@ char *m_a6502MnemonicList[] =
 		"CLC", "CLD", "CLI", "CLV", "SEC", "SED", "SEI",
 		"PHA", "PHP", "PLA", "PLP", "???",
 
-		"LAX", "SLO", "ATX", "AAX", "DOP", "TOP",
-		"ASR", "ISC", "SRE", "RLA", "AAC", "XAA", "DCP"};
+		"LAX", "SLO", "LXA", "AAX", "DOP", "TOP",
+		"ASR", "ISC", "SRE", "RLA", "AAC", "ANE", "DCP",
+		"RRA", "SBX", "ARR", "LAS", "SHA", "SHX", "SHY", "TAS"};
 
 _6502_OpcodeFunction_t m_a6502OpcodeFunctionList[] =
 	{
@@ -478,7 +502,7 @@ _6502_OpcodeFunction_t m_a6502OpcodeFunctionList[] =
 
 		_6502_LAX,
 		_6502_SLO,
-		_6502_ATX,
+		_6502_LXA,
 		_6502_AAX,
 		_6502_DOP,
 		_6502_TOP,
@@ -487,8 +511,16 @@ _6502_OpcodeFunction_t m_a6502OpcodeFunctionList[] =
 		_6502_SRE,
 		_6502_RLA,
 		_6502_AAC,
-		_6502_XAA,
+		_6502_ANE,
 		_6502_DCP,
+		_6502_RRA,
+		_6502_SBX,
+		_6502_ARR,
+		_6502_LAS,
+		_6502_SHA,
+		_6502_SHX,
+		_6502_SHY,
+		_6502_TAS,
 };
 
 _6502_AddressTypeFunction_t m_a6502AddressTypeFunctionList[] =
@@ -1788,9 +1820,10 @@ void _6502_SLO(_6502_Context_t *pContext)
 	PS.n = CPU.a & 0x80;
 }
 
-void _6502_ATX(_6502_Context_t *pContext)
+/* Fake6502-compatible LXA form; AHRM marks $AB unstable. */
+void _6502_LXA(_6502_Context_t *pContext)
 {
-	CPU.a &= *READ_ACCESS;
+	CPU.a = (CPU.a | 0xee) & *READ_ACCESS;
 	CPU.x = CPU.a;
 
 	PS.z = !CPU.a;
@@ -1834,6 +1867,11 @@ void _6502_ISC(_6502_Context_t *pContext)
 	cValue = *WRITE_ACCESS(&cValue);
 
 	_6502_SbcValue(pContext, cValue);
+
+	if(PS.d)
+	{
+		pContext->llCycleCounter--;
+	}
 }
 
 void _6502_SRE(_6502_Context_t *pContext)
@@ -1875,10 +1913,10 @@ void _6502_AAC(_6502_Context_t *pContext)
 	PS.c = PS.n;
 }
 
-void _6502_XAA(_6502_Context_t *pContext)
+/* Fake6502-compatible ANE form; AHRM marks $8B unstable. */
+void _6502_ANE(_6502_Context_t *pContext)
 {
-	CPU.a = CPU.x;
-	CPU.a &= *READ_ACCESS;
+	CPU.a = (CPU.a | 0xef) & CPU.x & *READ_ACCESS;
 
 	PS.z = !CPU.a;
 	PS.n = CPU.a & 0x80;
@@ -1895,6 +1933,143 @@ void _6502_DCP(_6502_Context_t *pContext)
 	PS.z = (CPU.a == cValue);
 	PS.n = (CPU.a - cValue) & 0x80;
 	PS.c = (CPU.a >= cValue);
+}
+
+/* Fake6502-compatible RRA form. */
+void _6502_RRA(_6502_Context_t *pContext)
+{
+	u8 cOldCarry = PS.c ? 1 : 0;
+	u8 cValue = *READ_ACCESS;
+
+	PS.c = cValue & 0x01;
+	cValue >>= 1;
+
+	if(cOldCarry)
+	{
+		cValue |= 0x80;
+	}
+
+	cValue = *WRITE_ACCESS(&cValue);
+	_6502_AdcValue(pContext, cValue);
+
+	if(PS.d)
+	{
+		pContext->llCycleCounter--;
+	}
+}
+
+/* Fake6502-compatible SBX form. */
+void _6502_SBX(_6502_Context_t *pContext)
+{
+	u8 cBase = CPU.a & CPU.x;
+	u8 cValue = *READ_ACCESS;
+
+	PS.c = (cBase >= cValue);
+	PS.z = (cBase == cValue);
+	PS.n = (cBase - cValue) & 0x80;
+	CPU.x = cBase - cValue;
+}
+
+/* Fake6502-compatible ARR form. */
+void _6502_ARR(_6502_Context_t *pContext)
+{
+	u8 cInput = *READ_ACCESS;
+	u8 cOldCarry = PS.c ? 1 : 0;
+
+	CPU.a &= cInput;
+	cInput = CPU.a;
+
+	CPU.a = (CPU.a >> 1) | (cOldCarry << 7);
+
+	PS.z = !CPU.a;
+	PS.n = CPU.a & 0x80;
+
+	if(!PS.d)
+	{
+		PS.c = CPU.a & 0x40;
+		PS.v = ((CPU.a ^ (CPU.a << 1)) & 0x40) != 0;
+	}
+	else
+	{
+		PS.v = ((CPU.a ^ cInput) & 0x40) != 0;
+
+		if(((cInput & 0x0f) + (cInput & 0x01)) > 0x05)
+		{
+			CPU.a = (CPU.a & 0xf0) | ((CPU.a + 0x06) & 0x0f);
+		}
+
+		if(((u16)cInput + (cInput & 0x10)) >= 0x60)
+		{
+			CPU.a += 0x60;
+			PS.c = 1;
+		}
+		else
+		{
+			PS.c = 0;
+		}
+	}
+}
+
+/* Fake6502-compatible LAS form. */
+void _6502_LAS(_6502_Context_t *pContext)
+{
+	u8 cValue = *READ_ACCESS & CPU.sp;
+
+	CPU.sp = CPU.a = CPU.x = cValue;
+
+	PS.z = !CPU.a;
+	PS.n = CPU.a & 0x80;
+	if(pContext->cPageCrossed)
+	{
+		pContext->llCycleCounter++;
+	}
+}
+
+/* Fake6502-compatible SHA form. */
+void _6502_SHA(_6502_Context_t *pContext)
+{
+	u8 cValue = CPU.a & CPU.x & (u8)(((pContext->sAccessAddress >> 8) + 1) & 0xff);
+
+	WRITE_ACCESS(&cValue);
+}
+
+/* Fake6502-compatible SHX form. */
+void _6502_SHX(_6502_Context_t *pContext)
+{
+	u16 sBase = pContext->sAccessAddress - CPU.y;
+	u8 cValue = CPU.x & (u8)(((sBase >> 8) + 1) & 0xff);
+
+	if(((sBase & 0xff) + CPU.y) > 0xff)
+	{
+		pContext->sAccessAddress = (pContext->sAccessAddress & 0xff) | ((u16)cValue << 8);
+	}
+
+	WRITE_ACCESS(&cValue);
+}
+
+/* Fake6502-compatible SHY form. */
+void _6502_SHY(_6502_Context_t *pContext)
+{
+	u16 sBase = pContext->sAccessAddress - CPU.x;
+	u8 cValue = CPU.y & (u8)(((sBase >> 8) + 1) & 0xff);
+
+	if(((sBase & 0xff) + CPU.x) > 0xff)
+	{
+		pContext->sAccessAddress = (pContext->sAccessAddress & 0xff) | ((u16)cValue << 8);
+	}
+
+	WRITE_ACCESS(&cValue);
+}
+
+/* Fake6502-compatible TAS form. */
+void _6502_TAS(_6502_Context_t *pContext)
+{
+	u8 cValue;
+
+	CPU.sp = CPU.a & CPU.x;
+	cValue = CPU.sp & (u8)(((pContext->sAccessAddress >> 8) + 1) & 0xff);
+
+	WRITE_ACCESS(&cValue);
 }
 
 /********************************************************************

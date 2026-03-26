@@ -403,6 +403,7 @@
 
       cpu.a = sum & 0xff;
       ps = setZNBits(ps, bin);
+      ctx.cycleCounter++;
     } else {
       const s = (cpu.a & 0xff) + value + ~~hasFlag(ps, FLAG_C);
       ps = setFlag(
@@ -435,6 +436,7 @@
       cpu.a = diff & 0xff;
       ps = setFlag(ps, FLAG_C, carry);
       ps = setZNBits(ps, bin);
+      ctx.cycleCounter++;
     } else {
       const a2 = cpu.a & 0xff;
       const d2 = a2 - value - (1 ^ ~~hasFlag(ps, FLAG_C));
@@ -766,8 +768,9 @@
     ctx.cpu.a = (ctx.cpu.a | writeAccess(ctx, v)) & 0xff;
     setZN(ctx, ctx.cpu.a);
   }
-  function opATX(ctx) {
-    ctx.cpu.a = ctx.cpu.a & readAccess(ctx) & 0xff;
+  // Fake6502-compatible LXA form; AHRM marks $AB as unstable.
+  function opLXA(ctx) {
+    ctx.cpu.a = ((ctx.cpu.a | 0xee) & readAccess(ctx)) & 0xff;
     ctx.cpu.x = ctx.cpu.a;
     setZN(ctx, ctx.cpu.a);
   }
@@ -790,6 +793,7 @@
     let v = (readAccess(ctx) + 1) & 0xff;
     v = writeAccess(ctx, v);
     sbcValue(ctx, v);
+    if (hasFlag(ctx.cpu.ps, FLAG_D)) ctx.cycleCounter--;
   }
   function opSRE(ctx) {
     let v = readAccess(ctx);
@@ -812,9 +816,9 @@
     setZN(ctx, ctx.cpu.a);
     ctx.cpu.ps = setFlag(ctx.cpu.ps, FLAG_C, hasFlag(ctx.cpu.ps, FLAG_N));
   }
-  function opXAA(ctx) {
-    ctx.cpu.a = ctx.cpu.x & 0xff;
-    ctx.cpu.a = ctx.cpu.a & readAccess(ctx) & 0xff;
+  // Fake6502-compatible ANE form; AHRM marks $8B as unstable.
+  function opANE(ctx) {
+    ctx.cpu.a = ((ctx.cpu.a | 0xef) & ctx.cpu.x & readAccess(ctx)) & 0xff;
     setZN(ctx, ctx.cpu.a);
   }
   function opDCP(ctx) {
@@ -831,15 +835,73 @@
     if (oldCarry) v |= 0x80;
     v = writeAccess(ctx, v);
     adcValue(ctx, v);
+    if (hasFlag(ctx.cpu.ps, FLAG_D)) ctx.cycleCounter--;
   }
   function opSBX(ctx) {
     const cpu = ctx.cpu;
     const base = (cpu.a & cpu.x) & 0xff;
     const imm = readAccess(ctx) & 0xff;
-    const diff = base - imm;
-    cpu.ps = setFlag(cpu.ps, FLAG_C, diff >= 0);
-    cpu.x = diff & 0xff;
-    setZN(ctx, cpu.x);
+    cpu.ps = setCompare(cpu.ps, base, imm);
+    cpu.x = (base - imm) & 0xff;
+  }
+  function opARR(ctx) {
+    const cpu = ctx.cpu;
+    const operand = readAccess(ctx) & 0xff;
+    const carryIn = hasFlag(cpu.ps, FLAG_C) ? 1 : 0;
+    const input = (cpu.a & operand) & 0xff;
+
+    cpu.a = ((input >> 1) | (carryIn << 7)) & 0xff;
+    setZN(ctx, cpu.a);
+
+    if (!hasFlag(cpu.ps, FLAG_D)) {
+      cpu.ps = setFlag(cpu.ps, FLAG_C, cpu.a & 0x40);
+      cpu.ps = setFlag(cpu.ps, FLAG_V, ((cpu.a ^ (cpu.a << 1)) & 0x40) !== 0);
+    } else {
+      cpu.ps = setFlag(cpu.ps, FLAG_V, ((cpu.a ^ input) & 0x40) !== 0);
+      if (((input & 0x0f) + (input & 0x01)) > 0x05) {
+        cpu.a = (cpu.a & 0xf0) | ((cpu.a + 0x06) & 0x0f);
+      }
+      if ((input + (input & 0x10)) >= 0x60) {
+        cpu.a = (cpu.a + 0x60) & 0xff;
+        cpu.ps = setFlag(cpu.ps, FLAG_C, true);
+      } else {
+        cpu.ps = setFlag(cpu.ps, FLAG_C, false);
+      }
+    }
+  }
+  function opLAS(ctx) {
+    const cpu = ctx.cpu;
+    const value = readAccess(ctx) & cpu.sp;
+    cpu.sp = cpu.a = cpu.x = value & 0xff;
+    setZN(ctx, value);
+    if (ctx.pageCrossed) ctx.cycleCounter++;
+  }
+  function opSHA(ctx) {
+    const value = ctx.cpu.a & ctx.cpu.x & ((((ctx.accessAddress >> 8) + 1) & 0xff));
+    writeAccess(ctx, value);
+  }
+  function opSHX(ctx) {
+    const cpu = ctx.cpu;
+    const base = (ctx.accessAddress - cpu.y) & 0xffff;
+    const value = cpu.x & ((((base >> 8) + 1) & 0xff));
+    if (((base & 0xff) + cpu.y) > 0xff) {
+      ctx.accessAddress = (ctx.accessAddress & 0xff) | ((value & 0xff) << 8);
+    }
+    writeAccess(ctx, value);
+  }
+  function opSHY(ctx) {
+    const cpu = ctx.cpu;
+    const base = (ctx.accessAddress - cpu.x) & 0xffff;
+    const value = cpu.y & ((((base >> 8) + 1) & 0xff));
+    if (((base & 0xff) + cpu.x) > 0xff) {
+      ctx.accessAddress = (ctx.accessAddress & 0xff) | ((value & 0xff) << 8);
+    }
+    writeAccess(ctx, value);
+  }
+  function opTAS(ctx) {
+    const cpu = ctx.cpu;
+    cpu.sp = (cpu.a & cpu.x) & 0xff;
+    writeAccess(ctx, cpu.sp & ((((ctx.accessAddress >> 8) + 1) & 0xff)));
   }
 
   const OPCODE_FUNCS = [
@@ -902,7 +964,7 @@
     opXXX,
     opLAX,
     opSLO,
-    opATX,
+    opLXA,
     opAAX,
     opDOP,
     opTOP,
@@ -911,10 +973,16 @@
     opSRE,
     opRLA,
     opAAC,
-    opXAA,
+    opANE,
     opDCP,
     opRRA,
     opSBX,
+    opARR,
+    opLAS,
+    opSHA,
+    opSHX,
+    opSHY,
+    opTAS,
   ];
   const CODE_TABLE = CpuTables.buildCodeTable();
   const OPCODE_ADDRESS_FUNCS = new Array(256);
