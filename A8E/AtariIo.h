@@ -130,10 +130,11 @@ typedef struct
 
 	/* POKEY pot scan state */
 	u8 cPotScanActive;
-	u64 llPotScanStartCycle;
+	u64 llPotScanLastCycle;
+	u64 llPotScanTerminalCycle;
+	u8 cPotScanCounter;
 	u8 aPotValues[8]; /* target values per pot (set by input layer) */
 	u8 aPotLatched[8]; /* 1 = latched at target */
-	u8 cAllPot; /* ALLPOT shadow (bits clear when pot latched) */
 
 	u8 *pDisk1;
 	u32 lDiskSize;

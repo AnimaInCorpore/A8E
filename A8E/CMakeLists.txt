@@ -152,4 +152,15 @@ if(BUILD_TESTING)
 
   add_test(NAME antic_dma_probe COMMAND antic_dma_probe)
   set_tests_properties(antic_dma_probe PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+  add_executable(pokey_pot_scan_probe
+    tests/pokey_pot_scan_probe.c
+    ${A8E_CORE_SOURCES}
+  )
+
+  target_compile_definitions(pokey_pot_scan_probe PRIVATE A8E_ENABLE_TEST_PROBES=1)
+  a8e_configure_target(pokey_pot_scan_probe)
+
+  add_test(NAME pokey_pot_scan_probe COMMAND pokey_pot_scan_probe)
+  set_tests_properties(pokey_pot_scan_probe PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 endif()

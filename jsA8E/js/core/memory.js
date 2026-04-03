@@ -786,6 +786,7 @@
 
   function createApi(cfg) {
     const CPU = cfg.CPU;
+    const CYCLE_NEVER = cfg.CYCLE_NEVER;
     const IO_PORTB = cfg.IO_PORTB;
     const DEFAULT_PORTB =
       typeof cfg.DEFAULT_PORTB === "number" ? sanitizePortB(cfg.DEFAULT_PORTB) : 0xff;
@@ -1334,8 +1335,9 @@
           pokeyLfsr17LastCycle: io.pokeyLfsr17LastCycle,
           pokeyPotValues: new Uint8Array(io.pokeyPotValues || 0),
           pokeyPotLatched: new Uint8Array(io.pokeyPotLatched || 0),
-          pokeyPotAllPot: io.pokeyPotAllPot | 0,
-          pokeyPotScanStartCycle: io.pokeyPotScanStartCycle,
+          pokeyPotScanLastCycle: io.pokeyPotScanLastCycle,
+          pokeyPotScanTerminalCycle: io.pokeyPotScanTerminalCycle,
+          pokeyPotCounter: io.pokeyPotCounter | 0,
           pokeyPotScanActive: !!io.pokeyPotScanActive,
           trigPhysical: new Uint8Array(io.trigPhysical || 0),
           trigLatched: new Uint8Array(io.trigLatched || 0),
@@ -1415,8 +1417,19 @@
         io.pokeyLfsr17LastCycle = state.pokeyLfsr17LastCycle;
         copyBytesTo(io.pokeyPotValues, state.pokeyPotValues);
         copyBytesTo(io.pokeyPotLatched, state.pokeyPotLatched);
-        io.pokeyPotAllPot = state.pokeyPotAllPot | 0;
-        io.pokeyPotScanStartCycle = state.pokeyPotScanStartCycle;
+        const legacyPokeyPotScanStartCycle =
+          typeof state.pokeyPotScanStartCycle === "number"
+            ? state.pokeyPotScanStartCycle
+            : 0;
+        io.pokeyPotScanLastCycle =
+          typeof state.pokeyPotScanLastCycle === "number"
+            ? state.pokeyPotScanLastCycle
+            : legacyPokeyPotScanStartCycle;
+        io.pokeyPotScanTerminalCycle =
+          typeof state.pokeyPotScanTerminalCycle === "number"
+            ? state.pokeyPotScanTerminalCycle
+            : CYCLE_NEVER;
+        io.pokeyPotCounter = state.pokeyPotCounter | 0;
         io.pokeyPotScanActive = !!state.pokeyPotScanActive;
         copyBytesTo(io.trigPhysical, state.trigPhysical);
         copyBytesTo(io.trigLatched, state.trigLatched);

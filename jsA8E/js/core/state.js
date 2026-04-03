@@ -9,7 +9,7 @@
 
     function makeIoData(video) {
       const potValues = new Uint8Array(8);
-      for (let p = 0; p < 8; p++) potValues[p] = 228;
+      for (let p = 0; p < 8; p++) potValues[p] = 229;
       return {
         video: {
           verticalScrollOffset: 0,
@@ -42,11 +42,12 @@
         // POKEY-ish randomness state (LFSR)
         pokeyLfsr17: 0x1ffff,
         pokeyLfsr17LastCycle: 0,
-        // POKEY pot scan (POT0..POT7 / ALLPOT) -- minimal but time-based.
+        // POKEY pot scan (POT0..POT7 / ALLPOT).
         pokeyPotValues: potValues,
         pokeyPotLatched: new Uint8Array(8),
-        pokeyPotAllPot: 0xff,
-        pokeyPotScanStartCycle: 0,
+        pokeyPotScanLastCycle: 0,
+        pokeyPotScanTerminalCycle: CYCLE_NEVER,
+        pokeyPotCounter: 0,
         pokeyPotScanActive: false,
         // Raw trigger inputs (1=released, 0=pressed) and GTIA-latched view.
         trigPhysical: new Uint8Array([1, 1, 1, 1]),

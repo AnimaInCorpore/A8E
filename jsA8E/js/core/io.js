@@ -74,6 +74,7 @@
     const IO_WSYNC = cfg.IO_WSYNC;
     const pokeyAudioSync = cfg.pokeyAudioSync;
     const pokeyAudioOnRegisterWrite = cfg.pokeyAudioOnRegisterWrite;
+    const pokeyPotPrepareSkctlWrite = cfg.pokeyPotPrepareSkctlWrite;
     const pokeyPotStartScan = cfg.pokeyPotStartScan;
     const pokeyRestartTimers = cfg.pokeyRestartTimers;
     const pokeySyncLfsr17 = cfg.pokeySyncLfsr17;
@@ -344,6 +345,7 @@
 
           case IO_SKCTL_SKSTAT:
             pokeySyncLfsr17(ctx);
+            pokeyPotPrepareSkctlWrite(ctx);
             sram[addr] = v;
             if (io.pokeyAudio)
               {pokeyAudioOnRegisterWrite(io.pokeyAudio, addr, v);}

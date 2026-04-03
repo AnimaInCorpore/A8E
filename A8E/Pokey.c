@@ -833,6 +833,14 @@ void Pokey_Init(_6502_Context_t *pContext)
 	}
 	PokeyAudio_RecomputeClocks(pPokey->aChannels, pPokey->audctl);
 
+	for(i = 0; i < 8; i++)
+	{
+		pIoData->aPotValues[i] = 229;
+	}
+	pIoData->llPotScanLastCycle = pContext->llCycleCounter;
+	pIoData->llPotScanTerminalCycle = CYCLE_NEVER;
+	pIoData->cPotScanCounter = 0;
+
 	memset(&want, 0, sizeof(want));
 	want.freq = (int)pPokey->sample_rate_hz;
 	want.format = AUDIO_S16SYS;
@@ -1188,8 +1196,121 @@ int Pokey_ShouldThrottle(_6502_Context_t *pContext)
 /***********************************************/
 
 /* Pot scanning constants */
-#define POKEY_POT_MAX 228
-#define POKEY_POT_CYCLES_PER_COUNT 28
+#define POKEY_POT_SLOW_MAX 228
+#define POKEY_POT_FAST_MAX 229
+#define POKEY_POT_SLOW_CYCLES_PER_COUNT CYCLES_PER_LINE
+
+static u8 Pokey_PotScanFastEnabled(_6502_Context_t *pContext)
+{
+	return (SRAM[IO_SKCTL_SKSTAT] & 0x04) ? 1 : 0;
+}
+
+static u64 Pokey_PotScanStepCycles(_6502_Context_t *pContext)
+{
+	if(Pokey_PotScanFastEnabled(pContext))
+	{
+		return 1ull;
+	}
+
+	return (SRAM[IO_SKCTL_SKSTAT] & 0x03) ? (u64)POKEY_POT_SLOW_CYCLES_PER_COUNT : 0ull;
+}
+
+static u8 Pokey_PotScanTerminalCount(_6502_Context_t *pContext)
+{
+	return Pokey_PotScanFastEnabled(pContext) ? POKEY_POT_FAST_MAX : POKEY_POT_SLOW_MAX;
+}
+
+static void Pokey_PotRefreshReadRegisters(_6502_Context_t *pContext)
+{
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+	u8 cTerminal;
+	u8 cCount;
+	u8 cAllPot;
+	u32 i;
+
+	if(!pIoData || !pIoData->cPotScanActive)
+	{
+		return;
+	}
+
+	cCount = pIoData->cPotScanCounter;
+	cTerminal =
+		(pIoData->llPotScanTerminalCycle != CYCLE_NEVER)
+			? cCount
+			: Pokey_PotScanTerminalCount(pContext);
+	cAllPot = 0xff;
+
+	for(i = 0; i < 8; i++)
+	{
+		u8 cRawTarget = pIoData->aPotValues[i];
+		u8 cTarget = cRawTarget;
+		u8 cSaturates;
+
+		if(cTarget > cTerminal)
+		{
+			cTarget = cTerminal;
+		}
+
+		cSaturates = (cRawTarget >= cTerminal) ? 1 : 0;
+		if(!pIoData->aPotLatched[i] && !cSaturates && cCount >= cTarget)
+		{
+			pIoData->aPotLatched[i] = 1;
+		}
+
+		if(pIoData->aPotLatched[i])
+		{
+			RAM[(IO_AUDF1_POT0 + i) & 0xffff] = cTarget;
+			cAllPot &= (u8)~(1u << i);
+		}
+		else
+		{
+			RAM[(IO_AUDF1_POT0 + i) & 0xffff] = cCount;
+		}
+	}
+
+	RAM[IO_AUDCTL_ALLPOT] = cAllPot;
+}
+
+static void Pokey_PotFinishScan(_6502_Context_t *pContext)
+{
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+	u8 cFinalValue;
+	u32 i;
+
+	if(!pIoData)
+	{
+		return;
+	}
+
+	cFinalValue = pIoData->cPotScanCounter;
+	for(i = 0; i < 8; i++)
+	{
+		if(!pIoData->aPotLatched[i])
+		{
+			RAM[(IO_AUDF1_POT0 + i) & 0xffff] = cFinalValue;
+		}
+	}
+
+	pIoData->cPotScanActive = 0;
+	pIoData->llPotScanTerminalCycle = CYCLE_NEVER;
+	RAM[IO_AUDCTL_ALLPOT] = 0x00;
+}
+
+static void Pokey_PotPrepareSkctlWrite(_6502_Context_t *pContext)
+{
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+
+	if(!pIoData || !pIoData->cPotScanActive)
+	{
+		return;
+	}
+
+	Pokey_PotUpdate(pContext);
+	if(pIoData->cPotScanActive)
+	{
+		pIoData->llPotScanLastCycle = pContext->llCycleCounter;
+	}
+}
 
 void Pokey_PotStartScan(_6502_Context_t *pContext)
 {
@@ -1202,8 +1323,9 @@ void Pokey_PotStartScan(_6502_Context_t *pContext)
 	}
 
 	pIoData->cPotScanActive = 1;
-	pIoData->llPotScanStartCycle = pContext->llCycleCounter;
-	pIoData->cAllPot = 0xff;
+	pIoData->llPotScanLastCycle = pContext->llCycleCounter;
+	pIoData->llPotScanTerminalCycle = CYCLE_NEVER;
+	pIoData->cPotScanCounter = 0;
 	memset(pIoData->aPotLatched, 0, sizeof(pIoData->aPotLatched));
 
 	for(i = 0; i < 8; i++)
@@ -1216,66 +1338,54 @@ void Pokey_PotStartScan(_6502_Context_t *pContext)
 void Pokey_PotUpdate(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	u64 elapsed;
-	u32 count;
-	u32 i;
-	u8 allpot;
-	u8 anyPending;
+	u64 llNow;
 
 	if(!pIoData || !pIoData->cPotScanActive)
 	{
 		return;
 	}
 
-	elapsed = pContext->llCycleCounter - pIoData->llPotScanStartCycle;
-	count = (u32)(elapsed / POKEY_POT_CYCLES_PER_COUNT);
-	if(count > 255)
+	llNow = pContext->llCycleCounter;
+	if(llNow < pIoData->llPotScanLastCycle)
 	{
-		count = 255;
+		pIoData->llPotScanLastCycle = llNow;
 	}
 
-	allpot = pIoData->cAllPot;
-	anyPending = 0;
-
-	for(i = 0; i < 8; i++)
+	if(pIoData->llPotScanTerminalCycle == CYCLE_NEVER)
 	{
-		u8 target;
+		u64 llStepCycles = Pokey_PotScanStepCycles(pContext);
 
-		if(pIoData->aPotLatched[i])
+		if(llStepCycles > 0)
 		{
-			continue;
-		}
+			u8 cTerminal = Pokey_PotScanTerminalCount(pContext);
+			u64 llElapsed = llNow - pIoData->llPotScanLastCycle;
+			u64 llSteps = llElapsed / llStepCycles;
+			u32 lStepsToTerminal = (u32)cTerminal - (u32)pIoData->cPotScanCounter;
 
-		anyPending = 1;
-		target = pIoData->aPotValues[i];
-		if(target > POKEY_POT_MAX)
-		{
-			target = POKEY_POT_MAX;
-		}
-
-		if(count >= target)
-		{
-			pIoData->aPotLatched[i] = 1;
-			RAM[(IO_AUDF1_POT0 + i) & 0xffff] = target;
-			allpot &= ~(1 << i);
-		}
-		else
-		{
-			u32 cur = count;
-			if(cur > POKEY_POT_MAX)
+			if(llSteps > 0)
 			{
-				cur = POKEY_POT_MAX;
+				if(llSteps >= (u64)lStepsToTerminal)
+				{
+					pIoData->cPotScanCounter = cTerminal;
+					pIoData->llPotScanLastCycle += (u64)lStepsToTerminal * llStepCycles;
+					pIoData->llPotScanTerminalCycle = pIoData->llPotScanLastCycle;
+				}
+				else
+				{
+					pIoData->cPotScanCounter =
+						(u8)((u32)pIoData->cPotScanCounter + (u32)llSteps);
+					pIoData->llPotScanLastCycle += llSteps * llStepCycles;
+				}
 			}
-			RAM[(IO_AUDF1_POT0 + i) & 0xffff] = (u8)cur;
 		}
 	}
 
-	pIoData->cAllPot = allpot;
-	RAM[IO_AUDCTL_ALLPOT] = allpot;
+	Pokey_PotRefreshReadRegisters(pContext);
 
-	if(!anyPending || (allpot & 0xff) == 0)
+	if(pIoData->llPotScanTerminalCycle != CYCLE_NEVER &&
+	   llNow > pIoData->llPotScanTerminalCycle)
 	{
-		pIoData->cPotScanActive = 0;
+		Pokey_PotFinishScan(pContext);
 	}
 }
 
@@ -2101,6 +2211,7 @@ u8 *Pokey_SKCTL_SKSTAT(_6502_Context_t *pContext, u8 *pValue)
 	if(pValue)
 	{
 		Pokey_Sync(pContext, pContext->llCycleCounter);
+		Pokey_PotPrepareSkctlWrite(pContext);
 		SRAM[IO_SKCTL_SKSTAT] = *pValue;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
