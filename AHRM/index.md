@@ -1,5 +1,6 @@
 # AHRM - Altirra Hardware Reference Manual
 
+> Local markdown mirror note: revised on 2026-03-31 against the online [2026-01-02 Altirra Hardware Reference Manual PDF](https://www.virtualdub.org/downloads/Altirra%20Hardware%20Reference%20Manual.pdf), the [Atari 8-bit technical documents archive](https://ftp.pigwa.net/stuff/collections/atari_forever/www/www.atari-history.com/archives/tech_docs_8bits.html), and the [Atari Home Computer Technical Reference Notes (1982)](https://www.bitsavers.org/pdf/atari/400_800/CO16555_Atari_Home_Computer_Technical_Reference_Notes_1982.pdf). Chapter 14's original PDF section boundaries have been restored in the local index; `14. Reference/2. Register list.md` remains the combined raw extraction.
 
 ## 0. Front Matter
 
@@ -215,6 +216,10 @@
 - [Reference](14.%20Reference/Reference.md)
 - [1. Memory map](14.%20Reference/1.%20Memory%20map.md)
 - [2. Register list](14.%20Reference/2.%20Register%20list.md)
+- [3. GTIA registers](14.%20Reference/3.%20GTIA%20registers.md)
+- [4. POKEY registers](14.%20Reference/4.%20POKEY%20registers.md)
+- [5. PIA registers](14.%20Reference/5.%20PIA%20registers.md)
+- [6. ANTIC registers](14.%20Reference/6.%20ANTIC%20registers.md)
 - [7. Register listing](14.%20Reference/7.%20Register%20listing.md)
 
 ## 15. Bibliography
@@ -222,6 +227,7 @@
 - [Bibliography](15.%20Bibliography/Bibliography.md)
 - [1. List of references](15.%20Bibliography/1.%20List%20of%20references.md)
 - [2. Errata](15.%20Bibliography/2.%20Errata.md)
+- [3. Printers](15.%20Bibliography/3.%20Printers.md)
 
 ## A. Polynomial Counters
 
@@ -278,10 +284,6 @@
 - [5. Game cartridges](F.%20Firmware%20Database/5.%20Game%20cartridges.md)
 - [6. BASIC](F.%20Firmware%20Database/6.%20BASIC.md)
 - [7. Disk Drives](F.%20Firmware%20Database/7.%20Disk%20Drives.md)
-
-## 15. Bibliography
-
-- [3. Printers](15.%20Bibliography/3.%20Printers.md)
 
 ## G. Quick Reference
 
