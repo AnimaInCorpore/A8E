@@ -4,6 +4,7 @@
   function createApi(cfg) {
     const CPU = cfg.CPU;
     const CYCLE_NEVER = cfg.CYCLE_NEVER;
+    const CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
     const IO_INIT_VALUES = cfg.IO_INIT_VALUES;
 
     function makeIoData(video) {
@@ -56,6 +57,11 @@
         rowDisplayMemoryAddress: 0,
         displayMemoryAddress: 0,
         firstRowScanline: false,
+        nmiTiming: {
+          enabledByCycle7: 0,
+          enabledByCycle8: 0,
+          enabledOnCycle7Mask: 0,
+        },
         chbaseTiming: {
           rawValue: 0,
           activeValue: 0,
@@ -71,6 +77,8 @@
           refreshDmaPending: 0,
           displayListInstructionDmaPending: 0,
           displayListAddressDmaRemaining: 0,
+          playfieldLineBuffer: new Uint8Array(48),
+          scheduledPlayfieldDma: new Uint8Array(CYCLES_PER_LINE),
         },
         keyPressCounter: 0,
         // Shim from the C version: optionally force OPTION held during the OS boot check

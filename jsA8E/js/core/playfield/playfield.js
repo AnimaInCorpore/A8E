@@ -66,27 +66,27 @@
       switch (pfWidth & 0x03) {
         case 0x01:
           if (cmd & 0x10) {
-            leftBorderCycles = (20 + (hscroll & 0x0f)) >> 1;
+            leftBorderCycles = (24 + (hscroll & 0x0f)) >> 1;
             playfieldCycles = 80;
           } else {
-            leftBorderCycles = 18;
+            leftBorderCycles = 20;
             playfieldCycles = 64;
           }
           break;
         case 0x02:
           if (cmd & 0x10) {
-            leftBorderCycles = (4 + (hscroll & 0x0f)) >> 1;
+            leftBorderCycles = (8 + (hscroll & 0x0f)) >> 1;
             playfieldCycles = 96;
           } else {
-            leftBorderCycles = 10;
+            leftBorderCycles = 12;
             playfieldCycles = 80;
           }
           break;
         case 0x03:
           if (cmd & 0x10) {
-            leftBorderCycles = (4 + (hscroll & 0x0f)) >> 1;
+            leftBorderCycles = (8 + (hscroll & 0x0f)) >> 1;
           } else {
-            leftBorderCycles = 2;
+            leftBorderCycles = 4;
           }
           playfieldCycles = 96;
           break;

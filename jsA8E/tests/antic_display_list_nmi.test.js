@@ -28,6 +28,9 @@ const CYCLE_NEVER = Number.POSITIVE_INFINITY;
 const CYCLES_PER_LINE = 114;
 
 function loadAnticApi() {
+  const cpuLog = {
+    nmiCalls: 0,
+  };
   const source = fs.readFileSync(
     path.join(__dirname, "..", "js", "core", "antic.js"),
     "utf8",
@@ -52,7 +55,9 @@ function loadAnticApi() {
   const api = context.window.A8EAntic.createApi({
     CPU: {
       stall: function () {},
-      nmi: function () {},
+      nmi: function () {
+        cpuLog.nmiCalls++;
+      },
       irq: function () {},
       executeOne: function () {},
     },
@@ -118,7 +123,10 @@ function loadAnticApi() {
     },
     fillLine: function () {},
   });
-  return api;
+  return {
+    api: api,
+    cpuLog: cpuLog,
+  };
 }
 
 function makeContext() {
@@ -150,6 +158,11 @@ function makeContext() {
       rowDisplayMemoryAddress: 0,
       displayMemoryAddress: 0,
       firstRowScanline: false,
+      nmiTiming: {
+        enabledByCycle7: 0,
+        enabledByCycle8: 0,
+        enabledOnCycle7Mask: 0,
+      },
       drawLine: {
         playerMissileInterleaved: false,
         playerMissileClockActive: false,
@@ -167,7 +180,7 @@ function runOneScanline(api, ctx) {
 }
 
 function testJvbWithDliUsesWaitForVblSemantics() {
-  const api = loadAnticApi();
+  const { api } = loadAnticApi();
   const ctx = makeContext();
 
   ctx.sram[IO_DMACTL] = 0x20;
@@ -184,11 +197,11 @@ function testJvbWithDliUsesWaitForVblSemantics() {
   assert.equal(ctx.ioData.displayListAddress, 0x1234);
   assert.equal(ctx.ioData.nextDisplayListLine, 8);
   assert.equal(ctx.ioData.displayListFetchCycle, CYCLES_PER_LINE);
-  assert.equal(ctx.ioData.dliCycle, CYCLES_PER_LINE + 14);
+  assert.equal(ctx.ioData.dliCycle, CYCLES_PER_LINE + 8);
 }
 
 function testNmistDliPersistsOutsideVblank() {
-  const api = loadAnticApi();
+  const { api } = loadAnticApi();
   const ctx = makeContext();
 
   ctx.sram[IO_DMACTL] = 0x20;
@@ -207,7 +220,7 @@ function testNmistDliPersistsOutsideVblank() {
 }
 
 function testNmistDliClearsAtVblankStart() {
-  const api = loadAnticApi();
+  const { api } = loadAnticApi();
   const ctx = makeContext();
 
   ctx.sram[IO_DMACTL] = 0x20;
@@ -225,7 +238,109 @@ function testNmistDliClearsAtVblankStart() {
   assert.equal(ctx.ram[IO_NMIRES_NMIST] & NMI_DLI, 0);
 }
 
+function testDliTriggersAtCycle8() {
+  const { api, cpuLog } = loadAnticApi();
+  const ctx = makeContext();
+
+  ctx.ioData.displayListFetchCycle = CYCLE_NEVER;
+  ctx.ioData.clock = 7;
+  ctx.ioData.dliCycle = 8;
+  ctx.sram[IO_NMIEN] = NMI_DLI;
+  ctx.ioData.nmiTiming.enabledByCycle7 = NMI_DLI;
+  ctx.ioData.nmiTiming.enabledByCycle8 = NMI_DLI;
+
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 0, "DLI should not trigger before cycle 8");
+
+  ctx.ioData.clock = 8;
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 1, "DLI should trigger on cycle 8");
+  assert.equal(ctx.ioData.dliCycle, CYCLE_NEVER);
+  assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_DLI, 0);
+}
+
+function testVbiTriggersAtLine248() {
+  const { api, cpuLog } = loadAnticApi();
+  const ctx = makeContext();
+
+  ctx.sram[IO_DMACTL] = 0x20;
+  ctx.sram[IO_NMIEN] = NMI_VBI;
+  ctx.ioData.video.currentDisplayLine = 247;
+  ctx.ioData.nextDisplayListLine = 247;
+  ctx.ioData.displayListAddress = 0x0700;
+  ctx.ram[0x0700] = 0x01;
+  ctx.ram[0x0701] = 0x00;
+  ctx.ram[0x0702] = 0x04;
+
+  runOneScanline(api, ctx);
+
+  assert.equal(ctx.ioData.video.currentDisplayLine, 248);
+  assert.equal(cpuLog.nmiCalls, 1, "VBI should trigger at the start of line 248");
+  assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_VBI, 0);
+}
+
+function testCycle7EnableDelaysDliByOneCycle() {
+  const { api, cpuLog } = loadAnticApi();
+  const ctx = makeContext();
+
+  ctx.ioData.displayListFetchCycle = CYCLE_NEVER;
+  ctx.ioData.clock = 8;
+  ctx.ioData.dliCycle = 8;
+  ctx.ioData.nmiTiming.enabledByCycle7 = NMI_DLI;
+  ctx.ioData.nmiTiming.enabledByCycle8 = NMI_DLI;
+  ctx.ioData.nmiTiming.enabledOnCycle7Mask = NMI_DLI;
+
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 0, "cycle-7 enable should delay DLI by one cycle");
+  assert.equal(ctx.ioData.dliCycle, 9, "DLI should be rescheduled to cycle 9");
+  assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_DLI, 0);
+
+  ctx.ioData.clock = 9;
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 1, "delayed DLI should trigger on cycle 9");
+  assert.equal(ctx.ioData.dliCycle, CYCLE_NEVER);
+}
+
+function testCycle8EnableIsTooLateForCurrentDli() {
+  const { api, cpuLog } = loadAnticApi();
+  const ctx = makeContext();
+
+  ctx.ioData.displayListFetchCycle = CYCLE_NEVER;
+  ctx.ioData.clock = 8;
+  ctx.ioData.dliCycle = 8;
+  ctx.ioData.nmiTiming.enabledByCycle7 = 0;
+  ctx.ioData.nmiTiming.enabledByCycle8 = NMI_DLI;
+  ctx.ioData.nmiTiming.enabledOnCycle7Mask = 0;
+
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 0, "cycle-8 enable should not trigger current-line DLI");
+  assert.equal(ctx.ioData.dliCycle, CYCLE_NEVER);
+  assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_DLI, 0);
+}
+
+function testCycle8DisableSuppressesCurrentDli() {
+  const { api, cpuLog } = loadAnticApi();
+  const ctx = makeContext();
+
+  ctx.ioData.displayListFetchCycle = CYCLE_NEVER;
+  ctx.ioData.clock = 8;
+  ctx.ioData.dliCycle = 8;
+  ctx.ioData.nmiTiming.enabledByCycle7 = NMI_DLI;
+  ctx.ioData.nmiTiming.enabledByCycle8 = 0;
+  ctx.ioData.nmiTiming.enabledOnCycle7Mask = 0;
+
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 0, "cycle-8 disable should suppress current-line DLI");
+  assert.equal(ctx.ioData.dliCycle, CYCLE_NEVER);
+  assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_DLI, 0);
+}
+
 testJvbWithDliUsesWaitForVblSemantics();
 testNmistDliPersistsOutsideVblank();
 testNmistDliClearsAtVblankStart();
+testDliTriggersAtCycle8();
+testVbiTriggersAtLine248();
+testCycle7EnableDelaysDliByOneCycle();
+testCycle8EnableIsTooLateForCurrentDli();
+testCycle8DisableSuppressesCurrentDli();
 console.log("antic_display_list_nmi tests passed");

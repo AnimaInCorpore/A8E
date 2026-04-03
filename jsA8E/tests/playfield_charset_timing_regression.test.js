@@ -166,7 +166,7 @@ function testCharacterRowReflectsVertically() {
   assert.equal(baseApi.fetchCharacterRow16(ram, chBase, 0, 6, 0x04), 0x14);
 }
 
-function testMode23UsesDelayedChbaseAndChactlBit2() {
+function testMode23UsesDelayedChbaseAndLatchesChactlPerScanline() {
   const context = createContext();
   const baseApi = createBaseApi(context);
   const captures = {
@@ -213,7 +213,7 @@ function testMode23UsesDelayedChbaseAndChactlBit2() {
     captures.mode2.map(function (entry) {
       return entry.chactl & 0x04;
     }),
-    [0x00, 0x04, 0x04, 0x04],
+    [0x00, 0x00, 0x00, 0x00],
   );
 
   const ctx3 = makeCtx(4);
@@ -237,7 +237,7 @@ function testMode23UsesDelayedChbaseAndChactlBit2() {
     captures.mode3.map(function (entry) {
       return entry.chactl & 0x04;
     }),
-    [0x00, 0x04, 0x04, 0x04],
+    [0x00, 0x00, 0x00, 0x00],
   );
 }
 
@@ -313,8 +313,38 @@ function testMode67MasksChbaseTo512AndPassesReflectBit() {
   assert.deepEqual(captures.mode7, [{ chBase: 0xfe00, chactl: 0x04 }]);
 }
 
+function testMode57StillStealsCharacterDmaOnOddRepeatedScanlines() {
+  const context = createContext();
+  const baseApi = createBaseApi(context);
+
+  const mode45 = createModeApi(context, "mode_4_5.js", baseApi, {
+    fetchCharacterRow16: function () {
+      return 0;
+    },
+  });
+  const ctx5 = makeCtx(1);
+  ctx5.ioData.video.verticalScrollOffset = 1;
+  ctx5.ram[0] = 0x00;
+
+  mode45.drawLineMode5(ctx5);
+  assert.equal(ctx5.cycleCounter, 1);
+
+  const mode67 = createModeApi(context, "mode_6_7.js", baseApi, {
+    fetchCharacterRow16: function () {
+      return 0;
+    },
+  });
+  const ctx7 = makeCtx(1);
+  ctx7.ioData.video.verticalScrollOffset = 1;
+  ctx7.ram[0] = 0x00;
+
+  mode67.drawLineMode7(ctx7);
+  assert.equal(ctx7.cycleCounter, 1);
+}
+
 testCharacterRowReflectsVertically();
-testMode23UsesDelayedChbaseAndChactlBit2();
+testMode23UsesDelayedChbaseAndLatchesChactlPerScanline();
 testMode45MasksChbaseTo1kAndPassesReflectBit();
 testMode67MasksChbaseTo512AndPassesReflectBit();
+testMode57StillStealsCharacterDmaOnOddRepeatedScanlines();
 console.log("playfield_charset_timing_regression tests passed");

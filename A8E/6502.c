@@ -662,6 +662,23 @@ static void _6502_ServicePendingNmi(_6502_Context_t *pContext)
 	pContext->llCycleCounter += 7;
 }
 
+static u8 _6502_ServicePendingInterrupts(_6502_Context_t *pContext)
+{
+	if(pContext->cNmiPendingFlag && !pContext->cNmiActiveFlag)
+	{
+		_6502_ServicePendingNmi(pContext);
+		return 1;
+	}
+
+	if(pContext->cIrqPendingFlag && !PS.i)
+	{
+		_6502_Irq(pContext);
+		return 1;
+	}
+
+	return 0;
+}
+
 static void _6502_SetPs(_6502_Context_t *pContext, u8 cPs)
 {
 	PS.n = cPs & FLAG_N;
@@ -1114,11 +1131,9 @@ void _6502_Execute(_6502_Context_t *pContext)
 		return;
 	}
 
-	_6502_ServicePendingNmi(pContext);
-
-	if(pContext->cIrqPendingFlag && !PS.i)
+	if(_6502_ServicePendingInterrupts(pContext))
 	{
-		_6502_Irq(pContext);
+		return;
 	}
 
 	cCode = RAM[CPU.pc++];

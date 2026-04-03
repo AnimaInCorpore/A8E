@@ -24,9 +24,37 @@
       };
     const fetchCharacterRow8 = cfg.fetchCharacterRow8;
     const fetchCharacterRow16 = cfg.fetchCharacterRow16;
+    const useDeferredCharacterFetch =
+      typeof cfg.fetchUnbufferedDisplayByte === "function";
     const stealDma = cfg.stealDma || function (ctx, cycles) {
       ctx.cycleCounter += cycles | 0;
     };
+    const fetchBufferedDisplayByte =
+      cfg.fetchBufferedDisplayByte ||
+      function (ctx, bufferIndex, address) {
+        void bufferIndex;
+        if (ctx.ioData.firstRowScanline) stealDma(ctx, 1);
+        return ctx.ram[address & 0xffff] & 0xff;
+      };
+    const fetchUnbufferedDisplayByte =
+      cfg.fetchUnbufferedDisplayByte ||
+      function (ctx, address) {
+        stealDma(ctx, 1);
+        return ctx.ram[address & 0xffff] & 0xff;
+      };
+
+    function resolveCharacterRow8(row, chactl) {
+      const glyphRow = row & 0xff;
+      if (glyphRow >= 8) return -1;
+      if ((chactl & 0x04) === 0) return glyphRow;
+      return 7 - glyphRow;
+    }
+
+    function resolveCharacterRow16(row, chactl) {
+      const glyphRow = row & 0xff;
+      if (glyphRow >= 16) return -1;
+      return resolveCharacterRow8(glyphRow >> 1, chactl);
+    }
 
     function writePixelPair(dst, prio, dstIndex, color, priority) {
       dst[dstIndex] = color;
@@ -66,26 +94,35 @@
       let data = 0;
       let colorIndex = 0;
       let p = 0;
+      let bufferIndex = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         const chBase = ((currentCharacterBaseRegister(io, sram) << 8) & 0xfe00) & 0xffff;
         const chactl = sram[IO_CHACTL] & 0x07;
         if (mask === 0x00) {
-          let ch = ram[dispAddr] & 0xff;
+          let ch = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          if (shouldStealDma(vScrollLine)) {
-            stealDma(ctx, 1);
-          }
-
-          if (io.firstRowScanline) {
-            stealDma(ctx, 1);
-          }
-
           colorIndex = ch >> 6;
           p = PRIORITY_TABLE_PF0123[colorIndex] & 0xff;
           ch &= 0x3f;
-
-          data = fetchCharacterRow(ram, chBase, ch, vScrollLine, chactl);
+          if (shouldStealDma(vScrollLine) && useDeferredCharacterFetch) {
+            const glyphRow =
+              fetchCharacterRow === fetchCharacterRow16
+                ? resolveCharacterRow16(vScrollLine, chactl)
+                : resolveCharacterRow8(vScrollLine, chactl);
+            data = glyphRow >= 0
+              ? fetchUnbufferedDisplayByte(
+                ctx,
+                (chBase + ch * 8 + glyphRow) & 0xffff,
+                3,
+              )
+              : 0;
+          } else if (shouldStealDma(vScrollLine)) {
+            stealDma(ctx, 1);
+            data = fetchCharacterRow(ram, chBase, ch, vScrollLine, chactl);
+          } else {
+            data = fetchCharacterRow(ram, chBase, ch, vScrollLine, chactl);
+          }
           mask = 0x80;
         }
 
@@ -119,8 +156,8 @@
     }
 
     function drawLineMode7(ctx) {
-      return drawLineMode67Common(ctx, fetchCharacterRow16, 16, function (vScrollLine) {
-        return (vScrollLine & 1) === 0;
+      return drawLineMode67Common(ctx, fetchCharacterRow16, 16, function () {
+        return true;
       });
     }
 

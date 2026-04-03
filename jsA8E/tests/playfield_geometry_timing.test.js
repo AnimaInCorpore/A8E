@@ -7,6 +7,7 @@ const vm = require("node:vm");
 
 const IO_DMACTL = 0xd400;
 const IO_HSCROL = 0xd40a;
+const PLAYFIELD_SCRATCH_VIEW_X = 64;
 
 function loadPlayfieldApi() {
   const baseSource = fs.readFileSync(
@@ -17,6 +18,7 @@ function loadPlayfieldApi() {
     path.join(__dirname, "..", "js", "core", "playfield", "playfield.js"),
     "utf8",
   );
+  const captures = [];
   const context = {
     console: console,
     Uint8Array: Uint8Array,
@@ -33,27 +35,19 @@ function loadPlayfieldApi() {
       const base = context.window.A8EPlayfieldRendererBase.createApi(cfg);
       return Object.assign({}, base, {
         drawModeLine: function (_, ctx) {
-          const scratchPixels = ctx.ioData.videoOut.playfieldScratchPixels;
-          const scratchPriority = ctx.ioData.videoOut.playfieldScratchPriority;
-          const start = ctx.ioData.drawLine.destIndex | 0;
-
-          scratchPixels[start + 12] = 0x7e;
-          scratchPriority[start + 12] = 0x10;
-          scratchPixels[start + 13] = 0x55;
-          scratchPriority[start + 13] = 0x00;
-
-          scratchPixels[start + 328] = 0x7d;
-          scratchPriority[start + 328] = 0x10;
-          scratchPixels[start + 329] = 0x54;
-          scratchPriority[start + 329] = 0x00;
-          return true;
+          captures.push({
+            bytesPerLine: ctx.ioData.drawLine.bytesPerLine | 0,
+            playfieldStartX:
+              (ctx.ioData.drawLine.destIndex | 0) - PLAYFIELD_SCRATCH_VIEW_X,
+          });
+          return false;
         },
       });
     },
   };
   vm.runInContext(source, context, { filename: "playfield.js" });
 
-  return context.window.A8EPlayfield.createApi({
+  const api = context.window.A8EPlayfield.createApi({
     Util: {
       fixedAdd: function (value, mask, add) {
         return (value & ~mask) | ((value + add) & mask);
@@ -89,6 +83,8 @@ function loadPlayfieldApi() {
     drawPlayerMissilesClock: function () {},
     fetchPmgDmaCycle: function () {},
   });
+
+  return { api, captures };
 }
 
 function makeCtx() {
@@ -98,7 +94,7 @@ function makeCtx() {
     sram: new Uint8Array(0x10000),
     ioData: {
       clock: 0,
-      currentDisplayListCommand: 0x12,
+      currentDisplayListCommand: 0x02,
       displayListFetchCycle: 0,
       firstRowScanline: false,
       rowDisplayMemoryAddress: 0,
@@ -127,26 +123,47 @@ function makeCtx() {
   };
 }
 
-function testHscrollClipPreservesPmgPixels() {
-  const api = loadPlayfieldApi();
+function recordGeometry(dmactl, hscrol, command) {
+  const { api, captures } = loadPlayfieldApi();
   const ctx = makeCtx();
-
-  ctx.sram[IO_DMACTL] = 0x21;
-  ctx.sram[IO_HSCROL] = 0x01;
-  ctx.sram[0xd01a] = 0x33;
-  ctx.sram[0xd01b] = 0x00;
-
+  ctx.sram[IO_DMACTL] = dmactl;
+  ctx.sram[IO_HSCROL] = hscrol;
+  ctx.ioData.currentDisplayListCommand = command;
   api.drawLine(ctx);
-
-  assert.equal(ctx.ioData.videoOut.pixels[118], 0x7e);
-  assert.equal(ctx.ioData.videoOut.priority[118], 0x10);
-  assert.equal(ctx.ioData.videoOut.pixels[119], 0x33);
-  assert.equal(ctx.ioData.videoOut.priority[119], 0x01);
-  assert.equal(ctx.ioData.videoOut.pixels[434], 0x7d);
-  assert.equal(ctx.ioData.videoOut.priority[434], 0x10);
-  assert.equal(ctx.ioData.videoOut.pixels[435], 0x33);
-  assert.equal(ctx.ioData.videoOut.priority[435], 0x01);
+  assert.equal(captures.length, 1, "drawModeLine should capture exactly one active-line geometry record");
+  return captures[0];
 }
 
-testHscrollClipPreservesPmgPixels();
-console.log("playfield_hscroll_priority_preservation tests passed");
+function testUnscrolledWidthsUseCorrectPlayfieldStart() {
+  assert.deepEqual(recordGeometry(0x21, 0x00, 0x02), {
+    bytesPerLine: 32,
+    playfieldStartX: 136,
+  });
+  assert.deepEqual(recordGeometry(0x22, 0x00, 0x02), {
+    bytesPerLine: 40,
+    playfieldStartX: 104,
+  });
+  assert.deepEqual(recordGeometry(0x23, 0x00, 0x02), {
+    bytesPerLine: 48,
+    playfieldStartX: 72,
+  });
+}
+
+function testHscrollPromotedFetchWindowsUseCorrectStart() {
+  assert.deepEqual(recordGeometry(0x21, 0x01, 0x12), {
+    bytesPerLine: 40,
+    playfieldStartX: 106,
+  });
+  assert.deepEqual(recordGeometry(0x22, 0x01, 0x12), {
+    bytesPerLine: 48,
+    playfieldStartX: 74,
+  });
+  assert.deepEqual(recordGeometry(0x23, 0x01, 0x12), {
+    bytesPerLine: 48,
+    playfieldStartX: 74,
+  });
+}
+
+testUnscrolledWidthsUseCorrectPlayfieldStart();
+testHscrollPromotedFetchWindowsUseCorrectStart();
+console.log("playfield_geometry_timing tests passed");

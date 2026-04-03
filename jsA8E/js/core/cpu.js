@@ -231,6 +231,18 @@
     ctx.cycleCounter += 7;
   }
 
+  function servicePendingInterrupts(ctx) {
+    if (ctx.nmiPending && !ctx.nmiActive) {
+      servicePendingNmi(ctx);
+      return true;
+    }
+    if (ctx.irqPending && !hasFlag(ctx.cpu.ps, FLAG_I)) {
+      irq(ctx);
+      return true;
+    }
+    return false;
+  }
+
   function reset(ctx) {
     const cpu = ctx.cpu;
     cpu.sp = 0xfd;
@@ -1027,8 +1039,7 @@
     const cpu = ctx.cpu;
     const ram = ctx.ram;
 
-    servicePendingNmi(ctx);
-    if (ctx.irqPending && !hasFlag(cpu.ps, FLAG_I)) irq(ctx);
+    if (servicePendingInterrupts(ctx)) return;
 
     const hook = ctx.pcHooks[cpu.pc];
     if (hook && hook(ctx)) {
@@ -1087,8 +1098,10 @@
       }
 
       if (ctx.cycleCounter >= ctx.stallCycleCounter) {
-        servicePendingNmi(ctx);
-        if (ctx.irqPending && !hasFlag(cpu.ps, FLAG_I)) irq(ctx);
+        if (servicePendingInterrupts(ctx)) {
+          cycles = ctx.cycleCounter;
+          continue;
+        }
 
         const hook = pcHooks[cpu.pc];
         if (hook && hook(ctx)) {

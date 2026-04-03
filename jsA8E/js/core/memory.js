@@ -1345,6 +1345,13 @@
           rowDisplayMemoryAddress: io.rowDisplayMemoryAddress | 0,
           displayMemoryAddress: io.displayMemoryAddress | 0,
           firstRowScanline: !!io.firstRowScanline,
+          nmiTiming: io.nmiTiming
+            ? {
+                enabledByCycle7: io.nmiTiming.enabledByCycle7 | 0,
+                enabledByCycle8: io.nmiTiming.enabledByCycle8 | 0,
+                enabledOnCycle7Mask: io.nmiTiming.enabledOnCycle7Mask | 0,
+              }
+            : null,
           chbaseTiming: io.chbaseTiming
             ? {
                 rawValue: io.chbaseTiming.rawValue | 0,
@@ -1365,6 +1372,8 @@
                   io.drawLine.displayListInstructionDmaPending | 0,
                 displayListAddressDmaRemaining:
                   io.drawLine.displayListAddressDmaRemaining | 0,
+                playfieldLineBuffer: new Uint8Array(io.drawLine.playfieldLineBuffer || 0),
+                scheduledPlayfieldDma: new Uint8Array(io.drawLine.scheduledPlayfieldDma || 0),
               }
             : null,
           keyPressCounter: io.keyPressCounter | 0,
@@ -1417,6 +1426,12 @@
         io.rowDisplayMemoryAddress = state.rowDisplayMemoryAddress | 0;
         io.displayMemoryAddress = state.displayMemoryAddress | 0;
         io.firstRowScanline = !!state.firstRowScanline;
+        if (state.nmiTiming && typeof state.nmiTiming === "object") {
+          io.nmiTiming.enabledByCycle7 = state.nmiTiming.enabledByCycle7 | 0;
+          io.nmiTiming.enabledByCycle8 = state.nmiTiming.enabledByCycle8 | 0;
+          io.nmiTiming.enabledOnCycle7Mask =
+            state.nmiTiming.enabledOnCycle7Mask | 0;
+        }
         if (state.chbaseTiming && typeof state.chbaseTiming === "object") {
           io.chbaseTiming.rawValue = state.chbaseTiming.rawValue | 0;
           io.chbaseTiming.activeValue = state.chbaseTiming.activeValue | 0;
@@ -1436,6 +1451,8 @@
             state.drawLine.displayListInstructionDmaPending | 0;
           io.drawLine.displayListAddressDmaRemaining =
             state.drawLine.displayListAddressDmaRemaining | 0;
+          copyBytesTo(io.drawLine.playfieldLineBuffer, state.drawLine.playfieldLineBuffer);
+          copyBytesTo(io.drawLine.scheduledPlayfieldDma, state.drawLine.scheduledPlayfieldDma);
         }
         io.keyPressCounter = state.keyPressCounter | 0;
         io.optionOnStart = !!state.optionOnStart;

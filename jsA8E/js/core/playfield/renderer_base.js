@@ -40,7 +40,7 @@
 
     const ACTIVE_LINE_HSYNC_PIXELS = 32;
     const ACTIVE_LINE_COLOR_BURST_CYCLES = 6;
-    const VCOUNT_UPDATE_CYCLE = 100;
+    const VCOUNT_UPDATE_CYCLE = 111;
     const REFRESH_FIRST_CYCLE = 25;
     const REFRESH_LAST_CYCLE = 57;
     const REFRESH_INTERVAL = 4;
@@ -77,6 +77,22 @@
       scanlineState.pfDma = (dmactl & 0x20) !== 0;
     }
 
+    function ensurePlayfieldLineBuffer(drawLine) {
+      let lineBuffer = drawLine.playfieldLineBuffer;
+      if (!(lineBuffer instanceof Uint8Array) || lineBuffer.length !== 48) {
+        lineBuffer = drawLine.playfieldLineBuffer = new Uint8Array(48);
+      }
+      return lineBuffer;
+    }
+
+    function ensureScheduledPlayfieldDma(drawLine) {
+      let scheduled = drawLine.scheduledPlayfieldDma;
+      if (!(scheduled instanceof Uint8Array) || scheduled.length !== CYCLES_PER_LINE) {
+        scheduled = drawLine.scheduledPlayfieldDma = new Uint8Array(CYCLES_PER_LINE);
+      }
+      return scheduled;
+    }
+
     function advanceScanlineCycle(ctx) {
       if (!scanlineState.active) return;
       scanlineState.cycle++;
@@ -105,6 +121,60 @@
         (drawLine.playfieldDmaStealCount | 0) + count;
     }
 
+    function currentLineCycle(ctx, cycleOffset) {
+      const io = ctx.ioData;
+      return ((io.clock - io.displayListFetchCycle) | 0) + (cycleOffset | 0);
+    }
+
+    function playfieldDmaAllowedAtCycle(ctx, cycleOffset) {
+      const dmactl = ctx.sram[IO_DMACTL] & 0xff;
+      if ((dmactl & 0x20) === 0 || (dmactl & 0x03) === 0) return false;
+      return currentLineCycle(ctx, cycleOffset) <= 105;
+    }
+
+    function readVirtualPlayfieldBus(ctx, cycleOffset) {
+      const lineCycle = currentLineCycle(ctx, cycleOffset);
+      if (lineCycle === 106 && (ctx.ioData.drawLine.refreshDmaPending | 0) !== 0) {
+        return 0xff;
+      }
+      const addr = ctx.accessAddress ? (ctx.accessAddress & 0xffff) : (ctx.cpu.pc & 0xffff);
+      return ctx.ram[addr] & 0xff;
+    }
+
+    function schedulePlayfieldDma(ctx, cycleOffset, cycles) {
+      const count = cycles | 0;
+      if (count <= 0) return;
+      if (!playfieldDmaAllowedAtCycle(ctx, cycleOffset)) return;
+      const lineCycle = currentLineCycle(ctx, cycleOffset);
+      if (lineCycle < 0 || lineCycle >= CYCLES_PER_LINE) return;
+      const scheduled = ensureScheduledPlayfieldDma(ctx.ioData.drawLine);
+      scheduled[lineCycle] = Math.min(255, (scheduled[lineCycle] | 0) + count);
+    }
+
+    function fetchBufferedDisplayByte(ctx, bufferIndex, address, cycleOffset) {
+      const io = ctx.ioData;
+      const drawLine = io.drawLine;
+      const lineBuffer = ensurePlayfieldLineBuffer(drawLine);
+      const index = (bufferIndex | 0) % 48;
+
+      if (io.firstRowScanline) {
+        const value = playfieldDmaAllowedAtCycle(ctx, cycleOffset)
+          ? (schedulePlayfieldDma(ctx, cycleOffset, 1), ctx.ram[address & 0xffff] & 0xff)
+          : readVirtualPlayfieldBus(ctx, cycleOffset);
+        lineBuffer[index] = value & 0xff;
+      }
+
+      return lineBuffer[index] & 0xff;
+    }
+
+    function fetchUnbufferedDisplayByte(ctx, address, cycleOffset) {
+      if (playfieldDmaAllowedAtCycle(ctx, cycleOffset)) {
+        schedulePlayfieldDma(ctx, cycleOffset, 1);
+        return ctx.ram[address & 0xffff] & 0xff;
+      }
+      return readVirtualPlayfieldBus(ctx, cycleOffset);
+    }
+
     function clockAction(ctx) {
       const io = ctx.ioData;
       const lineStartClock = io.displayListFetchCycle;
@@ -112,13 +182,24 @@
 
       advanceScanlineCycle(ctx);
 
-      if (io.clock >= lineStartClock + VCOUNT_UPDATE_CYCLE) {
-        const nextLine =
-          (io.video.currentDisplayLine + 1) % LINES_PER_SCREEN_PAL;
-        ctx.ram[IO_VCOUNT] = (nextLine >> 1) & 0xff;
+      if (lineCycle >= VCOUNT_UPDATE_CYCLE) {
+        const currentLine = io.video.currentDisplayLine | 0;
+        const nextLine = (currentLine + 1) % LINES_PER_SCREEN_PAL;
+        if (
+          currentLine === (LINES_PER_SCREEN_PAL - 1) &&
+          lineCycle === VCOUNT_UPDATE_CYCLE
+        ) {
+          // AHRM 4.10: the final line exposes one extra VCOUNT value for cycle 111 only.
+          ctx.ram[IO_VCOUNT] = (LINES_PER_SCREEN_PAL >> 1) & 0xff;
+        } else {
+          ctx.ram[IO_VCOUNT] = (nextLine >> 1) & 0xff;
+        }
       }
 
       const drawLine = io.drawLine;
+      const scheduledPlayfieldDma = ensureScheduledPlayfieldDma(drawLine);
+      const playfieldDmaStealCount = scheduledPlayfieldDma[lineCycle] | 0;
+      drawLine.playfieldDmaStealCount = playfieldDmaStealCount;
 
       if (fetchPmgDmaCycle) {
         if (lineCycle === 0 || (lineCycle >= 2 && lineCycle <= 5)) {
@@ -129,7 +210,9 @@
           }
         }
       }
-      const playfieldDmaStealCount = drawLine.playfieldDmaStealCount | 0;
+      if (playfieldDmaStealCount > 0) {
+        ctx.cycleCounter += playfieldDmaStealCount;
+      }
       const refreshSlot =
         lineCycle >= REFRESH_FIRST_CYCLE &&
         lineCycle <= REFRESH_LAST_CYCLE &&
@@ -167,8 +250,6 @@
           drawLine.refreshDmaPending = 1;
         }
       }
-
-      drawLine.playfieldDmaStealCount = 0;
 
       if (
         ctx.ioBeamTimedEventCycle <= io.clock ||
@@ -323,6 +404,9 @@
       fetchCharacterRow10,
       fetchCharacterRow16,
       stealDma,
+      schedulePlayfieldDma,
+      fetchBufferedDisplayByte,
+      fetchUnbufferedDisplayByte,
       drawBackgroundClipped,
       drawInterleavedVisibleBlankLine,
       initScanline,

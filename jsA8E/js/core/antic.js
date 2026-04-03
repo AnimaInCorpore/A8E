@@ -66,7 +66,7 @@
     const fillBkgPf012ColorTable = cfg.fillBkgPf012ColorTable;
     const decodeTextModeCharacter = cfg.decodeTextModeCharacter;
     const fillLine = cfg.fillLine;
-    const DLI_HORIZONTAL_OFFSET = 14;
+    const DLI_HORIZONTAL_OFFSET = 8;
     // ANTIC display list command bits
     const ANTIC_DLI_BIT = 0x80;
     const ANTIC_LMS_BIT = 0x40;
@@ -78,6 +78,42 @@
     const ANTIC_LMS_MIN_INSTRUCTION = 0x42;
     const ANTIC_CMD_MASK_DLI_JMP = 0x4f; // Isolates DLI, LMS, and instruction bits
     const ANTIC_CMD_MASK_JVB_DLI = 0xcf; // Isolates replayed JVB+DLI pattern
+
+    function ensureNmiTiming(io) {
+      let timing = io.nmiTiming;
+      if (!timing || typeof timing !== "object") {
+        timing = io.nmiTiming = {
+          enabledByCycle7: 0,
+          enabledByCycle8: 0,
+          enabledOnCycle7Mask: 0,
+        };
+      }
+      return timing;
+    }
+
+    function resetNmiTiming(ctx) {
+      const timing = ensureNmiTiming(ctx.ioData);
+      const nmien = ctx.sram[IO_NMIEN] & (NMI_DLI | NMI_VBI);
+      timing.enabledByCycle7 = nmien;
+      timing.enabledByCycle8 = nmien;
+      timing.enabledOnCycle7Mask = 0;
+      return timing;
+    }
+
+    function currentLineNmiState(io, bit) {
+      const timing = ensureNmiTiming(io);
+      if ((timing.enabledByCycle8 & bit) === 0) {
+        return { enabled: false, delayOneCycle: false };
+      }
+      if ((timing.enabledOnCycle7Mask & bit) !== 0) {
+        return { enabled: true, delayOneCycle: true };
+      }
+      if ((timing.enabledByCycle7 & bit) !== 0) {
+        return { enabled: true, delayOneCycle: false };
+      }
+      return { enabled: false, delayOneCycle: false };
+    }
+
     const playfieldApi =
       window.A8EPlayfield && window.A8EPlayfield.createApi
         ? window.A8EPlayfield.createApi({
@@ -266,7 +302,7 @@
         io.dliCycle = io.displayListFetchCycle + DLI_HORIZONTAL_OFFSET;
       }
 
-      if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 2) {
+      if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 1) {
         ram[IO_NMIRES_NMIST] |= NMI_VBI;
         if (sram[IO_NMIEN] & NMI_VBI) CPU.nmi(ctx);
       }
@@ -285,6 +321,10 @@
         io.drawLine.refreshDmaPending = 0;
         io.drawLine.displayListInstructionDmaPending = 0;
         io.drawLine.displayListAddressDmaRemaining = 0;
+        resetNmiTiming(ctx);
+        if (io.drawLine.scheduledPlayfieldDma && io.drawLine.scheduledPlayfieldDma.fill) {
+          io.drawLine.scheduledPlayfieldDma.fill(0);
+        }
         fetchLine(ctx);
         io.inDrawLine = true;
         cycleTimedEventUpdate(ctx);
@@ -303,10 +343,20 @@
       const beamEff = io.clock;
 
       if (beamEff >= io.dliCycle) {
+        const dliTiming = currentLineNmiState(io, NMI_DLI);
         ram[IO_NMIRES_NMIST] &= ~NMI_VBI;
         ram[IO_NMIRES_NMIST] |= NMI_DLI;
-        if (sram[IO_NMIEN] & NMI_DLI) CPU.nmi(ctx);
-        io.dliCycle = CYCLE_NEVER;
+        if (dliTiming.enabled) {
+          if (dliTiming.delayOneCycle && beamEff === io.dliCycle) {
+            ensureNmiTiming(io).enabledOnCycle7Mask &= ~NMI_DLI;
+            io.dliCycle = beamEff + 1;
+          } else {
+            CPU.nmi(ctx);
+            io.dliCycle = CYCLE_NEVER;
+          }
+        } else {
+          io.dliCycle = CYCLE_NEVER;
+        }
       }
 
       if (masterEff >= io.serialOutputTransmissionDoneCycle) {

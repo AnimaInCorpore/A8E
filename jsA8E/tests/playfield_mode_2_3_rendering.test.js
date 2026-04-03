@@ -233,8 +233,40 @@ function testMode2Mode3Prior0WidthIsNotDoubled() {
   assertLineWidth("drawLineMode3");
 }
 
+function testMode2LatchesChactlForWholeScanline() {
+  const decodedChactl = [];
+  const fetchedChactl = [];
+
+  const api = loadMode23Api({
+    decodeTextModeCharacter: function (ch, chactl) {
+      decodedChactl.push(chactl);
+      return ch & 0xff;
+    },
+    clockAction: function (ctx) {
+      ctx.sram[IO_CHACTL] = 0x03;
+    },
+    fetchCharacterRow8: function (_, __, ___, ____, chactl) {
+      fetchedChactl.push(chactl);
+      return 0;
+    },
+  });
+
+  const ctx = createCtx();
+  ctx.ioData.drawLine.bytesPerLine = 2;
+  ctx.sram[IO_CHACTL] = 0x00;
+  ctx.sram[IO_PRIOR] = 0x00;
+  ctx.ram[0] = 0x80;
+  ctx.ram[1] = 0x80;
+
+  api.drawLineMode2(ctx);
+
+  assert.deepEqual(decodedChactl, [0x00, 0x00]);
+  assert.deepEqual(fetchedChactl, [0x00, 0x00]);
+}
+
 testMode2GtiaColorTableOnlyWhenPriorMode2();
 testMode2AndMode3UseSameChbaseMasking();
 testMode2Mode3Prior0OutputParity();
 testMode2Mode3Prior0WidthIsNotDoubled();
+testMode2LatchesChactlForWholeScanline();
 console.log("playfield_mode_2_3_rendering tests passed");
