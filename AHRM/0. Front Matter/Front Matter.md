@@ -4,7 +4,7 @@ Created by Avery Lee
 
 ## Local editorial note
 
-This repository carries a local Markdown mirror of the Altirra Hardware Reference Manual. The original PDF front matter and Chapter 14 reference pages were partially damaged during PDF-to-Markdown extraction, so this local copy was revised on 2026-03-31 against the online sources below:
+This repository carries a local Markdown mirror of the Altirra Hardware Reference Manual. The original PDF front matter and Chapter 14 reference pages were partially damaged during PDF-to-Markdown extraction. This local copy was revised on 2026-04-05 against the online sources below (see `index.md` for a detailed changelog):
 
 - [Altirra Hardware Reference Manual, 2026-01-02 edition](https://www.virtualdub.org/downloads/Altirra%20Hardware%20Reference%20Manual.pdf)
 - [Atari 8-bit technical documents archive](https://ftp.pigwa.net/stuff/collections/atari_forever/www/www.atari-history.com/archives/tech_docs_8bits.html)
