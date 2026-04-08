@@ -78,6 +78,8 @@
           refreshDmaPending: 0,
           displayListInstructionDmaPending: 0,
           displayListAddressDmaRemaining: 0,
+          playerMissileClockActive: false,
+          playerMissileInterleaved: false,
           playfieldLineBuffer: new Uint8Array(48),
           scheduledPlayfieldDma: new Uint8Array(CYCLES_PER_LINE),
         },

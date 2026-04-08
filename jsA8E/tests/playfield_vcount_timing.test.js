@@ -52,10 +52,13 @@ function makeCtx(displayLine) {
       displayListFetchCycle: 0,
       drawLine: {
         playerMissileClockActive: false,
+        playerMissileInterleaved: false,
         playfieldDmaStealCount: 0,
         refreshDmaPending: 0,
         displayListInstructionDmaPending: 0,
         displayListAddressDmaRemaining: 0,
+        playfieldLineBuffer: new Uint8Array(48),
+        scheduledPlayfieldDma: new Uint8Array(114),
       },
       video: {
         currentDisplayLine: displayLine,

@@ -79,20 +79,8 @@
     const ANTIC_CMD_MASK_DLI_JMP = 0x4f; // Isolates DLI, LMS, and instruction bits
     const ANTIC_CMD_MASK_JVB_DLI = 0xcf; // Isolates replayed JVB+DLI pattern
 
-    function ensureNmiTiming(io) {
-      let timing = io.nmiTiming;
-      if (!timing || typeof timing !== "object") {
-        timing = io.nmiTiming = {
-          enabledByCycle7: 0,
-          enabledByCycle8: 0,
-          enabledOnCycle7Mask: 0,
-        };
-      }
-      return timing;
-    }
-
     function resetNmiTiming(ctx) {
-      const timing = ensureNmiTiming(ctx.ioData);
+      const timing = ctx.ioData.nmiTiming;
       const nmien = ctx.sram[IO_NMIEN] & (NMI_DLI | NMI_VBI);
       timing.enabledByCycle7 = nmien;
       timing.enabledByCycle8 = nmien;
@@ -101,7 +89,7 @@
     }
 
     function currentLineNmiState(io, bit) {
-      const timing = ensureNmiTiming(io);
+      const timing = io.nmiTiming;
       if ((timing.enabledByCycle8 & bit) === 0) {
         return { enabled: false, delayOneCycle: false };
       }
@@ -112,6 +100,14 @@
         return { enabled: true, delayOneCycle: false };
       }
       return { enabled: false, delayOneCycle: false };
+    }
+
+    function resetDrawLineState(drawLine) {
+      drawLine.playfieldDmaStealCount = 0;
+      drawLine.refreshDmaPending = 0;
+      drawLine.displayListInstructionDmaPending = 0;
+      drawLine.displayListAddressDmaRemaining = 0;
+      drawLine.scheduledPlayfieldDma.fill(0);
     }
 
     const playfieldApi =
@@ -317,14 +313,8 @@
         if (io.video.currentDisplayLine === 0) {
           io.clock = io.displayListFetchCycle;
         }
-        io.drawLine.playfieldDmaStealCount = 0;
-        io.drawLine.refreshDmaPending = 0;
-        io.drawLine.displayListInstructionDmaPending = 0;
-        io.drawLine.displayListAddressDmaRemaining = 0;
+        resetDrawLineState(io.drawLine);
         resetNmiTiming(ctx);
-        if (io.drawLine.scheduledPlayfieldDma && io.drawLine.scheduledPlayfieldDma.fill) {
-          io.drawLine.scheduledPlayfieldDma.fill(0);
-        }
         fetchLine(ctx);
         io.inDrawLine = true;
         cycleTimedEventUpdate(ctx);
@@ -348,7 +338,7 @@
         ram[IO_NMIRES_NMIST] |= NMI_DLI;
         if (dliTiming.enabled) {
           if (dliTiming.delayOneCycle && beamEff === io.dliCycle) {
-            ensureNmiTiming(io).enabledOnCycle7Mask &= ~NMI_DLI;
+            io.nmiTiming.enabledOnCycle7Mask &= ~NMI_DLI;
             io.dliCycle = beamEff + 1;
           } else {
             CPU.nmi(ctx);

@@ -1709,6 +1709,10 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 
 	u32 lLineDelta = AtariIoDisplayLineDelta(pIoData);
 	u32 lVerticalScrollOffset = ((8 - lLineDelta) - pIoData->tVideoData.lVerticalScrollOffset) & 0xff;
+	u8 cChactl = SRAM[IO_CHACTL];
+	u16 sChbase = ((u16)SRAM[IO_CHBASE] << 8) & 0xfc00;
+	if((cChactl & 0x04) && lVerticalScrollOffset < 8)
+		lVerticalScrollOffset = 7 - lVerticalScrollOffset;
 
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
 	u32 lCycle;
@@ -1722,15 +1726,25 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 
 		if(cMask == 0x00)
 		{
-			cCharacter = AtariIo_FetchBufferedDisplayByte(pContext, cBufferIndex++, 0);
+			u8 cRaw = AtariIo_FetchBufferedDisplayByte(pContext, cBufferIndex++, 0);
+			u8 cBit7 = cRaw & 0x80;
+			cCharacter = cRaw & 0x7f;
 
-			cInverse = cCharacter & 0x80;
-			cCharacter &= 0x7f;
-
-			cData = AtariIo_FetchUnbufferedDisplayByte(
-				pContext,
-				((SRAM[IO_CHBASE] << 8) & 0xfc00) + cCharacter * 8 + lVerticalScrollOffset,
-				3);
+			if(cBit7 && (cChactl & 0x01))
+			{
+				/* CHACTL bit 0: blank characters with name bit 7 set */
+				AtariIo_FetchUnbufferedDisplayByte(pContext,
+					sChbase + cCharacter * 8 + lVerticalScrollOffset, 3);
+				cData = 0x00;
+				cInverse = 0;
+			}
+			else
+			{
+				cData = AtariIo_FetchUnbufferedDisplayByte(pContext,
+					sChbase + cCharacter * 8 + lVerticalScrollOffset, 3);
+				/* CHACTL bit 1: invert characters with name bit 7 set */
+				cInverse = cBit7 && (cChactl & 0x02) ? 0x80 : 0x00;
+			}
 
 			cMask = 0x80;
 		}
@@ -1949,6 +1963,8 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 
 	u32 lLineDelta = AtariIoDisplayLineDelta(pIoData);
 	u32 lVerticalScrollOffset = ((10 - lLineDelta) - pIoData->tVideoData.lVerticalScrollOffset) & 0xff;
+	u8 cChactl = SRAM[IO_CHACTL];
+	u16 sChbase = ((u16)SRAM[IO_CHBASE] << 8) & 0xfc00;
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
 	u32 lCycle;
 	u8 cMask = 0x00;
@@ -1961,20 +1977,18 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 
 		if(cMask == 0x00)
 		{
-			u16 sCharacterBaseAddress = (SRAM[IO_CHBASE] << 8) & 0xfc00;
-
-			cCharacter = AtariIo_FetchBufferedDisplayByte(pContext, cBufferIndex++, 0);
-
-			cInverse = cCharacter & 0x80;
-			cCharacter &= 0x7f;
+			u8 cRaw = AtariIo_FetchBufferedDisplayByte(pContext, cBufferIndex++, 0);
+			u8 cBit7 = cRaw & 0x80;
+			cCharacter = cRaw & 0x7f;
 
 			if(cCharacter < 0x60)
 			{
 				if(lVerticalScrollOffset < 8)
 				{
+					u32 lRow = (cChactl & 0x04) ? (7 - lVerticalScrollOffset) : lVerticalScrollOffset;
 					cData = AtariIo_FetchUnbufferedDisplayByte(
 						pContext,
-						sCharacterBaseAddress + cCharacter * 8 + lVerticalScrollOffset,
+						sChbase + cCharacter * 8 + lRow,
 						3);
 				}
 				else
@@ -1988,16 +2002,33 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 				}
 				else if(lVerticalScrollOffset < 8)
 				{
+					u32 lRow = (cChactl & 0x04) ? (7 - lVerticalScrollOffset) : lVerticalScrollOffset;
 					cData = AtariIo_FetchUnbufferedDisplayByte(
 						pContext,
-						sCharacterBaseAddress + cCharacter * 8 + lVerticalScrollOffset,
+						sChbase + cCharacter * 8 + lRow,
 						3);
 				}
 				else
+				{
+					u32 lDescRow = lVerticalScrollOffset - 8;
+					u32 lRow = (cChactl & 0x04) ? (7 - lDescRow) : lDescRow;
 					cData = AtariIo_FetchUnbufferedDisplayByte(
 						pContext,
-						sCharacterBaseAddress + cCharacter * 8 + (lVerticalScrollOffset - 8),
+						sChbase + cCharacter * 8 + lRow,
 						3);
+				}
+			}
+
+			if(cBit7 && (cChactl & 0x01))
+			{
+				/* CHACTL bit 0: blank characters with name bit 7 set */
+				cData = 0x00;
+				cInverse = 0;
+			}
+			else
+			{
+				/* CHACTL bit 1: invert characters with name bit 7 set */
+				cInverse = cBit7 && (cChactl & 0x02) ? 0x80 : 0x00;
 			}
 
 			cMask = 0x80;
@@ -2195,6 +2226,10 @@ static void AtariIo_DrawLineMode4(_6502_Context_t *pContext)
 	u32 lLineDelta = AtariIoDisplayLineDelta(pIoData);
 	u32 lVerticalScrollOffset = ((8 - lLineDelta) -
 								 pIoData->tVideoData.lVerticalScrollOffset) & 0xff;
+	u8 cChactl = SRAM[IO_CHACTL];
+	u16 sChbase = ((u16)SRAM[IO_CHBASE] << 8) & 0xfc00;
+	if((cChactl & 0x04) && lVerticalScrollOffset < 8)
+		lVerticalScrollOffset = 7 - lVerticalScrollOffset;
 
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
 	u32 lCycle;
@@ -2212,7 +2247,7 @@ static void AtariIo_DrawLineMode4(_6502_Context_t *pContext)
 
 			cData = AtariIo_FetchUnbufferedDisplayByte(
 				pContext,
-				((SRAM[IO_CHBASE] << 8) & 0xfc00) + cCharacter * 8 + lVerticalScrollOffset,
+				sChbase + cCharacter * 8 + lVerticalScrollOffset,
 				3);
 			cMask = 0x02;
 		}
@@ -2275,6 +2310,8 @@ static void AtariIo_DrawLineMode5(_6502_Context_t *pContext)
 	u8 cInverse;
 	u32 lLineDelta = AtariIoDisplayLineDelta(pIoData);
 	u32 lVerticalScrollLine = ((16 - lLineDelta) - pIoData->tVideoData.lVerticalScrollOffset) & 0xff;
+	u8 cChactl = SRAM[IO_CHACTL];
+	u16 sChbase = ((u16)SRAM[IO_CHBASE] << 8) & 0xfe00;
 
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
 	u32 lCycle;
@@ -2282,6 +2319,8 @@ static void AtariIo_DrawLineMode5(_6502_Context_t *pContext)
 	u8 cBufferIndex = 0x00;
 
 	u32 lVerticalScrollOffset = lVerticalScrollLine >> 1;
+	if(cChactl & 0x04)
+		lVerticalScrollOffset = 7 - lVerticalScrollOffset;
 
 	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
 	{
@@ -2296,12 +2335,12 @@ static void AtariIo_DrawLineMode5(_6502_Context_t *pContext)
 			{
 				cData = AtariIo_FetchUnbufferedDisplayByte(
 					pContext,
-					((SRAM[IO_CHBASE] << 8) & 0xfe00) + cCharacter * 8 + lVerticalScrollOffset,
+					sChbase + cCharacter * 8 + lVerticalScrollOffset,
 					3);
 			}
 			else
 			{
-				cData = RAM[((SRAM[IO_CHBASE] << 8) & 0xfe00) + cCharacter * 8 + lVerticalScrollOffset];
+				cData = RAM[sChbase + cCharacter * 8 + lVerticalScrollOffset];
 			}
 			cMask = 0x02;
 		}
@@ -2365,6 +2404,10 @@ static void AtariIo_DrawLineMode6(_6502_Context_t *pContext)
 	u32 lLineDelta = AtariIoDisplayLineDelta(pIoData);
 	u32 lVerticalScrollOffset = ((8 - lLineDelta) -
 								 pIoData->tVideoData.lVerticalScrollOffset) & 0xff;
+	u8 cChactl = SRAM[IO_CHACTL];
+	u16 sChbase = ((u16)SRAM[IO_CHBASE] << 8) & 0xfe00;
+	if((cChactl & 0x04) && lVerticalScrollOffset < 8)
+		lVerticalScrollOffset = 7 - lVerticalScrollOffset;
 
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 4;
 	u32 lCycle;
@@ -2383,7 +2426,7 @@ static void AtariIo_DrawLineMode6(_6502_Context_t *pContext)
 
 			cData = AtariIo_FetchUnbufferedDisplayByte(
 				pContext,
-				((SRAM[IO_CHBASE] << 8) & 0xfe00) + cCharacter * 8 + lVerticalScrollOffset,
+				sChbase + cCharacter * 8 + lVerticalScrollOffset,
 				3);
 			cMask = 0x08;
 		}
@@ -2445,8 +2488,12 @@ static void AtariIo_DrawLineMode7(_6502_Context_t *pContext)
 	u8 cPriority;
 	u32 lLineDelta = AtariIoDisplayLineDelta(pIoData);
 	u32 lVerticalScrollLine = ((16 - lLineDelta) - pIoData->tVideoData.lVerticalScrollOffset) & 0xff;
+	u8 cChactl = SRAM[IO_CHACTL];
+	u16 sChbase = ((u16)SRAM[IO_CHBASE] << 8) & 0xfe00;
 
 	u32 lVerticalScrollOffset = lVerticalScrollLine >> 1;
+	if(cChactl & 0x04)
+		lVerticalScrollOffset = 7 - lVerticalScrollOffset;
 
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 4;
 	u32 lCycle;
@@ -2467,12 +2514,12 @@ static void AtariIo_DrawLineMode7(_6502_Context_t *pContext)
 			{
 				cData = AtariIo_FetchUnbufferedDisplayByte(
 					pContext,
-					((SRAM[IO_CHBASE] << 8) & 0xfe00) + cCharacter * 8 + lVerticalScrollOffset,
+					sChbase + cCharacter * 8 + lVerticalScrollOffset,
 					3);
 			}
 			else
 			{
-				cData = RAM[((SRAM[IO_CHBASE] << 8) & 0xfe00) + cCharacter * 8 + lVerticalScrollOffset];
+				cData = RAM[sChbase + cCharacter * 8 + lVerticalScrollOffset];
 			}
 			cMask = 0x08;
 		}

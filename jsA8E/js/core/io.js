@@ -400,15 +400,7 @@
 
           case IO_CHBASE: {
             sram[addr] = v;
-            const chbaseTiming =
-              io.chbaseTiming ||
-              (io.chbaseTiming = {
-                rawValue: 0,
-                activeValue: 0,
-                pendingValue: 0,
-                pendingClock: -1,
-                initialized: false,
-              });
+            const chbaseTiming = io.chbaseTiming;
             chbaseTiming.initialized = true;
             chbaseTiming.rawValue = v & 0xff;
             chbaseTiming.pendingValue = v & 0xff;
@@ -461,21 +453,22 @@
           case IO_NMIEN:
             // Only bits 7-5 are used (DLI/VBI/RESET).
             sram[addr] = v & (NMI_DLI | NMI_VBI | NMI_RESET);
-            if (io.inDrawLine && io.nmiTiming && typeof io.nmiTiming === "object") {
+            if (io.inDrawLine) {
+              const nmiTiming = io.nmiTiming;
               const lineCycle = (io.clock - io.displayListFetchCycle) | 0;
               if (lineCycle >= 0 && lineCycle < CYCLES_PER_LINE) {
                 if (lineCycle < 7) {
-                  io.nmiTiming.enabledByCycle7 = sram[addr] & 0xff;
-                  io.nmiTiming.enabledByCycle8 = sram[addr] & 0xff;
-                  io.nmiTiming.enabledOnCycle7Mask = 0;
+                  nmiTiming.enabledByCycle7 = sram[addr] & 0xff;
+                  nmiTiming.enabledByCycle8 = sram[addr] & 0xff;
+                  nmiTiming.enabledOnCycle7Mask = 0;
                 } else if (lineCycle === 7) {
-                  io.nmiTiming.enabledOnCycle7Mask =
-                    ((~io.nmiTiming.enabledByCycle7) & sram[addr]) &
+                  nmiTiming.enabledOnCycle7Mask =
+                    ((~nmiTiming.enabledByCycle7) & sram[addr]) &
                     (NMI_DLI | NMI_VBI | NMI_RESET);
-                  io.nmiTiming.enabledByCycle7 = sram[addr] & 0xff;
-                  io.nmiTiming.enabledByCycle8 = sram[addr] & 0xff;
+                  nmiTiming.enabledByCycle7 = sram[addr] & 0xff;
+                  nmiTiming.enabledByCycle8 = sram[addr] & 0xff;
                 } else if (lineCycle === 8) {
-                  io.nmiTiming.enabledByCycle8 = sram[addr] & 0xff;
+                  nmiTiming.enabledByCycle8 = sram[addr] & 0xff;
                 }
               }
             }

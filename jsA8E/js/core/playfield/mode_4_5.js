@@ -94,6 +94,8 @@
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
 
+      const chactl = sram[IO_CHACTL] & 0x07;
+
       let mask = 0x00;
       let data = 0;
       let inverse = false;
@@ -101,7 +103,6 @@
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         const chBase = ((currentCharacterBaseRegister(io, sram) << 8) & 0xfc00) & 0xffff;
-        const chactl = sram[IO_CHACTL] & 0x07;
         if (mask === 0x00) {
           const raw = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
           inverse = (raw & 0x80) !== 0;

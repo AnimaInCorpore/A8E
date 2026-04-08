@@ -77,22 +77,6 @@
       scanlineState.pfDma = (dmactl & 0x20) !== 0;
     }
 
-    function ensurePlayfieldLineBuffer(drawLine) {
-      let lineBuffer = drawLine.playfieldLineBuffer;
-      if (!(lineBuffer instanceof Uint8Array) || lineBuffer.length !== 48) {
-        lineBuffer = drawLine.playfieldLineBuffer = new Uint8Array(48);
-      }
-      return lineBuffer;
-    }
-
-    function ensureScheduledPlayfieldDma(drawLine) {
-      let scheduled = drawLine.scheduledPlayfieldDma;
-      if (!(scheduled instanceof Uint8Array) || scheduled.length !== CYCLES_PER_LINE) {
-        scheduled = drawLine.scheduledPlayfieldDma = new Uint8Array(CYCLES_PER_LINE);
-      }
-      return scheduled;
-    }
-
     function advanceScanlineCycle(ctx) {
       if (!scanlineState.active) return;
       scanlineState.cycle++;
@@ -137,7 +121,11 @@
       if (lineCycle === 106 && (ctx.ioData.drawLine.refreshDmaPending | 0) !== 0) {
         return 0xff;
       }
-      const addr = ctx.accessAddress ? (ctx.accessAddress & 0xffff) : (ctx.cpu.pc & 0xffff);
+      const useAccessAddress =
+        (ctx.accessMode | 0) !== 0 || ctx.accessFunction !== null;
+      const addr = useAccessAddress
+        ? (ctx.accessAddress & 0xffff)
+        : (ctx.cpu.pc & 0xffff);
       return ctx.ram[addr] & 0xff;
     }
 
@@ -147,14 +135,14 @@
       if (!playfieldDmaAllowedAtCycle(ctx, cycleOffset)) return;
       const lineCycle = currentLineCycle(ctx, cycleOffset);
       if (lineCycle < 0 || lineCycle >= CYCLES_PER_LINE) return;
-      const scheduled = ensureScheduledPlayfieldDma(ctx.ioData.drawLine);
+      const scheduled = ctx.ioData.drawLine.scheduledPlayfieldDma;
       scheduled[lineCycle] = Math.min(255, (scheduled[lineCycle] | 0) + count);
     }
 
     function fetchBufferedDisplayByte(ctx, bufferIndex, address, cycleOffset) {
       const io = ctx.ioData;
       const drawLine = io.drawLine;
-      const lineBuffer = ensurePlayfieldLineBuffer(drawLine);
+      const lineBuffer = drawLine.playfieldLineBuffer;
       const index = (bufferIndex | 0) % 48;
 
       if (io.firstRowScanline) {
@@ -197,7 +185,7 @@
       }
 
       const drawLine = io.drawLine;
-      const scheduledPlayfieldDma = ensureScheduledPlayfieldDma(drawLine);
+      const scheduledPlayfieldDma = drawLine.scheduledPlayfieldDma;
       const playfieldDmaStealCount = scheduledPlayfieldDma[lineCycle] | 0;
       drawLine.playfieldDmaStealCount = playfieldDmaStealCount;
 
@@ -285,22 +273,8 @@
       return sram[IO_COLBK] & 0xf0;
     }
 
-    function ensureChbaseTiming(io) {
-      let timing = io.chbaseTiming;
-      if (!timing || typeof timing !== "object") {
-        timing = io.chbaseTiming = {
-          rawValue: 0,
-          activeValue: 0,
-          pendingValue: 0,
-          pendingClock: -1,
-          initialized: false,
-        };
-      }
-      return timing;
-    }
-
     function currentCharacterBaseRegister(io, sram) {
-      const timing = ensureChbaseTiming(io);
+      const timing = io.chbaseTiming;
       if (sram) {
         const rawValue = sram[IO_CHBASE] & 0xff;
         if (!timing.initialized) {
@@ -313,7 +287,7 @@
           timing.rawValue = rawValue;
           timing.pendingValue = rawValue;
           if (timing.pendingClock < 0) {
-            timing.pendingClock = (io.clock | 0) + 1;
+            timing.pendingClock = (io.clock | 0) + 2;
           }
         }
       }

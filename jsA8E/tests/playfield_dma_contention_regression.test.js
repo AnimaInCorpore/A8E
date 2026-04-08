@@ -58,6 +58,8 @@ function makeCtx(clock, firstRowScanline) {
   return {
     cycleCounter: 0,
     accessAddress: 0x4321,
+    accessFunction: null,
+    accessMode: 1,
     cpu: {
       pc: 0x2000,
     },
@@ -74,6 +76,10 @@ function makeCtx(clock, firstRowScanline) {
         refreshDmaPending: 0,
         displayListInstructionDmaPending: 0,
         displayListAddressDmaRemaining: 0,
+        playerMissileClockActive: false,
+        playerMissileInterleaved: false,
+        playfieldLineBuffer: new Uint8Array(48),
+        scheduledPlayfieldDma: new Uint8Array(114),
       },
       video: {
         currentDisplayLine: 0,
@@ -123,6 +129,25 @@ function testVirtualCharacterFetchUsesCpuBusWithoutSchedulingDma() {
   assert.equal(ctx.cycleCounter, 0);
 }
 
+function testVirtualCharacterFetchUsesZeroPageCpuBusAddress() {
+  const api = loadRendererBaseApi();
+  const ctx = makeCtx(103, true);
+  enablePlayfieldDma(ctx);
+  ctx.accessAddress = 0x0000;
+  ctx.cpu.pc = 0x4321;
+  ctx.ram[0x0000] = 0x7c;
+  ctx.ram[0x4321] = 0x5a;
+
+  const value = api.fetchUnbufferedDisplayByte(ctx, 0x2000, 3);
+  assert.equal(
+    value,
+    0x7c,
+    "late virtual fetches must honor an active $0000 CPU bus address",
+  );
+  assert.equal(scheduledDmaAt(ctx, 106), 0);
+  assert.equal(ctx.cycleCounter, 0);
+}
+
 function testVirtualDisplayFetchLatchesRefreshDropArtifactIntoLineBuffer() {
   const api = loadRendererBaseApi();
   const ctx = makeCtx(106, true);
@@ -150,5 +175,6 @@ function testVirtualDisplayFetchLatchesRefreshDropArtifactIntoLineBuffer() {
 
 testScheduledCharacterDmaStealsOnCycle105();
 testVirtualCharacterFetchUsesCpuBusWithoutSchedulingDma();
+testVirtualCharacterFetchUsesZeroPageCpuBusAddress();
 testVirtualDisplayFetchLatchesRefreshDropArtifactIntoLineBuffer();
 console.log("playfield_dma_contention_regression tests passed");

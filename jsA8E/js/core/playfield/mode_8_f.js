@@ -85,7 +85,6 @@
 
     function drawLineMode8Like(ctx, bytesPerLineFactor, initialPhase) {
       const io = ctx.ioData;
-      const ram = ctx.ram;
       const sram = ctx.sram;
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
@@ -127,7 +126,6 @@
 
     function drawLineMode9(ctx) {
       const io = ctx.ioData;
-      const ram = ctx.ram;
       const sram = ctx.sram;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
@@ -164,7 +162,6 @@
 
     function drawLineModeB(ctx) {
       const io = ctx.ioData;
-      const ram = ctx.ram;
       const sram = ctx.sram;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
@@ -206,7 +203,6 @@
 
     function drawLineModeD(ctx) {
       const io = ctx.ioData;
-      const ram = ctx.ram;
       const sram = ctx.sram;
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
@@ -254,7 +250,6 @@
 
     function drawLineModeF(ctx) {
       const io = ctx.ioData;
-      const ram = ctx.ram;
       const sram = ctx.sram;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;

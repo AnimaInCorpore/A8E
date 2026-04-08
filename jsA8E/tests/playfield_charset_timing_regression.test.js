@@ -76,6 +76,13 @@ function makeCtx(bytesPerLine) {
       clock: 0,
       nextDisplayListLine: 8,
       firstRowScanline: false,
+      chbaseTiming: {
+        rawValue: 0,
+        activeValue: 0,
+        pendingValue: 0,
+        pendingClock: -1,
+        initialized: false,
+      },
       video: {
         currentDisplayLine: 0,
         verticalScrollOffset: 0,

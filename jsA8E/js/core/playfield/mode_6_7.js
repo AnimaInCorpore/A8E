@@ -90,6 +90,8 @@
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
 
+      const chactl = sram[IO_CHACTL] & 0x07;
+
       let mask = 0x00;
       let data = 0;
       let colorIndex = 0;
@@ -98,7 +100,6 @@
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         const chBase = ((currentCharacterBaseRegister(io, sram) << 8) & 0xfe00) & 0xffff;
-        const chactl = sram[IO_CHACTL] & 0x07;
         if (mask === 0x00) {
           let ch = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);

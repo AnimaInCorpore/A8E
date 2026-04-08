@@ -112,6 +112,8 @@ function makeCtx() {
         refreshDmaPending: 0,
         displayListInstructionDmaPending: 0,
         displayListAddressDmaRemaining: 0,
+        playfieldLineBuffer: new Uint8Array(48),
+        scheduledPlayfieldDma: new Uint8Array(114),
       },
       video: {
         currentDisplayLine: 0,

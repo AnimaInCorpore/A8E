@@ -164,8 +164,14 @@ function makeContext() {
         enabledOnCycle7Mask: 0,
       },
       drawLine: {
+        playfieldDmaStealCount: 0,
+        refreshDmaPending: 0,
+        displayListInstructionDmaPending: 0,
+        displayListAddressDmaRemaining: 0,
         playerMissileInterleaved: false,
         playerMissileClockActive: false,
+        playfieldLineBuffer: new Uint8Array(48),
+        scheduledPlayfieldDma: new Uint8Array(CYCLES_PER_LINE),
       },
       videoOut: {
         priority: new Uint8Array(456 * 312),
