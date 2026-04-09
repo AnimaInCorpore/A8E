@@ -1381,6 +1381,13 @@
                   io.drawLine.displayListInstructionDmaPending | 0,
                 displayListAddressDmaRemaining:
                   io.drawLine.displayListAddressDmaRemaining | 0,
+                playerMissileClockActive: !!io.drawLine.playerMissileClockActive,
+                playerMissileInterleaved: !!io.drawLine.playerMissileInterleaved,
+                pmgFirstVisibleSpan: !!io.drawLine.pmgFirstVisibleSpan,
+                playerPmgShift: new Uint8Array(io.drawLine.playerPmgShift || 0),
+                playerPmgState: new Uint8Array(io.drawLine.playerPmgState || 0),
+                missilePmgShift: new Uint8Array(io.drawLine.missilePmgShift || 0),
+                missilePmgState: new Uint8Array(io.drawLine.missilePmgState || 0),
                 playfieldLineBuffer: new Uint8Array(io.drawLine.playfieldLineBuffer || 0),
                 scheduledPlayfieldDma: new Uint8Array(io.drawLine.scheduledPlayfieldDma || 0),
               }
@@ -1471,6 +1478,21 @@
             state.drawLine.displayListInstructionDmaPending | 0;
           io.drawLine.displayListAddressDmaRemaining =
             state.drawLine.displayListAddressDmaRemaining | 0;
+          io.drawLine.playerMissileClockActive = !!state.drawLine.playerMissileClockActive;
+          io.drawLine.playerMissileInterleaved = !!state.drawLine.playerMissileInterleaved;
+          io.drawLine.pmgFirstVisibleSpan = !!state.drawLine.pmgFirstVisibleSpan;
+          if (state.drawLine.playerPmgShift) {
+            io.drawLine.playerPmgShift = new Uint8Array(state.drawLine.playerPmgShift);
+          }
+          if (state.drawLine.playerPmgState) {
+            io.drawLine.playerPmgState = new Uint8Array(state.drawLine.playerPmgState);
+          }
+          if (state.drawLine.missilePmgShift) {
+            io.drawLine.missilePmgShift = new Uint8Array(state.drawLine.missilePmgShift);
+          }
+          if (state.drawLine.missilePmgState) {
+            io.drawLine.missilePmgState = new Uint8Array(state.drawLine.missilePmgState);
+          }
           copyBytesTo(io.drawLine.playfieldLineBuffer, state.drawLine.playfieldLineBuffer);
           copyBytesTo(io.drawLine.scheduledPlayfieldDma, state.drawLine.scheduledPlayfieldDma);
         }

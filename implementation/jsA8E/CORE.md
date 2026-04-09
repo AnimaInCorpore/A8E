@@ -4,7 +4,7 @@
 
 - Files: `jsA8E/js/core/cpu.js`, `jsA8E/js/core/cpu_tables.js`, `jsA8E/js/core/antic.js`, `jsA8E/js/core/gtia.js`, `jsA8E/js/core/pokey.js`, `jsA8E/js/core/pokey_sio.js`, `jsA8E/js/core/memory.js`, `jsA8E/js/core/io.js`, `jsA8E/js/core/atari.js`, `jsA8E/js/core/hw.js`, `jsA8E/js/core/playfield/playfield.js`, `jsA8E/js/core/playfield/renderer_base.js`, `jsA8E/js/core/state.js`, `jsA8E/js/core/snapshot_codec.js`
 - Purpose: mirror Atari hardware behavior in JavaScript with timing-compatible execution.
-- Status: updated on 2026-04-08 (`partial`).
+- Status: updated on 2026-04-09 (`partial`).
 
 ## Architecture
 
@@ -50,7 +50,7 @@ PMG DMA fetches happen in `fetchPmgDmaCycle` (in `gtia.js`, called from `clockAc
 
 `PMBASE` is read live at each DMA cycle. This means a DLI write to PMBASE between cycles 5 and 0 of adjacent scanlines applies cleanly; a write during cycles 0–5 of an active scanline will cause a mixed-base fetch for that scanline (missiles use old base, late players use new base). This matches real hardware behavior.
 
-PM graphics are drawn interleaved with playfield pixels via `drawPlayerMissilesClock` called from `clockAction` during `drawLine`. Priority compositing uses a `Uint16Array` priority buffer; all player/missile draw functions mask with `& 0xffff`. Priority constants `PRIO_PF3` and `PRIO_M10_PM0-3` are wired through the full config chain (`atari.js → antic.js → A8EPlayfield → A8EPlayfieldRenderer → renderer_base → mode_*.js`). HSCROL-clipped lines preserve already-composited PMG pixels in both the aperture fill and the trailing border fill.
+PM graphics are drawn interleaved with playfield pixels via `drawPlayerMissilesClock` called from `clockAction` during `drawLine`. Priority compositing uses a `Uint16Array` priority buffer; all player/missile draw functions mask with `& 0xffff`. Priority constants `PRIO_PF3` and `PRIO_M10_PM0-3` are wired through the full config chain (`atari.js → antic.js → A8EPlayfield → A8EPlayfieldRenderer → renderer_base → mode_*.js`). The interleaved GTIA path now models PM output with a per-line shift-register/state-machine pair per object: a trigger ORs in fresh latch data, resets the size state, and lets mid-image rightward retriggers build overlapping images without moving the already-started copy. PM horizontal origin also includes the GTIA/ANTIC coordinate bias from AHRM 6.2, so HPOS `$30` lands on the normal playfield left edge (`x=104` in the full 456-pixel line buffer). HSCROL-clipped lines preserve already-composited PMG pixels in both the aperture fill and the trailing border fill.
 
 ## POKEY / Pot Scan
 
@@ -71,6 +71,7 @@ XEX mount preflight simulates the file's writes in load order, so a segment that
 ## Issues
 - Broader real-content raster verification (chained DLIs, PMG priority ladders, wide-playfield artifacts) is still incomplete.
 - VBI-side `NMIEN` gating and `VSCROL`/DLI same-line deadlines are not yet modeled.
+- The interleaved PMG path still reconstructs the hidden part of a scanline from current register state at the first visible span, rather than replaying every earlier same-line write cycle by cycle.
 
 ## Todo
 - Finish the raster-content sweep and extend the ANTIC deadline pass to VBI and `VSCROL`.

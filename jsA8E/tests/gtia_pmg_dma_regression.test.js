@@ -77,6 +77,22 @@ function makeCtx() {
       video: {
         currentDisplayLine: 0,
       },
+      clock: 0,
+      displayListFetchCycle: 0,
+      currentDisplayListCommand: 0x00,
+      drawLine: {
+        playerMissileClockActive: true,
+        playerMissileInterleaved: true,
+        pmgFirstVisibleSpan: true,
+        playerPmgShift: new Uint8Array(4),
+        playerPmgState: new Uint8Array(4),
+        missilePmgShift: new Uint8Array(4),
+        missilePmgState: new Uint8Array(4),
+      },
+      videoOut: {
+        pixels: new Uint8Array(456),
+        priority: new Uint16Array(456),
+      },
     },
   };
 }
@@ -119,6 +135,100 @@ function testPlayerDmaKeepsMissileSlotAlive() {
   assert.equal(ctx.sram[0xd011], 0x7a);
 }
 
+function testHposZeroStillRenders() {
+  const api = loadGtiaApi();
+  const ctx = makeCtx();
+
+  ctx.sram[0xd01b] = 0x00;
+  ctx.sram[0xd00d] = 0xff;
+  ctx.sram[0xd000] = 0x00;
+  ctx.sram[0xd008] = 0x03;
+  ctx.sram[0xd012] = 0x66;
+
+  api.drawPlayerMissilesClock(ctx, 32);
+
+  assert.equal(ctx.ioData.videoOut.pixels[32], 0x66);
+  assert.equal(ctx.ioData.videoOut.pixels[35], 0x66);
+}
+
+function testMidImageHposWriteKeepsOriginalStart() {
+  const api = loadGtiaApi();
+  const ctx = makeCtx();
+
+  ctx.sram[0xd01b] = 0x00;
+  ctx.sram[0xd00d] = 0xff;
+  ctx.sram[0xd000] = 0x18;
+  ctx.sram[0xd008] = 0x03;
+  ctx.sram[0xd012] = 0x44;
+
+  ctx.ioData.clock = 6;
+  api.drawPlayerMissilesClock(ctx, 56);
+
+  ctx.sram[0xd000] = 0x3c;
+  ctx.ioData.clock = 7;
+  api.drawPlayerMissilesClock(ctx, 60);
+
+  ctx.ioData.clock = 24;
+  api.drawPlayerMissilesClock(ctx, 128);
+
+  assert.equal(ctx.ioData.videoOut.pixels[56], 0x44);
+  assert.equal(ctx.ioData.videoOut.pixels[63], 0x44);
+  assert.equal(ctx.ioData.videoOut.pixels[128], 0x44);
+  assert.equal(ctx.ioData.videoOut.pixels[131], 0x44);
+}
+
+function testOverlappingRightwardHposRetriggerMergesShiftRegister() {
+  const api = loadGtiaApi();
+  const ctx = makeCtx();
+
+  ctx.sram[0xd01b] = 0x00;
+  ctx.sram[0xd00d] = 0x81;
+  ctx.sram[0xd000] = 0x18;
+  ctx.sram[0xd008] = 0x00;
+  ctx.sram[0xd012] = 0x55;
+
+  ctx.ioData.clock = 6;
+  api.drawPlayerMissilesClock(ctx, 56);
+
+  ctx.sram[0xd000] = 0x1a;
+  ctx.ioData.clock = 7;
+  api.drawPlayerMissilesClock(ctx, 60);
+  api.drawPlayerMissilesClock(ctx, 64);
+  api.drawPlayerMissilesClock(ctx, 68);
+  api.drawPlayerMissilesClock(ctx, 72);
+
+  assert.equal(ctx.ioData.videoOut.pixels[56], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[57], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[60], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[61], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[70], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[71], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[74], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[75], 0x55);
+  assert.equal(ctx.ioData.drawLine.playerPmgShift[0], 0x00);
+}
+
+function testHpos30MapsToNormalPlayfieldLeftEdge() {
+  const api = loadGtiaApi();
+  const ctx = makeCtx();
+
+  ctx.sram[0xd01b] = 0x00;
+  ctx.sram[0xd00d] = 0x80;
+  ctx.sram[0xd000] = 0x30;
+  ctx.sram[0xd008] = 0x00;
+  ctx.sram[0xd012] = 0x77;
+
+  api.drawPlayerMissiles(ctx);
+
+  assert.equal(ctx.ioData.videoOut.pixels[96], 0x00);
+  assert.equal(ctx.ioData.videoOut.pixels[104], 0x77);
+  assert.equal(ctx.ioData.videoOut.pixels[105], 0x77);
+}
+
 testVdelayMasksFetchesOnEvenScanlines();
 testPlayerDmaKeepsMissileSlotAlive();
+testHposZeroStillRenders();
+testMidImageHposWriteKeepsOriginalStart();
+testOverlappingRightwardHposRetriggerMergesShiftRegister();
+testHpos30MapsToNormalPlayfieldLeftEdge();
 console.log("gtia_pmg_dma_regression tests passed");

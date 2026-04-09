@@ -91,6 +91,11 @@ typedef struct
 	u8 cRefreshDmaPending;
 	u8 cDisplayListInstructionDmaPending;
 	u8 cDisplayListAddressDmaRemaining;
+	u8 cPmgFirstVisibleSpan;
+	u8 aPlayerPmgShift[4];
+	u8 aPlayerPmgState[4];
+	u8 aMissilePmgShift[4];
+	u8 aMissilePmgState[4];
 	u8 aPlayfieldLineBuffer[48];
 	u8 aScheduledPlayfieldDma[CYCLES_PER_LINE];
 } DrawLineData_t;

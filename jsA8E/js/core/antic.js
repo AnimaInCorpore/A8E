@@ -107,6 +107,13 @@
       drawLine.refreshDmaPending = 0;
       drawLine.displayListInstructionDmaPending = 0;
       drawLine.displayListAddressDmaRemaining = 0;
+      drawLine.playerMissileClockActive = false;
+      drawLine.playerMissileInterleaved = false;
+      drawLine.pmgFirstVisibleSpan = true;
+      drawLine.playerPmgShift.fill(0);
+      drawLine.playerPmgState.fill(0);
+      drawLine.missilePmgShift.fill(0);
+      drawLine.missilePmgState.fill(0);
       drawLine.scheduledPlayfieldDma.fill(0);
     }
 
