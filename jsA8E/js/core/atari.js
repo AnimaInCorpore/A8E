@@ -317,6 +317,7 @@
   const pokeyAudioSync = pokeyAudioApi.sync;
   const pokeyAudioConsume = pokeyAudioApi.consume;
   const pokeySyncLfsr17 = pokeyAudioApi.syncLfsr17;
+  const pokeyPotPrepareSkctlWrite = pokeyAudioApi.potPrepareSkctlWrite;
   const pokeyPotStartScan = pokeyAudioApi.potStartScan;
   const pokeyPotUpdate = pokeyAudioApi.potUpdate;
   const pokeyTimerPeriodCpuCycles = pokeyAudioApi.timerPeriodCpuCycles;
@@ -399,6 +400,7 @@
           IO_WSYNC: IO_WSYNC,
           pokeyAudioSync: pokeyAudioSync,
           pokeyAudioOnRegisterWrite: pokeyAudioOnRegisterWrite,
+          pokeyPotPrepareSkctlWrite: pokeyPotPrepareSkctlWrite,
           pokeyPotStartScan: pokeyPotStartScan,
           pokeyRestartTimers: pokeyRestartTimers,
           pokeySyncLfsr17: pokeySyncLfsr17,

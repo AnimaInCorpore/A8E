@@ -49,6 +49,13 @@
     const stealDma = cfg.stealDma || function (ctx, cycles) {
       ctx.cycleCounter += cycles | 0;
     };
+    const fetchBufferedDisplayByte =
+      cfg.fetchBufferedDisplayByte ||
+      function (ctx, bufferIndex, address) {
+        void bufferIndex;
+        if (ctx.ioData.firstRowScanline) stealDma(ctx, 1);
+        return ctx.ram[address & 0xffff] & 0xff;
+      };
 
     function writePixelQuad(dst, prio, dstIndex, color, priority) {
       dst[dstIndex] = color;
@@ -78,7 +85,6 @@
 
     function drawLineMode8Like(ctx, bytesPerLineFactor, initialPhase) {
       const io = ctx.ioData;
-      const ram = ctx.ram;
       const sram = ctx.sram;
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
@@ -92,14 +98,12 @@
 
       let data = 0;
       let phase = initialPhase;
+      let bufferIndex = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (phase === initialPhase) {
-          data = ram[dispAddr] & 0xff;
+          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          if (io.firstRowScanline) {
-            stealDma(ctx, 1);
-          }
           phase = 0;
         }
 
@@ -122,7 +126,6 @@
 
     function drawLineMode9(ctx) {
       const io = ctx.ioData;
-      const ram = ctx.ram;
       const sram = ctx.sram;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
@@ -134,14 +137,12 @@
 
       let mask = 0x00;
       let data = 0;
+      let bufferIndex = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (mask === 0x00) {
-          data = ram[dispAddr] & 0xff;
+          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          if (io.firstRowScanline) {
-            stealDma(ctx, 1);
-          }
           mask = 0x80;
         }
 
@@ -161,7 +162,6 @@
 
     function drawLineModeB(ctx) {
       const io = ctx.ioData;
-      const ram = ctx.ram;
       const sram = ctx.sram;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
@@ -173,14 +173,12 @@
 
       let mask = 0x00;
       let data = 0;
+      let bufferIndex = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (mask === 0x00) {
-          data = ram[dispAddr] & 0xff;
+          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          if (io.firstRowScanline) {
-            stealDma(ctx, 1);
-          }
           mask = 0x80;
         }
 
@@ -205,7 +203,6 @@
 
     function drawLineModeD(ctx) {
       const io = ctx.ioData;
-      const ram = ctx.ram;
       const sram = ctx.sram;
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
@@ -219,14 +216,12 @@
 
       let phase = 2;
       let data = 0;
+      let bufferIndex = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (phase === 2) {
-          data = ram[dispAddr] & 0xff;
+          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          if (io.firstRowScanline) {
-            stealDma(ctx, 1);
-          }
           phase = 0;
         }
 
@@ -255,7 +250,6 @@
 
     function drawLineModeF(ctx) {
       const io = ctx.ioData;
-      const ram = ctx.ram;
       const sram = ctx.sram;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
@@ -267,14 +261,14 @@
       const colorTable = SCRATCH_GTIA_COLOR_TABLE;
       let mask = 0x00;
       let data = 0;
+      let bufferIndex = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         const priorMode = (sram[IO_PRIOR] >> 6) & 3;
 
         if (mask === 0x00) {
-          data = ram[dispAddr] & 0xff;
+          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          stealDma(ctx, 1);
           mask = 0x80;
         }
 

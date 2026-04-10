@@ -1,5 +1,19 @@
 # AHRM - Altirra Hardware Reference Manual
 
+> Local markdown mirror note: revised on 2026-04-05 against the online [2026-01-02 Altirra Hardware Reference Manual PDF](https://www.virtualdub.org/downloads/Altirra%20Hardware%20Reference%20Manual.pdf), the [Atari 8-bit technical documents archive](https://ftp.pigwa.net/stuff/collections/atari_forever/www/www.atari-history.com/archives/tech_docs_8bits.html), the [Atari Home Computer Technical Reference Notes (1982)](https://www.bitsavers.org/pdf/atari/400_800/CO16555_Atari_Home_Computer_Technical_Reference_Notes_1982.pdf), and community resources from [AtariAge](https://forums.atariage.com/) and [Altirra 4.50 Test 7](https://www.virtualdub.org/altirra.html) emulator fixes. The 2026-04-05 pass fixed:
+>
+> - **Polynomial formulas**: Restored broken superscript notation in 5.2 Initialization, 5.3 Sound generation, 5.5 Noise generators, and B.5 CRC algorithm (`x 3` → `x^3`, `2 N - 1` → `2^N - 1`, etc.)
+> - **Register listing (14.7)**: Rebuilt the entire quick-reference register table from scratch — collision, trigger, color, audio, and ANTIC bit fields were all garbled from PDF extraction
+> - **Register list (14.2)**: Fixed garbled SIZEM register table layout
+> - **HTML entities**: Converted `&gt;`, `&lt;`, `&amp;` back to plain characters across 12 files
+> - **Oscilloscope text artifacts**: Removed leaked Rigol instrument metadata from E.5, 5.6, 6.2, E.3, 7.5
+> - **Garbled register tables**: Restructured MIO status/control register descriptions (11.3) and 850 Interface Module command fields (9.10)
+> - **Garbled character sets**: Added PDF-reference notes for 1025/1029 printer character set tables that were irreparably corrupted during extraction
+> - **CRC code formatting**: Restored Python code blocks in B.5 that were collapsed to single lines
+> - **ANTIC virtual DMA**: Clarified refresh-cycle overlap behavior on cycle 106 (pulled-up bus data) per Altirra 4.50 findings
+> - **Sound generation**: Fixed placeholder "N" → 15 for 4-bit polynomial counter period
+>
+> The 2026-01-02 PDF remains the latest AHRM edition (confirmed 2026-04-05; no newer version exists). Chapter 14's original section boundaries are preserved in the local index; `14. Reference/2. Register list.md` remains the combined raw extraction.
 
 ## 0. Front Matter
 
@@ -215,6 +229,10 @@
 - [Reference](14.%20Reference/Reference.md)
 - [1. Memory map](14.%20Reference/1.%20Memory%20map.md)
 - [2. Register list](14.%20Reference/2.%20Register%20list.md)
+- [3. GTIA registers](14.%20Reference/3.%20GTIA%20registers.md)
+- [4. POKEY registers](14.%20Reference/4.%20POKEY%20registers.md)
+- [5. PIA registers](14.%20Reference/5.%20PIA%20registers.md)
+- [6. ANTIC registers](14.%20Reference/6.%20ANTIC%20registers.md)
 - [7. Register listing](14.%20Reference/7.%20Register%20listing.md)
 
 ## 15. Bibliography
@@ -222,6 +240,7 @@
 - [Bibliography](15.%20Bibliography/Bibliography.md)
 - [1. List of references](15.%20Bibliography/1.%20List%20of%20references.md)
 - [2. Errata](15.%20Bibliography/2.%20Errata.md)
+- [3. Printers](15.%20Bibliography/3.%20Printers.md)
 
 ## A. Polynomial Counters
 
@@ -278,10 +297,6 @@
 - [5. Game cartridges](F.%20Firmware%20Database/5.%20Game%20cartridges.md)
 - [6. BASIC](F.%20Firmware%20Database/6.%20BASIC.md)
 - [7. Disk Drives](F.%20Firmware%20Database/7.%20Disk%20Drives.md)
-
-## 15. Bibliography
-
-- [3. Printers](15.%20Bibliography/3.%20Printers.md)
 
 ## G. Quick Reference
 

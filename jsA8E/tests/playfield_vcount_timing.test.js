@@ -52,10 +52,13 @@ function makeCtx(displayLine) {
       displayListFetchCycle: 0,
       drawLine: {
         playerMissileClockActive: false,
+        playerMissileInterleaved: false,
         playfieldDmaStealCount: 0,
         refreshDmaPending: 0,
         displayListInstructionDmaPending: 0,
         displayListAddressDmaRemaining: 0,
+        playfieldLineBuffer: new Uint8Array(48),
+        scheduledPlayfieldDma: new Uint8Array(114),
       },
       video: {
         currentDisplayLine: displayLine,
@@ -64,30 +67,37 @@ function makeCtx(displayLine) {
   };
 }
 
-function testVcountUpdatesAtCycle100Boundary() {
+function testVcountUpdatesAtCycle111Boundary() {
   const api = loadRendererBaseApi();
   const ctx = makeCtx(11);
   ctx.ram[IO_VCOUNT] = 5;
 
-  api.stepClockActions(ctx, 100);
-  assert.equal(ctx.ram[IO_VCOUNT], 5, "VCOUNT should still be old value before cycle 100");
+  api.stepClockActions(ctx, 111);
+  assert.equal(ctx.ram[IO_VCOUNT], 5, "VCOUNT should still be old value before cycle 111");
 
   api.stepClockActions(ctx, 1);
-  assert.equal(ctx.ram[IO_VCOUNT], 6, "VCOUNT should switch to next line value at cycle 100");
+  assert.equal(ctx.ram[IO_VCOUNT], 6, "VCOUNT should switch to next line value at cycle 111");
 }
 
-function testVcountWrapsToZeroAtLastLine() {
+function testVcountShowsEndOfFrameAnomalyThenWraps() {
   const api = loadRendererBaseApi();
   const ctx = makeCtx(311);
   ctx.ram[IO_VCOUNT] = 155;
 
-  api.stepClockActions(ctx, 100);
+  api.stepClockActions(ctx, 111);
   assert.equal(ctx.ram[IO_VCOUNT], 155);
 
   api.stepClockActions(ctx, 1);
-  assert.equal(ctx.ram[IO_VCOUNT], 0, "VCOUNT should wrap at the end of the PAL frame");
+  assert.equal(
+    ctx.ram[IO_VCOUNT],
+    156,
+    "VCOUNT should expose the PAL end-of-frame anomaly on cycle 111",
+  );
+
+  api.stepClockActions(ctx, 1);
+  assert.equal(ctx.ram[IO_VCOUNT], 0, "VCOUNT should wrap to zero after the anomaly cycle");
 }
 
-testVcountUpdatesAtCycle100Boundary();
-testVcountWrapsToZeroAtLastLine();
+testVcountUpdatesAtCycle111Boundary();
+testVcountShowsEndOfFrameAnomalyThenWraps();
 console.log("playfield_vcount_timing tests passed");

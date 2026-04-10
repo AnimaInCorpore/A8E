@@ -254,12 +254,15 @@ u8 *Antic_NMIEN(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
 	{
+		IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+		u8 cMaskedValue = (*pValue & 0xe0);
+
 #ifdef VERBOSE_NMI
 		printf("$%04X: NMIEN ", pContext->tCpu.pc);
 
-		if((*pValue & 0x80) != (SRAM[IO_NMIEN] & 0x80))
+		if((cMaskedValue & 0x80) != (SRAM[IO_NMIEN] & 0x80))
 		{
-			if(*pValue & 0x80)
+			if(cMaskedValue & 0x80)
 			{
 				printf("(DLI enabled) ");
 			}
@@ -267,9 +270,9 @@ u8 *Antic_NMIEN(_6502_Context_t *pContext, u8 *pValue)
 				printf("(DLI disabled) ");
 		}
 
-		if((*pValue & 0x40) != (SRAM[IO_NMIEN] & 0x40))
+		if((cMaskedValue & 0x40) != (SRAM[IO_NMIEN] & 0x40))
 		{
-			if(*pValue & 0x40)
+			if(cMaskedValue & 0x40)
 			{
 				printf("(VBI enabled) ");
 			}
@@ -277,9 +280,9 @@ u8 *Antic_NMIEN(_6502_Context_t *pContext, u8 *pValue)
 				printf("(VBI disabled) ");
 		}
 
-		if((*pValue & 0x20) != (SRAM[IO_NMIEN] & 0x20))
+		if((cMaskedValue & 0x20) != (SRAM[IO_NMIEN] & 0x20))
 		{
-			if(*pValue & 0x20)
+			if(cMaskedValue & 0x20)
 			{
 				printf("(RESET enabled)");
 			}
@@ -289,8 +292,36 @@ u8 *Antic_NMIEN(_6502_Context_t *pContext, u8 *pValue)
 
 		printf("\n");
 #endif
+		if(pIoData->bInDrawLine &&
+		   pIoData->llCycle >= pIoData->llDisplayListFetchCycle)
+		{
+			u32 lCycleInLine =
+				(u32)(pIoData->llCycle - pIoData->llDisplayListFetchCycle);
+
+			if(lCycleInLine < 7u)
+			{
+				pIoData->cNmienEnabledByCycle7 = cMaskedValue;
+				pIoData->cNmienEnabledByCycle8 = cMaskedValue;
+				pIoData->cNmienEnabledOnCycle7Mask = 0;
+			}
+			else if(lCycleInLine == 7u)
+			{
+				pIoData->cNmienEnabledOnCycle7Mask =
+					(pIoData->cNmienEnabledOnCycle7Mask &
+					 (u8)~(NMI_DLI | NMI_VBI | NMI_RESET)) |
+					((u8)~pIoData->cNmienEnabledByCycle7 & cMaskedValue &
+					 (NMI_DLI | NMI_VBI | NMI_RESET));
+				pIoData->cNmienEnabledByCycle7 = cMaskedValue;
+				pIoData->cNmienEnabledByCycle8 = cMaskedValue;
+			}
+			else if(lCycleInLine == 8u)
+			{
+				pIoData->cNmienEnabledByCycle8 = cMaskedValue;
+			}
+		}
+
 		/* Only bits 7-5 are used (DLI/VBI/RESET). */
-		SRAM[IO_NMIEN] = (*pValue & 0xe0);
+		SRAM[IO_NMIEN] = cMaskedValue;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" NMIEN: %02X\n", *pValue);

@@ -921,18 +921,88 @@
     }
 
     // --- POKEY pot scan (POT0..POT7 / ALLPOT) ---
-    const POKEY_POT_MAX = 228;
-    const POKEY_POT_CYCLES_PER_COUNT = 28; // ~64kHz at PAL CPU clock.
+    const POKEY_POT_SLOW_MAX = 228;
+    const POKEY_POT_FAST_MAX = 229;
+    const POKEY_POT_SLOW_CYCLES_PER_COUNT = CYCLES_PER_LINE;
+
+    function pokeyPotFastScanEnabled(ctx) {
+      return (ctx.sram[IO_SKCTL_SKSTAT] & 0x04) !== 0;
+    }
+
+    function pokeyPotStepCycles(ctx) {
+      if (pokeyPotFastScanEnabled(ctx)) return 1;
+      return (ctx.sram[IO_SKCTL_SKSTAT] & 0x03) !== 0
+        ? POKEY_POT_SLOW_CYCLES_PER_COUNT
+        : 0;
+    }
+
+    function pokeyPotTerminalCount(ctx) {
+      return pokeyPotFastScanEnabled(ctx) ? POKEY_POT_FAST_MAX : POKEY_POT_SLOW_MAX;
+    }
+
+    function pokeyPotRefreshReadRegisters(ctx) {
+      const io = ctx.ioData;
+      if (!io || !io.pokeyPotScanActive) return;
+
+      const count = io.pokeyPotCounter & 0xff;
+      const terminal =
+        io.pokeyPotScanTerminalCycle !== CYCLE_NEVER
+          ? count
+          : pokeyPotTerminalCount(ctx);
+      let allpot = 0xff;
+
+      for (let p = 0; p < 8; p++) {
+        const rawTarget = io.pokeyPotValues[p] & 0xff;
+        const target = rawTarget > terminal ? terminal : rawTarget;
+        const saturates = rawTarget >= terminal;
+
+        if (!io.pokeyPotLatched[p] && !saturates && count >= target) {
+          io.pokeyPotLatched[p] = 1;
+        }
+
+        if (io.pokeyPotLatched[p]) {
+          ctx.ram[(IO_AUDF1_POT0 + p) & 0xffff] = target & 0xff;
+          allpot &= ~(1 << p);
+        } else {
+          ctx.ram[(IO_AUDF1_POT0 + p) & 0xffff] = count & 0xff;
+        }
+      }
+
+      ctx.ram[IO_AUDCTL_ALLPOT] = allpot & 0xff;
+    }
+
+    function pokeyPotFinishScan(ctx) {
+      const io = ctx.ioData;
+      if (!io) return;
+
+      const finalValue = io.pokeyPotCounter & 0xff;
+      for (let p = 0; p < 8; p++) {
+        if (!io.pokeyPotLatched[p]) {
+          ctx.ram[(IO_AUDF1_POT0 + p) & 0xffff] = finalValue;
+        }
+      }
+
+      io.pokeyPotScanActive = false;
+      io.pokeyPotScanTerminalCycle = CYCLE_NEVER;
+      ctx.ram[IO_AUDCTL_ALLPOT] = 0x00;
+    }
+
+    function pokeyPotPrepareSkctlWrite(ctx) {
+      const io = ctx.ioData;
+      if (!io || !io.pokeyPotScanActive) return;
+      pokeyPotUpdate(ctx);
+      if (io.pokeyPotScanActive) io.pokeyPotScanLastCycle = ctx.cycleCounter;
+    }
 
     function pokeyPotStartScan(ctx) {
       const io = ctx.ioData;
       if (!io) return;
       io.pokeyPotScanActive = true;
-      io.pokeyPotScanStartCycle = ctx.cycleCounter;
-      io.pokeyPotAllPot = 0xff;
+      io.pokeyPotScanLastCycle = ctx.cycleCounter;
+      io.pokeyPotScanTerminalCycle = CYCLE_NEVER;
+      io.pokeyPotCounter = 0;
       io.pokeyPotLatched.fill(0);
 
-      // Reset visible pot counters (read-side).
       for (let i = 0; i < 8; i++) ctx.ram[(IO_AUDF1_POT0 + i) & 0xffff] = 0x00;
       ctx.ram[IO_AUDCTL_ALLPOT] = 0xff;
     }
@@ -941,37 +1011,37 @@
       const io = ctx.ioData;
       if (!io || !io.pokeyPotScanActive) return;
 
-      let elapsed = ctx.cycleCounter - io.pokeyPotScanStartCycle;
-      if (elapsed < 0) elapsed = 0;
-      let count = Math.floor(elapsed / POKEY_POT_CYCLES_PER_COUNT);
-      if (count > 255) count = 255;
+      const now = ctx.cycleCounter;
+      if (now < io.pokeyPotScanLastCycle) io.pokeyPotScanLastCycle = now;
 
-      let allpot = io.pokeyPotAllPot & 0xff;
-      let anyPending = 0;
-
-      for (let p = 0; p < 8; p++) {
-        if (io.pokeyPotLatched[p]) continue;
-        anyPending = 1;
-
-        let target = io.pokeyPotValues[p] & 0xff;
-        if (target > POKEY_POT_MAX) target = POKEY_POT_MAX;
-
-        if (count >= target) {
-          io.pokeyPotLatched[p] = 1;
-          ctx.ram[(IO_AUDF1_POT0 + p) & 0xffff] = target & 0xff;
-          allpot &= ~(1 << p);
-        } else {
-          let cur = count;
-          if (cur > POKEY_POT_MAX) cur = POKEY_POT_MAX;
-          ctx.ram[(IO_AUDF1_POT0 + p) & 0xffff] = cur & 0xff;
+      if (io.pokeyPotScanTerminalCycle === CYCLE_NEVER) {
+        const stepCycles = pokeyPotStepCycles(ctx);
+        if (stepCycles > 0) {
+          const terminal = pokeyPotTerminalCount(ctx);
+          const elapsed = now - io.pokeyPotScanLastCycle;
+          const steps = Math.floor(elapsed / stepCycles);
+          const stepsToTerminal = terminal - (io.pokeyPotCounter & 0xff);
+          if (steps > 0) {
+            if (steps >= stepsToTerminal) {
+              io.pokeyPotCounter = terminal & 0xff;
+              io.pokeyPotScanLastCycle += stepsToTerminal * stepCycles;
+              io.pokeyPotScanTerminalCycle = io.pokeyPotScanLastCycle;
+            } else {
+              io.pokeyPotCounter = ((io.pokeyPotCounter & 0xff) + steps) & 0xff;
+              io.pokeyPotScanLastCycle += steps * stepCycles;
+            }
+          }
         }
       }
 
-      io.pokeyPotAllPot = allpot & 0xff;
-      ctx.ram[IO_AUDCTL_ALLPOT] = io.pokeyPotAllPot;
+      pokeyPotRefreshReadRegisters(ctx);
 
-      if (!anyPending || (io.pokeyPotAllPot & 0xff) === 0)
-        {io.pokeyPotScanActive = false;}
+      if (
+        io.pokeyPotScanTerminalCycle !== CYCLE_NEVER &&
+        now > io.pokeyPotScanTerminalCycle
+      ) {
+        pokeyPotFinishScan(ctx);
+      }
     }
 
     function pokeyTimerPeriodCpuCycles(ctx, timer) {
@@ -1051,6 +1121,7 @@
       sync: pokeyAudioSync,
       consume: pokeyAudioConsume,
       syncLfsr17: pokeySyncLfsr17,
+      potPrepareSkctlWrite: pokeyPotPrepareSkctlWrite,
       potStartScan: pokeyPotStartScan,
       potUpdate: pokeyPotUpdate,
       timerPeriodCpuCycles: pokeyTimerPeriodCpuCycles,

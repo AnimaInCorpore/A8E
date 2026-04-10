@@ -4,11 +4,12 @@
   function createApi(cfg) {
     const CPU = cfg.CPU;
     const CYCLE_NEVER = cfg.CYCLE_NEVER;
+    const CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
     const IO_INIT_VALUES = cfg.IO_INIT_VALUES;
 
     function makeIoData(video) {
       const potValues = new Uint8Array(8);
-      for (let p = 0; p < 8; p++) potValues[p] = 228;
+      for (let p = 0; p < 8; p++) potValues[p] = 229;
       return {
         video: {
           verticalScrollOffset: 0,
@@ -41,11 +42,12 @@
         // POKEY-ish randomness state (LFSR)
         pokeyLfsr17: 0x1ffff,
         pokeyLfsr17LastCycle: 0,
-        // POKEY pot scan (POT0..POT7 / ALLPOT) -- minimal but time-based.
+        // POKEY pot scan (POT0..POT7 / ALLPOT).
         pokeyPotValues: potValues,
         pokeyPotLatched: new Uint8Array(8),
-        pokeyPotAllPot: 0xff,
-        pokeyPotScanStartCycle: 0,
+        pokeyPotScanLastCycle: 0,
+        pokeyPotScanTerminalCycle: CYCLE_NEVER,
+        pokeyPotCounter: 0,
         pokeyPotScanActive: false,
         // Raw trigger inputs (1=released, 0=pressed) and GTIA-latched view.
         trigPhysical: new Uint8Array([1, 1, 1, 1]),
@@ -56,6 +58,11 @@
         rowDisplayMemoryAddress: 0,
         displayMemoryAddress: 0,
         firstRowScanline: false,
+        nmiTiming: {
+          enabledByCycle7: 0,
+          enabledByCycle8: 0,
+          enabledOnCycle7Mask: 0,
+        },
         chbaseTiming: {
           rawValue: 0,
           activeValue: 0,
@@ -71,6 +78,15 @@
           refreshDmaPending: 0,
           displayListInstructionDmaPending: 0,
           displayListAddressDmaRemaining: 0,
+          playerMissileClockActive: false,
+          playerMissileInterleaved: false,
+          pmgFirstVisibleSpan: true,
+          playerPmgShift: new Uint8Array(4),
+          playerPmgState: new Uint8Array(4),
+          missilePmgShift: new Uint8Array(4),
+          missilePmgState: new Uint8Array(4),
+          playfieldLineBuffer: new Uint8Array(48),
+          scheduledPlayfieldDma: new Uint8Array(CYCLES_PER_LINE),
         },
         keyPressCounter: 0,
         // Shim from the C version: optionally force OPTION held during the OS boot check

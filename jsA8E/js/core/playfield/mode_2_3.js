@@ -27,9 +27,40 @@
     const clockAction = cfg.clockAction;
     const fetchCharacterRow8 = cfg.fetchCharacterRow8;
     const fetchCharacterRow10 = cfg.fetchCharacterRow10;
+    const useDeferredCharacterFetch =
+      typeof cfg.fetchUnbufferedDisplayByte === "function";
     const stealDma = cfg.stealDma || function (ctx, cycles) {
       ctx.cycleCounter += cycles | 0;
     };
+    const fetchBufferedDisplayByte =
+      cfg.fetchBufferedDisplayByte ||
+      function (ctx, bufferIndex, address) {
+        void bufferIndex;
+        if (ctx.ioData.firstRowScanline) stealDma(ctx, 1);
+        return ctx.ram[address & 0xffff] & 0xff;
+      };
+    const fetchUnbufferedDisplayByte =
+      cfg.fetchUnbufferedDisplayByte ||
+      function (ctx, address) {
+        stealDma(ctx, 1);
+        return ctx.ram[address & 0xffff] & 0xff;
+      };
+
+    function resolveCharacterRow8(row, chactl) {
+      const glyphRow = row & 0xff;
+      if (glyphRow >= 8) return -1;
+      if ((chactl & 0x04) === 0) return glyphRow;
+      return 7 - glyphRow;
+    }
+
+    function resolveCharacterRow10(ch, row, chactl) {
+      const glyphRow = row & 0xff;
+      if (ch < 0x60) return resolveCharacterRow8(glyphRow, chactl);
+      if (glyphRow < 2) return -1;
+      if (glyphRow < 8) return resolveCharacterRow8(glyphRow, chactl);
+      if (glyphRow < 10) return resolveCharacterRow8(glyphRow - 8, chactl);
+      return -1;
+    }
 
     function writeBackgroundQuad(dst, prio, dstIndex, color) {
       dst[dstIndex] = color; prio[dstIndex++] = PRIO_BKG;
@@ -55,28 +86,39 @@
       let dstIndex = io.drawLine.destIndex | 0;
       let dispAddr = io.drawLine.displayMemoryAddress & 0xffff;
       const colorTable = SCRATCH_GTIA_COLOR_TABLE;
+      const chactl = sram[IO_CHACTL] & 0x07;
 
       let mask = 0x00;
       let data = 0;
       let inverse = false;
+      let bufferIndex = 0;
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         const chBase = ((currentCharacterBaseRegister(io, sram) << 8) & 0xfc00) & 0xffff;
         const priorMode = (sram[IO_PRIOR] >> 6) & 3;
-        const chactl = sram[IO_CHACTL] & 0x07;
 
         if (mask === 0x00) {
-          const decoded = decodeTextModeCharacter(ram[dispAddr] & 0xff, chactl);
+          const displayByte = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
+          const decoded = decodeTextModeCharacter(displayByte & 0xff, chactl);
           const ch = decoded & 0xff;
           inverse = (decoded & 0x100) !== 0;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          stealDma(ctx, 1);
-
-          if (io.firstRowScanline) {
+          const glyphRow =
+            fetchCharacterRow === fetchCharacterRow10
+              ? resolveCharacterRow10(ch, vScrollOffset, chactl)
+              : resolveCharacterRow8(vScrollOffset, chactl);
+          if (glyphRow >= 0 && useDeferredCharacterFetch) {
+            data = fetchUnbufferedDisplayByte(
+              ctx,
+              (chBase + ch * 8 + glyphRow) & 0xffff,
+              3,
+            );
+          } else if (glyphRow >= 0) {
             stealDma(ctx, 1);
+            data = fetchCharacterRow(ram, chBase, ch, vScrollOffset, chactl);
+          } else {
+            data = 0;
           }
-
-          data = fetchCharacterRow(ram, chBase, ch, vScrollOffset, chactl);
           mask = 0x80;
         }
 

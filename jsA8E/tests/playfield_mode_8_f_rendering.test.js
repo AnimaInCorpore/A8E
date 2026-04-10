@@ -68,6 +68,7 @@ function createCtx() {
     ram: new Uint8Array(0x10000),
     sram: new Uint8Array(0x10000),
     ioData: {
+      firstRowScanline: false,
       drawLine: {
         bytesPerLine: 1,
         destIndex: 0,
@@ -98,5 +99,26 @@ function testModeFPriorMode0WidthIsNotDoubled() {
   assert.equal(ctx.ioData.videoOut.priority[8], 0xeeee);
 }
 
+function testModeFDmaOnlyOccursOnFirstScanline() {
+  const api = loadMode8FApi();
+
+  const ctxRepeated = createCtx();
+  ctxRepeated.sram[IO_PRIOR] = 0x00;
+  ctxRepeated.ram[0] = 0xff;
+  ctxRepeated.ioData.firstRowScanline = false;
+
+  api.drawLineModeF(ctxRepeated);
+  assert.equal(ctxRepeated.cycleCounter, 0);
+
+  const ctxFirst = createCtx();
+  ctxFirst.sram[IO_PRIOR] = 0x00;
+  ctxFirst.ram[0] = 0xff;
+  ctxFirst.ioData.firstRowScanline = true;
+
+  api.drawLineModeF(ctxFirst);
+  assert.equal(ctxFirst.cycleCounter, 1);
+}
+
 testModeFPriorMode0WidthIsNotDoubled();
+testModeFDmaOnlyOccursOnFirstScanline();
 console.log("playfield_mode_8_f_rendering tests passed");

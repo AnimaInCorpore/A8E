@@ -91,6 +91,13 @@ typedef struct
 	u8 cRefreshDmaPending;
 	u8 cDisplayListInstructionDmaPending;
 	u8 cDisplayListAddressDmaRemaining;
+	u8 cPmgFirstVisibleSpan;
+	u8 aPlayerPmgShift[4];
+	u8 aPlayerPmgState[4];
+	u8 aMissilePmgShift[4];
+	u8 aMissilePmgState[4];
+	u8 aPlayfieldLineBuffer[48];
+	u8 aScheduledPlayfieldDma[CYCLES_PER_LINE];
 } DrawLineData_t;
 
 typedef struct
@@ -105,6 +112,9 @@ typedef struct
 	u64 llTimer2Cycle;
 	u64 llTimer4Cycle;
 	u8 bInDrawLine;
+	u8 cNmienEnabledByCycle7;
+	u8 cNmienEnabledByCycle8;
+	u8 cNmienEnabledOnCycle7Mask;
 
 	void *pPokey;
 
@@ -125,10 +135,11 @@ typedef struct
 
 	/* POKEY pot scan state */
 	u8 cPotScanActive;
-	u64 llPotScanStartCycle;
+	u64 llPotScanLastCycle;
+	u64 llPotScanTerminalCycle;
+	u8 cPotScanCounter;
 	u8 aPotValues[8]; /* target values per pot (set by input layer) */
 	u8 aPotLatched[8]; /* 1 = latched at target */
-	u8 cAllPot; /* ALLPOT shadow (bits clear when pot latched) */
 
 	u8 *pDisk1;
 	u32 lDiskSize;
@@ -144,6 +155,18 @@ void AtariIoClose(_6502_Context_t *pContext);
 
 void AtariIoCycleTimedEventUpdate(_6502_Context_t *pContext);
 void AtariIoStatus(_6502_Context_t *pContext);
+
+#ifdef A8E_ENABLE_TEST_PROBES
+void AtariIoTimingProbeStepClock(_6502_Context_t *pContext);
+u8 AtariIoTimingProbeFetchBufferedDisplayByte(
+	_6502_Context_t *pContext,
+	u8 cBufferIndex,
+	u32 lCycleOffset);
+u8 AtariIoTimingProbeFetchUnbufferedDisplayByte(
+	_6502_Context_t *pContext,
+	u16 sAddress,
+	u32 lCycleOffset);
+#endif
 
 void AtariIoDrawScreen(
 	_6502_Context_t *pContext,

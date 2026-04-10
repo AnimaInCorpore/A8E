@@ -786,6 +786,7 @@
 
   function createApi(cfg) {
     const CPU = cfg.CPU;
+    const CYCLE_NEVER = cfg.CYCLE_NEVER;
     const IO_PORTB = cfg.IO_PORTB;
     const DEFAULT_PORTB =
       typeof cfg.DEFAULT_PORTB === "number" ? sanitizePortB(cfg.DEFAULT_PORTB) : 0xff;
@@ -829,51 +830,53 @@
         delete target.disk1Name;
       }
 
-      function migrateLegacyDisk1(source) {
+      function migrateLegacyDisk1(source, media) {
         if (!source || !source.disk1 || !source.disk1.length) return false;
-        if (machine.media.diskImages.length > 0) return false;
+        if (media.diskImages.length > 0) return false;
         const legacyBytes = source.disk1;
         const image = createDiskImage(legacyBytes, source.disk1Name || "disk.atr");
         const legacySize = source.disk1Size | 0;
         if (legacySize > 0 && legacySize <= legacyBytes.length)
           {image.size = legacySize;}
-        const imageIndex = machine.media.diskImages.length | 0;
-        machine.media.diskImages.push(image);
-        if ((machine.media.deviceSlots[0] | 0) === NO_IMAGE_MOUNTED) {
-          machine.media.deviceSlots[0] = imageIndex;
+        const imageIndex = media.diskImages.length | 0;
+        media.diskImages.push(image);
+        if ((media.deviceSlots[0] | 0) === NO_IMAGE_MOUNTED) {
+          media.deviceSlots[0] = imageIndex;
         }
         return true;
       }
 
-      function ensureMediaLayout() {
-        if (!machine.media) machine.media = {};
+      function getMediaState() {
+        const media = machine.media || (machine.media = {});
         if (
-          !(machine.media.deviceSlots instanceof Int16Array) ||
-          machine.media.deviceSlots.length !== DEVICE_SLOT_COUNT
+          !(media.deviceSlots instanceof Int16Array) ||
+          media.deviceSlots.length !== DEVICE_SLOT_COUNT
         )
-          {machine.media.deviceSlots = makeDefaultDeviceSlots();}
-        if (!Array.isArray(machine.media.diskImages)) machine.media.diskImages = [];
+          {media.deviceSlots = makeDefaultDeviceSlots();}
+        if (!Array.isArray(media.diskImages)) media.diskImages = [];
 
         // One-time compatibility migration from legacy disk1 fields.
-        let migrated = migrateLegacyDisk1(machine.media);
+        let migrated = migrateLegacyDisk1(media, media);
         if (
           !migrated &&
           machine.ctx &&
           machine.ctx.ioData &&
-          machine.ctx.ioData !== machine.media
+          machine.ctx.ioData !== media
         ) {
-          migrated = migrateLegacyDisk1(machine.ctx.ioData);
+          migrated = migrateLegacyDisk1(machine.ctx.ioData, media);
         }
         // Always drop legacy fields after optional migration to avoid stale state.
-        clearLegacyDisk1Fields(machine.media);
+        clearLegacyDisk1Fields(media);
         if (machine.ctx && machine.ctx.ioData)
           {clearLegacyDisk1Fields(machine.ctx.ioData);}
+        return media;
       }
 
       function getDiskImageByIndex(imageIndex) {
+        const media = getMediaState();
         const idx = imageIndex | 0;
-        if (idx < 0 || idx >= machine.media.diskImages.length) return null;
-        const image = machine.media.diskImages[idx];
+        if (idx < 0 || idx >= media.diskImages.length) return null;
+        const image = media.diskImages[idx];
         if (!image || !image.bytes) return null;
         return image;
       }
@@ -883,27 +886,27 @@
         return !!getDiskImageByIndex(imageIndex);
       }
 
-      function storeDiskImage(bytes, name, preferredIndex) {
+      function storeDiskImage(media, bytes, name, preferredIndex) {
         const image = createDiskImage(bytes, name || "disk.atr");
         if (isValidImageIndex(preferredIndex)) {
           const preferred = preferredIndex | 0;
-          machine.media.diskImages[preferred] = image;
+          media.diskImages[preferred] = image;
           return preferred;
         }
-        const imageIndex = machine.media.diskImages.length | 0;
-        machine.media.diskImages.push(image);
+        const imageIndex = media.diskImages.length | 0;
+        media.diskImages.push(image);
         return imageIndex;
       }
 
       function copyMediaToIoData() {
         const io = machine.ctx.ioData;
-        ensureMediaLayout();
-        io.deviceSlots = machine.media.deviceSlots;
-        io.diskImages = machine.media.diskImages;
-        io.basicRom = machine.media.basicRom;
-        io.osRom = machine.media.osRom;
-        io.selfTestRom = machine.media.selfTestRom;
-        io.floatingPointRom = machine.media.floatingPointRom;
+        const media = getMediaState();
+        io.deviceSlots = media.deviceSlots;
+        io.diskImages = media.diskImages;
+        io.basicRom = media.basicRom;
+        io.osRom = media.osRom;
+        io.selfTestRom = media.selfTestRom;
+        io.floatingPointRom = media.floatingPointRom;
       }
 
       function createDiskImage(bytes, name) {
@@ -917,11 +920,12 @@
       }
 
       function getMediaStateForXex() {
+        const media = getMediaState();
         return {
-          basicRomLoaded: !!machine.media.basicRom,
-          osRomLoaded: !!machine.media.osRom,
-          floatingPointRomLoaded: !!machine.media.floatingPointRom,
-          selfTestRomLoaded: !!machine.media.selfTestRom,
+          basicRomLoaded: !!media.basicRom,
+          osRomLoaded: !!media.osRom,
+          floatingPointRomLoaded: !!media.floatingPointRom,
+          selfTestRomLoaded: !!media.selfTestRom,
         };
       }
 
@@ -976,9 +980,9 @@
         deviceSlotIndex,
         options,
       ) {
-        ensureMediaLayout();
+        const media = getMediaState();
         const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
-        const deviceImageIndex = machine.media.deviceSlots[deviceSlot] | 0;
+        const deviceImageIndex = media.deviceSlots[deviceSlot] | 0;
         const preferredImageIndex = isValidImageIndex(deviceImageIndex)
           ? deviceImageIndex
           : NO_IMAGE_MOUNTED;
@@ -988,11 +992,12 @@
           options || null,
         );
         const imageIndex = storeDiskImage(
+          media,
           prepared.bytes,
           name,
           preferredImageIndex,
         );
-        machine.media.deviceSlots[deviceSlot] = imageIndex;
+        media.deviceSlots[deviceSlot] = imageIndex;
         copyMediaToIoData();
         return {
           imageIndex: imageIndex,
@@ -1101,7 +1106,7 @@
       }
 
       function hardReset(options) {
-        ensureMediaLayout();
+        getMediaState();
         machine.ctx.cycleCounter = 0;
         machine.ctx.stallCycleCounter = 0;
         machine.ctx.nmiPending = 0;
@@ -1139,6 +1144,7 @@
       }
 
       function loadOsRom(arrayBuffer) {
+        const media = getMediaState();
         const bytes = new Uint8Array(arrayBuffer);
         if (bytes.length !== 0x4000) {
           throw new Error(
@@ -1149,29 +1155,30 @@
         // 0x0000-0x0FFF => $C000-$CFFF
         // 0x1000-0x17FF => self-test => $5000-$57FF (if enabled)
         // 0x1800-0x3FFF => floating point => $D800-$FFFF
-        machine.media.osRom = new Uint8Array(bytes.subarray(0x0000, 0x1000));
-        machine.media.selfTestRom = new Uint8Array(
+        media.osRom = new Uint8Array(bytes.subarray(0x0000, 0x1000));
+        media.selfTestRom = new Uint8Array(
           bytes.subarray(0x1000, 0x1800),
         );
-        machine.media.floatingPointRom = new Uint8Array(
+        media.floatingPointRom = new Uint8Array(
           bytes.subarray(0x1800, 0x4000),
         );
-        machine.ctx.ioData.osRom = machine.media.osRom;
-        machine.ctx.ioData.selfTestRom = machine.media.selfTestRom;
-        machine.ctx.ioData.floatingPointRom = machine.media.floatingPointRom;
+        machine.ctx.ioData.osRom = media.osRom;
+        machine.ctx.ioData.selfTestRom = media.selfTestRom;
+        machine.ctx.ioData.floatingPointRom = media.floatingPointRom;
         machine.osRomLoaded = true;
         setupMemoryMap();
       }
 
       function loadBasicRom(arrayBuffer) {
+        const media = getMediaState();
         const bytes = new Uint8Array(arrayBuffer);
         if (bytes.length !== 0x2000) {
           throw new Error(
             "ATARIBAS.ROM must be 8KB (0x2000), got " + bytes.length,
           );
         }
-        machine.media.basicRom = new Uint8Array(bytes);
-        machine.ctx.ioData.basicRom = machine.media.basicRom;
+        media.basicRom = new Uint8Array(bytes);
+        machine.ctx.ioData.basicRom = media.basicRom;
         machine.basicRomLoaded = true;
         setupMemoryMap();
       }
@@ -1186,31 +1193,31 @@
       }
 
       function mountImageToDeviceSlot(imageIndex, deviceSlotIndex) {
-        ensureMediaLayout();
+        const media = getMediaState();
         const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
         const idx = imageIndex | 0;
         if (idx === NO_IMAGE_MOUNTED) {
-          machine.media.deviceSlots[deviceSlot] = NO_IMAGE_MOUNTED;
+          media.deviceSlots[deviceSlot] = NO_IMAGE_MOUNTED;
           copyMediaToIoData();
           return;
         }
         const image = getDiskImageByIndex(idx);
         if (!image) throw new Error("Disk image index out of range: " + idx);
-        machine.media.deviceSlots[deviceSlot] = idx;
+        media.deviceSlots[deviceSlot] = idx;
         copyMediaToIoData();
       }
 
       function unmountDeviceSlot(deviceSlotIndex) {
-        ensureMediaLayout();
+        const media = getMediaState();
         const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
-        machine.media.deviceSlots[deviceSlot] = NO_IMAGE_MOUNTED;
+        media.deviceSlots[deviceSlot] = NO_IMAGE_MOUNTED;
         copyMediaToIoData();
       }
 
       function getMountedDiskForDeviceSlot(deviceSlotIndex) {
-        ensureMediaLayout();
+        const media = getMediaState();
         const deviceSlot = normalizeDeviceSlotIndex(deviceSlotIndex);
-        const imageIndex = machine.media.deviceSlots[deviceSlot] | 0;
+        const imageIndex = media.deviceSlots[deviceSlot] | 0;
         if (imageIndex === NO_IMAGE_MOUNTED) return null;
         const image = getDiskImageByIndex(imageIndex);
         if (!image) return null;
@@ -1279,6 +1286,7 @@
       }
 
       function getBankState() {
+        const media = getMediaState();
         const portB = machine.ctx.sram[IO_PORTB] & 0xff;
         return {
           portB: portB,
@@ -1286,10 +1294,10 @@
           osEnabled: (portB & 0x01) !== 0,
           floatingPointEnabled: (portB & 0x01) !== 0,
           selfTestEnabled: (portB & 0x80) === 0,
-          basicRomLoaded: !!machine.media.basicRom,
-          osRomLoaded: !!machine.media.osRom,
-          floatingPointRomLoaded: !!machine.media.floatingPointRom,
-          selfTestRomLoaded: !!machine.media.selfTestRom,
+          basicRomLoaded: !!media.basicRom,
+          osRomLoaded: !!media.osRom,
+          floatingPointRomLoaded: !!media.floatingPointRom,
+          selfTestRomLoaded: !!media.selfTestRom,
         };
       }
 
@@ -1334,8 +1342,9 @@
           pokeyLfsr17LastCycle: io.pokeyLfsr17LastCycle,
           pokeyPotValues: new Uint8Array(io.pokeyPotValues || 0),
           pokeyPotLatched: new Uint8Array(io.pokeyPotLatched || 0),
-          pokeyPotAllPot: io.pokeyPotAllPot | 0,
-          pokeyPotScanStartCycle: io.pokeyPotScanStartCycle,
+          pokeyPotScanLastCycle: io.pokeyPotScanLastCycle,
+          pokeyPotScanTerminalCycle: io.pokeyPotScanTerminalCycle,
+          pokeyPotCounter: io.pokeyPotCounter | 0,
           pokeyPotScanActive: !!io.pokeyPotScanActive,
           trigPhysical: new Uint8Array(io.trigPhysical || 0),
           trigLatched: new Uint8Array(io.trigLatched || 0),
@@ -1345,6 +1354,13 @@
           rowDisplayMemoryAddress: io.rowDisplayMemoryAddress | 0,
           displayMemoryAddress: io.displayMemoryAddress | 0,
           firstRowScanline: !!io.firstRowScanline,
+          nmiTiming: io.nmiTiming
+            ? {
+                enabledByCycle7: io.nmiTiming.enabledByCycle7 | 0,
+                enabledByCycle8: io.nmiTiming.enabledByCycle8 | 0,
+                enabledOnCycle7Mask: io.nmiTiming.enabledOnCycle7Mask | 0,
+              }
+            : null,
           chbaseTiming: io.chbaseTiming
             ? {
                 rawValue: io.chbaseTiming.rawValue | 0,
@@ -1365,6 +1381,15 @@
                   io.drawLine.displayListInstructionDmaPending | 0,
                 displayListAddressDmaRemaining:
                   io.drawLine.displayListAddressDmaRemaining | 0,
+                playerMissileClockActive: !!io.drawLine.playerMissileClockActive,
+                playerMissileInterleaved: !!io.drawLine.playerMissileInterleaved,
+                pmgFirstVisibleSpan: !!io.drawLine.pmgFirstVisibleSpan,
+                playerPmgShift: new Uint8Array(io.drawLine.playerPmgShift || 0),
+                playerPmgState: new Uint8Array(io.drawLine.playerPmgState || 0),
+                missilePmgShift: new Uint8Array(io.drawLine.missilePmgShift || 0),
+                missilePmgState: new Uint8Array(io.drawLine.missilePmgState || 0),
+                playfieldLineBuffer: new Uint8Array(io.drawLine.playfieldLineBuffer || 0),
+                scheduledPlayfieldDma: new Uint8Array(io.drawLine.scheduledPlayfieldDma || 0),
               }
             : null,
           keyPressCounter: io.keyPressCounter | 0,
@@ -1406,8 +1431,19 @@
         io.pokeyLfsr17LastCycle = state.pokeyLfsr17LastCycle;
         copyBytesTo(io.pokeyPotValues, state.pokeyPotValues);
         copyBytesTo(io.pokeyPotLatched, state.pokeyPotLatched);
-        io.pokeyPotAllPot = state.pokeyPotAllPot | 0;
-        io.pokeyPotScanStartCycle = state.pokeyPotScanStartCycle;
+        const legacyPokeyPotScanStartCycle =
+          typeof state.pokeyPotScanStartCycle === "number"
+            ? state.pokeyPotScanStartCycle
+            : 0;
+        io.pokeyPotScanLastCycle =
+          typeof state.pokeyPotScanLastCycle === "number"
+            ? state.pokeyPotScanLastCycle
+            : legacyPokeyPotScanStartCycle;
+        io.pokeyPotScanTerminalCycle =
+          typeof state.pokeyPotScanTerminalCycle === "number"
+            ? state.pokeyPotScanTerminalCycle
+            : CYCLE_NEVER;
+        io.pokeyPotCounter = state.pokeyPotCounter | 0;
         io.pokeyPotScanActive = !!state.pokeyPotScanActive;
         copyBytesTo(io.trigPhysical, state.trigPhysical);
         copyBytesTo(io.trigLatched, state.trigLatched);
@@ -1417,6 +1453,12 @@
         io.rowDisplayMemoryAddress = state.rowDisplayMemoryAddress | 0;
         io.displayMemoryAddress = state.displayMemoryAddress | 0;
         io.firstRowScanline = !!state.firstRowScanline;
+        if (state.nmiTiming && typeof state.nmiTiming === "object") {
+          io.nmiTiming.enabledByCycle7 = state.nmiTiming.enabledByCycle7 | 0;
+          io.nmiTiming.enabledByCycle8 = state.nmiTiming.enabledByCycle8 | 0;
+          io.nmiTiming.enabledOnCycle7Mask =
+            state.nmiTiming.enabledOnCycle7Mask | 0;
+        }
         if (state.chbaseTiming && typeof state.chbaseTiming === "object") {
           io.chbaseTiming.rawValue = state.chbaseTiming.rawValue | 0;
           io.chbaseTiming.activeValue = state.chbaseTiming.activeValue | 0;
@@ -1436,6 +1478,23 @@
             state.drawLine.displayListInstructionDmaPending | 0;
           io.drawLine.displayListAddressDmaRemaining =
             state.drawLine.displayListAddressDmaRemaining | 0;
+          io.drawLine.playerMissileClockActive = !!state.drawLine.playerMissileClockActive;
+          io.drawLine.playerMissileInterleaved = !!state.drawLine.playerMissileInterleaved;
+          io.drawLine.pmgFirstVisibleSpan = !!state.drawLine.pmgFirstVisibleSpan;
+          if (state.drawLine.playerPmgShift) {
+            io.drawLine.playerPmgShift = new Uint8Array(state.drawLine.playerPmgShift);
+          }
+          if (state.drawLine.playerPmgState) {
+            io.drawLine.playerPmgState = new Uint8Array(state.drawLine.playerPmgState);
+          }
+          if (state.drawLine.missilePmgShift) {
+            io.drawLine.missilePmgShift = new Uint8Array(state.drawLine.missilePmgShift);
+          }
+          if (state.drawLine.missilePmgState) {
+            io.drawLine.missilePmgState = new Uint8Array(state.drawLine.missilePmgState);
+          }
+          copyBytesTo(io.drawLine.playfieldLineBuffer, state.drawLine.playfieldLineBuffer);
+          copyBytesTo(io.drawLine.scheduledPlayfieldDma, state.drawLine.scheduledPlayfieldDma);
         }
         io.keyPressCounter = state.keyPressCounter | 0;
         io.optionOnStart = !!state.optionOnStart;
@@ -1444,10 +1503,10 @@
       }
 
       function cloneMediaState() {
-        ensureMediaLayout();
+        const media = getMediaState();
         return {
-          deviceSlots: Array.from(machine.media.deviceSlots || []),
-          diskImages: machine.media.diskImages.map(function (image) {
+          deviceSlots: Array.from(media.deviceSlots || []),
+          diskImages: media.diskImages.map(function (image) {
             return {
               id: image.id ? String(image.id) : "",
               name: image.name ? String(image.name) : "disk.atr",
@@ -1456,13 +1515,13 @@
               bytes: new Uint8Array(image.bytes || 0),
             };
           }),
-          basicRom: machine.media.basicRom ? new Uint8Array(machine.media.basicRom) : null,
-          osRom: machine.media.osRom ? new Uint8Array(machine.media.osRom) : null,
-          selfTestRom: machine.media.selfTestRom
-            ? new Uint8Array(machine.media.selfTestRom)
+          basicRom: media.basicRom ? new Uint8Array(media.basicRom) : null,
+          osRom: media.osRom ? new Uint8Array(media.osRom) : null,
+          selfTestRom: media.selfTestRom
+            ? new Uint8Array(media.selfTestRom)
             : null,
-          floatingPointRom: machine.media.floatingPointRom
-            ? new Uint8Array(machine.media.floatingPointRom)
+          floatingPointRom: media.floatingPointRom
+            ? new Uint8Array(media.floatingPointRom)
             : null,
         };
       }
@@ -1501,7 +1560,7 @@
       }
 
       function exportSnapshotState() {
-        ensureMediaLayout();
+        getMediaState();
         return {
           ram: new Uint8Array(machine.ctx.ram),
           sram: new Uint8Array(machine.ctx.sram),
