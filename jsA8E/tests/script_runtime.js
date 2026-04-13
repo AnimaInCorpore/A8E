@@ -44,7 +44,6 @@ function resolveRomPath(filename) {
 function resolveRoms() {
   return {
     os: resolveRomPath("ATARIXL.ROM"),
-    basic: resolveRomPath("ATARIBAS.ROM"),
   };
 }
 
