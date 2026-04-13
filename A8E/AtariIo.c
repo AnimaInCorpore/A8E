@@ -45,7 +45,7 @@
 ********************************************************************/
 
 #define CLIP(a) MAX(0, MIN(255, a))
-#define DLI_HORIZONTAL_OFFSET 8u
+#define DLI_HORIZONTAL_OFFSET 7u
 
 typedef struct
 {
@@ -5104,33 +5104,37 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 
 	if(llBeamCycle >= pIoData->llDliCycle)
 	{
-		NmiSourceTiming_t tDliTiming =
-			AtariIoCurrentLineNmiSourceState(pIoData, NMI_DLI);
 #ifdef VERBOSE_DL
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" DL: %3lu DLI\n", pIoData->tVideoData.lCurrentDisplayLine);
 #endif
-		/* NMIST reflects pending NMIs even if disabled in NMIEN. */
+		/* NMIST is set at cycle 7 unconditionally (AHRM 4.8). */
 		/* DLI/VBI status bits are mutually exclusive. */
 		RAM[IO_NMIRES_NMIST] &= ~NMI_VBI;
 		RAM[IO_NMIRES_NMIST] |= NMI_DLI;
 
-		if(tDliTiming.cEnabled)
+		if(llBeamCycle > pIoData->llDliCycle)
 		{
-			if(tDliTiming.cDelayOneCycle && llBeamCycle == pIoData->llDliCycle)
+			/* NMI fires at cycle 8 (one cycle after NMIST at cycle 7). */
+			NmiSourceTiming_t tDliTiming =
+				AtariIoCurrentLineNmiSourceState(pIoData, NMI_DLI);
+			if(tDliTiming.cEnabled)
 			{
-				pIoData->cNmienEnabledOnCycle7Mask &= (u8)~NMI_DLI;
-				pIoData->llDliCycle = llBeamCycle + 1;
+				if(tDliTiming.cDelayOneCycle && llBeamCycle == pIoData->llDliCycle + 1)
+				{
+					pIoData->cNmienEnabledOnCycle7Mask &= (u8)~NMI_DLI;
+					pIoData->llDliCycle = llBeamCycle; /* reschedule: NMI fires at llBeamCycle+1 */
+				}
+				else
+				{
+					_6502_Nmi(pContext);
+					pIoData->llDliCycle = CYCLE_NEVER;
+				}
 			}
 			else
 			{
-				_6502_Nmi(pContext);
 				pIoData->llDliCycle = CYCLE_NEVER;
 			}
-		}
-		else
-		{
-			pIoData->llDliCycle = CYCLE_NEVER;
 		}
 	}
 

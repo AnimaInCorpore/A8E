@@ -66,7 +66,7 @@
     const fillBkgPf012ColorTable = cfg.fillBkgPf012ColorTable;
     const decodeTextModeCharacter = cfg.decodeTextModeCharacter;
     const fillLine = cfg.fillLine;
-    const DLI_HORIZONTAL_OFFSET = 8;
+    const DLI_HORIZONTAL_OFFSET = 7;
     // ANTIC display list command bits
     const ANTIC_DLI_BIT = 0x80;
     const ANTIC_LMS_BIT = 0x40;
@@ -340,19 +340,24 @@
       const beamEff = io.clock;
 
       if (beamEff >= io.dliCycle) {
-        const dliTiming = currentLineNmiState(io, NMI_DLI);
+        // NMIST is set at cycle 7 unconditionally (AHRM 4.8)
         ram[IO_NMIRES_NMIST] &= ~NMI_VBI;
         ram[IO_NMIRES_NMIST] |= NMI_DLI;
-        if (dliTiming.enabled) {
-          if (dliTiming.delayOneCycle && beamEff === io.dliCycle) {
-            io.nmiTiming.enabledOnCycle7Mask &= ~NMI_DLI;
-            io.dliCycle = beamEff + 1;
+
+        if (beamEff > io.dliCycle) {
+          // NMI fires at cycle 8 (one cycle after NMIST at cycle 7)
+          const dliTiming = currentLineNmiState(io, NMI_DLI);
+          if (dliTiming.enabled) {
+            if (dliTiming.delayOneCycle && beamEff === io.dliCycle + 1) {
+              io.nmiTiming.enabledOnCycle7Mask &= ~NMI_DLI;
+              io.dliCycle = beamEff; // reschedule: NMI fires at beamEff+1
+            } else {
+              CPU.nmi(ctx);
+              io.dliCycle = CYCLE_NEVER;
+            }
           } else {
-            CPU.nmi(ctx);
             io.dliCycle = CYCLE_NEVER;
           }
-        } else {
-          io.dliCycle = CYCLE_NEVER;
         }
       }
 

@@ -208,7 +208,7 @@ function testJvbWithDliUsesWaitForVblSemantics() {
   assert.equal(ctx.ioData.displayListAddress, 0x1234);
   assert.equal(ctx.ioData.nextDisplayListLine, 8);
   assert.equal(ctx.ioData.displayListFetchCycle, CYCLES_PER_LINE);
-  assert.equal(ctx.ioData.dliCycle, CYCLES_PER_LINE + 8);
+  assert.equal(ctx.ioData.dliCycle, CYCLES_PER_LINE + 7);
 }
 
 function testNmistDliPersistsOutsideVblank() {
@@ -249,23 +249,26 @@ function testNmistDliClearsAtVblankStart() {
   assert.equal(ctx.ram[IO_NMIRES_NMIST] & NMI_DLI, 0);
 }
 
-function testDliTriggersAtCycle8() {
+function testDliNmistAtCycle7NmiAtCycle8() {
+  // AHRM 4.8: NMIST is set on cycle 7; NMI is asserted on cycle 8.
   const { api, cpuLog } = loadAnticApi();
   const ctx = makeContext();
 
   ctx.ioData.displayListFetchCycle = CYCLE_NEVER;
   ctx.ioData.clock = 7;
-  ctx.ioData.dliCycle = 8;
+  ctx.ioData.dliCycle = 7;
   ctx.sram[IO_NMIEN] = NMI_DLI;
   ctx.ioData.nmiTiming.enabledByCycle7 = NMI_DLI;
   ctx.ioData.nmiTiming.enabledByCycle8 = NMI_DLI;
 
   api.ioCycleTimedEvent(ctx);
-  assert.equal(cpuLog.nmiCalls, 0, "DLI should not trigger before cycle 8");
+  assert.equal(cpuLog.nmiCalls, 0, "NMI should not fire on cycle 7 (NMIST set, but NMI waits for cycle 8)");
+  assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_DLI, 0, "NMIST DLI bit should be set at cycle 7");
+  assert.equal(ctx.ioData.dliCycle, 7, "dliCycle should remain 7 until NMI fires at cycle 8");
 
   ctx.ioData.clock = 8;
   api.ioCycleTimedEvent(ctx);
-  assert.equal(cpuLog.nmiCalls, 1, "DLI should trigger on cycle 8");
+  assert.equal(cpuLog.nmiCalls, 1, "NMI should fire on cycle 8");
   assert.equal(ctx.ioData.dliCycle, CYCLE_NEVER);
   assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_DLI, 0);
 }
@@ -291,38 +294,57 @@ function testVbiTriggersAtLine248() {
 }
 
 function testCycle7EnableDelaysDliByOneCycle() {
+  // AHRM 4.8: NMIEN enabled exactly on cycle 7 delays the NMI by one cycle.
+  // With dliCycle=7: NMIST set at cycle 7, NMI would fire at cycle 8.
+  // But enabledOnCycle7Mask causes the NMI-fire phase to be delayed from
+  // cycle 8 to cycle 9. dliCycle is rescheduled to 8 so the NMI fires at 9.
   const { api, cpuLog } = loadAnticApi();
   const ctx = makeContext();
 
   ctx.ioData.displayListFetchCycle = CYCLE_NEVER;
-  ctx.ioData.clock = 8;
-  ctx.ioData.dliCycle = 8;
+  ctx.ioData.clock = 7;
+  ctx.ioData.dliCycle = 7;
   ctx.ioData.nmiTiming.enabledByCycle7 = NMI_DLI;
   ctx.ioData.nmiTiming.enabledByCycle8 = NMI_DLI;
   ctx.ioData.nmiTiming.enabledOnCycle7Mask = NMI_DLI;
 
+  // Cycle 7: NMIST set, no NMI yet
   api.ioCycleTimedEvent(ctx);
-  assert.equal(cpuLog.nmiCalls, 0, "cycle-7 enable should delay DLI by one cycle");
-  assert.equal(ctx.ioData.dliCycle, 9, "DLI should be rescheduled to cycle 9");
+  assert.equal(cpuLog.nmiCalls, 0, "no NMI at cycle 7 (NMIST only)");
+  assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_DLI, 0, "NMIST should be set at cycle 7");
+
+  ctx.ioData.clock = 8;
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 0, "cycle-7 enable should delay NMI from cycle 8 to cycle 9");
+  assert.equal(ctx.ioData.dliCycle, 8, "DLI rescheduled to cycle 8 so NMI fires at cycle 9");
   assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_DLI, 0);
 
   ctx.ioData.clock = 9;
   api.ioCycleTimedEvent(ctx);
-  assert.equal(cpuLog.nmiCalls, 1, "delayed DLI should trigger on cycle 9");
+  assert.equal(cpuLog.nmiCalls, 1, "delayed NMI should fire on cycle 9");
   assert.equal(ctx.ioData.dliCycle, CYCLE_NEVER);
 }
 
 function testCycle8EnableIsTooLateForCurrentDli() {
+  // AHRM 4.8: NMIEN enabled on cycle 8 is too late to trigger the current DLI.
+  // Two-step: cycle 7 sets NMIST (enabled=0 so no NMI path queued),
+  //           cycle 8 fires the NMI phase but enabledByCycle7=0 means no NMI.
   const { api, cpuLog } = loadAnticApi();
   const ctx = makeContext();
 
   ctx.ioData.displayListFetchCycle = CYCLE_NEVER;
-  ctx.ioData.clock = 8;
-  ctx.ioData.dliCycle = 8;
+  ctx.ioData.clock = 7;
+  ctx.ioData.dliCycle = 7;
   ctx.ioData.nmiTiming.enabledByCycle7 = 0;
   ctx.ioData.nmiTiming.enabledByCycle8 = NMI_DLI;
   ctx.ioData.nmiTiming.enabledOnCycle7Mask = 0;
 
+  // Cycle 7: NMIST set, dliCycle stays at 7
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 0, "no NMI at cycle 7");
+  assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_DLI, 0, "NMIST set at cycle 7");
+
+  ctx.ioData.clock = 8;
   api.ioCycleTimedEvent(ctx);
   assert.equal(cpuLog.nmiCalls, 0, "cycle-8 enable should not trigger current-line DLI");
   assert.equal(ctx.ioData.dliCycle, CYCLE_NEVER);
@@ -330,16 +352,24 @@ function testCycle8EnableIsTooLateForCurrentDli() {
 }
 
 function testCycle8DisableSuppressesCurrentDli() {
+  // AHRM 4.8: NMIEN disabled on cycle 8 suppresses the NMI even though
+  // NMIST was set at cycle 7 (enabledByCycle7=NMI_DLI but enabledByCycle8=0).
   const { api, cpuLog } = loadAnticApi();
   const ctx = makeContext();
 
   ctx.ioData.displayListFetchCycle = CYCLE_NEVER;
-  ctx.ioData.clock = 8;
-  ctx.ioData.dliCycle = 8;
+  ctx.ioData.clock = 7;
+  ctx.ioData.dliCycle = 7;
   ctx.ioData.nmiTiming.enabledByCycle7 = NMI_DLI;
   ctx.ioData.nmiTiming.enabledByCycle8 = 0;
   ctx.ioData.nmiTiming.enabledOnCycle7Mask = 0;
 
+  // Cycle 7: NMIST set, dliCycle stays at 7
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 0, "no NMI at cycle 7");
+  assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_DLI, 0, "NMIST set at cycle 7");
+
+  ctx.ioData.clock = 8;
   api.ioCycleTimedEvent(ctx);
   assert.equal(cpuLog.nmiCalls, 0, "cycle-8 disable should suppress current-line DLI");
   assert.equal(ctx.ioData.dliCycle, CYCLE_NEVER);
@@ -349,7 +379,7 @@ function testCycle8DisableSuppressesCurrentDli() {
 testJvbWithDliUsesWaitForVblSemantics();
 testNmistDliPersistsOutsideVblank();
 testNmistDliClearsAtVblankStart();
-testDliTriggersAtCycle8();
+testDliNmistAtCycle7NmiAtCycle8();
 testVbiTriggersAtLine248();
 testCycle7EnableDelaysDliByOneCycle();
 testCycle8EnableIsTooLateForCurrentDli();
