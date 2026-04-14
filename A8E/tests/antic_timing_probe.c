@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 
 #include "6502.h"
@@ -382,7 +381,7 @@ static int TestDliDisableOnCycle8SuppressesCurrentLine(void)
 	return 1;
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
 	int lPassed = 1;
 
