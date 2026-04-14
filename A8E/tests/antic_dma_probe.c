@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 
 #include "6502.h"
