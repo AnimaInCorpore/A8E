@@ -36,7 +36,7 @@ Playfield DMA is scheduled per line cycle (`scheduledPlayfieldDma` array in `dra
 
 ## Character Modes (ANTIC 2–7)
 
-- **CHBASE** (`$D409`): delayed latch in `currentCharacterBaseRegister()` (`renderer_base.js`). When `SRAM[IO_CHBASE]` changes, the new value takes effect 2 clock cycles later, matching AHRM 4.4. The active value is used by all character renderers; `io.chbaseTiming` carries `rawValue`, `activeValue`, `pendingValue`, and `pendingClock`.
+- **CHBASE** (`$D409`): delayed latch in `currentCharacterBaseRegister()` (`renderer_base.js`). Per AHRM 4.4, the new value takes effect 2 color clocks after the bus write. Since the emulator executes instructions atomically (`executeOne`), the IO handler offsets by `(ctx.currentInstructionCycles − 1)` to account for the 6502 performing the write on the last cycle of the instruction (e.g., STA absolute writes on cycle 4, so the latch is placed at `io.clock + 3 + 2 = io.clock + 5`). The active value is used by all character renderers; `io.chbaseTiming` carries `rawValue`, `activeValue`, `pendingValue`, and `pendingClock`.
 - **CHACTL** (`$D401`): latched once at scanline start in all text modes (2/3/4/5/6/7). A DLI write to CHACTL only affects the next scanline, not the remainder of the current one.
 - Modes 4/5 use a 1K-aligned CHBASE mask (`& 0xfc00`); modes 6/7 use a 512-byte mask (`& 0xfe00`).
 - Modes 5 and 7 always steal character-data DMA on every scanline (doubled lines are not a special case).

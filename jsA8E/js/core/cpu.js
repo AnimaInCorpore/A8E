@@ -75,6 +75,7 @@
       instructionCounter: 0,
       currentInstructionPc: 0,
       currentOpcode: 0,
+      currentInstructionCycles: 0,
       memoryWriteHook: null,
       instructionTraceHook: null,
       illegalOpcodeHook: null,
@@ -1050,6 +1051,7 @@
     if (onIllegalOpcode(ctx, opcode)) return;
     ctx.currentInstructionPc = cpu.pc & 0xffff;
     ctx.currentOpcode = opcode & 0xff;
+    ctx.currentInstructionCycles = OPCODE_BASE_CYCLES[opcode] | 0;
     cpu.pc = (cpu.pc + 1) & 0xffff;
 
     ctx.accessFunctionOverride = null;
@@ -1137,6 +1139,7 @@
         }
         ctx.currentInstructionPc = cpu.pc & 0xffff;
         ctx.currentOpcode = opcode & 0xff;
+        ctx.currentInstructionCycles = OPCODE_BASE_CYCLES[opcode] | 0;
         let nextEvent = cycleTarget;
         if (
           ctx.ioCycleTimedEventFunction &&

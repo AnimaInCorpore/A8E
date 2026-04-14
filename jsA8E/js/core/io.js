@@ -404,7 +404,14 @@
             chbaseTiming.initialized = true;
             chbaseTiming.rawValue = v & 0xff;
             chbaseTiming.pendingValue = v & 0xff;
-            chbaseTiming.pendingClock = (io.clock | 0) + 2;
+            // AHRM 4.4: CHBASE change takes effect 2 color clocks after
+            // the register write.  The 6502 bus write occurs on the last
+            // cycle of the instruction, so offset by (instructionCycles − 1)
+            // to place the latch relative to the actual write cycle.
+            const writeCycleOffset =
+              Math.max((ctx.currentInstructionCycles | 0) - 1, 0);
+            chbaseTiming.pendingClock =
+              (io.clock | 0) + writeCycleOffset + 2;
             break;
           }
 
