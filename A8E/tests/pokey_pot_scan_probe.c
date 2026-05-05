@@ -201,7 +201,7 @@ static int TestSkctlModeChangesDoNotRetroactivelyRescaleElapsedTime(void)
 	return 1;
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
 	if(!TestSlowScanUsesScanlineRateAndRunsToCompletion())
 	{

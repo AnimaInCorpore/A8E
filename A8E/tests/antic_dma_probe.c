@@ -401,7 +401,7 @@ static int TestWsyncStallLetsDliPreemptNextInstruction(void)
 	return 1;
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
 	int lPassed = 1;
 

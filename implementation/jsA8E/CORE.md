@@ -18,8 +18,8 @@ State is created up-front by `state.js` into a fixed `ioData` shape. ANTIC and t
 
 ## ANTIC / Display List
 
-- DLI asserts at cycle 8 of the last scanline of a DLI-enabled mode line (AHRM 4.8). The NMI handler begins at the first instruction boundary at cycle 10 or later.
-- Same-scanline `NMIEN` writes: cycle-7 write enables the current DLI (with one-beam-cycle delay to the CPU); cycle-8 write can still suppress it; NMIST latches unconditionally regardless of NMIEN.
+- NMIST DLI/VBI bits are set at cycle 7 of the triggering scanline; NMI is asserted at cycle 8 (AHRM 4.8). `DLI_HORIZONTAL_OFFSET = 7` marks the NMIST cycle; the event handler fires at cycle 7 to latch NMIST and again at cycle 8 to fire the NMI. The NMI handler begins at the first instruction boundary at cycle 10 or later.
+- Same-scanline `NMIEN` writes: cycle-7 write enables the current DLI (with one-beam-cycle delay — NMI fires at cycle 9 instead of 8); cycle-8 write can still suppress the NMI; NMIST latches unconditionally at cycle 7 regardless of NMIEN.
 - VBI fires at the start of scan line 248 (AHRM 4.8).
 - VCOUNT flips to the next scanline on cycle 111 of the previous line (AHRM 4.10), including the one-cycle PAL end-of-frame anomaly (`$9C` on the last scanline's cycle 111 before wrapping to `$00`).
 - WSYNC stalls the CPU to cycle 105 (`WSYNC_CYCLE`); writes ≤ cycle 103 target the current line, writes ≥ cycle 104 (`WSYNC_BOUNDARY`) target the next line (AHRM 4.9).
@@ -36,7 +36,7 @@ Playfield DMA is scheduled per line cycle (`scheduledPlayfieldDma` array in `dra
 
 ## Character Modes (ANTIC 2–7)
 
-- **CHBASE** (`$D409`): delayed latch in `currentCharacterBaseRegister()` (`renderer_base.js`). When `SRAM[IO_CHBASE]` changes, the new value takes effect 2 clock cycles later, matching AHRM 4.4. The active value is used by all character renderers; `io.chbaseTiming` carries `rawValue`, `activeValue`, `pendingValue`, and `pendingClock`.
+- **CHBASE** (`$D409`): delayed latch in `currentCharacterBaseRegister()` (`renderer_base.js`). Per AHRM 4.4, the new value takes effect 2 color clocks after the bus write. Since the emulator executes instructions atomically (`executeOne`), the IO handler offsets by `(ctx.currentInstructionCycles − 1)` to account for the 6502 performing the write on the last cycle of the instruction (e.g., STA absolute writes on cycle 4, so the latch is placed at `io.clock + 3 + 2 = io.clock + 5`). The active value is used by all character renderers; `io.chbaseTiming` carries `rawValue`, `activeValue`, `pendingValue`, and `pendingClock`.
 - **CHACTL** (`$D401`): latched once at scanline start in all text modes (2/3/4/5/6/7). A DLI write to CHACTL only affects the next scanline, not the remainder of the current one.
 - Modes 4/5 use a 1K-aligned CHBASE mask (`& 0xfc00`); modes 6/7 use a 512-byte mask (`& 0xfe00`).
 - Modes 5 and 7 always steal character-data DMA on every scanline (doubled lines are not a special case).
