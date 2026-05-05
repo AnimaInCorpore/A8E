@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "jsA8E",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["http-server", ".", "-p", "8080", "-c-1"],
+      "port": 8080
+    }
+  ]
+}

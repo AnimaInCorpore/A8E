@@ -847,7 +847,7 @@
     installIoHandlers(machine.ctx, ioAccess);
 
     function isReady() {
-      return machine.osRomLoaded && machine.basicRomLoaded;
+      return machine.osRomLoaded;
     }
 
     const inputRuntime = inputApi.createRuntime({
