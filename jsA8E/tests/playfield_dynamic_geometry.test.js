@@ -98,6 +98,7 @@ function makeCtx(command) {
         playerMissileClockActive: false,
         playerMissileInterleaved: false,
         playfieldDmaStealCount: 0,
+        scheduledPlayfieldDma: new Uint8Array(114),
         refreshDmaPending: 0,
         displayListInstructionDmaPending: 0,
         displayListAddressDmaRemaining: 0,

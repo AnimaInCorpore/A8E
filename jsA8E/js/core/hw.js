@@ -115,7 +115,10 @@
     // Viewport from A8E.c
     const VIEW_W = 336;
     const VIEW_H = 240;
-    const VIEW_X = (16 + 12 + 6 + 10 + 4) * 2 + 160 - VIEW_W / 2; // 88
+    const NORMAL_PLAYFIELD_START_X = 104;
+    const NORMAL_PLAYFIELD_WIDTH = 320;
+    const VIEW_X =
+      NORMAL_PLAYFIELD_START_X - (VIEW_W - NORMAL_PLAYFIELD_WIDTH) / 2; // 96
     const VIEW_Y = 8;
 
     // Priority bits (from Antic.c)

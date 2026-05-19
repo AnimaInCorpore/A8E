@@ -87,6 +87,22 @@ function loadPlayfieldApi() {
   return { api, captures };
 }
 
+function loadHwApi() {
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "js", "core", "hw.js"),
+    "utf8",
+  );
+  const context = {
+    Uint8Array: Uint8Array,
+    Math: Math,
+    Object: Object,
+  };
+  context.window = context;
+  vm.createContext(context);
+  vm.runInContext(source, context, { filename: "hw.js" });
+  return context.window.A8EHw.createApi();
+}
+
 function makeCtx() {
   return {
     cycleCounter: 0,
@@ -166,6 +182,20 @@ function testHscrollPromotedFetchWindowsUseCorrectStart() {
   });
 }
 
+function testViewportCentersCorrectedNormalPlayfield() {
+  const hw = loadHwApi();
+  const normalPlayfieldStartX = 104;
+  const normalPlayfieldWidth = 320;
+  assert.equal(hw.VIEW_W, 336);
+  assert.equal(hw.VIEW_X, 96);
+  assert.equal(normalPlayfieldStartX - hw.VIEW_X, 8);
+  assert.equal(
+    normalPlayfieldStartX + normalPlayfieldWidth - 1 - hw.VIEW_X,
+    327,
+  );
+}
+
 testUnscrolledWidthsUseCorrectPlayfieldStart();
 testHscrollPromotedFetchWindowsUseCorrectStart();
+testViewportCentersCorrectedNormalPlayfield();
 console.log("playfield_geometry_timing tests passed");

@@ -4956,7 +4956,7 @@ void AtariIoDrawScreen(
 	SDL_Rect tRect;
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
 
-	tRect.x = (16 + 12 + 6 + 10 + 4) * 2 + 160 - lScreenWidth / 2;
+	tRect.x = 104 - (((s32)lScreenWidth - 320) / 2);
 	tRect.y = 8;
 	tRect.w = lScreenWidth;
 	tRect.h = lScreenHeight;
