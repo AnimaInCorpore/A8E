@@ -136,15 +136,15 @@ static int TestDliTriggersAtCycle8(void)
 
 	ProbeMachine_ResetTiming(&tMachine);
 
-	pIoData->llDliCycle = 8;
+	pIoData->llDliCycle = 7;
 	pContext->pShadowMemory[IO_NMIEN] = NMI_DLI;
 	pIoData->cNmienEnabledByCycle7 = NMI_DLI;
 	pIoData->cNmienEnabledByCycle8 = NMI_DLI;
 
 	ProbeMachine_TriggerBeamEvent(&tMachine, 7, 7);
 	REQUIRE(pContext->cNmiPendingFlag == 0, "DLI fired before cycle 8");
-	REQUIRE((pContext->pMemory[IO_NMIRES_NMIST] & NMI_DLI) == 0,
-			"NMIST DLI bit set before cycle 8");
+	REQUIRE((pContext->pMemory[IO_NMIRES_NMIST] & NMI_DLI) != 0,
+			"NMIST DLI bit missing at cycle 7");
 
 	ProbeMachine_TriggerBeamEvent(&tMachine, 8, 8);
 	REQUIRE(pContext->cNmiPendingFlag == 1, "DLI did not trigger on cycle 8");
@@ -250,7 +250,7 @@ static int TestJvbDliReplayBehavior(void)
 			pIoData->sDisplayListAddress);
 	REQUIRE(pIoData->lNextDisplayListLine == 8,
 			"JVB+DLI did not switch to wait-for-VBL semantics");
-	REQUIRE(pIoData->llDliCycle == llFirstLineStartCycle + CYCLES_PER_LINE + 8,
+	REQUIRE(pIoData->llDliCycle == llFirstLineStartCycle + CYCLES_PER_LINE + 7,
 			"JVB+DLI replay did not arm the next scanline DLI");
 
 	pContext->cNmiPendingFlag = 0;
@@ -265,7 +265,7 @@ static int TestJvbDliReplayBehavior(void)
 	ProbeMachine_RunCurrentScanline(&tMachine);
 	REQUIRE(pIoData->tVideoData.lCurrentDisplayLine == 22,
 			"JVB+DLI replay did not advance to the next scanline");
-	REQUIRE(pIoData->llDliCycle == llFirstLineStartCycle + (2 * CYCLES_PER_LINE) + 8,
+	REQUIRE(pIoData->llDliCycle == llFirstLineStartCycle + (2 * CYCLES_PER_LINE) + 7,
 			"JVB+DLI replay did not re-arm after a replayed scanline");
 
 	pIoData->tVideoData.lCurrentDisplayLine = 247;
@@ -295,15 +295,15 @@ static int TestDliEnableOnCycle7DelaysByOneCycle(void)
 	pIoData->bInDrawLine = 1;
 	pIoData->llDisplayListFetchCycle = 0;
 	pIoData->llCycle = 7;
-	pIoData->llDliCycle = 8;
+	pIoData->llDliCycle = 7;
 	Antic_NMIEN(pContext, &cValue);
 	pIoData->bInDrawLine = 0;
 
 	ProbeMachine_TriggerBeamEvent(&tMachine, 8, 8);
 	REQUIRE(pContext->cNmiPendingFlag == 0,
 			"cycle-7 NMIEN enable should delay the DLI by one cycle");
-	REQUIRE(pIoData->llDliCycle == 9,
-			"cycle-7 NMIEN enable moved DLI to %llu instead of 9",
+	REQUIRE(pIoData->llDliCycle == 8,
+			"cycle-7 NMIEN enable moved DLI to %llu instead of 8",
 			pIoData->llDliCycle);
 	REQUIRE((pContext->pMemory[IO_NMIRES_NMIST] & NMI_DLI) != 0,
 			"cycle-7 delayed DLI did not still latch NMIST");
@@ -332,7 +332,7 @@ static int TestDliEnableOnCycle8IsTooLate(void)
 	pIoData->bInDrawLine = 1;
 	pIoData->llDisplayListFetchCycle = 0;
 	pIoData->llCycle = 8;
-	pIoData->llDliCycle = 8;
+	pIoData->llDliCycle = 7;
 	Antic_NMIEN(pContext, &cValue);
 	pIoData->bInDrawLine = 0;
 
@@ -365,7 +365,7 @@ static int TestDliDisableOnCycle8SuppressesCurrentLine(void)
 	pIoData->bInDrawLine = 1;
 	pIoData->llDisplayListFetchCycle = 0;
 	pIoData->llCycle = 8;
-	pIoData->llDliCycle = 8;
+	pIoData->llDliCycle = 7;
 	Antic_NMIEN(pContext, &cValue);
 	pIoData->bInDrawLine = 0;
 

@@ -382,7 +382,7 @@ static int TestWsyncStallLetsDliPreemptNextInstruction(void)
 	pContext->pShadowMemory[IO_NMIEN] = NMI_DLI;
 	pIoData->cNmienEnabledByCycle7 = NMI_DLI;
 	pIoData->cNmienEnabledByCycle8 = NMI_DLI;
-	pIoData->llDliCycle = 105;
+	pIoData->llDliCycle = 104;
 	ProbeMachine_TriggerBeamEvent(&tMachine, 105, 105);
 	REQUIRE(pContext->cNmiPendingFlag == 1,
 			"DLI did not become pending during WSYNC stall");

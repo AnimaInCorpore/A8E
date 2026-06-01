@@ -102,6 +102,7 @@
           const decoded = decodeTextModeCharacter(displayByte & 0xff, chactl);
           const ch = decoded & 0xff;
           inverse = (decoded & 0x100) !== 0;
+          const blank = (decoded & 0x200) !== 0;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           const glyphRow =
             fetchCharacterRow === fetchCharacterRow10
@@ -119,6 +120,7 @@
           } else {
             data = 0;
           }
+          if (blank) data = 0;
           mask = 0x80;
         }
 

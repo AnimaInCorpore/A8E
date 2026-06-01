@@ -4,7 +4,7 @@
 
 - Files: `jsA8E/js/core/cpu.js`, `jsA8E/js/core/cpu_tables.js`, `jsA8E/js/core/antic.js`, `jsA8E/js/core/gtia.js`, `jsA8E/js/core/pokey.js`, `jsA8E/js/core/pokey_sio.js`, `jsA8E/js/core/memory.js`, `jsA8E/js/core/io.js`, `jsA8E/js/core/atari.js`, `jsA8E/js/core/hw.js`, `jsA8E/js/core/playfield/playfield.js`, `jsA8E/js/core/playfield/renderer_base.js`, `jsA8E/js/core/state.js`, `jsA8E/js/core/snapshot_codec.js`
 - Purpose: mirror Atari hardware behavior in JavaScript with timing-compatible execution.
-- Status: updated on 2026-04-09 (`partial`).
+- Status: updated on 2026-05-12 (`partial`).
 
 ## Architecture
 
@@ -28,11 +28,13 @@ State is created up-front by `state.js` into a fixed `ioData` shape. ANTIC and t
 
 ## Playfield DMA and Active-Line Geometry
 
-Active-line geometry anchors the unscrolled playfield window to the corrected AHRM 4.14 width starts (clock 26/18/10 after HSYNC for narrow/normal/wide). HSCROL-promoted windows delay those baselines by one cycle per two color clocks of scroll.
+Active-line geometry maps GTIA horizontal positions from AHRM 6.2 into the 456-pixel line buffer: narrow starts at color clock `$40` (`x=128`), normal at `$30` (`x=96`), and wide at `$20` (`x=64`, with the normal viewport clipping the far-left wide area). HSCROL-promoted windows delay those baselines by one cycle per two color clocks of scroll.
 
 DMA steal positions (AHRM 4.14): refresh at cycles 25/29/33/37/41/45/49/53/57 (one-cycle deferral; further blocked refreshes drop); display list instruction at cycle 1; LMS/jump address at cycles 6–7; missile DMA at cycle 0; player DMA at cycles 2–5 (AHRM 4.13).
 
 Playfield DMA is scheduled per line cycle (`scheduledPlayfieldDma` array in `drawLine` state), not charged as a bulk stall. First-row display/name fetches fill a reusable 48-byte line buffer; repeated scanlines reuse buffered bytes. Character modes 2–7 place the character-data fetch in the `+3` cycle slot after the display/name fetch. Late fetches after cycle 105 use the virtual CPU bus path: the active CPU bus address is sampled even when it is `$0000` (JavaScript truthiness is not used as a validity check), and deferred-refresh overlaps return pulled-up `$FF` per AHRM 4.14.
+
+Mapped bitmap modes consume bytes MSB-first per AHRM 4.5. Mode 8 repeats each two-bit color index across two output cycles (8 hires pixels), while mode A advances through all four two-bit pairs in the byte across four output cycles (4 hires pixels per color index).
 
 ## Character Modes (ANTIC 2–7)
 
@@ -42,7 +44,7 @@ Playfield DMA is scheduled per line cycle (`scheduledPlayfieldDma` array in `dra
 - Modes 5 and 7 always steal character-data DMA on every scanline (doubled lines are not a special case).
 - Mode F only steals bitmap DMA on the first scanline of a stretched line.
 - Vertical reflection (CHACTL bit 2) is applied in all modes 2–7.
-- Modes 2/3: bit 7 of the character name is decoded via `decodeTextModeCharacter` using CHACTL bits 0 (blank) and 1 (invert). Mode 4/5: bit 7 selects the alternate color set (PF3 substitution) directly without routing through `decodeTextModeCharacter`, matching real hardware. Modes 6/7: upper two bits of the character name select the foreground color index; the remaining 6 bits are the character code.
+- Modes 2/3: bit 7 of the character name is decoded via `decodeTextModeCharacter` using CHACTL bits 0 (blank) and 1 (invert); blanking forces zero glyph data and can still be inverted when both bits are set. Mode 4/5: bit 7 selects the alternate color set (PF3 substitution) directly without routing through `decodeTextModeCharacter`, matching real hardware. Modes 6/7: upper two bits of the character name select the foreground color index; the remaining 6 bits are the character code.
 
 ## Player-Missile Graphics
 
@@ -50,7 +52,7 @@ PMG DMA fetches happen in `fetchPmgDmaCycle` (in `gtia.js`, called from `clockAc
 
 `PMBASE` is read live at each DMA cycle. This means a DLI write to PMBASE between cycles 5 and 0 of adjacent scanlines applies cleanly; a write during cycles 0–5 of an active scanline will cause a mixed-base fetch for that scanline (missiles use old base, late players use new base). This matches real hardware behavior.
 
-PM graphics are drawn interleaved with playfield pixels via `drawPlayerMissilesClock` called from `clockAction` during `drawLine`. Priority compositing uses a `Uint16Array` priority buffer; all player/missile draw functions mask with `& 0xffff`. Priority constants `PRIO_PF3` and `PRIO_M10_PM0-3` are wired through the full config chain (`atari.js → antic.js → A8EPlayfield → A8EPlayfieldRenderer → renderer_base → mode_*.js`). The interleaved GTIA path now models PM output with a per-line shift-register/state-machine pair per object: a trigger ORs in fresh latch data, resets the size state, and lets mid-image rightward retriggers build overlapping images without moving the already-started copy. PM horizontal origin also includes the GTIA/ANTIC coordinate bias from AHRM 6.2, so HPOS `$30` lands on the normal playfield left edge (`x=104` in the full 456-pixel line buffer). HSCROL-clipped lines preserve already-composited PMG pixels in both the aperture fill and the trailing border fill.
+PM graphics are drawn interleaved with playfield pixels via `drawPlayerMissilesClock` called from `clockAction` during `drawLine`. Priority compositing uses a `Uint16Array` priority buffer; all player/missile draw functions mask with `& 0xffff`. Priority constants `PRIO_PF3` and `PRIO_M10_PM0-3` are wired through the full config chain (`atari.js → antic.js → A8EPlayfield → A8EPlayfieldRenderer → renderer_base → mode_*.js`). The interleaved GTIA path now models PM output with a per-line shift-register/state-machine pair per object: a trigger ORs in fresh latch data, resets the size state, and lets mid-image rightward retriggers build overlapping images without moving the already-started copy. PM horizontal origin uses the same AHRM 6.2 coordinate mapping as playfield rendering, so HPOS `$30` lands on the normal playfield left edge (`x=96` in the full 456-pixel line buffer). HSCROL-clipped lines preserve already-composited PMG pixels in both the aperture fill and the trailing border fill.
 
 ## POKEY / Pot Scan
 

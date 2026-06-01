@@ -162,19 +162,19 @@ function testMidImageHposWriteKeepsOriginalStart() {
   ctx.sram[0xd012] = 0x44;
 
   ctx.ioData.clock = 6;
-  api.drawPlayerMissilesClock(ctx, 56);
+  api.drawPlayerMissilesClock(ctx, 48);
 
   ctx.sram[0xd000] = 0x3c;
   ctx.ioData.clock = 7;
-  api.drawPlayerMissilesClock(ctx, 60);
+  api.drawPlayerMissilesClock(ctx, 52);
 
   ctx.ioData.clock = 24;
-  api.drawPlayerMissilesClock(ctx, 128);
+  api.drawPlayerMissilesClock(ctx, 120);
 
-  assert.equal(ctx.ioData.videoOut.pixels[56], 0x44);
-  assert.equal(ctx.ioData.videoOut.pixels[63], 0x44);
-  assert.equal(ctx.ioData.videoOut.pixels[128], 0x44);
-  assert.equal(ctx.ioData.videoOut.pixels[131], 0x44);
+  assert.equal(ctx.ioData.videoOut.pixels[48], 0x44);
+  assert.equal(ctx.ioData.videoOut.pixels[55], 0x44);
+  assert.equal(ctx.ioData.videoOut.pixels[120], 0x44);
+  assert.equal(ctx.ioData.videoOut.pixels[123], 0x44);
 }
 
 function testOverlappingRightwardHposRetriggerMergesShiftRegister() {
@@ -188,23 +188,23 @@ function testOverlappingRightwardHposRetriggerMergesShiftRegister() {
   ctx.sram[0xd012] = 0x55;
 
   ctx.ioData.clock = 6;
-  api.drawPlayerMissilesClock(ctx, 56);
+  api.drawPlayerMissilesClock(ctx, 48);
 
   ctx.sram[0xd000] = 0x1a;
   ctx.ioData.clock = 7;
+  api.drawPlayerMissilesClock(ctx, 52);
+  api.drawPlayerMissilesClock(ctx, 56);
   api.drawPlayerMissilesClock(ctx, 60);
   api.drawPlayerMissilesClock(ctx, 64);
-  api.drawPlayerMissilesClock(ctx, 68);
-  api.drawPlayerMissilesClock(ctx, 72);
 
-  assert.equal(ctx.ioData.videoOut.pixels[56], 0x55);
-  assert.equal(ctx.ioData.videoOut.pixels[57], 0x55);
-  assert.equal(ctx.ioData.videoOut.pixels[60], 0x55);
-  assert.equal(ctx.ioData.videoOut.pixels[61], 0x55);
-  assert.equal(ctx.ioData.videoOut.pixels[70], 0x55);
-  assert.equal(ctx.ioData.videoOut.pixels[71], 0x55);
-  assert.equal(ctx.ioData.videoOut.pixels[74], 0x55);
-  assert.equal(ctx.ioData.videoOut.pixels[75], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[48], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[49], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[52], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[53], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[62], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[63], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[66], 0x55);
+  assert.equal(ctx.ioData.videoOut.pixels[67], 0x55);
   assert.equal(ctx.ioData.drawLine.playerPmgShift[0], 0x00);
 }
 
@@ -220,9 +220,9 @@ function testHpos30MapsToNormalPlayfieldLeftEdge() {
 
   api.drawPlayerMissiles(ctx);
 
-  assert.equal(ctx.ioData.videoOut.pixels[96], 0x00);
-  assert.equal(ctx.ioData.videoOut.pixels[104], 0x77);
-  assert.equal(ctx.ioData.videoOut.pixels[105], 0x77);
+  assert.equal(ctx.ioData.videoOut.pixels[95], 0x00);
+  assert.equal(ctx.ioData.videoOut.pixels[96], 0x77);
+  assert.equal(ctx.ioData.videoOut.pixels[97], 0x77);
 }
 
 testVdelayMasksFetchesOnEvenScanlines();

@@ -38,7 +38,7 @@
     const drawPlayerMissilesClock = cfg.drawPlayerMissilesClock;
     const fetchPmgDmaCycle = cfg.fetchPmgDmaCycle;
 
-    const ACTIVE_LINE_HSYNC_PIXELS = 32;
+    const ACTIVE_LINE_HSYNC_PIXELS = 24;
     const ACTIVE_LINE_COLOR_BURST_CYCLES = 6;
     const VCOUNT_UPDATE_CYCLE = 111;
     const REFRESH_FIRST_CYCLE = 25;

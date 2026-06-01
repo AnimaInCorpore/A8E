@@ -155,39 +155,39 @@ function recordGeometry(dmactl, hscrol, command) {
 function testUnscrolledWidthsUseCorrectPlayfieldStart() {
   assert.deepEqual(recordGeometry(0x21, 0x00, 0x02), {
     bytesPerLine: 32,
-    playfieldStartX: 136,
+    playfieldStartX: 128,
   });
   assert.deepEqual(recordGeometry(0x22, 0x00, 0x02), {
     bytesPerLine: 40,
-    playfieldStartX: 104,
+    playfieldStartX: 96,
   });
   assert.deepEqual(recordGeometry(0x23, 0x00, 0x02), {
     bytesPerLine: 48,
-    playfieldStartX: 72,
+    playfieldStartX: 64,
   });
 }
 
 function testHscrollPromotedFetchWindowsUseCorrectStart() {
   assert.deepEqual(recordGeometry(0x21, 0x01, 0x12), {
     bytesPerLine: 40,
-    playfieldStartX: 106,
+    playfieldStartX: 98,
   });
   assert.deepEqual(recordGeometry(0x22, 0x01, 0x12), {
     bytesPerLine: 48,
-    playfieldStartX: 74,
+    playfieldStartX: 66,
   });
   assert.deepEqual(recordGeometry(0x23, 0x01, 0x12), {
     bytesPerLine: 48,
-    playfieldStartX: 74,
+    playfieldStartX: 66,
   });
 }
 
 function testViewportCentersCorrectedNormalPlayfield() {
   const hw = loadHwApi();
-  const normalPlayfieldStartX = 104;
+  const normalPlayfieldStartX = 96;
   const normalPlayfieldWidth = 320;
   assert.equal(hw.VIEW_W, 336);
-  assert.equal(hw.VIEW_X, 96);
+  assert.equal(hw.VIEW_X, 88);
   assert.equal(normalPlayfieldStartX - hw.VIEW_X, 8);
   assert.equal(
     normalPlayfieldStartX + normalPlayfieldWidth - 1 - hw.VIEW_X,

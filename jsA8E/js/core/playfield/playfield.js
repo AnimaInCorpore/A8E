@@ -22,7 +22,7 @@
     if (!rendererApi) throw new Error("A8EPlayfieldRenderer is not loaded");
 
     const PLAYFIELD_SCRATCH_VIEW_X = 64;
-    const ACTIVE_LINE_HSYNC_PIXELS = 32;
+    const ACTIVE_LINE_HSYNC_PIXELS = 24;
     const ACTIVE_LINE_COLOR_BURST_CYCLES = 6;
     const PMG_PRIORITY_MASK =
       0x10 | 0x20 | 0x40 | 0x80 | 0x100 | 0x200 | 0x400 | 0x800;

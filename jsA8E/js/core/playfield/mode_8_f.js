@@ -83,7 +83,12 @@
       return dstIndex + 1;
     }
 
-    function drawLineMode8Like(ctx, bytesPerLineFactor, initialPhase) {
+    function drawLineMode8Like(
+      ctx,
+      bytesPerLineFactor,
+      initialPhase,
+      bitPairPhaseShift,
+    ) {
       const io = ctx.ioData;
       const sram = ctx.sram;
 
@@ -108,7 +113,8 @@
         }
 
         fillBkgPf012ColorTable(sram, aColorTable);
-        const idx = (data >> (6 - ((phase >> 1) * 2))) & 0x03;
+        const bitPair = bitPairPhaseShift ? phase >> bitPairPhaseShift : phase;
+        const idx = (data >> (6 - (bitPair * 2))) & 0x03;
         const c = aColorTable[idx] & 0xff;
         const p = PRIORITY_TABLE_BKG_PF012[idx] & 0xff;
         dstIndex = writePixelQuad(dst, prio, dstIndex, c, p);
@@ -121,7 +127,7 @@
     }
 
     function drawLineMode8(ctx) {
-      return drawLineMode8Like(ctx, 8, 8);
+      return drawLineMode8Like(ctx, 8, 8, 1);
     }
 
     function drawLineMode9(ctx) {
@@ -157,7 +163,7 @@
     }
 
     function drawLineModeA(ctx) {
-      return drawLineMode8Like(ctx, 4, 4);
+      return drawLineMode8Like(ctx, 4, 4, 0);
     }
 
     function drawLineModeB(ctx) {

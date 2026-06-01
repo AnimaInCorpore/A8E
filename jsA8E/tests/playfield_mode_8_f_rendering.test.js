@@ -82,6 +82,62 @@ function createCtx() {
   };
 }
 
+function loadApiWithBitmapColors() {
+  return loadMode8FApi({
+    fillBkgPf012ColorTable: function (sram, table) {
+      table[0] = sram[IO_COLBK] & 0xff;
+      table[1] = sram[IO_COLPF0] & 0xff;
+      table[2] = sram[IO_COLPF1] & 0xff;
+      table[3] = sram[IO_COLPF2] & 0xff;
+    },
+  });
+}
+
+function setBitmapColors(ctx) {
+  ctx.sram[IO_COLBK] = 0x10;
+  ctx.sram[IO_COLPF0] = 0x21;
+  ctx.sram[IO_COLPF1] = 0x32;
+  ctx.sram[IO_COLPF2] = 0x43;
+}
+
+function testMode8RepeatsEachBitPairForEightPixels() {
+  const api = loadApiWithBitmapColors();
+  const ctx = createCtx();
+
+  setBitmapColors(ctx);
+  ctx.ram[0] = 0x1b; // 00, 01, 10, 11
+
+  api.drawLineMode8(ctx);
+
+  assert.equal(ctx.ioData.videoOut.pixels[0], 0x10);
+  assert.equal(ctx.ioData.videoOut.pixels[7], 0x10);
+  assert.equal(ctx.ioData.videoOut.pixels[8], 0x21);
+  assert.equal(ctx.ioData.videoOut.pixels[15], 0x21);
+  assert.equal(ctx.ioData.videoOut.pixels[16], 0x32);
+  assert.equal(ctx.ioData.videoOut.pixels[23], 0x32);
+  assert.equal(ctx.ioData.videoOut.pixels[24], 0x43);
+  assert.equal(ctx.ioData.videoOut.pixels[31], 0x43);
+}
+
+function testModeAUsesAllFourBitPairs() {
+  const api = loadApiWithBitmapColors();
+  const ctx = createCtx();
+
+  setBitmapColors(ctx);
+  ctx.ram[0] = 0x1b; // 00, 01, 10, 11
+
+  api.drawLineModeA(ctx);
+
+  assert.equal(ctx.ioData.videoOut.pixels[0], 0x10);
+  assert.equal(ctx.ioData.videoOut.pixels[3], 0x10);
+  assert.equal(ctx.ioData.videoOut.pixels[4], 0x21);
+  assert.equal(ctx.ioData.videoOut.pixels[7], 0x21);
+  assert.equal(ctx.ioData.videoOut.pixels[8], 0x32);
+  assert.equal(ctx.ioData.videoOut.pixels[11], 0x32);
+  assert.equal(ctx.ioData.videoOut.pixels[12], 0x43);
+  assert.equal(ctx.ioData.videoOut.pixels[15], 0x43);
+}
+
 function testModeFPriorMode0WidthIsNotDoubled() {
   const api = loadMode8FApi();
   const ctx = createCtx();
@@ -119,6 +175,8 @@ function testModeFDmaOnlyOccursOnFirstScanline() {
   assert.equal(ctxFirst.cycleCounter, 1);
 }
 
+testMode8RepeatsEachBitPairForEightPixels();
+testModeAUsesAllFourBitPairs();
 testModeFPriorMode0WidthIsNotDoubled();
 testModeFDmaOnlyOccursOnFirstScanline();
 console.log("playfield_mode_8_f_rendering tests passed");

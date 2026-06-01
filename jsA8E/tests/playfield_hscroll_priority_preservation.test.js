@@ -140,14 +140,14 @@ function testHscrollClipPreservesPmgPixels() {
 
   api.drawLine(ctx);
 
-  assert.equal(ctx.ioData.videoOut.pixels[118], 0x7e);
-  assert.equal(ctx.ioData.videoOut.priority[118], 0x10);
-  assert.equal(ctx.ioData.videoOut.pixels[119], 0x33);
-  assert.equal(ctx.ioData.videoOut.priority[119], 0x01);
-  assert.equal(ctx.ioData.videoOut.pixels[434], 0x7d);
-  assert.equal(ctx.ioData.videoOut.priority[434], 0x10);
-  assert.equal(ctx.ioData.videoOut.pixels[435], 0x33);
-  assert.equal(ctx.ioData.videoOut.priority[435], 0x01);
+  assert.equal(ctx.ioData.videoOut.pixels[110], 0x7e);
+  assert.equal(ctx.ioData.videoOut.priority[110], 0x10);
+  assert.equal(ctx.ioData.videoOut.pixels[111], 0x33);
+  assert.equal(ctx.ioData.videoOut.priority[111], 0x01);
+  assert.equal(ctx.ioData.videoOut.pixels[426], 0x7d);
+  assert.equal(ctx.ioData.videoOut.priority[426], 0x10);
+  assert.equal(ctx.ioData.videoOut.pixels[427], 0x33);
+  assert.equal(ctx.ioData.videoOut.priority[427], 0x01);
 }
 
 testHscrollClipPreservesPmgPixels();

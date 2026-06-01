@@ -33,7 +33,7 @@
     const IO_SIZEP3_M3PL = cfg.IO_SIZEP3_M3PL;
     const IO_VDELAY = cfg.IO_VDELAY;
     const PLAYFIELD_SCRATCH_VIEW_X = cfg.PLAYFIELD_SCRATCH_VIEW_X || 0;
-    const PMG_POSITION_BIAS_PIXELS = 8;
+    const PMG_POSITION_BIAS_PIXELS = 0;
 
     const PRIO_PF0 = cfg.PRIO_PF0;
     const PRIO_PF1 = cfg.PRIO_PF1;

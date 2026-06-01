@@ -49,8 +49,13 @@ function loadMode23Api(overrides) {
         colorTable[i] = i & 0xff;
       }
     },
-    decodeTextModeCharacter: function (ch) {
-      return ch & 0xff;
+    decodeTextModeCharacter: function (ch, chactl) {
+      ch &= 0xff;
+      if ((ch & 0x80) === 0) return ch;
+      ch &= 0x7f;
+      return ch |
+        ((chactl & 0x02) ? 0x100 : 0) |
+        ((chactl & 0x01) ? 0x200 : 0);
     },
     stealDma: function (ctx, cycles) {
       ctx.cycleCounter += cycles | 0;
@@ -264,9 +269,40 @@ function testMode2LatchesChactlForWholeScanline() {
   assert.deepEqual(fetchedChactl, [0x00, 0x00]);
 }
 
+function testMode2BlankAndInvertProducesInvertedSpace() {
+  const api = loadMode23Api({
+    fetchCharacterRow8: function () {
+      return 0xff;
+    },
+  });
+
+  const ctx = createCtx();
+  ctx.sram[IO_CHACTL] = 0x03;
+  ctx.sram[IO_PRIOR] = 0x00;
+  ctx.sram[IO_COLPF1] = 0x0b;
+  ctx.sram[IO_COLPF2] = 0xa0;
+  ctx.ram[0] = 0x80;
+
+  api.drawLineMode2(ctx);
+
+  assert.deepEqual(Array.from(ctx.ioData.videoOut.pixels.slice(0, 4)), [
+    0xab,
+    0xab,
+    0xab,
+    0xab,
+  ]);
+  assert.deepEqual(Array.from(ctx.ioData.videoOut.priority.slice(0, 4)), [
+    0x02,
+    0x02,
+    0x02,
+    0x02,
+  ]);
+}
+
 testMode2GtiaColorTableOnlyWhenPriorMode2();
 testMode2AndMode3UseSameChbaseMasking();
 testMode2Mode3Prior0OutputParity();
 testMode2Mode3Prior0WidthIsNotDoubled();
 testMode2LatchesChactlForWholeScanline();
+testMode2BlankAndInvertProducesInvertedSpace();
 console.log("playfield_mode_2_3_rendering tests passed");

@@ -176,9 +176,10 @@
   function decodeTextModeCharacter(ch, chactl) {
     ch &= 0xff;
     if (!(ch & 0x80)) return ch;
-    if (chactl & 0x01) return 0x00; // blank/space for high-bit characters
     ch &= 0x7f;
-    return chactl & 0x02 ? ch | 0x100 : ch;
+    return ch |
+      (chactl & 0x02 ? 0x100 : 0) |
+      (chactl & 0x01 ? 0x200 : 0);
   }
 
   const softwareApi =

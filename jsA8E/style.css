@@ -1038,6 +1038,14 @@ button:hover:not(:disabled) {
   grid-column: 2;
   grid-row: 2;
   width: var(--side-band-w);
+  /* Gist places the silver function strip one key-unit to the right of the main
+     block (BREAK ends at x:16.25, the silver keys start at x:17.25). The main
+     block's right padding already supplies part of that gap, so make up the rest
+     here so the total clears exactly one main key unit (--side-key-w). */
+  margin-left: max(
+    0px,
+    calc(var(--side-key-w) - var(--shell-pad-x) - var(--deck-pad-x))
+  );
   background: transparent;
   border: 0;
   padding: 0;
@@ -1257,11 +1265,13 @@ button:hover:not(:disabled) {
     gap: 0;
     overflow: hidden;
   }
+  /* Clip cleanly (no ellipsis "…") if a label is ever marginally too wide;
+     the per-label font sizes below are tuned so labels actually fit down to
+     ~320px, so this is just a safety net. */
   .atariKeyboard .key .top,
   .atariKeyboard .key .mainlbl,
   .atariKeyboard .key .sublbl {
     overflow: hidden;
-    text-overflow: ellipsis;
     max-width: 100%;
   }
   /* primary label: numbers and single symbols — keep prominent */
@@ -1272,27 +1282,28 @@ button:hover:not(:disabled) {
   .atariKeyboard .key .top {
     font-size: clamp(5.5px, 2vw, 10px);
   }
-  /* word labels on .small keys (CLEAR, INSERT, DELETE) — smaller to fit */
+  /* word labels on .small keys (CLEAR, INSERT, DELETE) — must fit a 1u key */
   .atariKeyboard .key.small .top {
-    font-size: clamp(3.5px, 1.2vw, 8px);
+    font-size: clamp(3px, 1vw, 7px);
   }
   .atariKeyboard .key .sublbl {
-    font-size: clamp(3px, 1.2vw, 8px);
+    font-size: clamp(3px, 1.1vw, 8px);
   }
-  /* .small keys: symbols like <, >, _, | */
+  /* .small keys: mostly single symbols (<, >, _, |) plus the word "BACK"/"SET",
+     so size to fit the widest of those in a 1u key */
   .atariKeyboard .key.small .mainlbl {
-    font-size: clamp(6px, 2.2vw, 13px);
+    font-size: clamp(4.5px, 1.5vw, 11px);
   }
-  /* small keys with direct text (ESC, BREAK) — slightly reduced */
+  /* small keys with direct text (ESC, BREAK) — size to fit "BREAK" in 1u */
   .atariKeyboard .key.small {
-    font-size: clamp(5.5px, 2vw, 10px);
+    font-size: clamp(4px, 1.2vw, 11px);
+    letter-spacing: 0;
   }
-  /* wide label keys (RETURN, SHIFT, CAPS) — compact text */
+  /* wide label keys (RETURN, SHIFT, CAPS) — size to fit "RETURN" in 1.5u */
   .atariKeyboard .key.wide {
-    font-size: clamp(5.5px, 2vw, 10px);
-    letter-spacing: 0.01em;
+    font-size: clamp(4px, 1.5vw, 10px);
+    letter-spacing: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
   }
   .atariKeyboard .key .leg-tl {
     top: clamp(2px, 0.5vw, 6px);
@@ -1319,6 +1330,9 @@ button:hover:not(:disabled) {
     grid-column: 1;
     grid-row: 3;
     width: auto;
+    /* The 1-unit gap only applies to the side-by-side desktop layout; here the
+       strip wraps to its own full-width row below the keyboard. */
+    margin-left: 0;
     padding: clamp(4px, 1.4vw, 12px) var(--side-pad-x) clamp(4px, 1.4vw, 12px);
     border-left: 0;
     border-bottom: 1px solid #888888;

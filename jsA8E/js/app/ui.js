@@ -466,9 +466,22 @@
       );
     }
 
+    function findMainUnitKey() {
+      if (!atariKeyboard) return null;
+      const keys = atariKeyboard.querySelectorAll(".main .row .key");
+      // The silver side keys are one layout unit wide (gist w:1), so the
+      // reference must be a weight-1 key. The first key in the block is ESC
+      // (--w: 1.25), so scan for an actual unit-width key instead.
+      for (let i = 0; i < keys.length; i++) {
+        if (Math.abs(parseKeyboardRowWeight(keys[i]) - 1) < 0.001) {
+          return keys[i];
+        }
+      }
+      return keys[0] || null;
+    }
+
     function syncSideKeyWidthToMainUnit() {
-      if (!atariKeyboard) return;
-      const mainKey = atariKeyboard.querySelector(".main .row .key");
+      const mainKey = findMainUnitKey();
       if (!mainKey) return;
       const mainW = mainKey.getBoundingClientRect().width;
       if (!(mainW > 0)) return;
@@ -533,7 +546,7 @@
       }
 
       let sideHeightDrift = false;
-      const mainKey = atariKeyboard.querySelector(".main .row .key");
+      const mainKey = findMainUnitKey();
       const sideKey = atariKeyboard.querySelector(".side-key");
       if (mainKey && sideKey) {
         const mainH = mainKey.getBoundingClientRect().height;
