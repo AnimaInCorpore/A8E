@@ -47,6 +47,8 @@ Process rule: review this file before planning any improvement, and update it af
 
 ## Recent Improvements
 
+- 2026-06-01: `A8E/tests/antic_graphics_modes_probe.c`: restored the probe's SDL-compatible `main(int argc, char *argv[])` signature so the MinGW/SDL2main build no longer conflicts with SDL's `SDL_main` declaration.
+
 - 2026-05-20: `jsA8E/js/core/playfield/mode_8_f.js`, `jsA8E/tests/playfield_mode_8_f_rendering.test.js`: corrected JS ANTIC mode A bitmap expansion to consume all four two-bit pairs in each byte. Mode 8 still repeats each pair across two output cycles, but mode A now advances per pair, fixing the broken Archon board-border bitmap line.
 
 - 2026-05-20: `jsA8E/js/core/hw.js`, `A8E/AtariIo.c`, `jsA8E/tests/playfield_geometry_timing.test.js`: merged the viewport-centering change with the corrected AHRM GTIA origin. The normal 320-pixel playfield starts at full-line `x=96`, so the 336-pixel visible crop starts at `x=88` and keeps the playfield at screen `x=8..327`.

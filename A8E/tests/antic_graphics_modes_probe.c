@@ -314,9 +314,12 @@ static int TestMode7FetchesCharacterDataOnOddRepeatedScanlines(void)
 	return 1;
 }
 
-int main(void)
+int main(int argc, char *argv[])
 {
 	int bOk = 1;
+
+	(void)argc;
+	(void)argv;
 
 	SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
 	SDL_setenv("SDL_VIDEODRIVER", "dummy", 1);
