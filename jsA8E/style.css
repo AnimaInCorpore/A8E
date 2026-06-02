@@ -61,6 +61,7 @@ body {
   gap: 12px;
   flex-shrink: 0;
   flex-wrap: wrap;
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
 
@@ -430,7 +431,17 @@ button:hover:not(:disabled) {
   opacity: 0.6;
 }
 
-.screenViewport:fullscreen,
+/* NOTE: these must be SEPARATE rules. A selector list is invalidated in full if
+   any selector in it is unknown to the browser, so grouping :fullscreen with the
+   prefixed :-webkit-full-screen would drop the whole rule in Firefox (and the
+   reverse in older WebKit). Keep one rule per pseudo-class. */
+.screenViewport:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  background: transparent;
+  padding: 0;
+}
 .screenViewport:-webkit-full-screen {
   width: 100vw;
   height: 100vh;
@@ -713,7 +724,7 @@ button:hover:not(:disabled) {
   --bed: #202018;
   --bed-hi: #d5d5c8;
   --stripe: #200218;
-  --key-top: #2f2f27;
+  --key-top: #2d2d25;
   --key-mid: #282820;
   --legend: #cccccc;
   --legend-dim: #a7a79a;
@@ -733,7 +744,7 @@ button:hover:not(:disabled) {
   --key-font: clamp(6px, 1.25vw, 14px);
   --key-font-wide: clamp(5px, 1.02vw, 11px);
   --side-key-w: clamp(16px, 4.2vw, 48px);
-  --side-band-w: calc(var(--side-key-w) * 0.962);
+  --side-band-w: var(--side-key-w);
   --side-key-h: var(--key-h);
   --side-key-gap: var(--gap);
   --side-band-top: 0px;
@@ -777,6 +788,12 @@ button:hover:not(:disabled) {
   justify-content: space-between;
   grid-column: 1 / 4;
   user-select: none;
+  /* Explicitly paint cream so the gradient below it is not relied upon for
+     colour, then add the thin dark stripe at the bottom — matching KLE's
+     #200218 separator band which is otherwise too narrow to render reliably. */
+  background: var(--bed-hi);
+  border-bottom: clamp(2px, 0.4vw, 4px) solid var(--stripe);
+  box-sizing: border-box;
 }
 
 .atariKeyboard .chassis-label .kbname {
@@ -828,11 +845,11 @@ button:hover:not(:disabled) {
   min-width: 0;
   box-sizing: border-box;
   height: var(--key-h);
-  border-radius: clamp(3px, 0.55vw, 6px);
-  border-top:    1px solid #3a3a30;
-  border-left:   1px solid #3a3a30;
-  border-right:  1px solid #0e0e0a;
-  border-bottom: 4px solid #0e0e0a;
+  border-radius: clamp(5px, 1.1vw, 14px);
+  border-top:    1px solid #323228;
+  border-left:   1px solid #323228;
+  border-right:  1px solid #111110;
+  border-bottom: 3px solid #111110;
   background: var(--key-mid);
   box-shadow: none;
   color: var(--legend);
@@ -862,9 +879,9 @@ button:hover:not(:disabled) {
 .atariKeyboard .key::before {
   content: "";
   position: absolute;
-  inset: 3px 5px 7px 5px;
+  inset: 2px 3px 5px 3px;
   background: var(--key-top);
-  border-radius: 3px;
+  border-radius: clamp(4px, 0.9vw, 12px);
   pointer-events: none;
   z-index: -2;
 }
@@ -872,8 +889,8 @@ button:hover:not(:disabled) {
 .atariKeyboard .key::after {
   content: "";
   position: absolute;
-  inset: 3px 5px 7px 5px;
-  border-radius: 3px;
+  inset: 2px 3px 5px 3px;
+  border-radius: clamp(4px, 0.9vw, 12px);
   background-image: linear-gradient(
     135deg,
     rgba(255, 255, 255, 0.03) 0%,
@@ -1022,6 +1039,26 @@ button:hover:not(:disabled) {
   letter-spacing: 0.03em;
 }
 
+/* Desktop-only sizing (above mobile breakpoint).
+   Mobile retains its own sizes from the @media (max-width: 780px) block. */
+@media (min-width: 781px) {
+  /* Plain letter keys (A-Z etc.) — match KLE's f:9 proportional size (~37% of
+     key width). Keys with .leg children (.top/.mainlbl) have their own explicit
+     font-size rules that override this inheritance, so number keys are unaffected. */
+  .atariKeyboard .key:not(.small):not(.wide) {
+    font-size: clamp(7px, 1.7vw, 20px);
+  }
+
+  /* Word-label small keys (ESC, BREAK, etc.) — at narrow desktop widths the
+     spacers are active and keys shrink to ~32px; reduce font and inline padding
+     so 5-letter words like BREAK still fit without clipping. Wide small keys
+     (CONTROL, CAPS, RETURN, SHIFT) are wide enough and excluded. */
+  .atariKeyboard .key.small:not(.wide) {
+    font-size: clamp(5px, 0.9vw, 13px);
+    padding-inline: clamp(1px, 0.4vw, 6px);
+  }
+}
+
 .atariKeyboard .key:not(.active):hover {
   filter: brightness(1.18);
 }
@@ -1054,39 +1091,9 @@ button:hover:not(:disabled) {
 }
 
 
-.atariKeyboard .case-side::before {
-  content: "";
-  position: absolute;
-  top: calc(-1 * var(--side-band-top));
-  right: 0;
-  bottom: calc(-1 * var(--side-band-bottom));
-  left: 0;
-  background: var(--metal);
-  border-top: 1px solid var(--metal-hi);
-  border-left: 1px solid var(--metal-hi);
-  border-right: 1px solid #888888;
-  border-bottom: 3px solid #888888;
-  border-radius: 5px;
-  z-index: -2;
-  pointer-events: none;
-}
-
+.atariKeyboard .case-side::before,
 .atariKeyboard .case-side::after {
-  content: "";
-  position: absolute;
-  top: calc(-1 * var(--side-band-top) + 2px);
-  right: 3px;
-  bottom: calc(-1 * var(--side-band-bottom) + 5px);
-  left: 3px;
-  background: var(--metal-hi);
-  border-radius: 3px;
-  background-image: linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.04),
-    rgba(0, 0, 0, 0.04)
-  );
-  z-index: -1;
-  pointer-events: none;
+  display: none;
 }
 
 .atariKeyboard .side-keys {
@@ -1094,17 +1101,17 @@ button:hover:not(:disabled) {
   flex-direction: column;
   gap: var(--side-key-gap);
   width: 100%;
+  /* Align first side-key with the first main key row.
+     The main block is offset by deck-pad-top inside .deck; match it here. */
+  padding-top: var(--deck-pad-top);
 }
 
 .atariKeyboard .side-key {
   height: var(--side-key-h);
   width: 100%;
   box-sizing: border-box;
-  border-radius: clamp(2px, 0.55vw, 5px);
-  border-top:    1px solid var(--metal-hi);
-  border-left:   1px solid var(--metal-hi);
-  border-right:  1px solid #888888;
-  border-bottom: 3px solid #888888;
+  border-radius: clamp(3px, 0.6vw, 7px);
+  border: 1px solid #999999;
   background: var(--metal);
   box-shadow: none;
   cursor: pointer;
@@ -1117,28 +1124,9 @@ button:hover:not(:disabled) {
   z-index: 0;
 }
 
-.atariKeyboard .side-key::before {
-  content: "";
-  position: absolute;
-  inset: 2px 3px 5px 3px;
-  background: var(--metal-hi);
-  border-radius: 3px;
-  pointer-events: none;
-  z-index: -2;
-}
-
+.atariKeyboard .side-key::before,
 .atariKeyboard .side-key::after {
-  content: "";
-  position: absolute;
-  inset: 2px 3px 5px 3px;
-  border-radius: 3px;
-  background-image: linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.04),
-    rgba(0, 0, 0, 0.04)
-  );
-  pointer-events: none;
-  z-index: -1;
+  display: none;
 }
 
 .atariKeyboard .side-key:not(.active):hover {
@@ -1148,8 +1136,7 @@ button:hover:not(:disabled) {
 .atariKeyboard .side-key.pressed,
 .atariKeyboard .side-key:active,
 .atariKeyboard .side-key.active {
-  transform: translateY(3px);
-  border-bottom-width: 1px;
+  transform: translateY(2px);
   filter: brightness(0.88) drop-shadow(0 0 5px rgba(200, 200, 180, 0.35));
 }
 
@@ -1223,6 +1210,10 @@ button:hover:not(:disabled) {
   .atariKeyboard .atari {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto auto auto;
+    /* On mobile the board is much taller, so the gradient's %-based cream stop
+       bleeds behind the first key rows. The chassis-label already paints its own
+       cream background + stripe border, so use solid dark here instead. */
+    background: var(--bed);
     box-shadow:
       0 clamp(3px, 1vw, 8px) 0 #060603,
       0 clamp(6px, 2vw, 16px) clamp(16px, 5vw, 50px) rgba(0, 0, 0, 0.9),
@@ -1365,6 +1356,7 @@ button:hover:not(:disabled) {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: var(--gap);
+    padding-top: 0;
     padding-right: 0;
     padding-bottom: 4px;
   }
@@ -1861,9 +1853,13 @@ canvas.crtEnabled {
 /* ---- Assembler Editor Panel ---- */
 .assemblerPanel {
   width: min(100%, 1083px);
+  /* dvh tracks the *visible* viewport as mobile browser chrome shows/hides;
+     the vh values are the fallback for browsers without dvh support. */
   height: calc(100vh - 70px);
+  height: calc(100dvh - 70px);
   min-height: 340px;
   max-height: calc(100vh - 70px);
+  max-height: calc(100dvh - 70px);
   flex-shrink: 0;
   border: 1px solid var(--sub-panel-border);
   border-radius: 6px;
@@ -2364,6 +2360,7 @@ canvas.crtEnabled {
   width: min(100%, 1083px);
   min-height: clamp(260px, 34vh, 360px);
   max-height: 90vh;
+  max-height: 90dvh;
   border: 1px solid var(--sub-panel-border);
   border-radius: 6px;
   background: var(--sub-panel-bg);

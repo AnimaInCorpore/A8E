@@ -12,7 +12,13 @@
       "Bash(echo \"exit: $?\")",
       "mcp__Claude_Preview__preview_start",
       "mcp__Claude_in_Chrome__switch_browser",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "mcp__Claude_in_Chrome__list_connected_browsers",
+      "mcp__Claude_in_Chrome__select_browser",
+      "mcp__Claude_in_Chrome__tabs_create_mcp",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__browser_batch",
+      "mcp__Claude_in_Chrome__computer"
     ]
   }
 }
