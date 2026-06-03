@@ -1604,6 +1604,7 @@ canvas.crtEnabled {
   padding: 5px 8px;
   background: var(--sub-panel-toolbar-bg);
   border-bottom: 1px solid var(--sub-panel-inner-border);
+  flex-wrap: wrap;
   flex-shrink: 0;
 }
 .hostfs-btn {
@@ -2352,6 +2353,16 @@ canvas.crtEnabled {
   .asm-source-select {
     min-width: min(52vw, 240px);
     max-width: min(70vw, 300px);
+  }
+}
+
+/* On phones the 160px clamp floor of the breakpoint gutter eats ~half the
+   editor width (28vw only overtakes 160px above ~570px wide). Shrink the floor
+   so the code column stays usable; the gutter still fits line #, address and a
+   trimmed byte column. */
+@media (max-width: 600px) {
+  .asm-editor-wrap {
+    --asm-gutter-width: clamp(100px, 30vw, 160px);
   }
 }
 
