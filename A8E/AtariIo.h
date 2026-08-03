@@ -74,7 +74,6 @@
 
 typedef struct
 {
-	u32 lVerticalScrollOffset;
 	u32 lCurrentDisplayLine;
 
 	SDL_Surface *pSdlAtariSurface;
@@ -105,6 +104,7 @@ typedef struct
 	u64 llCycle;
 	u64 llDisplayListFetchCycle;
 	u64 llDliCycle;
+	u64 llVbiCycle;
 	u64 llSerialOutputNeedDataCycle;
 	u64 llSerialOutputTransmissionDoneCycle;
 	u64 llSerialInputDataReadyCycle;
@@ -116,6 +116,13 @@ typedef struct
 	u8 cNmienEnabledByCycle8;
 	u8 cNmienEnabledOnCycle7Mask;
 
+	/* CHBASE delayed latch (AHRM 4.4: effect 2 color clocks after write) */
+	u8 bChbaseTimingInitialized;
+	u8 cChbaseRawValue;
+	u8 cChbaseActiveValue;
+	u8 cChbasePendingValue;
+	u64 llChbasePendingCycle;
+
 	void *pPokey;
 
 	u8 cCurrentDisplayListCommand;
@@ -124,6 +131,18 @@ typedef struct
 	u16 sRowDisplayMemoryAddress;
 	u16 sDisplayMemoryAddress;
 	u8 bFirstRowScanline;
+
+	/* AHRM 4.7: 4-bit mode-line row (delta) counter.  A mode line normally
+	 * ends when the counter reaches its static end row; the first line after
+	 * a vertically scrolled region instead ends when the counter matches the
+	 * live VSCROL value (sampled at cycle 108 of each scanline; the DLI
+	 * decision samples VSCROL at cycle 5).
+	 */
+	u8 cModeLineRowCounter;
+	u8 cModeLineEndRow;
+	u8 bModeLineScrollExit;
+	u8 bModeLineExitDli;
+	u8 bModeLineEndsThisLine;
 	u8 cValuePortA;
 	u8 cValuePortB;
 

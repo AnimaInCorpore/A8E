@@ -4,7 +4,7 @@
 
 - Files: `jsA8E/js/core/cpu.js`, `jsA8E/js/core/cpu_tables.js`, `jsA8E/js/core/antic.js`, `jsA8E/js/core/gtia.js`, `jsA8E/js/core/pokey.js`, `jsA8E/js/core/pokey_sio.js`, `jsA8E/js/core/memory.js`, `jsA8E/js/core/io.js`, `jsA8E/js/core/atari.js`, `jsA8E/js/core/hw.js`, `jsA8E/js/core/playfield/playfield.js`, `jsA8E/js/core/playfield/renderer_base.js`, `jsA8E/js/core/state.js`, `jsA8E/js/core/snapshot_codec.js`
 - Purpose: mirror Atari hardware behavior in JavaScript with timing-compatible execution.
-- Status: updated on 2026-05-12 (`partial`).
+- Status: updated on 2026-08-03 (`partial`).
 
 ## Architecture
 
@@ -20,7 +20,8 @@ State is created up-front by `state.js` into a fixed `ioData` shape. ANTIC and t
 
 - NMIST DLI/VBI bits are set at cycle 7 of the triggering scanline; NMI is asserted at cycle 8 (AHRM 4.8). `DLI_HORIZONTAL_OFFSET = 7` marks the NMIST cycle; the event handler fires at cycle 7 to latch NMIST and again at cycle 8 to fire the NMI. The NMI handler begins at the first instruction boundary at cycle 10 or later.
 - Same-scanline `NMIEN` writes: cycle-7 write enables the current DLI (with one-beam-cycle delay — NMI fires at cycle 9 instead of 8); cycle-8 write can still suppress the NMI; NMIST latches unconditionally at cycle 7 regardless of NMIEN.
-- VBI fires at the start of scan line 248 (AHRM 4.8).
+- The VBI uses the same two-phase model on scan line 248: `io.vbiCycle` is armed at cycle 7 (NMIST VBI latches there and clears the DLI bit), the NMI fires at cycle 8, and the `NMIEN` cycle-7/8 gating (cycle-7 enable delays the NMI by one cycle, cycle-8 disable suppresses it) applies exactly as for DLIs.
+- Vertical scrolling follows a live 4-bit row (delta) counter (`io.modeLineRowCounter`, AHRM 4.7). Region entry latches VSCROL as the start row at the mode-line fetch (deadline cycle 0) and wraps out-of-range values (GTIA 9++). The region-exit line ends when the counter matches the live VSCROL value, latched at the top of the cycle-109 clock action (writes through cycle 108 count); `evaluateModeLineEnd` advances the counter or schedules the next display-list fetch after each drawn scanline. Exit-line DLIs are armed dynamically at cycle 6 of the scanline whose counter matches VSCROL as of cycle 5, so the height decision and DLI decision can diverge (the AHRM "turbo" double-write trick). Character renderers derive glyph rows from the row counter with the AHRM 4.7 tall-line mappings (modes 2/3: rows 10-15 repeat 2-7, rows 8-9 blank/descend; modes 4/6: rows 8-15 repeat 0-7; modes 5/7: scanline counter halved).
 - VCOUNT flips to the next scanline on cycle 111 of the previous line (AHRM 4.10), including the one-cycle PAL end-of-frame anomaly (`$9C` on the last scanline's cycle 111 before wrapping to `$00`).
 - WSYNC stalls the CPU to cycle 105 (`WSYNC_CYCLE`); writes ≤ cycle 103 target the current line, writes ≥ cycle 104 (`WSYNC_BOUNDARY`) target the next line (AHRM 4.9).
 - JVB decode ignores DLI/VSCROL bits; JVB+DLI replay re-arms one DLI per scanline until VBL. NMIST DLI bit follows AHRM lifetime (cleared at line 248 or NMIRES, not every scanline).
@@ -64,7 +65,7 @@ All documented and undocumented opcodes are implemented, including the fake6502/
 
 ## Snapshots
 
-Snapshot saves default to advancing paused execution to the next frame boundary before encoding, avoiding unstable mid-frame raster state (`timing: "exact"` opts out). Payloads capture CPU registers/counters, RAM + shadow RAM, video buffers, `ioData` timing/custom-chip state (including `nmiTiming`, `chbaseTiming`, POKEY pot-scan state, ANTIC timing latch), mounted media/ROM bytes, debugger trace/breakpoints, input bookkeeping, and H: device HostFS file set plus open-channel state.
+Snapshot saves default to advancing paused execution to the next frame boundary before encoding, avoiding unstable mid-frame raster state (`timing: "exact"` opts out). Payloads capture CPU registers/counters, RAM + shadow RAM, video buffers, `ioData` timing/custom-chip state (including `nmiTiming`, `chbaseTiming`, `vbiCycle`, the ANTIC mode-line row-counter state, POKEY pot-scan state, ANTIC timing latch), mounted media/ROM bytes, debugger trace/breakpoints, input bookkeeping, and H: device HostFS file set plus open-channel state. Snapshots predating `vbiCycle`/row-counter fields restore with quiescent defaults (safe for the default frame-boundary saves).
 
 ## XEX Preflight
 
@@ -72,8 +73,9 @@ XEX mount preflight simulates the file's writes in load order, so a segment that
 
 ## Issues
 - Broader real-content raster verification (chained DLIs, PMG priority ladders, wide-playfield artifacts) is still incomplete.
-- VBI-side `NMIEN` gating and `VSCROL`/DLI same-line deadlines are not yet modeled.
+- The AHRM 4.8 missed-NMI case (an IRQ acknowledged at exactly cycle 4 swallowing the cycle-8 NMI) is not modeled.
+- Blanked extended text rows (modes 2/3 rows 8-9 for non-descender characters) skip the character-data bus fetch instead of fetching and discarding, so their DMA steal timing is approximated.
 - The interleaved PMG path still reconstructs the hidden part of a scanline from current register state at the first visible span, rather than replaying every earlier same-line write cycle by cycle.
 
 ## Todo
-- Finish the raster-content sweep and extend the ANTIC deadline pass to VBI and `VSCROL`.
+- Finish the raster-content sweep, including the AHRM VSCROL corner-case examples (Atomix Plus!, GTIA 9++ content).

@@ -14,6 +14,7 @@
     const IO_HSCROL = cfg.IO_HSCROL;
     const IO_PRIOR = cfg.IO_PRIOR;
     const IO_VCOUNT = cfg.IO_VCOUNT;
+    const IO_VSCROL = cfg.IO_VSCROL;
 
     const PRIO_BKG = cfg.PRIO_BKG | 0;
     const PRIO_PM0 = cfg.PRIO_PM0 | 0;
@@ -182,6 +183,28 @@
         } else {
           ctx.ram[IO_VCOUNT] = (nextLine >> 1) & 0xff;
         }
+      }
+
+      // AHRM 4.8: a VSCROL write affects whether the DLI fires on this
+      // scanline only through cycle 5, so the exit-line DLI decision is
+      // evaluated once the beam reaches cycle 6.
+      if (
+        lineCycle === 6 &&
+        io.modeLineExitDli &&
+        (io.modeLineRowCounter & 0x0f) === (ctx.sram[IO_VSCROL] & 0x0f)
+      ) {
+        io.dliCycle = lineStartClock + 7;
+        if (io.dliCycle < ctx.ioBeamTimedEventCycle) {
+          ctx.ioBeamTimedEventCycle = io.dliCycle;
+        }
+      }
+
+      // AHRM 4.7: the final row of a scrolled region is determined by the
+      // VSCROL value as of cycle 108, so the comparison latches once the
+      // beam reaches cycle 109.
+      if (lineCycle === 109 && io.modeLineScrollExit) {
+        io.modeLineEndsThisLine =
+          (io.modeLineRowCounter & 0x0f) === (ctx.sram[IO_VSCROL] & 0x0f);
       }
 
       const drawLine = io.drawLine;

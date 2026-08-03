@@ -76,9 +76,10 @@
       const ram = ctx.ram;
       const sram = ctx.sram;
 
-      const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      const vScrollLine =
-        ((vScrollBase - lineDelta) - (io.video.verticalScrollOffset | 0)) & 0xff;
+      // AHRM 4.7: mode 6 rows 8-15 repeat rows 0-7; mode 7 counts its
+      // doubled scanlines directly on the 4-bit row counter.
+      const rowCounter = io.modeLineRowCounter & 0x0f;
+      const vScrollLine = vScrollBase === 16 ? rowCounter : rowCounter & 0x07;
 
       const aColorTable = SCRATCH_COLOR_TABLE_A;
       loadColorTable(sram, aColorTable);

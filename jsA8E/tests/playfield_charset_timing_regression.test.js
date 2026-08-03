@@ -85,8 +85,8 @@ function makeCtx(bytesPerLine) {
       },
       video: {
         currentDisplayLine: 0,
-        verticalScrollOffset: 0,
       },
+      modeLineRowCounter: 0,
       drawLine: {
         bytesPerLine: bytesPerLine,
         destIndex: 0,
@@ -180,7 +180,12 @@ function testMode23UsesDelayedChbaseAndLatchesChactlPerScanline() {
     mode2: [],
     mode3: [],
   };
+  let activeCapture = null;
 
+  // Instrument the deferred character-data fetch (the path the real
+  // pipeline uses).  The fetched address encodes both the delayed CHBASE
+  // (address & $FC00) and the resolved glyph row (address & 7), so a
+  // mid-scanline CHACTL reflect write would show up as a row flip.
   const mode23 = createModeApi(context, "mode_2_3.js", baseApi, {
     clockAction: function (ctx) {
       if (ctx.ioData.clock === 1) {
@@ -189,12 +194,11 @@ function testMode23UsesDelayedChbaseAndLatchesChactlPerScanline() {
       }
       ctx.ioData.clock = (ctx.ioData.clock | 0) + 1;
     },
-    fetchCharacterRow8: function (ram, chBase, ch, row, chactl) {
-      captures.mode2.push({ chBase: chBase, chactl: chactl });
-      return 0;
-    },
-    fetchCharacterRow10: function (ram, chBase, ch, row, chactl) {
-      captures.mode3.push({ chBase: chBase, chactl: chactl });
+    fetchUnbufferedDisplayByte: function (ctx, address) {
+      activeCapture.push({
+        chBase: address & 0xfc00,
+        glyphRow: address & 0x07,
+      });
       return 0;
     },
   });
@@ -208,6 +212,7 @@ function testMode23UsesDelayedChbaseAndLatchesChactlPerScanline() {
   ctx2.ram[2] = 0x00;
   ctx2.ram[3] = 0x00;
 
+  activeCapture = captures.mode2;
   mode23.drawLineMode2(ctx2);
 
   assert.deepEqual(
@@ -218,7 +223,7 @@ function testMode23UsesDelayedChbaseAndLatchesChactlPerScanline() {
   );
   assert.deepEqual(
     captures.mode2.map(function (entry) {
-      return entry.chactl & 0x04;
+      return entry.glyphRow;
     }),
     [0x00, 0x00, 0x00, 0x00],
   );
@@ -232,6 +237,7 @@ function testMode23UsesDelayedChbaseAndLatchesChactlPerScanline() {
   ctx3.ram[2] = 0x00;
   ctx3.ram[3] = 0x00;
 
+  activeCapture = captures.mode3;
   mode23.drawLineMode3(ctx3);
 
   assert.deepEqual(
@@ -242,7 +248,7 @@ function testMode23UsesDelayedChbaseAndLatchesChactlPerScanline() {
   );
   assert.deepEqual(
     captures.mode3.map(function (entry) {
-      return entry.chactl & 0x04;
+      return entry.glyphRow;
     }),
     [0x00, 0x00, 0x00, 0x00],
   );
@@ -330,7 +336,7 @@ function testMode57StillStealsCharacterDmaOnOddRepeatedScanlines() {
     },
   });
   const ctx5 = makeCtx(1);
-  ctx5.ioData.video.verticalScrollOffset = 1;
+  ctx5.ioData.modeLineRowCounter = 1;
   ctx5.ram[0] = 0x00;
 
   mode45.drawLineMode5(ctx5);
@@ -342,7 +348,7 @@ function testMode57StillStealsCharacterDmaOnOddRepeatedScanlines() {
     },
   });
   const ctx7 = makeCtx(1);
-  ctx7.ioData.video.verticalScrollOffset = 1;
+  ctx7.ioData.modeLineRowCounter = 1;
   ctx7.ram[0] = 0x00;
 
   mode67.drawLineMode7(ctx7);

@@ -179,7 +179,24 @@ u8 *Antic_CHBASE(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
 	{
+		IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+		u32 lWriteCycleOffset =
+			pContext->cCurrentInstructionCycles > 0
+				? (u32)(pContext->cCurrentInstructionCycles - 1)
+				: 0;
+
 		SRAM[IO_CHBASE] = *pValue;
+
+		/* AHRM 4.4: CHBASE change takes effect 2 color clocks after the
+		 * register write.  The 6502 bus write occurs on the last cycle of
+		 * the instruction, so offset by (instruction cycles - 1) to place
+		 * the latch relative to the actual write cycle.
+		 */
+		pIoData->bChbaseTimingInitialized = 1;
+		pIoData->cChbaseRawValue = *pValue;
+		pIoData->cChbasePendingValue = *pValue;
+		pIoData->llChbasePendingCycle =
+			pIoData->llCycle + lWriteCycleOffset + 2;
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" CHBASE: %02X\n", *pValue);

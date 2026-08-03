@@ -1140,6 +1140,7 @@ void _6502_Execute(_6502_Context_t *pContext)
 
 	pContext->AccessFunction = NULL;
 	pContext->cPageCrossed = 0;
+	pContext->cCurrentInstructionCycles = m_a6502CodeTable[cCode].cCycles;
 	m_a6502AddressTypeFunctionList[m_a6502CodeTable[cCode].cAddressType](pContext);
 
 	if(pContext->AccessFunction == NULL)

@@ -83,6 +83,7 @@ static void ProbeMachine_ResetVideo(ProbeMachine_t *pMachine)
 	pIoData->llCycle = 0;
 	pIoData->llDisplayListFetchCycle = 0;
 	pIoData->llDliCycle = CYCLE_NEVER;
+	pIoData->llVbiCycle = CYCLE_NEVER;
 	pIoData->llSerialOutputNeedDataCycle = CYCLE_NEVER;
 	pIoData->llSerialOutputTransmissionDoneCycle = CYCLE_NEVER;
 	pIoData->llSerialInputDataReadyCycle = CYCLE_NEVER;
@@ -97,7 +98,11 @@ static void ProbeMachine_ResetVideo(ProbeMachine_t *pMachine)
 	pIoData->sDisplayMemoryAddress = 0x2000;
 	pIoData->bFirstRowScanline = 0;
 	pIoData->tVideoData.lCurrentDisplayLine = 8;
-	pIoData->tVideoData.lVerticalScrollOffset = 0;
+	pIoData->cModeLineRowCounter = 0;
+	pIoData->cModeLineEndRow = 0;
+	pIoData->bModeLineScrollExit = 0;
+	pIoData->bModeLineExitDli = 0;
+	pIoData->bModeLineEndsThisLine = 0;
 }
 
 static void ProbeMachine_PrepareModeLine(
@@ -118,7 +123,10 @@ static void ProbeMachine_PrepareModeLine(
 	pIoData->sDisplayMemoryAddress = 0x2000;
 	pIoData->bFirstRowScanline = bFirstRowScanline;
 	pIoData->tVideoData.lCurrentDisplayLine = lCurrentLine;
-	pIoData->tVideoData.lVerticalScrollOffset = 0;
+	pIoData->cModeLineRowCounter = 0;
+	pIoData->bModeLineScrollExit = 0;
+	pIoData->bModeLineExitDli = 0;
+	pIoData->bModeLineEndsThisLine = 0;
 
 	SRAM[IO_DMACTL] = 0x22;
 	SRAM[IO_HSCROL] = 0x00;
@@ -236,6 +244,55 @@ static int TestMode2BlankAndInvertProducesInvertedSpace(void)
 	return 1;
 }
 
+static int TestMode2MidScanlineChbaseLatchSwitchesCharacterSet(void)
+{
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+	IoData_t *pIoData = tMachine.pIoData;
+
+	REQUIRE(pContext != NULL, "machine open failed");
+
+	ProbeMachine_ResetVideo(&tMachine);
+	ProbeMachine_PrepareModeLine(&tMachine, 0x02, 8, 16, 0);
+
+	SRAM[IO_CHACTL] = 0x00;
+	SRAM[IO_CHBASE] = 0x24;
+	RAM[0x2000] = 0xff; /* old charset: char 0 row 0 solid */
+	RAM[0x2400] = 0x00; /* new charset: char 0 row 0 empty */
+
+	/* Prime a pending CHBASE switch ($20 -> $24) that matures at beam
+	 * cycle 58 - the fetch cycle of character cell 20 on this line
+	 * (playfield starts at cycle 18, one character per two cycles).
+	 */
+	pIoData->bChbaseTimingInitialized = 1;
+	pIoData->cChbaseRawValue = 0x24;
+	pIoData->cChbaseActiveValue = 0x20;
+	pIoData->cChbasePendingValue = 0x24;
+	pIoData->llChbasePendingCycle = 58;
+
+	AtariIoDrawLine(pContext);
+
+	REQUIRE(
+		ProbeMachine_PixelAt(&tMachine, 8, 248) == 0xab,
+		"character 19 used the pending CHBASE too early; x248 was $%02X",
+		ProbeMachine_PixelAt(&tMachine, 8, 248));
+	REQUIRE(
+		ProbeMachine_PixelAt(&tMachine, 8, 256) == SRAM[IO_COLPF2],
+		"character 20 kept the stale CHBASE; x256 was $%02X instead of $%02X",
+		ProbeMachine_PixelAt(&tMachine, 8, 256),
+		SRAM[IO_COLPF2]);
+	REQUIRE(
+		pIoData->cChbaseActiveValue == 0x24,
+		"pending CHBASE value $24 was not latched (active is $%02X)",
+		pIoData->cChbaseActiveValue);
+	REQUIRE(
+		pIoData->llChbasePendingCycle == CYCLE_NEVER,
+		"CHBASE pending cycle was not cleared after latching");
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
 static int TestMode5UsesOneKilobyteChbaseAlignment(void)
 {
 	ProbeMachine_t tMachine = ProbeMachine_Open();
@@ -274,6 +331,7 @@ static int TestMode5FetchesCharacterDataOnOddRepeatedScanlines(void)
 
 	ProbeMachine_ResetVideo(&tMachine);
 	ProbeMachine_PrepareModeLine(&tMachine, 0x05, 8, 23, 0);
+	pIoData->cModeLineRowCounter = 1;
 
 	SRAM[IO_CHBASE] = 0x20;
 	pIoData->tDrawLineData.aPlayfieldLineBuffer[0] = 0x00;
@@ -299,6 +357,7 @@ static int TestMode7FetchesCharacterDataOnOddRepeatedScanlines(void)
 
 	ProbeMachine_ResetVideo(&tMachine);
 	ProbeMachine_PrepareModeLine(&tMachine, 0x07, 8, 23, 0);
+	pIoData->cModeLineRowCounter = 1;
 
 	SRAM[IO_CHBASE] = 0x20;
 	pIoData->tDrawLineData.aPlayfieldLineBuffer[0] = 0x00;
@@ -331,6 +390,7 @@ int main(int argc, char *argv[])
 
 	bOk &= TestCharacterModeOriginsUseGtiaClock30();
 	bOk &= TestMode2BlankAndInvertProducesInvertedSpace();
+	bOk &= TestMode2MidScanlineChbaseLatchSwitchesCharacterSet();
 	bOk &= TestMode5UsesOneKilobyteChbaseAlignment();
 	bOk &= TestMode5FetchesCharacterDataOnOddRepeatedScanlines();
 	bOk &= TestMode7FetchesCharacterDataOnOddRepeatedScanlines();

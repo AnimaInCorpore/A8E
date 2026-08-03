@@ -12,13 +12,13 @@
       for (let p = 0; p < 8; p++) potValues[p] = 229;
       return {
         video: {
-          verticalScrollOffset: 0,
           currentDisplayLine: 0,
         },
         displayListFetchCycle: 0,
         clock: 0,
         inDrawLine: false,
         dliCycle: CYCLE_NEVER,
+        vbiCycle: CYCLE_NEVER,
         serialOutputNeedDataCycle: CYCLE_NEVER,
         serialOutputTransmissionDoneCycle: CYCLE_NEVER,
         serialInputDataReadyCycle: CYCLE_NEVER,
@@ -58,6 +58,12 @@
         rowDisplayMemoryAddress: 0,
         displayMemoryAddress: 0,
         firstRowScanline: false,
+        // AHRM 4.7: 4-bit mode-line row (delta) counter state.
+        modeLineRowCounter: 0,
+        modeLineEndRow: 0,
+        modeLineScrollExit: false,
+        modeLineExitDli: false,
+        modeLineEndsThisLine: false,
         nmiTiming: {
           enabledByCycle7: 0,
           enabledByCycle8: 0,
@@ -113,6 +119,7 @@
         masterNext = io.displayListFetchCycle;
       }
       if (io.dliCycle < beamNext) beamNext = io.dliCycle;
+      if (io.vbiCycle < beamNext) beamNext = io.vbiCycle;
 
       if (io.serialOutputTransmissionDoneCycle < masterNext) {
         masterNext = io.serialOutputTransmissionDoneCycle;

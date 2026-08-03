@@ -87,6 +87,61 @@ static NmiSourceTiming_t AtariIoCurrentLineNmiSourceState(const IoData_t *pIoDat
 	return tState;
 }
 
+/* Called after each drawn scanline: advance the 4-bit mode-line row counter
+ * and decide whether the next scanline fetches a new display list command
+ * (AHRM 4.7).  Exit lines use the VSCROL comparison latched at cycle 108.
+ */
+static void AtariIoEvaluateModeLineEnd(_6502_Context_t *pContext)
+{
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+	u32 lCurrentDisplayLine = pIoData->tVideoData.lCurrentDisplayLine;
+	u8 bEnded;
+
+	if(!(SRAM[IO_DMACTL] & 0x20))
+	{
+		return;
+	}
+
+	if(lCurrentDisplayLine < 8 || lCurrentDisplayLine > 247)
+	{
+		return;
+	}
+
+	/* Only evaluate while a fetched mode line is in progress. */
+	if(pIoData->lNextDisplayListLine <= lCurrentDisplayLine)
+	{
+		return;
+	}
+
+	/* JVB waits for vertical blank regardless of its height. */
+	if((pIoData->cCurrentDisplayListCommand & 0x4f) == 0x41)
+	{
+		return;
+	}
+
+	if(pIoData->bModeLineScrollExit)
+	{
+		bEnded = pIoData->bModeLineEndsThisLine;
+	}
+	else
+	{
+		bEnded = (pIoData->cModeLineRowCounter == pIoData->cModeLineEndRow);
+	}
+
+	if(bEnded)
+	{
+		pIoData->lNextDisplayListLine = lCurrentDisplayLine + 1;
+	}
+	else
+	{
+		pIoData->cModeLineRowCounter = (pIoData->cModeLineRowCounter + 1) & 0x0f;
+		if(pIoData->lNextDisplayListLine == lCurrentDisplayLine + 1)
+		{
+			pIoData->lNextDisplayListLine = lCurrentDisplayLine + 2;
+		}
+	}
+}
+
 static void AtariIoAdvanceScanline(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
@@ -105,7 +160,11 @@ static void AtariIoAdvanceScanline(_6502_Context_t *pContext)
 		pIoData->tVideoData.lCurrentDisplayLine = 0;
 		pIoData->lNextDisplayListLine = 8;
 		pIoData->cCurrentDisplayListCommand = 0;
-		pIoData->tVideoData.lVerticalScrollOffset = 0;
+		pIoData->cModeLineRowCounter = 0;
+		pIoData->cModeLineEndRow = 0;
+		pIoData->bModeLineScrollExit = 0;
+		pIoData->bModeLineExitDli = 0;
+		pIoData->bModeLineEndsThisLine = 0;
 		memset(pIoData->tVideoData.pPriorityData, 0, PIXELS_PER_LINE * LINES_PER_SCREEN_PAL);
 	}
 
@@ -121,11 +180,12 @@ static void AtariIoAdvanceScanline(_6502_Context_t *pContext)
 
 	if(pIoData->tVideoData.lCurrentDisplayLine == 248)
 	{
-		RAM[IO_NMIRES_NMIST] |= NMI_VBI;
-		if(SRAM[IO_NMIEN] & NMI_VBI)
-		{
-			_6502_Nmi(pContext);
-		}
+		/* VBI NMIST latches at cycle 7 of scan line 248; the NMI itself
+		 * fires at cycle 8, gated by the same NMIEN deadlines as the DLI
+		 * (AHRM 4.8). llDisplayListFetchCycle already points at line 248.
+		 */
+		pIoData->llVbiCycle =
+			pIoData->llDisplayListFetchCycle + DLI_HORIZONTAL_OFFSET;
 	}
 }
 
@@ -1151,6 +1211,27 @@ static void AtariIo_DrawClockAction(_6502_Context_t *pContext)
 		}
 	}
 
+	/* AHRM 4.8: a VSCROL write affects whether the DLI fires on this
+	 * scanline only through cycle 5, so the exit-line DLI decision is
+	 * evaluated once the beam reaches cycle 6.
+	 */
+	if(lCycleInLine == 6 && pIoData->bModeLineExitDli &&
+	   pIoData->cModeLineRowCounter == (SRAM[IO_VSCROL] & 0x0f))
+	{
+		pIoData->llDliCycle = llLineStartCycle + DLI_HORIZONTAL_OFFSET;
+		AtariIoCycleTimedEventUpdate(pContext);
+	}
+
+	/* AHRM 4.7: the final row of a scrolled region is determined by the
+	 * VSCROL value as of cycle 108, so the comparison latches once the
+	 * beam reaches cycle 109.
+	 */
+	if(lCycleInLine == 109 && pIoData->bModeLineScrollExit)
+	{
+		pIoData->bModeLineEndsThisLine =
+			(pIoData->cModeLineRowCounter == (SRAM[IO_VSCROL] & 0x0f));
+	}
+
 	if(lCycleInLine == 0 || (lCycleInLine >= 2 && lCycleInLine <= 5))
 	{
 		if(AtariIo_FetchPmgDmaCycle(pContext, lCycleInLine, pIoData->tVideoData.lCurrentDisplayLine))
@@ -1264,14 +1345,46 @@ static AnticModeInfo_t m_aAnticModeInfoTable[16] =
 		{1, 8, AtariIo_DrawLineModeF},
 };
 
-static u32 AtariIoDisplayLineDelta(const IoData_t *pIoData)
-{
-	return pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine;
-}
-
 static void AtariIoAdvanceDisplayMemoryRow(IoData_t *pIoData)
 {
 	FIXED_ADD(pIoData->sDisplayMemoryAddress, 0x0fff, pIoData->tDrawLineData.lBytesPerLine);
+}
+
+/* AHRM 4.4: a CHBASE write takes effect 2 color clocks after the bus write.
+ * Character renderers poll this per output cycle so mid-scanline DLI writes
+ * switch the character set at the correct beam position.  Direct SRAM pokes
+ * (test probes) are picked up with the same 2-cycle delay.
+ */
+static u8 AtariIo_CurrentChbaseRegister(_6502_Context_t *pContext)
+{
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+	u8 cRawValue = SRAM[IO_CHBASE];
+
+	if(!pIoData->bChbaseTimingInitialized)
+	{
+		pIoData->bChbaseTimingInitialized = 1;
+		pIoData->cChbaseRawValue = cRawValue;
+		pIoData->cChbaseActiveValue = cRawValue;
+		pIoData->cChbasePendingValue = cRawValue;
+		pIoData->llChbasePendingCycle = CYCLE_NEVER;
+	}
+	else if(cRawValue != pIoData->cChbaseRawValue)
+	{
+		pIoData->cChbaseRawValue = cRawValue;
+		pIoData->cChbasePendingValue = cRawValue;
+		if(pIoData->llChbasePendingCycle == CYCLE_NEVER)
+		{
+			pIoData->llChbasePendingCycle = pIoData->llCycle + 2;
+		}
+	}
+
+	if(pIoData->llCycle >= pIoData->llChbasePendingCycle)
+	{
+		pIoData->cChbaseActiveValue = pIoData->cChbasePendingValue;
+		pIoData->llChbasePendingCycle = CYCLE_NEVER;
+	}
+
+	return pIoData->cChbaseActiveValue;
 }
 
 // Todo: check all true read values!
@@ -1715,12 +1828,12 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 	u8 cPriority0;
 	u8 cPriority1;
 
-	u32 lLineDelta = AtariIoDisplayLineDelta(pIoData);
-	u32 lVerticalScrollOffset = ((8 - lLineDelta) - pIoData->tVideoData.lVerticalScrollOffset) & 0xff;
+	u32 lModeLineRow = pIoData->cModeLineRowCounter & 0x0f;
 	u8 cChactl = SRAM[IO_CHACTL];
-	u16 sChbase = ((u16)SRAM[IO_CHBASE] << 8) & 0xfc00;
-	if((cChactl & 0x04) && lVerticalScrollOffset < 8)
-		lVerticalScrollOffset = 7 - lVerticalScrollOffset;
+
+	/* AHRM 4.7: mode 2 rows 10-15 repeat rows 2-7. */
+	if(lModeLineRow >= 10)
+		lModeLineRow -= 8;
 
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
 	u32 lCycle;
@@ -1729,6 +1842,7 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 
 	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
 	{
+		u16 sChbase = ((u16)AtariIo_CurrentChbaseRegister(pContext) << 8) & 0xfc00;
 		u8 cPriorMode = SRAM[IO_PRIOR] >> 6;
 		u8 cOutputData;
 
@@ -1738,18 +1852,34 @@ static void AtariIo_DrawLineMode2(_6502_Context_t *pContext)
 			u8 cBit7 = cRaw & 0x80;
 			cCharacter = cRaw & 0x7f;
 
+			if(lModeLineRow < 8)
+			{
+				u32 lRow = (cChactl & 0x04) ? (7 - lModeLineRow) : lModeLineRow;
+				cData = AtariIo_FetchUnbufferedDisplayByte(pContext,
+					sChbase + cCharacter * 8 + lRow, 3);
+			}
+			else if(cCharacter >= 0x60)
+			{
+				/* AHRM 4.7: rows 8-9 show descender rows 0-1, as in mode 3. */
+				u32 lDescRow = lModeLineRow - 8;
+				u32 lRow = (cChactl & 0x04) ? (7 - lDescRow) : lDescRow;
+				cData = AtariIo_FetchUnbufferedDisplayByte(pContext,
+					sChbase + cCharacter * 8 + lRow, 3);
+			}
+			else
+			{
+				/* AHRM 4.7: rows 8-9 are blank for non-descender characters. */
+				cData = 0x00;
+			}
+
 			if(cBit7 && (cChactl & 0x01))
 			{
 				/* CHACTL bit 0: blank characters with name bit 7 set */
-				AtariIo_FetchUnbufferedDisplayByte(pContext,
-					sChbase + cCharacter * 8 + lVerticalScrollOffset, 3);
 				cData = 0x00;
 				cInverse = cChactl & 0x02 ? 0x80 : 0x00;
 			}
 			else
 			{
-				cData = AtariIo_FetchUnbufferedDisplayByte(pContext,
-					sChbase + cCharacter * 8 + lVerticalScrollOffset, 3);
 				/* CHACTL bit 1: invert characters with name bit 7 set */
 				cInverse = cBit7 && (cChactl & 0x02) ? 0x80 : 0x00;
 			}
@@ -1969,10 +2099,13 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 	u8 cPriority0;
 	u8 cPriority1;
 
-	u32 lLineDelta = AtariIoDisplayLineDelta(pIoData);
-	u32 lVerticalScrollOffset = ((10 - lLineDelta) - pIoData->tVideoData.lVerticalScrollOffset) & 0xff;
+	u32 lVerticalScrollOffset = pIoData->cModeLineRowCounter & 0x0f;
 	u8 cChactl = SRAM[IO_CHACTL];
-	u16 sChbase = ((u16)SRAM[IO_CHBASE] << 8) & 0xfc00;
+
+	/* AHRM 4.7: mode 3 rows 10-15 repeat rows 2-7. */
+	if(lVerticalScrollOffset >= 10)
+		lVerticalScrollOffset -= 8;
+
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
 	u32 lCycle;
 	u8 cMask = 0x00;
@@ -1980,6 +2113,7 @@ static void AtariIo_DrawLineMode3(_6502_Context_t *pContext)
 
 	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
 	{
+		u16 sChbase = ((u16)AtariIo_CurrentChbaseRegister(pContext) << 8) & 0xfc00;
 		u8 cPriorMode = SRAM[IO_PRIOR] >> 6;
 		u8 cOutputData;
 
@@ -2231,12 +2365,10 @@ static void AtariIo_DrawLineMode4(_6502_Context_t *pContext)
 	u8 cPriority;
 	u8 cInverse;
 
-	u32 lLineDelta = AtariIoDisplayLineDelta(pIoData);
-	u32 lVerticalScrollOffset = ((8 - lLineDelta) -
-								 pIoData->tVideoData.lVerticalScrollOffset) & 0xff;
+	/* AHRM 4.7: mode 4 rows 8-15 repeat rows 0-7. */
+	u32 lVerticalScrollOffset = pIoData->cModeLineRowCounter & 0x07;
 	u8 cChactl = SRAM[IO_CHACTL];
-	u16 sChbase = ((u16)SRAM[IO_CHBASE] << 8) & 0xfc00;
-	if((cChactl & 0x04) && lVerticalScrollOffset < 8)
+	if(cChactl & 0x04)
 		lVerticalScrollOffset = 7 - lVerticalScrollOffset;
 
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
@@ -2246,6 +2378,8 @@ static void AtariIo_DrawLineMode4(_6502_Context_t *pContext)
 
 	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
 	{
+		u16 sChbase = ((u16)AtariIo_CurrentChbaseRegister(pContext) << 8) & 0xfc00;
+
 		if(cMask == 0x00)
 		{
 			cCharacter = AtariIo_FetchBufferedDisplayByte(pContext, cBufferIndex++, 0);
@@ -2316,10 +2450,8 @@ static void AtariIo_DrawLineMode5(_6502_Context_t *pContext)
 	u8 cColor;
 	u8 cPriority;
 	u8 cInverse;
-	u32 lLineDelta = AtariIoDisplayLineDelta(pIoData);
-	u32 lVerticalScrollLine = ((16 - lLineDelta) - pIoData->tVideoData.lVerticalScrollOffset) & 0xff;
+	u32 lVerticalScrollLine = pIoData->cModeLineRowCounter & 0x0f;
 	u8 cChactl = SRAM[IO_CHACTL];
-	u16 sChbase = ((u16)SRAM[IO_CHBASE] << 8) & 0xfc00;
 
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 2;
 	u32 lCycle;
@@ -2332,6 +2464,8 @@ static void AtariIo_DrawLineMode5(_6502_Context_t *pContext)
 
 	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
 	{
+		u16 sChbase = ((u16)AtariIo_CurrentChbaseRegister(pContext) << 8) & 0xfc00;
+
 		if(cMask == 0x00)
 		{
 			cCharacter = AtariIo_FetchBufferedDisplayByte(pContext, cBufferIndex++, 0);
@@ -2402,12 +2536,10 @@ static void AtariIo_DrawLineMode6(_6502_Context_t *pContext)
 	u8 cColorIndex;
 	u8 cPriority;
 
-	u32 lLineDelta = AtariIoDisplayLineDelta(pIoData);
-	u32 lVerticalScrollOffset = ((8 - lLineDelta) -
-								 pIoData->tVideoData.lVerticalScrollOffset) & 0xff;
+	/* AHRM 4.7: mode 6 rows 8-15 repeat rows 0-7. */
+	u32 lVerticalScrollOffset = pIoData->cModeLineRowCounter & 0x07;
 	u8 cChactl = SRAM[IO_CHACTL];
-	u16 sChbase = ((u16)SRAM[IO_CHBASE] << 8) & 0xfe00;
-	if((cChactl & 0x04) && lVerticalScrollOffset < 8)
+	if(cChactl & 0x04)
 		lVerticalScrollOffset = 7 - lVerticalScrollOffset;
 
 	u32 lPlayfieldCycles = pIoData->tDrawLineData.lBytesPerLine * 4;
@@ -2417,6 +2549,8 @@ static void AtariIo_DrawLineMode6(_6502_Context_t *pContext)
 
 	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
 	{
+		u16 sChbase = ((u16)AtariIo_CurrentChbaseRegister(pContext) << 8) & 0xfe00;
+
 		if(cMask == 0x00)
 		{
 			cCharacter = AtariIo_FetchBufferedDisplayByte(pContext, cBufferIndex++, 0);
@@ -2487,10 +2621,8 @@ static void AtariIo_DrawLineMode7(_6502_Context_t *pContext)
 	u8 cData;
 	u8 cColorIndex;
 	u8 cPriority;
-	u32 lLineDelta = AtariIoDisplayLineDelta(pIoData);
-	u32 lVerticalScrollLine = ((16 - lLineDelta) - pIoData->tVideoData.lVerticalScrollOffset) & 0xff;
+	u32 lVerticalScrollLine = pIoData->cModeLineRowCounter & 0x0f;
 	u8 cChactl = SRAM[IO_CHACTL];
-	u16 sChbase = ((u16)SRAM[IO_CHBASE] << 8) & 0xfe00;
 
 	u32 lVerticalScrollOffset = lVerticalScrollLine >> 1;
 	if(cChactl & 0x04)
@@ -2503,6 +2635,8 @@ static void AtariIo_DrawLineMode7(_6502_Context_t *pContext)
 
 	for(lCycle = 0; lCycle < lPlayfieldCycles; lCycle++)
 	{
+		u16 sChbase = ((u16)AtariIo_CurrentChbaseRegister(pContext) << 8) & 0xfe00;
+
 		if(cMask == 0x00)
 		{
 			cCharacter = AtariIo_FetchBufferedDisplayByte(pContext, cBufferIndex++, 0);
@@ -3044,59 +3178,83 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 				pIoData->tDrawLineData.cDisplayListAddressDmaRemaining = 2;
 			}
 
-			// Calculate next fetch line
-			if((pIoData->cCurrentDisplayListCommand & 0x0f) <= 0x01)
+			// Mode-line row counter setup (AHRM 4.7).  The 4-bit delta
+			// counter starts at 0, or at VSCROL when this mode line enters
+			// a vertically scrolled region.  It normally runs to the static
+			// end row; the first line after a scrolled region instead ends
+			// when the counter matches the live VSCROL value.
 			{
-				pIoData->lNextDisplayListLine +=
-					((pIoData->cCurrentDisplayListCommand & 0x70) >> 4) + 1;
-			}
-			else
-			{
-				pIoData->lNextDisplayListLine +=
-					m_aAnticModeInfoTable[pIoData->cCurrentDisplayListCommand & 0x0f].lNumberOfLines;
-			}
+				u8 cStartRow = 0;
+				u8 cEndRow;
+				u8 bScrollExit = 0;
+				u32 lModeLineRows;
 
-			// Vertical scrolling fixes on the next fetch line
-			if(((cOldDisplayListCommand & 0x2f) < 0x22) &&
-			   ((pIoData->cCurrentDisplayListCommand & 0x2f) >= 0x22))
-			{
+				if((pIoData->cCurrentDisplayListCommand & 0x0f) <= 0x01)
+				{
+					cEndRow = (pIoData->cCurrentDisplayListCommand & 0x70) >> 4;
+				}
+				else
+				{
+					cEndRow = (u8)((m_aAnticModeInfoTable[pIoData->cCurrentDisplayListCommand & 0x0f].lNumberOfLines - 1) & 0x0f);
+				}
+
+				if(((cOldDisplayListCommand & 0x2f) < 0x22) &&
+				   ((pIoData->cCurrentDisplayListCommand & 0x2f) >= 0x22))
+				{
+					/* Region entry: the counter starts at VSCROL (deadline
+					 * cycle 0).  Values above the natural end row wrap the
+					 * 4-bit counter and extend the mode line (GTIA 9++). */
+					cStartRow = SRAM[IO_VSCROL] & 0x0f;
+				}
+				else if(((cOldDisplayListCommand & 0x2f) >= 0x22) &&
+						((pIoData->cCurrentDisplayListCommand & 0x2f) < 0x22))
+				{
+					/* Region exit: this line ends when the counter matches
+					 * the live VSCROL value instead of the static end row. */
+					bScrollExit = 1;
+				}
+
+				pIoData->cModeLineRowCounter = cStartRow;
+				pIoData->cModeLineEndRow = cEndRow;
+				pIoData->bModeLineScrollExit = bScrollExit;
+				pIoData->bModeLineExitDli =
+					bScrollExit &&
+					(pIoData->cCurrentDisplayListCommand & 0x80) &&
+					(pIoData->cCurrentDisplayListCommand & 0x4f) != 0x41;
+				pIoData->bModeLineEndsThisLine = 0;
+
+				if(bScrollExit)
+				{
+					lModeLineRows = (u32)(((SRAM[IO_VSCROL] - cStartRow) & 0x0f) + 1);
+				}
+				else
+				{
+					lModeLineRows = (u32)(((cEndRow - cStartRow) & 0x0f) + 1);
+				}
+
 				pIoData->lNextDisplayListLine =
-					MAX(pIoData->tVideoData.lCurrentDisplayLine + 1, pIoData->lNextDisplayListLine - SRAM[IO_VSCROL]);
-
-				pIoData->tVideoData.lVerticalScrollOffset = 0;
-			}
-			else if(((cOldDisplayListCommand & 0x2f) >= 0x22) &&
-					((pIoData->cCurrentDisplayListCommand & 0x2f) < 0x22))
-			{
-				u32 lTemp = pIoData->lNextDisplayListLine;
-
-				pIoData->lNextDisplayListLine =
-					MIN(pIoData->lNextDisplayListLine, pIoData->tVideoData.lCurrentDisplayLine + SRAM[IO_VSCROL] + 1);
-
-				pIoData->tVideoData.lVerticalScrollOffset = lTemp - pIoData->lNextDisplayListLine;
-			}
-			else
-			{
-				pIoData->tVideoData.lVerticalScrollOffset = 0;
+					pIoData->tVideoData.lCurrentDisplayLine + lModeLineRows;
 			}
 
-			// DLI? (schedule after vertical scrolling adjustments)
+			// DLI?  Exit lines are armed dynamically at cycle 6 of the
+			// scanline whose row counter matches VSCROL (AHRM 4.8: VSCROL
+			// writes affect the DLI only through cycle 5).
 			if(pIoData->cCurrentDisplayListCommand & 0x80)
 			{
 				if((pIoData->cCurrentDisplayListCommand & 0x4f) == 0x41)
 				{
 					/* JVB mode line height is one scanline while replayed. */
 					pIoData->llDliCycle = pIoData->llCycle + DLI_HORIZONTAL_OFFSET;
+					AtariIoCycleTimedEventUpdate(pContext);
 				}
-				else
+				else if(!pIoData->bModeLineScrollExit)
 				{
 					pIoData->llDliCycle =
 						pIoData->llCycle +
 						(pIoData->lNextDisplayListLine - pIoData->tVideoData.lCurrentDisplayLine - 1) * CYCLES_PER_LINE +
 						DLI_HORIZONTAL_OFFSET;
+					AtariIoCycleTimedEventUpdate(pContext);
 				}
-
-				AtariIoCycleTimedEventUpdate(pContext);
 			}
 
 			// Fetch new display list address
@@ -5037,6 +5195,9 @@ void AtariIoCycleTimedEventUpdate(_6502_Context_t *pContext)
 	pContext->llIoBeamTimedEventCycle =
 		MIN(pIoData->llDliCycle, pContext->llIoBeamTimedEventCycle);
 
+	pContext->llIoBeamTimedEventCycle =
+		MIN(pIoData->llVbiCycle, pContext->llIoBeamTimedEventCycle);
+
 	pContext->llIoMasterTimedEventCycle =
 		MIN(pIoData->llSerialOutputTransmissionDoneCycle, pContext->llIoMasterTimedEventCycle);
 
@@ -5086,6 +5247,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 		AtariIoCycleTimedEventUpdate(pContext);
 
 		AtariIoDrawLine(pContext);
+		AtariIoEvaluateModeLineEnd(pContext);
 		pIoData->llDisplayListFetchCycle += CYCLES_PER_LINE;
 		AtariIoAdvanceScanline(pContext);
 		pIoData->bInDrawLine = 0;
@@ -5123,6 +5285,42 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 			else
 			{
 				pIoData->llDliCycle = CYCLE_NEVER;
+			}
+		}
+	}
+
+	if(llBeamCycle >= pIoData->llVbiCycle)
+	{
+#ifdef VERBOSE_DL
+		printf("             [%16llu]", pContext->llCycleCounter);
+		printf(" DL: %3lu VBI\n", pIoData->tVideoData.lCurrentDisplayLine);
+#endif
+		/* NMIST is set at cycle 7 unconditionally (AHRM 4.8). */
+		/* DLI/VBI status bits are mutually exclusive. */
+		RAM[IO_NMIRES_NMIST] &= ~NMI_DLI;
+		RAM[IO_NMIRES_NMIST] |= NMI_VBI;
+
+		if(llBeamCycle > pIoData->llVbiCycle)
+		{
+			/* NMI fires at cycle 8 (one cycle after NMIST at cycle 7). */
+			NmiSourceTiming_t tVbiTiming =
+				AtariIoCurrentLineNmiSourceState(pIoData, NMI_VBI);
+			if(tVbiTiming.cEnabled)
+			{
+				if(tVbiTiming.cDelayOneCycle && llBeamCycle == pIoData->llVbiCycle + 1)
+				{
+					pIoData->cNmienEnabledOnCycle7Mask &= (u8)~NMI_VBI;
+					pIoData->llVbiCycle = llBeamCycle; /* reschedule: NMI fires at llBeamCycle+1 */
+				}
+				else
+				{
+					_6502_Nmi(pContext);
+					pIoData->llVbiCycle = CYCLE_NEVER;
+				}
+			}
+			else
+			{
+				pIoData->llVbiCycle = CYCLE_NEVER;
 			}
 		}
 	}
@@ -5332,6 +5530,14 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 
 	pIoData->llDisplayListFetchCycle = 0;
 	pIoData->llDliCycle = CYCLE_NEVER;
+	pIoData->llVbiCycle = CYCLE_NEVER;
+	pIoData->bChbaseTimingInitialized = 0;
+	pIoData->llChbasePendingCycle = CYCLE_NEVER;
+	pIoData->cModeLineRowCounter = 0;
+	pIoData->cModeLineEndRow = 0;
+	pIoData->bModeLineScrollExit = 0;
+	pIoData->bModeLineExitDli = 0;
+	pIoData->bModeLineEndsThisLine = 0;
 	pIoData->llSerialOutputNeedDataCycle = CYCLE_NEVER;
 	pIoData->llSerialOutputTransmissionDoneCycle = CYCLE_NEVER;
 	pIoData->llSerialInputDataReadyCycle = CYCLE_NEVER;

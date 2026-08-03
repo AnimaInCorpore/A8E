@@ -128,6 +128,7 @@
             FIRST_VISIBLE_LINE: FIRST_VISIBLE_LINE,
             LAST_VISIBLE_LINE: LAST_VISIBLE_LINE,
             IO_VCOUNT: IO_VCOUNT,
+            IO_VSCROL: IO_VSCROL,
             IO_CHACTL: IO_CHACTL,
             IO_CHBASE: IO_CHBASE,
             IO_COLBK: IO_COLBK,
@@ -198,43 +199,63 @@
             io.drawLine.displayListAddressDmaRemaining = 2;
           }
           const mode = cmd & ANTIC_MODE_BITS;
+
+          // Mode-line row counter setup (AHRM 4.7).  The 4-bit delta
+          // counter starts at 0, or at VSCROL when this mode line enters
+          // a vertically scrolled region.  It normally runs to the static
+          // end row; the first line after a scrolled region instead ends
+          // when the counter matches the live VSCROL value.
+          let startRow = 0;
+          let endRow;
+          let scrollExit = false;
+
           if (mode <= 0x01) {
-            io.nextDisplayListLine += ((cmd & ANTIC_VSCROL_BITS) >> 4) + 1;
+            endRow = (cmd & ANTIC_VSCROL_BITS) >> 4;
           } else {
-            io.nextDisplayListLine += ANTIC_MODE_INFO[mode].lines;
+            endRow = (ANTIC_MODE_INFO[mode].lines - 1) & 0x0f;
           }
 
-          // Vertical scrolling adjustments (ported from AtariIo.c)
           if ((oldCmd & 0x2f) < 0x22 && (cmd & 0x2f) >= 0x22) {
-            io.nextDisplayListLine = Math.max(
-              io.video.currentDisplayLine + 1,
-              io.nextDisplayListLine - (sram[IO_VSCROL] & 0xff),
-            );
-            io.video.verticalScrollOffset = 0;
+            // Region entry: the counter starts at VSCROL (deadline cycle
+            // 0).  Values above the natural end row wrap the 4-bit counter
+            // and extend the mode line (GTIA 9++).
+            startRow = sram[IO_VSCROL] & 0x0f;
           } else if ((oldCmd & 0x2f) >= 0x22 && (cmd & 0x2f) < 0x22) {
-            const temp = io.nextDisplayListLine;
-            io.nextDisplayListLine = Math.min(
-              io.nextDisplayListLine,
-              io.video.currentDisplayLine + (sram[IO_VSCROL] & 0xff) + 1,
-            );
-            io.video.verticalScrollOffset = temp - io.nextDisplayListLine;
-          } else {
-            io.video.verticalScrollOffset = 0;
+            // Region exit: this line ends when the counter matches the
+            // live VSCROL value instead of the static end row.
+            scrollExit = true;
           }
 
-          // DLI scheduling
+          io.modeLineRowCounter = startRow;
+          io.modeLineEndRow = endRow;
+          io.modeLineScrollExit = scrollExit;
+          io.modeLineExitDli =
+            scrollExit &&
+            (cmd & ANTIC_DLI_BIT) !== 0 &&
+            (cmd & ANTIC_CMD_MASK_DLI_JMP) !== ANTIC_JVB_INSTRUCTION;
+          io.modeLineEndsThisLine = false;
+
+          const modeLineRows = scrollExit
+            ? (((sram[IO_VSCROL] & 0x0f) - startRow) & 0x0f) + 1
+            : ((endRow - startRow) & 0x0f) + 1;
+          io.nextDisplayListLine = io.video.currentDisplayLine + modeLineRows;
+
+          // DLI scheduling.  Exit lines are armed dynamically at cycle 6
+          // of the scanline whose row counter matches VSCROL (AHRM 4.8:
+          // VSCROL writes affect the DLI only through cycle 5).
           if (cmd & ANTIC_DLI_BIT) {
             if ((cmd & ANTIC_CMD_MASK_DLI_JMP) === ANTIC_JVB_INSTRUCTION) {
               // Replayed JVB has one-scanline height.
               io.dliCycle = io.clock + DLI_HORIZONTAL_OFFSET;
-            } else {
+              cycleTimedEventUpdate(ctx);
+            } else if (!scrollExit) {
               io.dliCycle =
                 io.clock +
                 (io.nextDisplayListLine - io.video.currentDisplayLine - 1) *
                   CYCLES_PER_LINE +
                 DLI_HORIZONTAL_OFFSET;
+              cycleTimedEventUpdate(ctx);
             }
-            cycleTimedEventUpdate(ctx);
           }
 
           // JMP
@@ -273,10 +294,44 @@
       }
     }
 
+    // Called after each drawn scanline: advance the 4-bit mode-line row
+    // counter and decide whether the next scanline fetches a new display
+    // list command (AHRM 4.7).  Exit lines use the VSCROL comparison
+    // latched at cycle 108.
+    function evaluateModeLineEnd(ctx) {
+      const io = ctx.ioData;
+      const sram = ctx.sram;
+      const currentLine = io.video.currentDisplayLine | 0;
+
+      if ((sram[IO_DMACTL] & 0x20) === 0) return;
+      if (currentLine < FIRST_VISIBLE_LINE || currentLine > LAST_VISIBLE_LINE)
+        {return;}
+      // Only evaluate while a fetched mode line is in progress.
+      if (io.nextDisplayListLine <= currentLine) return;
+      // JVB waits for vertical blank regardless of its height.
+      if (
+        (io.currentDisplayListCommand & ANTIC_CMD_MASK_DLI_JMP) ===
+        ANTIC_JVB_INSTRUCTION
+      )
+        {return;}
+
+      const ended = io.modeLineScrollExit
+        ? io.modeLineEndsThisLine
+        : (io.modeLineRowCounter & 0x0f) === (io.modeLineEndRow & 0x0f);
+
+      if (ended) {
+        io.nextDisplayListLine = currentLine + 1;
+      } else {
+        io.modeLineRowCounter = (io.modeLineRowCounter + 1) & 0x0f;
+        if (io.nextDisplayListLine === currentLine + 1) {
+          io.nextDisplayListLine = currentLine + 2;
+        }
+      }
+    }
+
     function advanceScanline(ctx) {
       const io = ctx.ioData;
       const ram = ctx.ram;
-      const sram = ctx.sram;
 
       io.video.currentDisplayLine++;
 
@@ -290,7 +345,11 @@
         io.video.currentDisplayLine = 0;
         io.nextDisplayListLine = 8;
         io.currentDisplayListCommand = 0;
-        io.video.verticalScrollOffset = 0;
+        io.modeLineRowCounter = 0;
+        io.modeLineEndRow = 0;
+        io.modeLineScrollExit = false;
+        io.modeLineExitDli = false;
+        io.modeLineEndsThisLine = false;
         io.videoOut.priority.fill(0);
       }
 
@@ -306,8 +365,10 @@
       }
 
       if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 1) {
-        ram[IO_NMIRES_NMIST] |= NMI_VBI;
-        if (sram[IO_NMIEN] & NMI_VBI) CPU.nmi(ctx);
+        // VBI NMIST latches at cycle 7 of scan line 248; the NMI itself
+        // fires at cycle 8, gated by the same NMIEN deadlines as the DLI
+        // (AHRM 4.8). io.displayListFetchCycle already points at line 248.
+        io.vbiCycle = io.displayListFetchCycle + DLI_HORIZONTAL_OFFSET;
       }
     }
 
@@ -329,6 +390,7 @@
         try {
           drawLine(ctx);
           if (!io.drawLine.playerMissileInterleaved) drawPlayerMissiles(ctx);
+          evaluateModeLineEnd(ctx);
           io.displayListFetchCycle += CYCLES_PER_LINE;
           advanceScanline(ctx);
         } finally {
@@ -357,6 +419,28 @@
             }
           } else {
             io.dliCycle = CYCLE_NEVER;
+          }
+        }
+      }
+
+      if (beamEff >= io.vbiCycle) {
+        // NMIST is set at cycle 7 unconditionally (AHRM 4.8)
+        ram[IO_NMIRES_NMIST] &= ~NMI_DLI;
+        ram[IO_NMIRES_NMIST] |= NMI_VBI;
+
+        if (beamEff > io.vbiCycle) {
+          // NMI fires at cycle 8 (one cycle after NMIST at cycle 7)
+          const vbiTiming = currentLineNmiState(io, NMI_VBI);
+          if (vbiTiming.enabled) {
+            if (vbiTiming.delayOneCycle && beamEff === io.vbiCycle + 1) {
+              io.nmiTiming.enabledOnCycle7Mask &= ~NMI_VBI;
+              io.vbiCycle = beamEff; // reschedule: NMI fires at beamEff+1
+            } else {
+              CPU.nmi(ctx);
+              io.vbiCycle = CYCLE_NEVER;
+            }
+          } else {
+            io.vbiCycle = CYCLE_NEVER;
           }
         }
       }

@@ -32,10 +32,13 @@ Recent raster-timing work landed in both cores:
 - Visible scanlines now render playfield/background state on the per-color-clock path.
 - Visible player/missile output is interleaved on the scanline timing path in both implementations.
 - Visible blank/background-only lines now spend the initial color-burst clocks invisibly before drawing the live-read remainder of the line.
+- The VBI follows the AHRM cycle-7 NMIST / cycle-8 NMI model with full NMIEN cycle-7/8 gating, matching the DLI path.
+- Vertical scrolling runs on a live 4-bit mode-line row counter with the AHRM VSCROL deadlines (entry latch at cycle 0, exit comparison through cycle 108, DLI decision through cycle 5), enabling GTIA 9++-style extended mode lines and mid-line VSCROL rewrites.
+- Mid-scanline CHBASE writes latch with the AHRM 2-color-clock delay in both cores.
 
 The implementation pass for legacy-style per-color-clock rendering is now in place in both cores. Remaining work is verification against real raster-effect content and closing any title-specific differences that show up during that sweep.
 
-- regression verification against real raster-effect content
+- regression verification against real raster-effect content (including VSCROL corner-case titles such as Atomix Plus! and GTIA 9++ demos)
 - follow-up on any localized title-specific timing differences found during that verification
 
 For the current verification checklist and signoff notes, see [legacy/COLOR_CLOCK_ACCURACY.md](legacy/COLOR_CLOCK_ACCURACY.md).

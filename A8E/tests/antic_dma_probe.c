@@ -69,6 +69,7 @@ static void ProbeMachine_ResetTiming(ProbeMachine_t *pMachine)
 	pIoData->llCycle = 0;
 	pIoData->llDisplayListFetchCycle = CYCLE_NEVER;
 	pIoData->llDliCycle = CYCLE_NEVER;
+	pIoData->llVbiCycle = CYCLE_NEVER;
 	pIoData->llSerialOutputNeedDataCycle = CYCLE_NEVER;
 	pIoData->llSerialOutputTransmissionDoneCycle = CYCLE_NEVER;
 	pIoData->llSerialInputDataReadyCycle = CYCLE_NEVER;
@@ -84,7 +85,11 @@ static void ProbeMachine_ResetTiming(ProbeMachine_t *pMachine)
 	pIoData->bFirstRowScanline = 0;
 
 	pIoData->tVideoData.lCurrentDisplayLine = 0;
-	pIoData->tVideoData.lVerticalScrollOffset = 0;
+	pIoData->cModeLineRowCounter = 0;
+	pIoData->cModeLineEndRow = 0;
+	pIoData->bModeLineScrollExit = 0;
+	pIoData->bModeLineExitDli = 0;
+	pIoData->bModeLineEndsThisLine = 0;
 
 	memset(&pIoData->tDrawLineData, 0, sizeof(pIoData->tDrawLineData));
 

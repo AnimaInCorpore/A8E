@@ -83,8 +83,8 @@ function createCtx() {
       firstRowScanline: false,
       video: {
         currentDisplayLine: 0,
-        verticalScrollOffset: 0,
       },
+      modeLineRowCounter: 0,
       drawLine: {
         bytesPerLine: 1,
         destIndex: 0,
@@ -115,7 +115,7 @@ function testMode2GtiaColorTableOnlyWhenPriorMode2() {
         ctx.sram[IO_PRIOR] = 0x80;
       }
     },
-    fetchCharacterRow8: function () {
+    fetchUnbufferedDisplayByte: function () {
       return 0xf1;
     },
   });
@@ -133,33 +133,33 @@ function testMode2GtiaColorTableOnlyWhenPriorMode2() {
 }
 
 function testMode2AndMode3UseSameChbaseMasking() {
-  let mode2ChBase = -1;
-  let mode3ChBase = -1;
+  let fetchAddress = -1;
 
   const api = loadMode23Api({
-    fetchCharacterRow8: function (_, chBase) {
-      mode2ChBase = chBase;
-      return 0;
-    },
-    fetchCharacterRow10: function (_, chBase) {
-      mode3ChBase = chBase;
+    fetchUnbufferedDisplayByte: function (ctx, address) {
+      fetchAddress = address & 0xffff;
       return 0;
     },
   });
 
+  // Character 0 row 0, so the fetch address is exactly the masked CHBASE.
   const expected = ((0xff << 8) & 0xfc00) & 0xffff;
 
   const ctx2 = createCtx();
   ctx2.sram[IO_CHBASE] = 0xff;
   ctx2.sram[IO_PRIOR] = 0x00;
   ctx2.ram[0] = 0x00;
+  fetchAddress = -1;
   api.drawLineMode2(ctx2);
+  const mode2ChBase = fetchAddress;
 
   const ctx3 = createCtx();
   ctx3.sram[IO_CHBASE] = 0xff;
   ctx3.sram[IO_PRIOR] = 0x00;
   ctx3.ram[0] = 0x00;
+  fetchAddress = -1;
   api.drawLineMode3(ctx3);
+  const mode3ChBase = fetchAddress;
 
   assert.equal(mode2ChBase, expected);
   assert.equal(mode3ChBase, expected);
@@ -183,10 +183,7 @@ function runPriorMode0Line(api, drawFnName, inverse) {
 
 function testMode2Mode3Prior0OutputParity() {
   const api = loadMode23Api({
-    fetchCharacterRow8: function () {
-      return 0xa0;
-    },
-    fetchCharacterRow10: function () {
+    fetchUnbufferedDisplayByte: function () {
       return 0xa0;
     },
   });
@@ -202,10 +199,7 @@ function testMode2Mode3Prior0OutputParity() {
 
 function testMode2Mode3Prior0WidthIsNotDoubled() {
   const api = loadMode23Api({
-    fetchCharacterRow8: function () {
-      return 0xa0;
-    },
-    fetchCharacterRow10: function () {
+    fetchUnbufferedDisplayByte: function () {
       return 0xa0;
     },
   });
@@ -240,7 +234,7 @@ function testMode2Mode3Prior0WidthIsNotDoubled() {
 
 function testMode2LatchesChactlForWholeScanline() {
   const decodedChactl = [];
-  const fetchedChactl = [];
+  let fetchCount = 0;
 
   const api = loadMode23Api({
     decodeTextModeCharacter: function (ch, chactl) {
@@ -250,8 +244,8 @@ function testMode2LatchesChactlForWholeScanline() {
     clockAction: function (ctx) {
       ctx.sram[IO_CHACTL] = 0x03;
     },
-    fetchCharacterRow8: function (_, __, ___, ____, chactl) {
-      fetchedChactl.push(chactl);
+    fetchUnbufferedDisplayByte: function () {
+      fetchCount++;
       return 0;
     },
   });
@@ -266,12 +260,12 @@ function testMode2LatchesChactlForWholeScanline() {
   api.drawLineMode2(ctx);
 
   assert.deepEqual(decodedChactl, [0x00, 0x00]);
-  assert.deepEqual(fetchedChactl, [0x00, 0x00]);
+  assert.equal(fetchCount, 2);
 }
 
 function testMode2BlankAndInvertProducesInvertedSpace() {
   const api = loadMode23Api({
-    fetchCharacterRow8: function () {
+    fetchUnbufferedDisplayByte: function () {
       return 0xff;
     },
   });
@@ -299,10 +293,49 @@ function testMode2BlankAndInvertProducesInvertedSpace() {
   ]);
 }
 
+function testMode2ExtendedRowsFollowAhrmMapping() {
+  // AHRM 4.7: on vertically extended mode 2 lines, rows 8-9 blank
+  // non-descender characters (descenders show glyph rows 0-1) and rows
+  // 10-15 repeat rows 2-7.
+  const fetches = [];
+  const api = loadMode23Api({
+    fetchUnbufferedDisplayByte: function (ctx, address) {
+      fetches.push(address & 0xffff);
+      return 0xff;
+    },
+  });
+
+  const ctxBlank = createCtx();
+  ctxBlank.ioData.modeLineRowCounter = 8;
+  ctxBlank.ram[0] = 0x00;
+  fetches.length = 0;
+  api.drawLineMode2(ctxBlank);
+  assert.equal(fetches.length, 0, "row 8 must blank a non-descender character");
+
+  const ctxDesc = createCtx();
+  ctxDesc.ioData.modeLineRowCounter = 9;
+  ctxDesc.ram[0] = 0x61;
+  fetches.length = 0;
+  api.drawLineMode2(ctxDesc);
+  assert.deepEqual(
+    fetches,
+    [0x61 * 8 + 1],
+    "row 9 must show glyph row 1 of a descender character",
+  );
+
+  const ctxWrap = createCtx();
+  ctxWrap.ioData.modeLineRowCounter = 12;
+  ctxWrap.ram[0] = 0x00;
+  fetches.length = 0;
+  api.drawLineMode2(ctxWrap);
+  assert.deepEqual(fetches, [4], "row 12 must repeat glyph row 4");
+}
+
 testMode2GtiaColorTableOnlyWhenPriorMode2();
 testMode2AndMode3UseSameChbaseMasking();
 testMode2Mode3Prior0OutputParity();
 testMode2Mode3Prior0WidthIsNotDoubled();
 testMode2LatchesChactlForWholeScanline();
 testMode2BlankAndInvertProducesInvertedSpace();
+testMode2ExtendedRowsFollowAhrmMapping();
 console.log("playfield_mode_2_3_rendering tests passed");

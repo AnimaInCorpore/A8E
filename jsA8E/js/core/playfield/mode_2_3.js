@@ -25,8 +25,6 @@
         return sram[IO_CHBASE] & 0xff;
       };
     const clockAction = cfg.clockAction;
-    const fetchCharacterRow8 = cfg.fetchCharacterRow8;
-    const fetchCharacterRow10 = cfg.fetchCharacterRow10;
     const useDeferredCharacterFetch =
       typeof cfg.fetchUnbufferedDisplayByte === "function";
     const stealDma = cfg.stealDma || function (ctx, cycles) {
@@ -62,6 +60,15 @@
       return -1;
     }
 
+    function resolveCharacterRowMode2(ch, row, chactl) {
+      const glyphRow = row & 0xff;
+      if (glyphRow < 8) return resolveCharacterRow8(glyphRow, chactl);
+      // AHRM 4.7: mode 2 rows 8-9 blank non-descender characters and show
+      // descender rows 0-1, the same way as mode 3.
+      if (ch < 0x60) return -1;
+      return resolveCharacterRow8(glyphRow - 8, chactl);
+    }
+
     function writeBackgroundQuad(dst, prio, dstIndex, color) {
       dst[dstIndex] = color; prio[dstIndex++] = PRIO_BKG;
       dst[dstIndex] = color; prio[dstIndex++] = PRIO_BKG;
@@ -70,14 +77,15 @@
       return dstIndex;
     }
 
-    function drawLineMode23Common(ctx, fetchCharacterRow, vScrollBase) {
+    function drawLineMode23Common(ctx, isMode3) {
       const io = ctx.ioData;
       const ram = ctx.ram;
       const sram = ctx.sram;
 
-      const lineDelta = io.nextDisplayListLine - io.video.currentDisplayLine;
-      const vScrollOffset =
-        ((vScrollBase - lineDelta) - (io.video.verticalScrollOffset | 0)) & 0xff;
+      // AHRM 4.7: the 4-bit mode-line row counter selects the glyph row;
+      // rows 10-15 repeat rows 2-7 in both text modes.
+      let vScrollOffset = io.modeLineRowCounter & 0x0f;
+      if (vScrollOffset >= 10) vScrollOffset -= 8;
 
       const bytesPerLine = io.drawLine.bytesPerLine | 0;
       const playfieldCycles = bytesPerLine * 2;
@@ -104,10 +112,9 @@
           inverse = (decoded & 0x100) !== 0;
           const blank = (decoded & 0x200) !== 0;
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
-          const glyphRow =
-            fetchCharacterRow === fetchCharacterRow10
-              ? resolveCharacterRow10(ch, vScrollOffset, chactl)
-              : resolveCharacterRow8(vScrollOffset, chactl);
+          const glyphRow = isMode3
+            ? resolveCharacterRow10(ch, vScrollOffset, chactl)
+            : resolveCharacterRowMode2(ch, vScrollOffset, chactl);
           if (glyphRow >= 0 && useDeferredCharacterFetch) {
             data = fetchUnbufferedDisplayByte(
               ctx,
@@ -116,7 +123,7 @@
             );
           } else if (glyphRow >= 0) {
             stealDma(ctx, 1);
-            data = fetchCharacterRow(ram, chBase, ch, vScrollOffset, chactl);
+            data = ram[(chBase + ch * 8 + glyphRow) & 0xffff] & 0xff;
           } else {
             data = 0;
           }
@@ -217,11 +224,11 @@
     }
 
     function drawLineMode2(ctx) {
-      return drawLineMode23Common(ctx, fetchCharacterRow8, 8);
+      return drawLineMode23Common(ctx, false);
     }
 
     function drawLineMode3(ctx) {
-      return drawLineMode23Common(ctx, fetchCharacterRow10, 10);
+      return drawLineMode23Common(ctx, true);
     }
 
     return { drawLineMode2, drawLineMode3 };

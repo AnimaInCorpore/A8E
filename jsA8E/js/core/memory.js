@@ -1312,7 +1312,6 @@
         return {
           video: io && io.video
             ? {
-                verticalScrollOffset: io.video.verticalScrollOffset | 0,
                 currentDisplayLine: io.video.currentDisplayLine | 0,
               }
             : null,
@@ -1320,6 +1319,7 @@
           clock: io.clock,
           inDrawLine: !!io.inDrawLine,
           dliCycle: io.dliCycle,
+          vbiCycle: io.vbiCycle,
           serialOutputNeedDataCycle: io.serialOutputNeedDataCycle,
           serialOutputTransmissionDoneCycle: io.serialOutputTransmissionDoneCycle,
           serialInputDataReadyCycle: io.serialInputDataReadyCycle,
@@ -1354,6 +1354,11 @@
           rowDisplayMemoryAddress: io.rowDisplayMemoryAddress | 0,
           displayMemoryAddress: io.displayMemoryAddress | 0,
           firstRowScanline: !!io.firstRowScanline,
+          modeLineRowCounter: io.modeLineRowCounter | 0,
+          modeLineEndRow: io.modeLineEndRow | 0,
+          modeLineScrollExit: !!io.modeLineScrollExit,
+          modeLineExitDli: !!io.modeLineExitDli,
+          modeLineEndsThisLine: !!io.modeLineEndsThisLine,
           nmiTiming: io.nmiTiming
             ? {
                 enabledByCycle7: io.nmiTiming.enabledByCycle7 | 0,
@@ -1402,13 +1407,14 @@
         const state = snapshot && typeof snapshot === "object" ? snapshot : {};
         const io = makeIoData(video);
         if (state.video && typeof state.video === "object") {
-          io.video.verticalScrollOffset = state.video.verticalScrollOffset | 0;
           io.video.currentDisplayLine = state.video.currentDisplayLine | 0;
         }
         io.displayListFetchCycle = state.displayListFetchCycle;
         io.clock = state.clock;
         io.inDrawLine = !!state.inDrawLine;
         io.dliCycle = state.dliCycle;
+        // Older snapshots predate vbiCycle; keep the makeIoData default then.
+        if (state.vbiCycle !== undefined) io.vbiCycle = state.vbiCycle;
         io.serialOutputNeedDataCycle = state.serialOutputNeedDataCycle;
         io.serialOutputTransmissionDoneCycle = state.serialOutputTransmissionDoneCycle;
         io.serialInputDataReadyCycle = state.serialInputDataReadyCycle;
@@ -1453,6 +1459,14 @@
         io.rowDisplayMemoryAddress = state.rowDisplayMemoryAddress | 0;
         io.displayMemoryAddress = state.displayMemoryAddress | 0;
         io.firstRowScanline = !!state.firstRowScanline;
+        // Older snapshots predate the row-counter state; keep defaults then.
+        if (state.modeLineRowCounter !== undefined) {
+          io.modeLineRowCounter = state.modeLineRowCounter | 0;
+          io.modeLineEndRow = state.modeLineEndRow | 0;
+          io.modeLineScrollExit = !!state.modeLineScrollExit;
+          io.modeLineExitDli = !!state.modeLineExitDli;
+          io.modeLineEndsThisLine = !!state.modeLineEndsThisLine;
+        }
         if (state.nmiTiming && typeof state.nmiTiming === "object") {
           io.nmiTiming.enabledByCycle7 = state.nmiTiming.enabledByCycle7 | 0;
           io.nmiTiming.enabledByCycle8 = state.nmiTiming.enabledByCycle8 | 0;

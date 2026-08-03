@@ -146,6 +146,7 @@ function makeContext() {
       clock: 0,
       inDrawLine: false,
       dliCycle: CYCLE_NEVER,
+      vbiCycle: CYCLE_NEVER,
       serialOutputTransmissionDoneCycle: CYCLE_NEVER,
       serialOutputNeedDataCycle: CYCLE_NEVER,
       serialInputDataReadyCycle: CYCLE_NEVER,
@@ -274,6 +275,8 @@ function testDliNmistAtCycle7NmiAtCycle8() {
 }
 
 function testVbiTriggersAtLine248() {
+  // AHRM 4.8: on line 248 the VBI latches NMIST at cycle 7 and fires the
+  // NMI at cycle 8, using the same NMIEN gating deadlines as the DLI.
   const { api, cpuLog } = loadAnticApi();
   const ctx = makeContext();
 
@@ -285,12 +288,95 @@ function testVbiTriggersAtLine248() {
   ctx.ram[0x0700] = 0x01;
   ctx.ram[0x0701] = 0x00;
   ctx.ram[0x0702] = 0x04;
+  ctx.ram[IO_NMIRES_NMIST] = NMI_DLI;
+  ctx.ioData.nmiTiming.enabledByCycle7 = NMI_VBI;
+  ctx.ioData.nmiTiming.enabledByCycle8 = NMI_VBI;
 
   runOneScanline(api, ctx);
 
   assert.equal(ctx.ioData.video.currentDisplayLine, 248);
-  assert.equal(cpuLog.nmiCalls, 1, "VBI should trigger at the start of line 248");
-  assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_VBI, 0);
+  assert.equal(cpuLog.nmiCalls, 0, "VBI must not fire at the 247/248 boundary");
+  assert.equal(
+    ctx.ioData.vbiCycle,
+    ctx.ioData.displayListFetchCycle + 7,
+    "VBI deadline should be armed at cycle 7 of line 248",
+  );
+  assert.equal(
+    ctx.ram[IO_NMIRES_NMIST] & NMI_VBI,
+    0,
+    "NMIST VBI must not latch before cycle 7 of line 248",
+  );
+
+  ctx.ioData.clock = ctx.ioData.displayListFetchCycle + 7;
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 0, "no NMI at cycle 7 (NMIST only)");
+  assert.notEqual(
+    ctx.ram[IO_NMIRES_NMIST] & NMI_VBI,
+    0,
+    "NMIST VBI should latch at cycle 7 of line 248",
+  );
+  assert.equal(
+    ctx.ram[IO_NMIRES_NMIST] & NMI_DLI,
+    0,
+    "NMIST DLI bit should clear when the VBI latches",
+  );
+
+  ctx.ioData.clock = ctx.ioData.displayListFetchCycle + 8;
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 1, "VBI should fire at cycle 8 of line 248");
+  assert.equal(ctx.ioData.vbiCycle, CYCLE_NEVER);
+}
+
+function testVbiCycle7EnableDelaysByOneCycle() {
+  // AHRM 4.8: NMIEN enabled exactly on cycle 7 delays the VBI NMI by one
+  // cycle, mirroring the DLI behavior.
+  const { api, cpuLog } = loadAnticApi();
+  const ctx = makeContext();
+
+  ctx.ioData.displayListFetchCycle = CYCLE_NEVER;
+  ctx.ioData.clock = 7;
+  ctx.ioData.vbiCycle = 7;
+  ctx.ioData.nmiTiming.enabledByCycle7 = NMI_VBI;
+  ctx.ioData.nmiTiming.enabledByCycle8 = NMI_VBI;
+  ctx.ioData.nmiTiming.enabledOnCycle7Mask = NMI_VBI;
+
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 0, "no NMI at cycle 7 (NMIST only)");
+  assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_VBI, 0, "NMIST VBI set at cycle 7");
+
+  ctx.ioData.clock = 8;
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 0, "cycle-7 enable should delay VBI NMI to cycle 9");
+  assert.equal(ctx.ioData.vbiCycle, 8, "VBI rescheduled so NMI fires at cycle 9");
+
+  ctx.ioData.clock = 9;
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 1, "delayed VBI NMI should fire on cycle 9");
+  assert.equal(ctx.ioData.vbiCycle, CYCLE_NEVER);
+}
+
+function testVbiCycle8DisableSuppressesCurrentLine() {
+  // AHRM 4.8: NMIEN disabled on cycle 8 suppresses the VBI NMI even though
+  // NMIST already latched at cycle 7.
+  const { api, cpuLog } = loadAnticApi();
+  const ctx = makeContext();
+
+  ctx.ioData.displayListFetchCycle = CYCLE_NEVER;
+  ctx.ioData.clock = 7;
+  ctx.ioData.vbiCycle = 7;
+  ctx.ioData.nmiTiming.enabledByCycle7 = NMI_VBI;
+  ctx.ioData.nmiTiming.enabledByCycle8 = 0;
+  ctx.ioData.nmiTiming.enabledOnCycle7Mask = 0;
+
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 0, "no NMI at cycle 7");
+  assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_VBI, 0, "NMIST VBI set at cycle 7");
+
+  ctx.ioData.clock = 8;
+  api.ioCycleTimedEvent(ctx);
+  assert.equal(cpuLog.nmiCalls, 0, "cycle-8 disable should suppress the VBI NMI");
+  assert.equal(ctx.ioData.vbiCycle, CYCLE_NEVER);
+  assert.notEqual(ctx.ram[IO_NMIRES_NMIST] & NMI_VBI, 0, "NMIST VBI status stays latched");
 }
 
 function testCycle7EnableDelaysDliByOneCycle() {
@@ -381,6 +467,8 @@ testNmistDliPersistsOutsideVblank();
 testNmistDliClearsAtVblankStart();
 testDliNmistAtCycle7NmiAtCycle8();
 testVbiTriggersAtLine248();
+testVbiCycle7EnableDelaysByOneCycle();
+testVbiCycle8DisableSuppressesCurrentLine();
 testCycle7EnableDelaysDliByOneCycle();
 testCycle8EnableIsTooLateForCurrentDli();
 testCycle8DisableSuppressesCurrentDli();
