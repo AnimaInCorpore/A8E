@@ -74,7 +74,7 @@ For local release binaries with single-config generators (Makefiles/Ninja/MinGW 
 This method produces a standalone `.exe` without external DLL dependencies.
 
 #### Prerequisites
-- Install Visual Studio 2022 with the "Desktop development with C++" workload, or the standalone Build Tools.
+- Install Visual Studio 2022 or newer with the "Desktop development with C++" workload, or the standalone Build Tools.
 - Install an external `vcpkg` checkout and SDL2. Do not clone `vcpkg` into this repository:
   ```powershell
   git clone https://github.com/microsoft/vcpkg C:\dev\external\vcpkg
@@ -90,13 +90,14 @@ This method produces a standalone `.exe` without external DLL dependencies.
 Run from the repository root:
 ```powershell
 cmake -S . -B build/msvc `
-  -G "Visual Studio 17 2022" -A x64 `
+  -A x64 `
   -DCMAKE_TOOLCHAIN_FILE=C:\dev\external\vcpkg\scripts\buildsystems\vcpkg.cmake `
   -DVCPKG_TARGET_TRIPLET=x64-windows-static `
   -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded$<$<CONFIG:Debug>:Debug>"
 
 cmake --build build/msvc --config Release
 ```
+> **Note:** CMake picks the newest installed Visual Studio by default. Pass e.g. `-G "Visual Studio 17 2022"` only if you need to force a specific toolset.
 
 *Executable output: `build\msvc\A8E\Release\A8E.exe`*
 > **Note:** For MSVC static SDL builds, required Win32 system libraries are linked automatically by the project's CMake configuration.
