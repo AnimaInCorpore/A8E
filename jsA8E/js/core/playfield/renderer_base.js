@@ -117,6 +117,15 @@
       return currentLineCycle(ctx, cycleOffset) <= 105;
     }
 
+    // ANTIC has an independent expanded-memory view on 130XE/COMPY maps.
+    function readAnticDmaByte(ctx, address) {
+      const io = ctx.ioData;
+      if (typeof io.memoryExpansionRead === "function") {
+        return io.memoryExpansionRead(ctx, address, true) & 0xff;
+      }
+      return ctx.ram[address & 0xffff] & 0xff;
+    }
+
     function readVirtualPlayfieldBus(ctx, cycleOffset) {
       const lineCycle = currentLineCycle(ctx, cycleOffset);
       if (lineCycle === 106 && (ctx.ioData.drawLine.refreshDmaPending | 0) !== 0) {
@@ -148,7 +157,7 @@
 
       if (io.firstRowScanline) {
         const value = playfieldDmaAllowedAtCycle(ctx, cycleOffset)
-          ? (schedulePlayfieldDma(ctx, cycleOffset, 1), ctx.ram[address & 0xffff] & 0xff)
+          ? (schedulePlayfieldDma(ctx, cycleOffset, 1), readAnticDmaByte(ctx, address))
           : readVirtualPlayfieldBus(ctx, cycleOffset);
         lineBuffer[index] = value & 0xff;
       }
@@ -159,7 +168,7 @@
     function fetchUnbufferedDisplayByte(ctx, address, cycleOffset) {
       if (playfieldDmaAllowedAtCycle(ctx, cycleOffset)) {
         schedulePlayfieldDma(ctx, cycleOffset, 1);
-        return ctx.ram[address & 0xffff] & 0xff;
+        return readAnticDmaByte(ctx, address);
       }
       return readVirtualPlayfieldBus(ctx, cycleOffset);
     }

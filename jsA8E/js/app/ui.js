@@ -45,6 +45,7 @@
     if (text === "576k" || text === "576kb" || text === "rambo-576k") return "rambo-576k";
     if (text === "compy-576k" || text === "576k-compy") return "compy-576k";
     if (text === "1088k" || text === "1088kb" || text === "rambo-1088k") return "rambo-1088k";
+    if (text === "ultimate1mb" || text === "ultimate-1mb" || text === "1mb" || text === "1088k-u1mb") return "ultimate1mb";
     return null;
   }
 

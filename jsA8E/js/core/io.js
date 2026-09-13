@@ -95,6 +95,85 @@
       const sram = ctx.sram;
       const oldV = sram[IO_PORTB] & 0xff;
       const v = value & 0xff;
+      const memoryExpansion = io.memoryExpansion;
+      if (oldV !== v) {
+        const bank = memoryExpansion && memoryExpansion.enabled
+          ? (memoryExpansion.currentBank | 0)
+          : 0;
+        const cpuWindow = memoryExpansion && memoryExpansion.enabled
+          ? !!memoryExpansion.cpuWindowEnabled
+          : false;
+        const anticWindow = memoryExpansion && memoryExpansion.enabled
+          ? !!memoryExpansion.anticWindowEnabled
+          : false;
+        // Diagnostic-only trace for software that changes PORTB while
+        // loading or switching expanded-memory banks. Remove after diagnosis.
+        console.log(
+          "[A8E PORTB] pc=$" +
+            (ctx.currentInstructionPc & 0xffff).toString(16).padStart(4, "0") +
+            " cycle=" + (ctx.cycleCounter >>> 0) +
+            " old=$" + oldV.toString(16).padStart(2, "0") +
+            " new=$" + v.toString(16).padStart(2, "0") +
+            " bank=" + bank +
+            " cpu=" + (cpuWindow ? 1 : 0) +
+            " antic=" + (anticWindow ? 1 : 0),
+        );
+      }
+      const cpuWindowBit =
+        memoryExpansion && memoryExpansion.cpuEnableBit >= 0
+          ? 1 << memoryExpansion.cpuEnableBit
+          : 0;
+      const basicRomReused =
+        memoryExpansion &&
+        memoryExpansion.enabled &&
+        memoryExpansion.forceBasicOffWhenExpanded &&
+        (memoryExpansion.bankBits || []).indexOf(1) >= 0;
+      const selfTestRomReused =
+        memoryExpansion &&
+        memoryExpansion.enabled &&
+        memoryExpansion.forceSelfTestOffWhenExpanded &&
+        (memoryExpansion.bankBits || []).indexOf(7) >= 0;
+      // U1MB shadows the PIA output for reused ROM-control bits. A write that
+      // enables the CPU window changes the bank, but preserves ROM visibility.
+      const u1mbRomStateMode = !!(
+        memoryExpansion &&
+        memoryExpansion.ultimate1mb &&
+        memoryExpansion.enabled
+      );
+      const oldCpuWindowEnabled =
+        !!(memoryExpansion && memoryExpansion.enabled && cpuWindowBit) &&
+        (oldV & cpuWindowBit) === 0;
+      const newCpuWindowEnabled =
+        !!(memoryExpansion && memoryExpansion.enabled && cpuWindowBit) &&
+        (v & cpuWindowBit) === 0;
+      const oldBasicRomEnabled =
+        u1mbRomStateMode && (memoryExpansion.bankBits || []).indexOf(1) >= 0
+          ? (memoryExpansion.initialized
+              ? !!memoryExpansion.basicEnabled
+              : (oldV & 0x02) === 0)
+          : (oldV & 0x02) === 0 &&
+            !(basicRomReused && oldCpuWindowEnabled);
+      const newBasicRomEnabled =
+        u1mbRomStateMode && (memoryExpansion.bankBits || []).indexOf(1) >= 0
+          ? (newCpuWindowEnabled
+              ? oldBasicRomEnabled
+              : (v & 0x02) === 0)
+          : (v & 0x02) === 0 &&
+            !(basicRomReused && newCpuWindowEnabled);
+      const oldSelfTestRomEnabled =
+        u1mbRomStateMode && (memoryExpansion.bankBits || []).indexOf(7) >= 0
+          ? (memoryExpansion.initialized
+              ? !!memoryExpansion.selfTestEnabled
+              : (oldV & 0x80) === 0)
+          : (oldV & 0x80) === 0 &&
+            !(selfTestRomReused && oldCpuWindowEnabled);
+      const newSelfTestRomEnabled =
+        u1mbRomStateMode && (memoryExpansion.bankBits || []).indexOf(7) >= 0
+          ? (newCpuWindowEnabled
+              ? oldSelfTestRomEnabled
+              : (v & 0x80) === 0)
+          : (v & 0x80) === 0 &&
+            !(selfTestRomReused && newCpuWindowEnabled);
 
       function traceCopy(startAddr, source) {
         if (!ctx || typeof ctx.memoryWriteHook !== "function") return;
@@ -153,8 +232,8 @@
       }
 
       // Bit 1: BASIC ROM disable (1=disabled -> RAM, 0=enabled -> ROM)
-      if ((oldV & 0x02) !== (v & 0x02)) {
-        if (v & 0x02) {
+      if (oldBasicRomEnabled !== newBasicRomEnabled) {
+        if (!newBasicRomEnabled) {
           const basicRamVisible = sram.subarray(0xa000, 0xc000);
           ram.set(basicRamVisible, 0xa000);
           traceCopy(0xa000, basicRamVisible);
@@ -172,8 +251,8 @@
       }
 
       // Bit 7: Self-test ROM disable (1=disabled -> RAM, 0=enabled -> ROM)
-      if ((oldV & 0x80) !== (v & 0x80)) {
-        if (v & 0x80) {
+      if (oldSelfTestRomEnabled !== newSelfTestRomEnabled) {
+        if (!newSelfTestRomEnabled) {
           const selfTestRamVisible = sram.subarray(0x5000, 0x5800);
           ram.set(selfTestRamVisible, 0x5000);
           traceCopy(0x5000, selfTestRamVisible);
@@ -218,6 +297,11 @@
 
       if (value != null) {
         const v = value & 0xff;
+
+        // U1MB owns the shadowed $D380-$D3FF range when selected.
+        if (addr >= 0xd380 && addr <= 0xd3ff && io.ultimate1mbWrite) {
+          if (io.ultimate1mbWrite(ctx, addr, v)) return ram[addr] & 0xff;
+        }
 
         switch (addr) {
           // --- GTIA ---
@@ -343,6 +427,10 @@
             sram[addr] = v;
             // IRQST bits read as 1 for disabled sources.
             ram[addr] |= ~v & 0xff;
+            // POKEY IRQ is level-sensitive. Disabling its sources must not
+            // leave a software-queued interrupt for a later CLI.
+            if (CPU && typeof CPU.clearIrqPending === "function")
+              CPU.clearIrqPending(ctx);
             break;
 
           case IO_SKCTL_SKSTAT:
@@ -516,6 +604,10 @@
       }
 
       // Reads
+      if (addr >= 0xd380 && addr <= 0xd3ff && io.ultimate1mbRead) {
+        const u1mbValue = io.ultimate1mbRead(ctx, addr);
+        if (u1mbValue != null) return u1mbValue & 0xff;
+      }
       switch (addr) {
         case IO_PORTA:
           if ((sram[IO_PACTL] & 0x04) === 0) return io.valuePortA & 0xff;

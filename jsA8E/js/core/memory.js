@@ -11,14 +11,14 @@
     0x8D, 0xE2, 0x02, 0x8D, 0xE3, 0x02, 0x85, 0x48,
     0xA9, 0x04, 0x85, 0x49, 0xA9, 0x00, 0x85, 0x4A,
     /* parse_header */
-    0x20, 0x7E, 0x07, 0xC9, 0xFF, 0xD0, 0x4F,
-    0x20, 0x7E, 0x07, 0xC9, 0xFF, 0xD0, 0x48,
-    0x20, 0x7E, 0x07, 0x85, 0x43,
-    0x20, 0x7E, 0x07, 0x85, 0x44,
-    0x20, 0x7E, 0x07, 0x85, 0x45,
-    0x20, 0x7E, 0x07, 0x85, 0x46,
+    0x20, 0x81, 0x07, 0xC9, 0xFF, 0xD0, 0x4F,
+    0x20, 0x81, 0x07, 0xC9, 0xFF, 0xD0, 0x48,
+    0x20, 0x81, 0x07, 0x85, 0x43,
+    0x20, 0x81, 0x07, 0x85, 0x44,
+    0x20, 0x81, 0x07, 0x85, 0x45,
+    0x20, 0x81, 0x07, 0x85, 0x46,
     /* copy_loop */
-    0x20, 0x7E, 0x07, 0xA0, 0x00, 0x91, 0x43,
+    0x20, 0x81, 0x07, 0xA0, 0x00, 0x91, 0x43,
     0xE6, 0x43, 0xD0, 0x02, 0xE6, 0x44,
     /* check_end */
     0xA5, 0x44, 0xC5, 0x46, 0x90, 0xED, 0xD0, 0x06,
@@ -30,11 +30,11 @@
     0xA9, 0x00, 0x8D, 0xE2, 0x02, 0x8D, 0xE3, 0x02,
     0x4C, 0x1F, 0x07,
     /* run_addr */
-    0xAD, 0xE1, 0x02, 0xF0, 0x03, 0x6C, 0xE0, 0x02,
+    0xAD, 0xE0, 0x02, 0x0D, 0xE1, 0x02, 0xF0, 0x03, 0x6C, 0xE0, 0x02,
     /* done */
     0x60,
     /* get_byte */
-    0xA5, 0x48, 0xD0, 0x03, 0x20, 0x8F, 0x07,
+    0xA5, 0x48, 0xD0, 0x03, 0x20, 0x92, 0x07,
     0xA6, 0x47, 0xBD, 0x00, 0x06, 0xE6, 0x47, 0xC6, 0x48, 0x60,
     /* read_sector */
     0xA9, 0x31, 0x8D, 0x00, 0x03,
@@ -55,10 +55,10 @@
     0x60
   ];
   const XEX_BOOT_LOADER_BASE = 0x0700;
-  const XEX_BOOT_PATCH_GETBYTE_BUF_LO = 0x0788 - XEX_BOOT_LOADER_BASE;
-  const XEX_BOOT_PATCH_GETBYTE_BUF_HI = 0x0789 - XEX_BOOT_LOADER_BASE;
-  const XEX_BOOT_PATCH_DBUF_LO = 0x07a4 - XEX_BOOT_LOADER_BASE;
-  const XEX_BOOT_PATCH_DBUF_HI = 0x07a9 - XEX_BOOT_LOADER_BASE;
+  const XEX_BOOT_PATCH_GETBYTE_BUF_LO = 0x078b - XEX_BOOT_LOADER_BASE;
+  const XEX_BOOT_PATCH_GETBYTE_BUF_HI = 0x078c - XEX_BOOT_LOADER_BASE;
+  const XEX_BOOT_PATCH_DBUF_LO = 0x07a7 - XEX_BOOT_LOADER_BASE;
+  const XEX_BOOT_PATCH_DBUF_HI = 0x07ac - XEX_BOOT_LOADER_BASE;
   const XEX_BOOT_LOADER_RESERVED_START = 0x0700;
   const XEX_BOOT_LOADER_RESERVED_END = 0x087f;
   const XEX_SEGMENT_MARKER = 0xff;
@@ -163,6 +163,20 @@
       forceBasicOffWhenExpanded: true,
       forceSelfTestOffWhenExpanded: true,
     },
+    "ultimate1mb": {
+      key: "ultimate1mb",
+      label: "Ultimate1MB (1MB)",
+      enabled: true,
+      extendedBytes: 0x100000,
+      // U1MB defaults to its 1088K-compatible memory configuration.
+      bankBits: [1, 2, 3, 5, 6, 7],
+      cpuEnableBit: 4,
+      anticEnableBit: 4,
+      sharedWindow: true,
+      forceBasicOffWhenExpanded: true,
+      forceSelfTestOffWhenExpanded: true,
+      ultimate1mb: true,
+    },
   };
 
   function normalizeMemoryExpansionProfile(value) {
@@ -203,6 +217,9 @@
     if (text === "1088k" || text === "1088kb" || text === "rambo-1088k") {
       return "rambo-1088k";
     }
+    if (text === "ultimate1mb" || text === "ultimate-1mb" || text === "1mb" || text === "1088k-u1mb") {
+      return "ultimate1mb";
+    }
     return null;
   }
 
@@ -213,7 +230,7 @@
 
   function createMemoryExpansionState(profileKey) {
     const spec = getMemoryExpansionSpec(profileKey);
-    return {
+    const state = {
       profile: spec.key,
       label: spec.label,
       enabled: !!spec.enabled,
@@ -225,6 +242,11 @@
       sharedWindow: !!spec.sharedWindow,
       forceBasicOffWhenExpanded: !!spec.forceBasicOffWhenExpanded,
       forceSelfTestOffWhenExpanded: !!spec.forceSelfTestOffWhenExpanded,
+      ultimate1mb: !!spec.ultimate1mb,
+      ultimateUctl: spec.ultimate1mb ? 0x03 : 0,
+      ultimateUaux: 0,
+      ultimateColdReset: spec.ultimate1mb ? 0x80 : 0,
+      ultimateConfigLocked: false,
       bankStorage: new Uint8Array(spec.extendedBytes || 0),
       mainWindowShadow: new Uint8Array(0x4000),
       currentBank: 0,
@@ -234,6 +256,7 @@
       selfTestEnabled: false,
       initialized: false,
     };
+    return state;
   }
 
   function cloneMemoryExpansionState(state) {
@@ -251,6 +274,11 @@
       sharedWindow: !!source.sharedWindow,
       forceBasicOffWhenExpanded: !!source.forceBasicOffWhenExpanded,
       forceSelfTestOffWhenExpanded: !!source.forceSelfTestOffWhenExpanded,
+      ultimate1mb: !!source.ultimate1mb,
+      ultimateUctl: source.ultimateUctl & 0xff,
+      ultimateUaux: source.ultimateUaux & 0xff,
+      ultimateColdReset: source.ultimateColdReset & 0x80,
+      ultimateConfigLocked: !!source.ultimateConfigLocked,
       bankStorage: new Uint8Array(source.bankStorage || 0),
       mainWindowShadow: new Uint8Array(source.mainWindowShadow || 0),
       currentBank: source.currentBank | 0,
@@ -1000,6 +1028,7 @@
       machine.memoryExpansion = createMemoryExpansionState(
         opts && opts.memoryExpansion !== undefined ? opts.memoryExpansion : "none",
       );
+      applyUltimate1mbMemoryMode(machine.memoryExpansion);
 
       function makeDefaultDeviceSlots() {
         const slots = new Int16Array(DEVICE_SLOT_COUNT);
@@ -1106,6 +1135,30 @@
         return machine.memoryExpansion || createMemoryExpansionState("none");
       }
 
+      // U1MB UCTL memory modes follow the AHRM UCTL D1:D0 definitions.
+      function applyUltimate1mbMemoryMode(state) {
+        const mem = state;
+        if (!mem || !mem.ultimate1mb) return;
+        const mode = mem.ultimateUctl & 0x03;
+        const modes = [
+          { bits: [], cpu: -1, antic: -1, shared: true, basic: false, selfTest: false },
+          { bits: [2, 3, 5, 6], cpu: 4, antic: 4, shared: true, basic: false, selfTest: false },
+          // AHRM: U1MB ROM enables follow PORTB bit changes only while the
+          // CPU window is disabled in the 576K/1088K modes. They must not be
+          // forcibly cleared merely because the extended window is active.
+          { bits: [1, 2, 3, 6, 7], cpu: 4, antic: 5, shared: false, basic: false, selfTest: false },
+          { bits: [1, 2, 3, 5, 6, 7], cpu: 4, antic: 4, shared: true, basic: false, selfTest: false },
+        ][mode];
+        mem.enabled = mode !== 0;
+        mem.bankBits = new Uint8Array(modes.bits);
+        mem.bankCount = modes.bits.length ? 1 << modes.bits.length : 0;
+        mem.cpuEnableBit = modes.cpu;
+        mem.anticEnableBit = modes.antic;
+        mem.sharedWindow = modes.shared;
+        mem.forceBasicOffWhenExpanded = modes.basic;
+        mem.forceSelfTestOffWhenExpanded = modes.selfTest;
+      }
+
       function getPortBMemoryBankIndex(portB, state) {
         const mem = state || getMemoryExpansionState();
         const bits = mem.bankBits || new Uint8Array(0);
@@ -1152,7 +1205,19 @@
 
       function syncMemoryExpansionWindow(ctx, oldPortB, newPortB) {
         const mem = getMemoryExpansionState();
-        if (!mem.enabled) return;
+        if (!mem.enabled) {
+          // U1MB mode 00 disables the extended window and exposes motherboard RAM.
+          if (mem.initialized && mem.cpuWindowEnabled) {
+            const oldBank = getPortBMemoryBankIndex(oldPortB, mem);
+            storeWindowToStorage(ctx, mem, oldBank);
+            ctx.ram.set(mem.mainWindowShadow.subarray(0, 0x4000), 0x4000);
+          }
+          mem.cpuWindowEnabled = false;
+          mem.anticWindowEnabled = false;
+          mem.currentBank = 0;
+          mem.initialized = true;
+          return;
+        }
 
         const oldCpuEnabled = getMemoryWindowEnabled(oldPortB, mem, false);
         const nextCpuEnabled = getMemoryWindowEnabled(newPortB, mem, false);
@@ -1167,8 +1232,12 @@
           mem.currentBank = nextBank;
           mem.cpuWindowEnabled = nextCpuEnabled;
           mem.anticWindowEnabled = nextAnticEnabled;
-          mem.basicEnabled = (newPortB & 0x02) === 0;
-          mem.selfTestEnabled = (newPortB & 0x80) === 0;
+          mem.basicEnabled =
+            (newPortB & 0x02) === 0 &&
+            !(mem.forceBasicOffWhenExpanded && (mem.bankBits || []).indexOf(1) >= 0 && nextCpuEnabled);
+          mem.selfTestEnabled =
+            (newPortB & 0x80) === 0 &&
+            !(mem.forceSelfTestOffWhenExpanded && (mem.bankBits || []).indexOf(7) >= 0 && nextCpuEnabled);
           if (nextCpuEnabled) {
             copyWindowFromStorage(ctx, mem, nextBank);
           }
@@ -1199,6 +1268,12 @@
         if (!reuseSelfTestBit || !nextCpuEnabled) {
           mem.selfTestEnabled = (newPortB & 0x80) === 0;
         }
+        if (nextCpuEnabled && mem.forceBasicOffWhenExpanded && reuseBasicBit) {
+          mem.basicEnabled = false;
+        }
+        if (nextCpuEnabled && mem.forceSelfTestOffWhenExpanded && reuseSelfTestBit) {
+          mem.selfTestEnabled = false;
+        }
       }
 
       function readExpansionMemoryByte(ctx, address, isAnticRead) {
@@ -1211,14 +1286,81 @@
           ? (mem.sharedWindow ? mem.cpuWindowEnabled : mem.anticWindowEnabled)
           : mem.cpuWindowEnabled;
         if (!enabled) return ctx.ram[addr] & 0xff;
+        // With the CPU window active, ctx.ram is the live view of the
+        // selected bank. ANTIC must see CPU writes immediately, especially
+        // for shared CPU+ANTIC profiles such as RAMBO and U1MB; bankStorage
+        // is only committed when the CPU window changes banks or closes.
+        if (isAnticRead && mem.cpuWindowEnabled) {
+          return ctx.ram[addr] & 0xff;
+        }
         const bank = getPortBMemoryBankIndex(ctx.sram[IO_PORTB] & 0xff, mem);
         const offset = getMemoryStorageOffset(bank, mem);
         if (offset < 0) return ctx.ram[addr] & 0xff;
         return mem.bankStorage[offset + (addr - 0x4000)] & 0xff;
       }
 
+      function reconfigureUltimate1mb(ctx) {
+        const mem = getMemoryExpansionState();
+        if (!mem.ultimate1mb) return;
+        if (mem.initialized && mem.cpuWindowEnabled) {
+          storeWindowToStorage(ctx, mem, mem.currentBank);
+          ctx.ram.set(mem.mainWindowShadow.subarray(0, 0x4000), 0x4000);
+        }
+        mem.cpuWindowEnabled = false;
+        mem.anticWindowEnabled = false;
+        mem.currentBank = 0;
+        mem.initialized = false;
+        applyUltimate1mbMemoryMode(mem);
+        syncMemoryExpansionWindow(ctx, ctx.sram[IO_PORTB] & 0xff, ctx.sram[IO_PORTB] & 0xff);
+      }
+
+      // Initial U1MB register model. BIOS/flash/RTC/PBI behavior remains separate.
+      function ultimate1mbRead(ctx, address) {
+        const mem = getMemoryExpansionState();
+        if (!mem.ultimate1mb) return null;
+        const addr = address & 0xffff;
+        if (addr === 0xd383) return mem.ultimateColdReset & 0x80;
+        if (addr >= 0xd380 && addr <= 0xd3ff) return 0xff;
+        return null;
+      }
+
+      function ultimate1mbWrite(ctx, address, value) {
+        const mem = getMemoryExpansionState();
+        if (!mem.ultimate1mb) return false;
+        const addr = address & 0xffff;
+        const v = value & 0xff;
+        if (addr < 0xd380 || addr > 0xd3ff) return false;
+        if (!mem.ultimateConfigLocked) {
+          if (addr === 0xd380) {
+            mem.ultimateUctl = v;
+            reconfigureUltimate1mb(ctx);
+          } else if (addr === 0xd381) {
+            mem.ultimateUaux = v;
+          } else if (addr === 0xd383) {
+            mem.ultimateColdReset = v & 0x80;
+          }
+          if (addr === 0xd380 && (v & 0x80)) mem.ultimateConfigLocked = true;
+        }
+        return true;
+      }
+
       function setMemoryExpansion(profileKey) {
+        const previous = machine.memoryExpansion;
+        // The CPU window may currently contain an expanded bank. Restore the
+        // motherboard RAM hidden underneath before replacing the profile;
+        // otherwise the next profile can mistake that bank for base RAM.
+        if (
+          previous &&
+          previous.enabled &&
+          previous.initialized &&
+          previous.cpuWindowEnabled &&
+          previous.mainWindowShadow &&
+          previous.mainWindowShadow.length >= 0x4000
+        ) {
+          machine.ctx.ram.set(previous.mainWindowShadow.subarray(0, 0x4000), 0x4000);
+        }
         machine.memoryExpansion = createMemoryExpansionState(profileKey);
+        applyUltimate1mbMemoryMode(machine.memoryExpansion);
         if (machine.ctx && machine.ctx.ioData) {
           machine.ctx.ioData.memoryExpansion = machine.memoryExpansion;
         }
@@ -1430,6 +1572,14 @@
 
       function hardReset(options) {
         getMediaState();
+        if (machine.memoryExpansion && machine.memoryExpansion.ultimate1mb) {
+          machine.memoryExpansion.ultimateUctl = 0x03;
+          machine.memoryExpansion.ultimateUaux = 0;
+          machine.memoryExpansion.ultimateColdReset = 0x80;
+          machine.memoryExpansion.ultimateConfigLocked = false;
+          applyUltimate1mbMemoryMode(machine.memoryExpansion);
+          machine.memoryExpansion.initialized = false;
+        }
         machine.ctx.cycleCounter = 0;
         machine.ctx.stallCycleCounter = 0;
         machine.ctx.nmiPending = 0;
@@ -1441,6 +1591,8 @@
         copyMediaToIoData();
         machine.ctx.ioData.memoryExpansionRead = readExpansionMemoryByte;
         machine.ctx.ioData.memoryExpansionSync = syncMemoryExpansionWindow;
+        machine.ctx.ioData.ultimate1mbRead = ultimate1mbRead;
+        machine.ctx.ioData.ultimate1mbWrite = ultimate1mbWrite;
         machine.ctx.ioData.pokeyAudio = machine.audioState;
         machine.ctx.ioCycleTimedEventFunction = ioCycleTimedEvent;
         cycleTimedEventUpdate(machine.ctx);
@@ -1632,6 +1784,10 @@
             currentBank: mem.currentBank | 0,
             cpuWindowEnabled: !!mem.cpuWindowEnabled,
             anticWindowEnabled: !!mem.anticWindowEnabled,
+            ultimateUctl: mem.ultimate1mb ? mem.ultimateUctl & 0xff : null,
+            ultimateUaux: mem.ultimate1mb ? mem.ultimateUaux & 0xff : null,
+            ultimateColdReset: mem.ultimate1mb ? mem.ultimateColdReset & 0x80 : null,
+            ultimateConfigLocked: mem.ultimate1mb ? !!mem.ultimateConfigLocked : null,
           },
         };
       }
@@ -1942,6 +2098,8 @@
         machine.ctx.ioData.memoryExpansion = machine.memoryExpansion;
         machine.ctx.ioData.memoryExpansionRead = readExpansionMemoryByte;
         machine.ctx.ioData.memoryExpansionSync = syncMemoryExpansionWindow;
+        machine.ctx.ioData.ultimate1mbRead = ultimate1mbRead;
+        machine.ctx.ioData.ultimate1mbWrite = ultimate1mbWrite;
         copyMediaToIoData();
         machine.ctx.ioCycleTimedEventFunction = ioCycleTimedEvent;
         machine.ctx.ioData.pokeyAudio = null;

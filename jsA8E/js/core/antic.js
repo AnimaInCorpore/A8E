@@ -185,6 +185,14 @@
             : null;    if (!playfieldApi) throw new Error("A8EPlayfield is not loaded");
     const drawLine = playfieldApi.drawLine;
 
+    function readAnticDmaByte(ctx, address) {
+      const io = ctx.ioData;
+      if (typeof io.memoryExpansionRead === "function") {
+        return io.memoryExpansionRead(ctx, address, true) & 0xff;
+      }
+      return ctx.ram[address & 0xffff] & 0xff;
+    }
+
     function fetchLine(ctx) {
       const io = ctx.ioData;
       const ram = ctx.ram;
@@ -198,8 +206,10 @@
         if (io.video.currentDisplayLine === io.nextDisplayListLine) {
           io.drawLine.displayListInstructionDmaPending = 1;
           const oldCmd = io.currentDisplayListCommand & 0xff;
-          io.currentDisplayListCommand =
-            ram[io.displayListAddress & 0xffff] & 0xff;
+          io.currentDisplayListCommand = readAnticDmaByte(
+            ctx,
+            io.displayListAddress,
+          );
           io.displayListAddress = Util.fixedAdd(
             io.displayListAddress,
             0x03ff,
@@ -278,8 +288,8 @@
           // JMP
           if ((cmd & ANTIC_MODE_BITS) === ANTIC_JUMP_INSTRUCTION) {
             io.displayListAddress =
-              ram[io.displayListAddress & 0xffff] |
-              (ram[(io.displayListAddress + 1) & 0xffff] << 8);
+              readAnticDmaByte(ctx, io.displayListAddress) |
+              (readAnticDmaByte(ctx, io.displayListAddress + 1) << 8);
           }
 
           // Wait for VBL (JVB)
@@ -288,14 +298,14 @@
           // Load memory scan (LMS)
           if ((cmd & ANTIC_CMD_MASK_DLI_JMP) >= ANTIC_LMS_MIN_INSTRUCTION) {
             io.displayMemoryAddress =
-              ram[io.displayListAddress & 0xffff] & 0xff;
+              readAnticDmaByte(ctx, io.displayListAddress);
             io.displayListAddress = Util.fixedAdd(
               io.displayListAddress,
               0x03ff,
               1,
             );
             io.displayMemoryAddress |=
-              (ram[io.displayListAddress & 0xffff] & 0xff) << 8;
+              readAnticDmaByte(ctx, io.displayListAddress) << 8;
             io.displayListAddress = Util.fixedAdd(
               io.displayListAddress,
               0x03ff,

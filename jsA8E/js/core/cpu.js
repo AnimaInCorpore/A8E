@@ -309,7 +309,9 @@
   function irq(ctx) {
     const cpu = ctx.cpu;
     if (hasFlag(cpu.ps, FLAG_I)) {
-      ctx.irqPending = (ctx.irqPending + 1) & 0xff;
+      // IRQ is level-sensitive. Keep one pending indication while the line
+      // remains asserted; do not queue stale events after the source clears.
+      ctx.irqPending = 1;
     } else {
       if (ctx.irqPending) ctx.irqPending = (ctx.irqPending - 1) & 0xff;
       serviceInterrupt(ctx, 0xfffe, 0, cpu.pc);
@@ -444,6 +446,15 @@
       value = ctx.accessFunction(ctx, null) & 0xff;
     }
     return value;
+  }
+
+  function clearIrqPending(ctx) {
+    if (!ctx) return;
+    // POKEY IRQST is active-low and IRQEN is a mask. Keep a pending level only
+    // when at least one currently enabled POKEY source is still asserted.
+    const irqst = ctx.ram[0xd20e] & 0xff;
+    const irqen = ctx.sram[0xd20e] & 0xff;
+    if (((~irqst) & irqen & 0x7f) === 0) ctx.irqPending = 0;
   }
   function writeAccess(ctx, value) {
     const addr = ctx.accessAddress & 0xffff;
@@ -1322,6 +1333,7 @@
     clearPcHook: clearPcHook,
     setMemoryWriteHook: setMemoryWriteHook,
     setMemoryAccessHook: setMemoryAccessHook,
+    clearIrqPending: clearIrqPending,
     // exposed for debugging/tests
     getPs: getPs,
     setPs: setPs,
