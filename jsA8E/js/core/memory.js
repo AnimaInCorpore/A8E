@@ -1282,17 +1282,28 @@
         if (!mem.enabled || addr < 0x4000 || addr > 0x7fff) {
           return ctx.ram[addr] & 0xff;
         }
-        const enabled = isAnticRead
-          ? (mem.sharedWindow ? mem.cpuWindowEnabled : mem.anticWindowEnabled)
-          : mem.cpuWindowEnabled;
-        if (!enabled) return ctx.ram[addr] & 0xff;
-        // With the CPU window active, ctx.ram is the live view of the
-        // selected bank. ANTIC must see CPU writes immediately, especially
-        // for shared CPU+ANTIC profiles such as RAMBO and U1MB; bankStorage
-        // is only committed when the CPU window changes banks or closes.
-        if (isAnticRead && mem.cpuWindowEnabled) {
+        if (!isAnticRead) {
           return ctx.ram[addr] & 0xff;
         }
+
+        const anticEnabled = mem.sharedWindow
+          ? mem.cpuWindowEnabled
+          : mem.anticWindowEnabled;
+        if (!anticEnabled) {
+          // AHRM 2.7: 130XE/COMPY CPU and ANTIC windows are independent.
+          // When only the CPU window is active, ctx.ram holds the selected
+          // extended bank, while ANTIC must still see motherboard RAM.
+          if (mem.cpuWindowEnabled && !mem.sharedWindow) {
+            return mem.mainWindowShadow[addr - 0x4000] & 0xff;
+          }
+          return ctx.ram[addr] & 0xff;
+        }
+
+        // With a shared window, or with both 130XE windows enabled, ctx.ram
+        // is the live selected bank and therefore includes CPU writes that
+        // have not yet been committed to bankStorage.
+        if (mem.cpuWindowEnabled) return ctx.ram[addr] & 0xff;
+
         const bank = getPortBMemoryBankIndex(ctx.sram[IO_PORTB] & 0xff, mem);
         const offset = getMemoryStorageOffset(bank, mem);
         if (offset < 0) return ctx.ram[addr] & 0xff;
@@ -1566,7 +1577,8 @@
           const portB = sanitizePortB(options.portB | 0);
           machine.ctx.ram[IO_PORTB] = portB;
           machine.ctx.sram[IO_PORTB] = portB;
-          machine.ctx.ioData.valuePortB = portB;
+          machine.ctx.ioData.valuePortB = 0xff;
+          machine.ctx.ioData.outputPortB = portB;
         }
       }
 
@@ -1821,6 +1833,7 @@
           pokeyTimer4LastIrqCycle: io.pokeyTimer4LastIrqCycle,
           valuePortA: io.valuePortA | 0,
           valuePortB: io.valuePortB | 0,
+          outputPortB: io.outputPortB | 0,
           sioBuffer: new Uint8Array(io.sioBuffer || 0),
           sioOutIndex: io.sioOutIndex | 0,
           sioOutPhase: io.sioOutPhase | 0,
@@ -1921,6 +1934,8 @@
           io.pokeyTimer4LastIrqCycle = state.pokeyTimer4LastIrqCycle;
         io.valuePortA = state.valuePortA | 0;
         io.valuePortB = state.valuePortB | 0;
+        io.outputPortB =
+          state.outputPortB !== undefined ? state.outputPortB | 0 : 0xff;
         copyBytesTo(io.sioBuffer, state.sioBuffer);
         io.sioOutIndex = state.sioOutIndex | 0;
         io.sioOutPhase = state.sioOutPhase | 0;

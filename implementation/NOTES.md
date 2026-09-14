@@ -4,6 +4,16 @@
 
 Simple implementation notes for this repository.
 
+- 2026-09-14: `jsA8E/js/core/{hw,state,input,io}.js`, `jsA8E/headless.js`,
+  `A8E/AtariIo.c`, and `jsA8E/tests/pia_xlxe_defaults.test.js`: corrected the
+  XL/XE no-cartridge hardware state per AHRM 2.8. `TRIG3` now reports RD5 low
+  when no external cartridge maps `$A000-$BFFF`; internal BASIC does not
+  assert it. Also separated jsA8E's PORTB output latch from DDRB: reset now
+  exposes effective `$FF` through MMU pull-ups, and DDRB writes immediately
+  update ROM/extended-memory mapping. Headless automation now forwards its
+  selected memory-expansion profile. AtariWriter reaches its user menu after
+  one intended warm start without an 850 or title-specific behavior.
+
 - 2026-09-14: `jsA8E/index.html`: removed the obsolete `Nonfunctional`
   label from the validated `1088K (RAMBO)` profile and marked the separate
   `Ultimate1MB (1MB)` profile as `(WIP)` to reflect its remaining
@@ -395,3 +405,9 @@ The XEX loader's RUNAD check now reads both `$02E0` and `$02E1`. The three-byte 
   during expansion writes. jsA8E preserves the complete written byte and
   derives only the documented bank/window bits; native behavior now matches
   that rule and avoids altering the test's post-load display state.
+- 2026-09-14: `jsA8E/js/core/memory.js` and
+  `jsA8E/tests/memory_xex_preflight_bank_switch.test.js`: corrected separate
+  130XE/COMPY ANTIC visibility. When only the CPU extended-RAM window is
+  enabled, ANTIC now reads the preserved motherboard `$4000-$7FFF` view rather
+  than the CPU's live bank; enabling the independent ANTIC window still exposes
+  that selected bank. This follows AHRM 2.7 and is covered by a regression.

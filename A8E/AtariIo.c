@@ -1429,7 +1429,8 @@ static IoInitValue_t m_aIoInitValues[] =
 		{IO_GRAFP3_TRIG0, 0x00, 0x01, Gtia_GRAFP3_TRIG0},
 		{IO_GRAFM_TRIG1, 0x00, 0x01, Gtia_GRAFM_TRIG1},
 		{IO_COLPM0_TRIG2, 0x00, 0x01, Gtia_COLPM0_TRIG2},
-		{IO_COLPM1_TRIG3, 0x00, 0x01, Gtia_COLPM1_TRIG3},
+		/* XL/XE TRIG3 is RD5 cartridge sense: low with no cartridge. */
+		{IO_COLPM1_TRIG3, 0x00, 0x00, Gtia_COLPM1_TRIG3},
 		{IO_COLPM2_PAL, 0x00, 0x01, Gtia_COLPM2_PAL},
 		{IO_COLPM3, 0x00, 0x0f, Gtia_COLPM3},
 		{IO_COLPF0, 0x00, 0x0f, Gtia_COLPF0},

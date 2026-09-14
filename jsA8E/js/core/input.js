@@ -115,7 +115,10 @@
         const ctx = machine.ctx;
         const io = ctx.ioData;
         const reg = triggerRegister(index);
-        const physical = pressed ? 0 : 1;
+        // On XL/XE, TRIG3 is not a joystick input. It reports the external
+        // cartridge RD5 mapping state; this emulator currently has no
+        // cartridge slot, so it remains low.
+        const physical = index === 3 ? 0 : pressed ? 0 : 1;
 
         if (!io.trigPhysical || !io.trigLatched) {
           ctx.ram[reg] = physical;

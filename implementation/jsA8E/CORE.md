@@ -69,7 +69,9 @@ Snapshot saves default to advancing paused execution to the next frame boundary 
 
 ## XEX Preflight
 
-XEX mount preflight simulates the file's writes in load order, so a segment that writes `D301` can bank ROM out before later bytes target extended address ranges. Writes that are still ROM-backed at the time they execute are rejected. The default reset `PORTB` value is derived from the real `IO_PORTB` initialization entry (`$FD`) and inherits the `Option-on-Start` policy when no explicit override is supplied.
+XEX mount preflight simulates the file's writes in load order, so a segment that writes `D301` can bank ROM out before later bytes target extended address ranges. Writes that are still ROM-backed at the time they execute are rejected. The default reset `PORTB` value is the effective `$FF`: PIA DDRB resets to all inputs and XL/XE MMU pull-ups enable OS ROM while disabling BASIC and Self-Test until the OS programs ORB/DDRB. It inherits the `Option-on-Start` policy when no explicit override is supplied.
+
+XL/XE `TRIG3` is RD5 cartridge sense, not a released third joystick. It reads low with no external cartridge and internal BASIC does not assert it. PORTB keeps separate DDRB and ORB state; its effective MMU value is `(ORB & DDRB) | ~DDRB`, so a DDRB change updates ROM and extended-memory selection immediately.
 
 ## Issues
 - Broader real-content raster verification (chained DLIs, PMG priority ladders, wide-playfield artifacts) is still incomplete.

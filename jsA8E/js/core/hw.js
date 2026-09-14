@@ -250,7 +250,9 @@
       { addr: IO_GRAFP3_TRIG0, write: 0x00, read: 0x01 },
       { addr: IO_GRAFM_TRIG1, write: 0x00, read: 0x01 },
       { addr: IO_COLPM0_TRIG2, write: 0x00, read: 0x01 },
-      { addr: IO_COLPM1_TRIG3, write: 0x00, read: 0x01 },
+      // XL/XE TRIG3 senses the external cartridge RD5 line. With no
+      // cartridge mounted it is low; internal BASIC does not affect it.
+      { addr: IO_COLPM1_TRIG3, write: 0x00, read: 0x00 },
       {
         addr: IO_COLPM2_PAL,
         write: 0x00,
@@ -289,7 +291,9 @@
 
       // PIA
       { addr: IO_PORTA, write: 0xff, read: 0xff },
-      { addr: IO_PORTB, write: 0xfd, read: 0xfd },
+      // PIA reset makes DDRB all inputs. XL/XE MMU control lines are pulled
+      // high, so the effective PORTB value is $FF until the OS programs it.
+      { addr: IO_PORTB, write: 0xff, read: 0xff },
       { addr: IO_PACTL, write: 0x00, read: 0x3c },
       { addr: IO_PBCTL, write: 0x00, read: 0x3c },
 

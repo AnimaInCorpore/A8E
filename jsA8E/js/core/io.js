@@ -89,6 +89,28 @@
       IO_COLPM1_TRIG3,
     ];
 
+    function piaPortBEffectiveValue(io) {
+      const direction = io.valuePortB & 0xff;
+      const output = io.outputPortB & 0xff;
+      // AHRM 2.6/2.7: all XL/XE MMU lines, including lines added by common
+      // memory expansions, are pulled high while configured as inputs.
+      return ((output & direction) | (~direction & 0xff)) & 0xff;
+    }
+
+    function piaPortBApply(ctx) {
+      const io = ctx.ioData;
+      const oldV = ctx.sram[IO_PORTB] & 0xff;
+      const newV = piaPortBEffectiveValue(io);
+      piaPortBWrite(ctx, newV);
+      if (io && typeof io.memoryExpansionSync === "function") {
+        try {
+          io.memoryExpansionSync(ctx, oldV, newV);
+        } catch {
+          // ignore memory expansion sync errors
+        }
+      }
+    }
+
     function piaPortBWrite(ctx, value) {
       const io = ctx.ioData;
       const ram = ctx.ram;
@@ -442,19 +464,11 @@
           case IO_PORTB:
             if ((sram[IO_PBCTL] & 0x04) === 0) {
               io.valuePortB = v;
+              piaPortBApply(ctx);
               return io.valuePortB & 0xff;
             }
-            {
-              const oldV = sram[IO_PORTB] & 0xff;
-              piaPortBWrite(ctx, v);
-              if (io && typeof io.memoryExpansionSync === "function") {
-                try {
-                  io.memoryExpansionSync(ctx, oldV, v);
-                } catch {
-                  // ignore memory expansion sync errors
-                }
-              }
-            }
+            io.outputPortB = v;
+            piaPortBApply(ctx);
             break;
 
           case IO_PACTL:

@@ -28,9 +28,12 @@
         // Diagnostic counters for POKEY timer-4 IRQ investigation.
         pokeyTimer4IrqCount: 0,
         pokeyTimer4LastIrqCycle: CYCLE_NEVER,
-        // PIA shadow ports (for output mode)
+        // PIA data-direction registers and port B output latch. PIA reset
+        // leaves both DDRs at zero; external pull-ups determine PORTB's
+        // effective MMU value until the OS enables its outputs.
         valuePortA: 0,
         valuePortB: 0,
+        outputPortB: 0,
         // SIO state (ported from Pokey.c)
         // 850 handler downloads can be 1496 bytes (AHRM 9.10).
         sioBuffer: new Uint8Array(4096),
@@ -62,8 +65,10 @@
         pokeyPotCounter: 0,
         pokeyPotScanActive: false,
         // Raw trigger inputs (1=released, 0=pressed) and GTIA-latched view.
-        trigPhysical: new Uint8Array([1, 1, 1, 1]),
-        trigLatched: new Uint8Array([1, 1, 1, 1]),
+        // TRIG2 is hardwired inactive on XL/XE. TRIG3 is the RD5 cartridge
+        // sense line and is low when no external cartridge is mapped.
+        trigPhysical: new Uint8Array([1, 1, 1, 0]),
+        trigLatched: new Uint8Array([1, 1, 1, 0]),
         currentDisplayListCommand: 0,
         nextDisplayListLine: 8,
         displayListAddress: 0,

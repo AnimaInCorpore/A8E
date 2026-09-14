@@ -74,6 +74,7 @@ function createRuntime(options) {
 
   runtime.loadOsRom(new Uint8Array(0x4000).buffer);
   runtime.loadBasicRom(new Uint8Array(0x2000).buffer);
+  runtime._testMachine = machine;
   return runtime;
 }
 
@@ -250,6 +251,30 @@ function testInitadTraceDoesNotUseFutureSegments() {
   );
 }
 
+function test130XeAnticKeepsMotherboardRamWhenOnlyCpuWindowIsEnabled() {
+  const runtime = createRuntime();
+  runtime.hardReset({ memoryExpansion: "130xe-128k", portB: 0xff });
+
+  const ctx = runtime._testMachine.ctx;
+  const portB = 0xd301;
+  const sync = ctx.ioData.memoryExpansionSync;
+  ctx.ram[0x4000] = 0x11;
+
+  // $EF enables the 130XE CPU window but leaves the independent ANTIC
+  // window disabled. AHRM 2.7 requires ANTIC to retain motherboard RAM.
+  ctx.sram[portB] = 0xef;
+  ctx.ram[portB] = 0xef;
+  sync(ctx, 0xff, 0xef);
+  ctx.ram[0x4000] = 0x22;
+  assert.equal(ctx.ioData.memoryExpansionRead(ctx, 0x4000, true), 0x11);
+
+  // With bit 5 cleared, ANTIC is enabled and sees the selected extended bank.
+  ctx.sram[portB] = 0xcf;
+  ctx.ram[portB] = 0xcf;
+  sync(ctx, 0xef, 0xcf);
+  assert.equal(ctx.ioData.memoryExpansionRead(ctx, 0x4000, true), 0x22);
+}
+
 testPortBWriteSegmentIsAllowed();
 testPortBSwitchCanOpenSelfTestRam();
 testPortBSwitchCanOpenBasicRam();
@@ -258,5 +283,6 @@ testSelfTestWriteStillFailsWithoutBankSwitch();
 testInitadTraceCanDisableBasicFromAlreadyLoadedCode();
 testInitadTraceIgnoresNonAccumulatorLoadsBeforeSta();
 testInitadTraceDoesNotUseFutureSegments();
+test130XeAnticKeepsMotherboardRamWhenOnlyCpuWindowIsEnabled();
 
 console.log("memory_xex_preflight_bank_switch.test.js passed");
