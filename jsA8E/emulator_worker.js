@@ -33,6 +33,7 @@
   let rendererBackend = "unknown";
   let initDone = false;
   let hostFsUnsubscribe = null;
+  let diskLibraryUnsubscribe = null;
   const pendingCommands = [];
   const DEBUG_STATE_MIN_INTERVAL_MS = 80;
   let debugFlushTimer = 0;
@@ -376,6 +377,7 @@
       "js/core/antic.js",
       "js/core/gtia.js",
       "js/core/hostfs.js",
+      "js/core/disk_library.js",
       "js/core/hdevice.js",
       "js/core/debugger.js",
       "js/core/atari_support.js",
@@ -419,6 +421,24 @@
     });
   }
 
+  function getDiskLibrary() {
+    if (!app || !app.diskLibrary) return null;
+    return app.diskLibrary;
+  }
+
+  function postDiskLibrarySnapshot() {
+    const diskLibrary = getDiskLibrary();
+    if (!diskLibrary || typeof diskLibrary.listFiles !== "function") {
+      self.postMessage({ type: "diskLibrarySnapshot", ready: false, files: [] });
+      return;
+    }
+    self.postMessage({
+      type: "diskLibrarySnapshot",
+      ready: typeof diskLibrary.isReady === "function" ? diskLibrary.isReady() : true,
+      files: diskLibrary.listFiles(),
+    });
+  }
+
   function attachHostFsListener() {
     if (hostFsUnsubscribe) {
       hostFsUnsubscribe();
@@ -429,6 +449,22 @@
     hostFsUnsubscribe = hostFs.onChange(function () {
       try {
         postHostFsSnapshot();
+      } catch {
+        // ignore
+      }
+    });
+  }
+
+  function attachDiskLibraryListener() {
+    if (diskLibraryUnsubscribe) {
+      diskLibraryUnsubscribe();
+      diskLibraryUnsubscribe = null;
+    }
+    const diskLibrary = getDiskLibrary();
+    if (!diskLibrary || typeof diskLibrary.onChange !== "function") return;
+    diskLibraryUnsubscribe = diskLibrary.onChange(function () {
+      try {
+        postDiskLibrarySnapshot();
       } catch {
         // ignore
       }
@@ -608,6 +644,8 @@
 
     attachHostFsListener();
     postHostFsSnapshot();
+    attachDiskLibraryListener();
+    postDiskLibrarySnapshot();
     postState();
     if (typeof app.getDebugState === "function") {
       queueDebugState(app.getDebugState(), true);
@@ -672,6 +710,12 @@
     const hostFs = getHostFs();
     if (!hostFs || typeof hostFs.unlockFile !== "function") return;
     hostFs.unlockFile(name);
+  }
+
+  function requireDiskLibrary() {
+    const diskLibrary = getDiskLibrary();
+    if (!diskLibrary) throw new Error("Disk library is unavailable");
+    return diskLibrary;
   }
 
   function handleCommand(cmd, payload) {
@@ -788,6 +832,10 @@
           hostFsUnsubscribe();
           hostFsUnsubscribe = null;
         }
+        if (diskLibraryUnsubscribe) {
+          diskLibraryUnsubscribe();
+          diskLibraryUnsubscribe = null;
+        }
         if (debugFlushTimer) {
           clearTimeout(debugFlushTimer);
           debugFlushTimer = 0;
@@ -886,6 +934,59 @@
           };
         }
         throw new Error("A8E worker loadDiskToDeviceSlot is unavailable");
+      case "diskLibraryAdd": {
+        const library = requireDiskLibrary();
+        const result = await library.addFile(
+          data.name || "",
+          data.buffer || new ArrayBuffer(0),
+        );
+        postDiskLibrarySnapshot();
+        return result;
+      }
+      case "diskLibraryReplace": {
+        const library = requireDiskLibrary();
+        const result = await library.replaceFile(
+          data.id || "",
+          data.name || "",
+          data.buffer || new ArrayBuffer(0),
+        );
+        postDiskLibrarySnapshot();
+        postState();
+        return result;
+      }
+      case "diskLibraryMount": {
+        const library = requireDiskLibrary();
+        const result = await library.mountFile(data.id || "", data.slot | 0);
+        postDiskLibrarySnapshot();
+        postState();
+        return result;
+      }
+      case "diskLibraryUnmount": {
+        const library = requireDiskLibrary();
+        const result = await library.unmountFile(data.id || "");
+        postDiskLibrarySnapshot();
+        postState();
+        return result;
+      }
+      case "diskLibraryFlush": {
+        const library = requireDiskLibrary();
+        const result = await library.flush(data.id || "");
+        postDiskLibrarySnapshot();
+        return { ok: true, result: result || null };
+      }
+      case "diskLibraryDownload": {
+        const library = requireDiskLibrary();
+        const result = await library.downloadFile(data.id || "");
+        postDiskLibrarySnapshot();
+        return result;
+      }
+      case "diskLibraryDelete": {
+        const library = requireDiskLibrary();
+        const result = await library.deleteFile(data.id || "");
+        postDiskLibrarySnapshot();
+        postState();
+        return { ok: !!result };
+      }
       case "readMemory":
         if (typeof app.readMemory === "function") {
           return {

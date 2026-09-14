@@ -4,6 +4,17 @@
 
 Simple implementation notes for this repository.
 
+- 2026-09-14: `jsA8E/js/core/disk_library.js`, `jsA8E/js/core/{memory,pokey_sio,atari}.js`,
+  `jsA8E/js/core/app_proxy.js`, `jsA8E/emulator_worker.js`, and
+  `jsA8E/js/app/disk_library_ui.js`: added the initial worker-owned multi-drive
+  disk library. ATR/XEX entries use IndexedDB, the browser panel supports
+  upload/drop, exclusive D1:-D4: mounting, deletion, and download, and disk
+  writes are observed with image identity and drive-slot context without
+  changing SIO timing or responses. Serialized
+  dirty flushing and download consistency barriers are covered by focused
+  library and SIO observer tests; snapshot/media replacement edge cases remain
+  covered by library identity metadata and mount reconciliation.
+
 - 2026-09-14: `jsA8E/js/core/{hw,state,input,io}.js`, `jsA8E/headless.js`,
   `A8E/AtariIo.c`, and `jsA8E/tests/pia_xlxe_defaults.test.js`: corrected the
   XL/XE no-cartridge hardware state per AHRM 2.8. `TRIG3` now reports RD5 low

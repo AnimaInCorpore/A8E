@@ -1024,6 +1024,10 @@
       const getTurbo = opts.getTurbo;
       const pokeyAudioResetState = opts.pokeyAudioResetState;
       const pokeyAudioSetTurbo = opts.pokeyAudioSetTurbo;
+      const diskMediaChangeObserver =
+        typeof opts.onDiskMediaChanged === "function"
+          ? opts.onDiskMediaChanged
+          : null;
       let memoryWriteHook = null;
       machine.memoryExpansion = createMemoryExpansionState(
         opts && opts.memoryExpansion !== undefined ? opts.memoryExpansion : "none",
@@ -1107,8 +1111,8 @@
         return !!getDiskImageByIndex(imageIndex);
       }
 
-      function storeDiskImage(media, bytes, name, preferredIndex) {
-        const image = createDiskImage(bytes, name || "disk.atr");
+      function storeDiskImage(media, bytes, name, preferredIndex, options) {
+        const image = createDiskImage(bytes, name || "disk.atr", options || null);
         if (isValidImageIndex(preferredIndex)) {
           const preferred = preferredIndex | 0;
           media.diskImages[preferred] = image;
@@ -1129,6 +1133,7 @@
         io.selfTestRom = media.selfTestRom;
         io.floatingPointRom = media.floatingPointRom;
         io.memoryExpansion = machine.memoryExpansion;
+        io.diskMediaChangeObserver = diskMediaChangeObserver;
       }
 
       function getMemoryExpansionState() {
@@ -1378,14 +1383,18 @@
         return machine.memoryExpansion;
       }
 
-      function createDiskImage(bytes, name) {
-        return {
+      function createDiskImage(bytes, name, options) {
+        const image = {
           id: Date.now() + ":" + Math.random().toString(16).slice(2),
           name: name || "disk.atr",
           bytes: bytes,
           size: bytes.length | 0,
           writable: true,
         };
+        if (options && options.diskLibraryId) {
+          image.libraryId = String(options.diskLibraryId);
+        }
+        return image;
       }
 
       function getMediaStateForXex() {
@@ -1465,6 +1474,7 @@
           prepared.bytes,
           name,
           preferredImageIndex,
+          options || null,
         );
         media.deviceSlots[deviceSlot] = imageIndex;
         copyMediaToIoData();
@@ -1716,6 +1726,23 @@
           name: image.name || "disk.atr",
           size: image.size | 0 || image.bytes.length | 0,
           writable: image.writable !== false,
+          libraryId: image.libraryId ? String(image.libraryId) : "",
+        };
+      }
+
+      function getDiskImageBytesByIndex(imageIndex) {
+        const image = getDiskImageByIndex(imageIndex);
+        return image ? image.bytes : null;
+      }
+
+      function getDiskImageInfoByIndex(imageIndex) {
+        const image = getDiskImageByIndex(imageIndex);
+        if (!image) return null;
+        return {
+          imageIndex: imageIndex | 0,
+          name: image.name || "disk.atr",
+          size: image.size | 0 || image.bytes.length | 0,
+          libraryId: image.libraryId ? String(image.libraryId) : "",
         };
       }
 
@@ -2041,6 +2068,7 @@
               name: image.name ? String(image.name) : "disk.atr",
               size: image.size | 0,
               writable: image.writable !== false,
+              libraryId: image.libraryId ? String(image.libraryId) : "",
               bytes: new Uint8Array(image.bytes || 0),
             };
           }),
@@ -2074,6 +2102,7 @@
             bytes: bytes,
             size: image.size | 0 || bytes.length | 0,
             writable: image.writable !== false,
+            libraryId: image.libraryId ? String(image.libraryId) : "",
           });
         }
         machine.media = {
@@ -2140,6 +2169,8 @@
         unmountDeviceSlot: unmountDeviceSlot,
         getMountedDiskForDeviceSlot: getMountedDiskForDeviceSlot,
         hasMountedDiskForDeviceSlot: hasMountedDiskForDeviceSlot,
+        getDiskImageBytesByIndex: getDiskImageBytesByIndex,
+        getDiskImageInfoByIndex: getDiskImageInfoByIndex,
         readMemory: readMemory,
         readRange: readRange,
         writeMemory: writeMemory,

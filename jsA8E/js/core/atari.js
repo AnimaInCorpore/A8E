@@ -554,6 +554,10 @@
     window.A8EHostFs && window.A8EHostFs.createApi
       ? window.A8EHostFs.createApi()
       : null;
+  const diskLibraryApi =
+    window.A8EDiskLibrary && window.A8EDiskLibrary.createApi
+      ? window.A8EDiskLibrary.createApi()
+      : null;
   const hDeviceApi =
     window.A8EHDevice && window.A8EHDevice.createApi
       ? window.A8EHDevice.createApi({ hostFsApi: hostFsApi })
@@ -642,6 +646,13 @@
       frameCycleAccum: 0,
     };
     let debugRuntime = null;
+    let diskLibrary = null;
+
+    function onDiskMediaChanged(imageIndex, deviceSlot) {
+      if (diskLibrary && typeof diskLibrary.onDiskMediaChanged === "function") {
+        diskLibrary.onDiskMediaChanged(imageIndex | 0, deviceSlot | 0);
+      }
+    }
 
     function pauseInternal(reason) {
       const wasRunning = !!machine.running;
@@ -784,17 +795,20 @@
       },
       pokeyAudioResetState: pokeyAudioResetState,
       pokeyAudioSetTurbo: pokeyAudioSetTurbo,
+      onDiskMediaChanged: onDiskMediaChanged,
       memoryExpansion: memoryExpansion,
     });
     const memoryHardReset = memoryRuntime.hardReset;
     const memoryLoadOsRom = memoryRuntime.loadOsRom;
     const loadBasicRom = memoryRuntime.loadBasicRom;
-    const loadDiskToDeviceSlot = memoryRuntime.loadDiskToDeviceSlot;
-    const loadDiskToDeviceSlotDetailed = memoryRuntime.loadDiskToDeviceSlotDetailed;
-    const mountImageToDeviceSlot = memoryRuntime.mountImageToDeviceSlot;
-    const unmountDeviceSlot = memoryRuntime.unmountDeviceSlot;
+    const memoryLoadDiskToDeviceSlot = memoryRuntime.loadDiskToDeviceSlot;
+    const memoryLoadDiskToDeviceSlotDetailed = memoryRuntime.loadDiskToDeviceSlotDetailed;
+    const memoryMountImageToDeviceSlot = memoryRuntime.mountImageToDeviceSlot;
+    const memoryUnmountDeviceSlot = memoryRuntime.unmountDeviceSlot;
     const getMountedDiskForDeviceSlot = memoryRuntime.getMountedDiskForDeviceSlot;
     const hasMountedDiskForDeviceSlot = memoryRuntime.hasMountedDiskForDeviceSlot;
+    const getDiskImageBytesByIndex = memoryRuntime.getDiskImageBytesByIndex;
+    const getDiskImageInfoByIndex = memoryRuntime.getDiskImageInfoByIndex;
     const readMemoryRuntime = memoryRuntime.readMemory;
     const readRangeRuntime = memoryRuntime.readRange;
     const writeMemoryRuntime = memoryRuntime.writeMemory;
@@ -803,6 +817,69 @@
     const setCpuMemoryWriteHookRuntime = CPU.setMemoryWriteHook;
     const setCpuMemoryAccessHookRuntime = CPU.setMemoryAccessHook;
     const getBankStateRuntime = memoryRuntime.getBankState;
+
+    function reconcileDiskLibraryMounts() {
+      if (!diskLibrary || typeof diskLibrary.reconcileMounts !== "function") return;
+      diskLibrary.reconcileMounts().catch(function (err) {
+        console.error("Disk library mount reconciliation failed:", err);
+      });
+    }
+
+    function loadDiskToDeviceSlot(arrayBuffer, name, deviceSlotIndex) {
+      const imageIndex = memoryLoadDiskToDeviceSlot(
+        arrayBuffer,
+        name,
+        deviceSlotIndex,
+      );
+      reconcileDiskLibraryMounts();
+      return imageIndex;
+    }
+
+    function loadDiskToDeviceSlotDetailed(
+      arrayBuffer,
+      name,
+      deviceSlotIndex,
+      options,
+    ) {
+      return Promise.resolve(
+        memoryLoadDiskToDeviceSlotDetailed(
+          arrayBuffer,
+          name,
+          deviceSlotIndex,
+          options || null,
+        ),
+      ).then(function (result) {
+        reconcileDiskLibraryMounts();
+        return result;
+      });
+    }
+
+    function mountImageToDeviceSlot(imageIndex, deviceSlotIndex) {
+      const result = memoryMountImageToDeviceSlot(imageIndex, deviceSlotIndex);
+      reconcileDiskLibraryMounts();
+      return result;
+    }
+
+    function unmountDeviceSlot(deviceSlotIndex) {
+      const result = memoryUnmountDeviceSlot(deviceSlotIndex);
+      reconcileDiskLibraryMounts();
+      return result;
+    }
+
+    if (diskLibraryApi) {
+      diskLibrary = diskLibraryApi.create({
+        mountDisk: loadDiskToDeviceSlotDetailed,
+        unmountDisk: unmountDeviceSlot,
+        getDiskImageBytes: getDiskImageBytesByIndex,
+        getDiskImageInfo: getDiskImageInfoByIndex,
+        getMountedDiskForDeviceSlot: getMountedDiskForDeviceSlot,
+      });
+      diskLibrary.init().then(function () {
+        return diskLibrary.restoreMounts();
+      }).catch(function (err) {
+        console.error("Disk library initialization failed:", err);
+      });
+    }
 
     // H: device -- create instance and install CIO hook(s)
     let hDevice = null;
@@ -1064,7 +1141,9 @@
     }
 
     function loadSnapshot(arrayBuffer, options) {
-      return snapshotHelpers.loadSnapshot(arrayBuffer, options);
+      const result = snapshotHelpers.loadSnapshot(arrayBuffer, options);
+      reconcileDiskLibraryMounts();
+      return result;
     }
 
     function collectArtifacts(options) {
@@ -1358,6 +1437,8 @@
       unmountDeviceSlot: unmountDeviceSlot,
       getMountedDiskForDeviceSlot: getMountedDiskForDeviceSlot,
       hasMountedDiskForDeviceSlot: hasMountedDiskForDeviceSlot,
+      diskLibrary: diskLibrary,
+      getDiskLibrary: function () { return diskLibrary; },
       hDevice: hDevice,
       hasOsRom: hasOsRom,
       hasBasicRom: hasBasicRom,

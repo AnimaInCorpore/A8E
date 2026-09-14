@@ -42,6 +42,13 @@
     collectArtifacts: 15000,
     saveSnapshot: 15000,
     loadSnapshot: 15000,
+    diskLibraryAdd: 15000,
+    diskLibraryReplace: 15000,
+    diskLibraryMount: 15000,
+    diskLibraryUnmount: 15000,
+    diskLibraryFlush: 15000,
+    diskLibraryDownload: 30000,
+    diskLibraryDelete: 15000,
   };
 
   function supportsWorker() {
@@ -816,6 +823,135 @@
     };
   }
 
+  function createDiskLibraryProxy(sendRequest) {
+    const files = new Map();
+    const listeners = new Set();
+    let ready = false;
+
+    function emitChange() {
+      listeners.forEach(function (listener) {
+        try {
+          listener();
+        } catch {
+          // UI listeners must not affect worker communication.
+        }
+      });
+    }
+
+    function snapshotFromWire(items, isReady) {
+      files.clear();
+      if (Array.isArray(items)) {
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (!item || !item.id) continue;
+          files.set(String(item.id), Object.assign({}, item));
+        }
+      }
+      if (typeof isReady === "boolean") ready = isReady;
+      emitChange();
+    }
+
+    function listFiles() {
+      const result = [];
+      files.forEach(function (entry) {
+        result.push(Object.assign({}, entry));
+      });
+      result.sort(function (a, b) {
+        return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+      });
+      return result;
+    }
+
+    function getFileInfo(id) {
+      const entry = files.get(String(id || ""));
+      return entry ? Object.assign({}, entry) : null;
+    }
+
+    function onChange(listener) {
+      if (typeof listener !== "function") return function () {};
+      listeners.add(listener);
+      return function () { listeners.delete(listener); };
+    }
+
+    function isReady() {
+      return ready;
+    }
+
+    function addFile(name, data) {
+      const buffer = toArrayBuffer(data);
+      return sendRequest(
+        "diskLibraryAdd",
+        { name: String(name || ""), buffer: buffer },
+        [buffer],
+      );
+    }
+
+    function mountFile(id, slot) {
+      return sendRequest("diskLibraryMount", {
+        id: String(id || ""),
+        slot: slot | 0,
+      });
+    }
+
+    function replaceFile(id, name, data) {
+      const buffer = toArrayBuffer(data);
+      return sendRequest(
+        "diskLibraryReplace",
+        { id: String(id || ""), name: String(name || ""), buffer: buffer },
+        [buffer],
+      );
+    }
+
+    function unmountFile(id) {
+      return sendRequest("diskLibraryUnmount", { id: String(id || "") });
+    }
+
+    function flush(id) {
+      return sendRequest(
+        "diskLibraryFlush",
+        { id: String(id || "") },
+        null,
+        { timeoutMs: REQUEST_TIMEOUT_MS.diskLibraryFlush },
+      );
+    }
+
+    function downloadFile(id) {
+      return sendRequest(
+        "diskLibraryDownload",
+        { id: String(id || "") },
+        null,
+        { timeoutMs: REQUEST_TIMEOUT_MS.diskLibraryDownload },
+      ).then(function (result) {
+        if (result && result.buffer && isArrayBufferLike(result.buffer)) {
+          result.bytes = new Uint8Array(result.buffer);
+          delete result.buffer;
+        }
+        return result || null;
+      });
+    }
+
+    function deleteFile(id) {
+      return sendRequest("diskLibraryDelete", { id: String(id || "") });
+    }
+
+    return {
+      snapshotFromWire: snapshotFromWire,
+      api: {
+        listFiles: listFiles,
+        getFileInfo: getFileInfo,
+        isReady: isReady,
+        addFile: addFile,
+        replaceFile: replaceFile,
+        mountFile: mountFile,
+        unmountFile: unmountFile,
+        flush: flush,
+        downloadFile: downloadFile,
+        deleteFile: deleteFile,
+        onChange: onChange,
+      },
+    };
+  }
+
   function createWorkerApp(opts) {
     const canvas = opts.canvas;
     const worker = new Worker("emulator_worker.js");
@@ -829,6 +965,7 @@
     let requestSeq = 1;
     const debugListeners = new Set();
     const memoryAccessListeners = new Set();
+    const diskLibraryProxy = createDiskLibraryProxy(sendRequest);
     let keyboardMappingMode =
       opts && opts.keyboardMappingMode === "original"
         ? "original"
@@ -1149,6 +1286,11 @@
 
       if (data.type === "hostfsSnapshot") {
         hostFsProxy.snapshotFromWire(data.files || []);
+        return;
+      }
+
+      if (data.type === "diskLibrarySnapshot") {
+        diskLibraryProxy.snapshotFromWire(data.files || [], !!data.ready);
         return;
       }
 
@@ -1475,6 +1617,10 @@
         return !!state.mounted[idx];
       },
       hDevice: hDeviceProxy,
+      getDiskLibrary: function () {
+        return diskLibraryProxy.api;
+      },
+      diskLibrary: diskLibraryProxy.api,
       hasOsRom: function () {
         return !!state.hasOsRom;
       },

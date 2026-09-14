@@ -208,6 +208,8 @@
         const img = images[imageIndex];
         if (img && img.bytes) {
           return {
+            deviceSlot: slot,
+            imageIndex: imageIndex,
             bytes: img.bytes,
             size: img.size | 0 || img.bytes.length | 0,
           };
@@ -215,6 +217,21 @@
       }
 
       return null;
+    }
+
+    // Application-layer observers may persist a disk image after a successful
+    // mutation. This callback is deliberately outside the SIO response path:
+    // it does not alter protocol bytes or timing.
+    function notifyDiskMediaChanged(io, mounted) {
+      if (!mounted || typeof io.diskMediaChangeObserver !== "function") return;
+      try {
+        io.diskMediaChangeObserver(
+          mounted.imageIndex | 0,
+          mounted.deviceSlot | 0,
+        );
+      } catch {
+        // Persistence observers must never affect emulated SIO behavior.
+      }
     }
 
     function diskDevice(devId) {
@@ -332,6 +349,7 @@
             return;
           }
           disk.fill(0, DISK_HEADER_SIZE);
+          notifyDiskMediaChanged(io, mounted);
           queueAckComplete(ctx, now);
           return;
         }
@@ -394,6 +412,7 @@
 
         // WRITE / PUT: write sector payload.
         disk.set(buf.subarray(payloadOffset, payloadOffset + si.bytes), si.offset);
+        notifyDiskMediaChanged(io, mounted);
         queueAckComplete(ctx, now);
       }
 

@@ -498,6 +498,7 @@
     const btnKeyboardMap = document.getElementById("btnKeyboardMap");
     const btnOptionOnStart = document.getElementById("btnOptionOnStart");
     const btnHostFs = document.getElementById("btnHostFs");
+    const btnDiskLibrary = document.getElementById("btnDiskLibrary");
     const btnAssembler = document.getElementById("btnAssembler");
     const btnSnapshots = document.getElementById("btnSnapshots");
     const videoStandardSelect = document.getElementById("videoStandardSelect");
@@ -2136,6 +2137,14 @@
         app: app,
         panel: document.getElementById("hostfsPanel"),
         button: btnHostFs,
+      });
+    }
+
+    if (window.A8EDiskLibraryUI && app) {
+      window.A8EDiskLibraryUI.init({
+        app: app,
+        panel: document.getElementById("diskLibraryPanel"),
+        button: btnDiskLibrary,
       });
     }
 

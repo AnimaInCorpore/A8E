@@ -212,6 +212,9 @@
             <button id="btnHostFs" class="toggle-btn" title="Toggle H: device file manager. Upload files here to access them from the emulated Atari via the H: device." aria-label="Toggle H: device file manager.">
               <i class="fa-solid fa-folder-open"></i>
             </button>
+            <button id="btnDiskLibrary" class="toggle-btn" title="Toggle the persistent disk image library for D1: through D4:." aria-label="Toggle persistent disk image library.">
+              <i class="fa-solid fa-hard-drive"></i>
+            </button>
             <button id="btnAssembler" class="toggle-btn" title="Toggle assembler editor. Read and write source files on HostFS (H:) and assemble executable XEX files to HostFS." aria-label="Toggle assembler editor panel.">
               <i class="fa-solid fa-file-code"></i>
             </button>
@@ -364,6 +367,56 @@
               </div>
             </div>
           </div>
+        </div>
+      </section>
+      <section id="diskLibraryPanel" class="disklibPanel" hidden aria-label="Persistent disk image library">
+        <div class="disklib-titlebar">
+          <i class="fa-solid fa-hard-drive disklib-title-icon"></i>
+          <span class="disklib-title-text">Disk Library (D1:-D4:)</span>
+          <span class="disklib-status" aria-live="polite"></span>
+        </div>
+        <div class="disklib-toolbar">
+          <label class="disklib-label">Add</label>
+          <button class="disklib-btn disklib-upload-btn" title="Upload ATR or XEX files">
+            <i class="fa-solid fa-upload"></i> Upload
+          </button>
+          <input type="file" class="disklib-upload-input" accept=".atr,.xex,application/octet-stream" multiple hidden />
+          <span class="disklib-toolbar-sep"></span>
+          <label class="disklib-label">Select</label>
+          <button class="disklib-btn disklib-sel-all-btn" title="Select all library entries">
+            <i class="fa-solid fa-check-double"></i> All
+          </button>
+          <button class="disklib-btn disklib-sel-none-btn" title="Deselect all library entries">
+            <i class="fa-regular fa-square"></i> None
+          </button>
+          <span class="disklib-toolbar-sep"></span>
+          <button class="disklib-btn disklib-dl-sel-btn" title="Download selected images" disabled>
+            <i class="fa-solid fa-download"></i> Download
+          </button>
+          <button class="disklib-btn disklib-btn-danger disklib-del-sel-btn" title="Delete selected images" disabled>
+            <i class="fa-solid fa-trash"></i> Delete
+          </button>
+        </div>
+        <div class="disklib-drop-zone">
+          <div class="disklib-cols-header">
+            <span class="disklib-col disklib-col-chk"><input type="checkbox" class="disklib-master-chk" title="Select or deselect all" /></span>
+            <span class="disklib-col disklib-col-name">Name</span>
+            <span class="disklib-col disklib-col-size">Size</span>
+            <span class="disklib-col disklib-col-drive">D1:</span>
+            <span class="disklib-col disklib-col-drive">D2:</span>
+            <span class="disklib-col disklib-col-drive">D3:</span>
+            <span class="disklib-col disklib-col-drive">D4:</span>
+            <span class="disklib-col disklib-col-actions"></span>
+          </div>
+          <div class="disklib-list"></div>
+          <div class="disklib-drop-hint"><i class="fa-solid fa-upload"></i> Drop ATR or XEX files here</div>
+        </div>
+        <div class="disklib-statusbar">
+          <span class="disklib-stat-count">0 files</span>
+          <span class="disklib-stat-sep">|</span>
+          <span class="disklib-stat-sel" hidden></span>
+          <span class="disklib-flex"></span>
+          <span class="disklib-stat-total"></span>
         </div>
       </section>
       <section id="hostfsPanel" class="hostfsPanel" hidden aria-label="H: device file manager">
@@ -556,6 +609,7 @@
     <script src="js/core/antic.js"></script>
     <script src="js/core/gtia.js"></script>
     <script src="js/core/hostfs.js"></script>
+    <script src="js/core/disk_library.js"></script>
     <script src="js/core/hdevice.js"></script>
     <script src="js/core/debugger.js"></script>
     <script src="js/core/atari_support.js"></script>
@@ -571,6 +625,7 @@
     <script src="js/app/automation/build.js"></script>
     <script src="js/app/automation_api.js"></script>
     <script src="js/app/hostfs_ui.js"></script>
+    <script src="js/app/disk_library_ui.js"></script>
     <script src="js/app/assembler_ui.js"></script>
     <script src="js/app/snapshot_ui.js"></script>
     <script src="js/app/version.js"></script>

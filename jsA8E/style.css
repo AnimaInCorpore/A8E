@@ -1889,6 +1889,265 @@ canvas.crtEnabled {
   color: var(--sub-panel-dim);
 }
 
+/* ---- Persistent Multi-Drive Disk Library ---- */
+.disklibPanel {
+  width: min(100%, 1083px);
+  min-height: clamp(220px, 36vh, 420px);
+  border: 1px solid var(--sub-panel-border);
+  border-radius: 6px;
+  background: var(--sub-panel-bg);
+  margin-top: 8px;
+  font-size: var(--fs-sm);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  align-self: center;
+}
+.disklibPanel[hidden] {
+  display: none;
+}
+.disklib-titlebar,
+.disklib-toolbar,
+.disklib-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.disklib-titlebar {
+  padding: 6px 10px;
+  background: var(--sub-panel-header-bg);
+  border-bottom: 1px solid var(--sub-panel-border);
+}
+.disklib-title-icon {
+  color: var(--accent);
+  font-size: var(--fs-base);
+}
+.disklib-title-text {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+.disklib-status {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  color: var(--sub-panel-dim);
+}
+.disklib-status.success {
+  color: #70d090;
+}
+.disklib-status.error {
+  color: var(--danger);
+}
+.disklib-status.busy {
+  color: var(--accent);
+}
+.disklib-toolbar {
+  padding: 5px 8px;
+  background: var(--sub-panel-toolbar-bg);
+  border-bottom: 1px solid var(--sub-panel-inner-border);
+  flex-wrap: wrap;
+}
+.disklib-btn {
+  background: transparent;
+  border: 1px solid var(--sub-panel-inner-border);
+  color: var(--sub-panel-btn-idle);
+  border-radius: var(--sub-panel-btn-radius);
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+.disklib-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(92, 200, 255, 0.06);
+}
+.disklib-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.disklib-btn-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(200, 64, 48, 0.08);
+}
+.disklib-label {
+  color: var(--sub-panel-label);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.disklib-toolbar-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--sub-panel-inner-border);
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+.disklib-drop-zone {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  transition: background 0.15s;
+}
+.disklib-drop-zone.drag-over {
+  background: rgba(92, 200, 255, 0.04);
+  outline: 2px dashed var(--accent);
+  outline-offset: -3px;
+}
+.disklib-cols-header,
+.disklib-row {
+  display: grid;
+  grid-template-columns: 28px minmax(150px, 1fr) 78px repeat(4, 48px) 34px;
+  align-items: center;
+  column-gap: 4px;
+  padding: 3px 6px;
+}
+.disklib-cols-header {
+  background: var(--sub-panel-statusbar-bg);
+  border-bottom: 1px solid var(--sub-panel-inner-border);
+  color: var(--sub-panel-dim);
+  font-size: var(--fs-xs);
+  flex-shrink: 0;
+}
+.disklib-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: auto;
+  min-height: 96px;
+}
+.disklib-row {
+  min-width: 580px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: background 0.1s;
+}
+.disklib-row:hover {
+  background: rgba(92, 200, 255, 0.04);
+}
+.disklib-row:nth-child(even) {
+  background: rgba(255, 255, 255, 0.013);
+}
+.disklib-row.selected {
+  background: rgba(92, 200, 255, 0.08);
+  border-left-color: var(--accent);
+}
+.disklib-col {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.disklib-col-chk,
+.disklib-col-drive {
+  justify-content: center;
+}
+.disklib-col-name {
+  gap: 6px;
+  overflow: hidden;
+  font-family: monospace;
+  white-space: nowrap;
+}
+.disklib-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.disklib-col-size {
+  justify-content: flex-end;
+  color: var(--sub-panel-dim);
+  font-size: var(--fs-xs);
+}
+.disklib-col-actions {
+  justify-content: flex-end;
+}
+.disklib-type {
+  min-width: 28px;
+  padding: 1px 3px;
+  border-radius: 3px;
+  color: #5cc8ff;
+  background: rgba(92, 200, 255, 0.1);
+  font-family: sans-serif;
+  font-size: 9px;
+  text-align: center;
+}
+.disklib-type-xex {
+  color: #ffaa40;
+  background: rgba(255, 170, 64, 0.1);
+}
+.disklib-dirty {
+  color: #ffaa40;
+  font-family: sans-serif;
+  font-weight: bold;
+}
+.disklib-master-chk,
+.disklib-row-chk,
+.disklib-drive-chk {
+  accent-color: var(--accent);
+  cursor: pointer;
+  width: 12px;
+  height: 12px;
+}
+.disklib-drive-chk:checked {
+  accent-color: #70d090;
+}
+.disklib-action-btn {
+  background: none;
+  border: none;
+  color: var(--sub-panel-dim);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--sub-panel-btn-radius);
+  transition: color 0.1s, background 0.1s;
+  line-height: 1;
+}
+.disklib-action-btn:hover {
+  color: var(--accent);
+  background: rgba(92, 200, 255, 0.1);
+}
+.disklib-empty {
+  text-align: center;
+  color: var(--sub-panel-dim);
+  padding: 28px 0 20px;
+  line-height: 2;
+}
+.disklib-drop-hint {
+  text-align: center;
+  color: var(--sub-panel-dim);
+  font-size: var(--fs-xs);
+  padding: 4px 0 5px;
+  pointer-events: none;
+  transition: color 0.15s;
+}
+.disklib-drop-zone.drag-over .disklib-drop-hint {
+  color: var(--accent);
+}
+.disklib-statusbar {
+  padding: 4px 10px;
+  background: var(--sub-panel-statusbar-bg);
+  border-top: 1px solid var(--sub-panel-inner-border);
+  color: var(--sub-panel-dim);
+  font-size: var(--fs-xs);
+}
+.disklib-stat-sel {
+  color: var(--accent);
+  font-weight: 600;
+}
+.disklib-flex {
+  flex: 1;
+}
+
+@media (max-width: 600px) {
+  .disklibPanel {
+    width: 100%;
+  }
+}
+
 /* ---- Assembler Editor Panel ---- */
 .assemblerPanel {
   width: min(100%, 1083px);
