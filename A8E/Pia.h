@@ -33,5 +33,6 @@ u8 *Pia_PORTA(_6502_Context_t *pContext, u8 *pValue);
 u8 *Pia_PORTB(_6502_Context_t *pContext, u8 *pValue);
 u8 *Pia_PACTL(_6502_Context_t *pContext, u8 *pValue);
 u8 *Pia_PBCTL(_6502_Context_t *pContext, u8 *pValue);
+u8 *Pia_U1mbRegister(_6502_Context_t *pContext, u8 *pValue);
 
 #endif

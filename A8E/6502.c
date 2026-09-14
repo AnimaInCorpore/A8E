@@ -1110,7 +1110,9 @@ void _6502_Irq(_6502_Context_t *pContext)
 {
 	if(PS.i)
 	{
-		pContext->cIrqPendingFlag++;
+		/* IRQ is level-sensitive. Keep one pending request while the source
+		 * remains asserted; never accumulate stale interrupt events. */
+		pContext->cIrqPendingFlag = 1;
 	}
 	else
 	{
@@ -1121,6 +1123,12 @@ void _6502_Irq(_6502_Context_t *pContext)
 		_6502_ServiceInterrupt(pContext, 0xfffe, 0, CPU.pc);
 		pContext->llCycleCounter += 7;
 	}
+}
+
+void _6502_ReconcileIrq(_6502_Context_t *pContext, u8 bAsserted)
+{
+	if(pContext)
+		pContext->cIrqPendingFlag = bAsserted ? 1 : 0;
 }
 
 void _6502_Execute(_6502_Context_t *pContext)

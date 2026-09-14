@@ -58,18 +58,17 @@ The native timing pass now covers the legacy-style active-line geometry, HSCROL 
 
 ### Memory Expansion
 
-The native core supports the Atari 130XE 128K memory profile. Start it with
-`-128K`, for example:
+The native core supports the AHRM extended-memory bank profiles. Start one
+with a profile switch, for example:
 
 ```text
-A8E -128K Bosconian.atr
+A8E -320C game.atr
 ```
 
-The profile provides four 16K extended-RAM banks selected by `PORTB` bits 2-3.
-`PORTB` bit 4 controls the CPU window and bit 5 controls the independent ANTIC
-window. The main `$4000-$7FFF` RAM window is preserved while the CPU window is
-switched, as required by software bank-isolation tests. The default remains
-64K. RAMBO and COMPY profiles are not implemented yet.
+The main `$4000-$7FFF` RAM window is preserved while the CPU window is
+switched. RAMBO and COMPY profiles use the AHRM bank-bit layouts and shared or
+separate ANTIC windows. `-U1MB` provides the UCTL mode selector and U1MB bank
+geometry; BIOS/flash and PBI device images are not bundled with A8E yet.
 
 **Command Line:**
 ```text
@@ -81,8 +80,12 @@ A8E [options] [disk.atr|program.xex]
 * `-f` / `-F`: Launch in fullscreen mode. Uses desktop-resolution fullscreen (`SDL_WINDOW_FULLSCREEN_DESKTOP`) — the display mode is never changed, so the aspect ratio is correct on widescreen monitors and the desktop is never left in a degraded state if the app crashes. The window can be toggled at runtime with **Alt+Enter**.
 * `-b` / `-B`: Boot **with** BASIC enabled. By default, A8E simulates holding the OPTION key to disable BASIC. Passing this flag releases the console buttons.
 * `-n` / `-N`: Start an NTSC machine. PAL is the default. NTSC uses 262 scanlines, its native CPU clock, `$D014 = $0F`, a separate NTSC palette, and the NTSC pixel aspect ratio.
-* `-128K`: Enable the 128K 130XE memory expansion. The default remains 64K;
-  RAMBO and COMPY profiles are currently unavailable.
+* `-128K`: Enable the 128K 130XE memory expansion.
+* `-192R`, `-320R`, `-320C`, `-576R`, `-576C`, `-1088R`: Select the matching
+  AHRM RAMBO or COMPY memory map.
+* `-U1MB`: Select the Ultimate1MB memory model and its UCTL-controlled bank
+  modes. Flash/BIOS/PBI emulation requires a corresponding image and remains
+  pending.
 * `-d` / `-D`: Enable audio diagnostics. Writes per-frame buffer and underrun/overrun metrics to `a8e_audio_debug.csv` in the current directory. The file is overwritten on each run.
 
 At startup, A8E prints the selected memory profile, for example

@@ -2503,6 +2503,11 @@ u8 *Pokey_IRQEN_IRQST(_6502_Context_t *pContext, u8 *pValue)
 #endif
 		SRAM[IO_IRQEN_IRQST] = *pValue;
 		RAM[IO_IRQEN_IRQST] |= ~SRAM[IO_IRQEN_IRQST];
+		/* AHRM 5.7: IRQ follows the currently enabled, active POKEY
+		 * sources. Disabling the last source removes a masked request. */
+		_6502_ReconcileIrq(
+			pContext,
+			(u8)((~RAM[IO_IRQEN_IRQST] & SRAM[IO_IRQEN_IRQST] & 0x7f) != 0));
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" IRQEN: %02X\n", *pValue);

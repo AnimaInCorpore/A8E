@@ -96,29 +96,6 @@
       const oldV = sram[IO_PORTB] & 0xff;
       const v = value & 0xff;
       const memoryExpansion = io.memoryExpansion;
-      if (oldV !== v) {
-        const bank = memoryExpansion && memoryExpansion.enabled
-          ? (memoryExpansion.currentBank | 0)
-          : 0;
-        const cpuWindow = memoryExpansion && memoryExpansion.enabled
-          ? !!memoryExpansion.cpuWindowEnabled
-          : false;
-        const anticWindow = memoryExpansion && memoryExpansion.enabled
-          ? !!memoryExpansion.anticWindowEnabled
-          : false;
-        // Diagnostic-only trace for software that changes PORTB while
-        // loading or switching expanded-memory banks. Remove after diagnosis.
-        console.log(
-          "[A8E PORTB] pc=$" +
-            (ctx.currentInstructionPc & 0xffff).toString(16).padStart(4, "0") +
-            " cycle=" + (ctx.cycleCounter >>> 0) +
-            " old=$" + oldV.toString(16).padStart(2, "0") +
-            " new=$" + v.toString(16).padStart(2, "0") +
-            " bank=" + bank +
-            " cpu=" + (cpuWindow ? 1 : 0) +
-            " antic=" + (anticWindow ? 1 : 0),
-        );
-      }
       const cpuWindowBit =
         memoryExpansion && memoryExpansion.cpuEnableBit >= 0
           ? 1 << memoryExpansion.cpuEnableBit

@@ -9,3 +9,5 @@ ATARIXL.ROM
 .cache/
 *.atr
 *.xex
+!implementation/U1MB_MEMORY_TEST.XEX
+!implementation/MEMORY_STRESS_TEST.XEX

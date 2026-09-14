@@ -244,44 +244,44 @@ static const u8 aXexBootLoader[] =
 
 		/* $071F: parse_header */
 		0x20,
-		0x7E,
-		0x07, /* JSR get_byte ($077E) */
+		0x81,
+		0x07, /* JSR get_byte ($0781) */
 		0xC9,
 		0xFF, /* CMP #$FF */
 		0xD0,
 		0x4F, /* BNE run_addr ($0775) */
 		0x20,
-		0x7E,
+		0x81,
 		0x07, /* JSR get_byte */
 		0xC9,
 		0xFF, /* CMP #$FF */
 		0xD0,
 		0x48, /* BNE run_addr ($0775) */
 		0x20,
-		0x7E,
+		0x81,
 		0x07, /* JSR get_byte ; start_lo */
 		0x85,
 		0x43, /* STA $43 */
 		0x20,
-		0x7E,
+		0x81,
 		0x07, /* JSR get_byte ; start_hi */
 		0x85,
 		0x44, /* STA $44 */
 		0x20,
-		0x7E,
+		0x81,
 		0x07, /* JSR get_byte ; end_lo */
 		0x85,
 		0x45, /* STA $45 */
 		0x20,
-		0x7E,
+		0x81,
 		0x07, /* JSR get_byte ; end_hi */
 		0x85,
 		0x46, /* STA $46 */
 
 		/* $0741: copy_loop */
 		0x20,
-		0x7E,
-		0x07, /* JSR get_byte ($077E) */
+		0x81,
+		0x07, /* JSR get_byte ($0781) */
 		0xA0,
 		0x00, /* LDY #$00 */
 		0x91,
@@ -341,25 +341,28 @@ static const u8 aXexBootLoader[] =
 
 		/* $0775: run_addr */
 		0xAD,
+		0xE0,
+		0x02, /* LDA $02E0 */
+		0x0D,
 		0xE1,
-		0x02, /* LDA $02E1 */
+		0x02, /* ORA $02E1 */
 		0xF0,
-		0x03, /* BEQ done ($077D) */
+		0x03, /* BEQ done ($0780) */
 		0x6C,
 		0xE0,
 		0x02, /* JMP ($02E0) */
-		/* $077D: done */
+		/* $0780: done */
 		0x60, /* RTS */
 
-		/* $077E: get_byte */
+		/* $0781: get_byte */
 		0xA5,
 		0x48, /* LDA $48 */
 		0xD0,
-		0x03, /* BNE have_byte ($0785) */
+		0x03, /* BNE have_byte ($0788) */
 		0x20,
-		0x8F,
-		0x07, /* JSR read_sector ($078F) */
-		/* $0785: have_byte */
+		0x92,
+		0x07, /* JSR read_sector ($0792) */
+		/* $0788: have_byte */
 		0xA6,
 		0x47, /* LDX $47 */
 		0xBD,
@@ -371,7 +374,7 @@ static const u8 aXexBootLoader[] =
 		0x48, /* DEC $48 */
 		0x60, /* RTS */
 
-		/* $078F: read_sector */
+		/* $0792: read_sector */
 		0xA9,
 		0x31, /* LDA #$31 */
 		0x8D,
@@ -448,10 +451,10 @@ static const u8 aXexBootLoader[] =
 };
 
 #define XEX_BOOT_LOADER_BASE 0x0700u
-#define XEX_BOOT_PATCH_GETBYTE_BUFLO_INDEX (0x0788u - XEX_BOOT_LOADER_BASE)
-#define XEX_BOOT_PATCH_GETBYTE_BUFHI_INDEX (0x0789u - XEX_BOOT_LOADER_BASE)
-#define XEX_BOOT_PATCH_DBUFLO_INDEX (0x07A4u - XEX_BOOT_LOADER_BASE)
-#define XEX_BOOT_PATCH_DBUFHI_INDEX (0x07A9u - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_GETBYTE_BUFLO_INDEX (0x078Bu - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_GETBYTE_BUFHI_INDEX (0x078Cu - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_DBUFLO_INDEX (0x07A7u - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_DBUFHI_INDEX (0x07ACu - XEX_BOOT_LOADER_BASE)
 #define XEX_BOOT_LOADER_RESERVED_START 0x0700u
 #define XEX_BOOT_LOADER_RESERVED_END 0x087Fu
 
@@ -1044,9 +1047,13 @@ static u8 AtariIo_PlayfieldDmaAllowedAtCycle(_6502_Context_t *pContext, u32 lCyc
 static u8 AtariIo_ReadAnticMemory(_6502_Context_t *pContext, u16 sAddress)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-	if(pIoData->eMemoryExpansion == ATARI_MEMORY_130XE_128K &&
+	if(pIoData->eMemoryExpansion != ATARI_MEMORY_NONE &&
 	   pIoData->bAnticExtendedWindow && sAddress >= 0x4000 && sAddress < 0x8000)
 	{
+		/* Shared CPU+ANTIC maps observe the live CPU window. The bank
+		 * storage is committed only when the window changes or closes. */
+		if(pIoData->bCpuExtendedWindow)
+			return RAM[sAddress];
 		return pIoData->pExtendedMemory[pIoData->cExtendedBank * 0x4000u + (sAddress - 0x4000u)];
 	}
 	return RAM[sAddress];
@@ -1118,12 +1125,6 @@ static u8 AtariIo_FetchUnbufferedDisplayByte(_6502_Context_t *pContext, u16 sAdd
 	if(AtariIo_PlayfieldDmaAllowedAtCycle(pContext, lCycleOffset))
 	{
 		AtariIo_SchedulePlayfieldDma(pContext, lCycleOffset, 1);
-		IoData_t *pIoData = (IoData_t *)pContext->pIoData;
-		if(pIoData->eMemoryExpansion == ATARI_MEMORY_130XE_128K &&
-		   pIoData->bAnticExtendedWindow && sAddress >= 0x4000 && sAddress < 0x8000)
-		{
-			return pIoData->pExtendedMemory[pIoData->cExtendedBank * 0x4000u + (sAddress - 0x4000u)];
-		}
 		return AtariIo_ReadAnticMemory(pContext, sAddress);
 	}
 
@@ -5529,9 +5530,28 @@ void AtariIoOpenWithMemory(
 	memset(pIoData, 0, sizeof(IoData_t));
 	pIoData->eVideoStandard = eVideoStandard;
 	pIoData->eMemoryExpansion = eMemoryExpansion;
-	if(eMemoryExpansion == ATARI_MEMORY_130XE_128K)
+	if(eMemoryExpansion == ATARI_MEMORY_ULTIMATE1MB)
 	{
-		pIoData->pExtendedMemory = (u8 *)calloc(1, 0x10000u);
+		pIoData->cU1mbUctl = 0x03;
+		pIoData->cU1mbColdf = 0x80;
+	}
+	pIoData->bBasicRomEnabled = 1;
+	pIoData->bSelfTestRomEnabled = 0;
+	if(eMemoryExpansion != ATARI_MEMORY_NONE)
+	{
+		u32 lExtendedBytes = 0x10000u;
+		switch(eMemoryExpansion)
+		{
+		case ATARI_MEMORY_RAMBO_192K: lExtendedBytes = 0x20000u; break;
+		case ATARI_MEMORY_RAMBO_320K:
+		case ATARI_MEMORY_COMPY_320K: lExtendedBytes = 0x40000u; break;
+		case ATARI_MEMORY_RAMBO_576K:
+		case ATARI_MEMORY_COMPY_576K: lExtendedBytes = 0x80000u; break;
+		case ATARI_MEMORY_RAMBO_1088K:
+		case ATARI_MEMORY_ULTIMATE1MB: lExtendedBytes = 0x100000u; break;
+		default: break;
+		}
+		pIoData->pExtendedMemory = (u8 *)calloc(1, lExtendedBytes);
 		pIoData->pMainWindowShadow = (u8 *)malloc(0x4000u);
 		if(!pIoData->pExtendedMemory || !pIoData->pMainWindowShadow)
 		{
@@ -5619,6 +5639,16 @@ void AtariIoOpenWithMemory(
 			pIoInitValue->AccessFunction);
 
 		pIoInitValue++;
+	}
+	/* U1MB reserves the upper PIA page only for the selected profile. Keep
+	 * these addresses mapped to the XL/XE OS ROM for ordinary machines. */
+	if(eMemoryExpansion == ATARI_MEMORY_ULTIMATE1MB)
+	{
+		/* U1MB owns the complete upper PIA page. Most of it is an
+		 * undriven/write-only register range, so install the handler for
+		 * every address rather than only the currently modeled registers. */
+		for(u32 lAddress = IO_U1MB_UCTL; lAddress <= 0xd3ff; lAddress++)
+			_6502_SetIo(pContext, (u16)lAddress, Pia_U1mbRegister);
 	}
 
 	pIoData->pDisk1 = (u8 *)malloc(MAX_DISK_SIZE);

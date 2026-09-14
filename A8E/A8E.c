@@ -57,6 +57,8 @@ int main(int argc, char *argv[])
 	u32 lLogicalWidth;
 	u32 lWindowScale = 2;
 	u32 lFullscreen = 0;
+	char cMemoryTitle[64];
+	char cWindowTitle[160];
 	int lIndex;
 
 	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0)
@@ -74,6 +76,13 @@ int main(int argc, char *argv[])
 				eMemoryExpansion = ATARI_MEMORY_130XE_128K;
 				continue;
 			}
+			if(strcmp(argv[lIndex], "-192R") == 0) { eMemoryExpansion = ATARI_MEMORY_RAMBO_192K; continue; }
+			if(strcmp(argv[lIndex], "-320R") == 0) { eMemoryExpansion = ATARI_MEMORY_RAMBO_320K; continue; }
+			if(strcmp(argv[lIndex], "-320C") == 0) { eMemoryExpansion = ATARI_MEMORY_COMPY_320K; continue; }
+			if(strcmp(argv[lIndex], "-576R") == 0) { eMemoryExpansion = ATARI_MEMORY_RAMBO_576K; continue; }
+			if(strcmp(argv[lIndex], "-576C") == 0) { eMemoryExpansion = ATARI_MEMORY_COMPY_576K; continue; }
+			if(strcmp(argv[lIndex], "-1088R") == 0) { eMemoryExpansion = ATARI_MEMORY_RAMBO_1088K; continue; }
+			if(strcmp(argv[lIndex], "-U1MB") == 0) { eMemoryExpansion = ATARI_MEMORY_ULTIMATE1MB; continue; }
 			switch(argv[lIndex][1])
 			{
 			case 'b':
@@ -115,12 +124,27 @@ int main(int argc, char *argv[])
 	lLogicalWidth = eVideoStandard == ATARI_VIDEO_NTSC ? 288u : 350u;
 	lWindowWidth = lLogicalWidth * lWindowScale;
 	lWindowHeight = lAtariScreenHeight * lWindowScale;
+	switch(eMemoryExpansion)
+	{
+	case ATARI_MEMORY_130XE_128K: strcpy(cMemoryTitle, "128K (130XE)"); break;
+	case ATARI_MEMORY_RAMBO_192K: strcpy(cMemoryTitle, "192K (RAMBO)"); break;
+	case ATARI_MEMORY_RAMBO_320K: strcpy(cMemoryTitle, "320K (RAMBO)"); break;
+	case ATARI_MEMORY_COMPY_320K: strcpy(cMemoryTitle, "320K (COMPY)"); break;
+	case ATARI_MEMORY_RAMBO_576K: strcpy(cMemoryTitle, "576K (RAMBO)"); break;
+	case ATARI_MEMORY_COMPY_576K: strcpy(cMemoryTitle, "576K (COMPY)"); break;
+	case ATARI_MEMORY_RAMBO_1088K: strcpy(cMemoryTitle, "1088K (RAMBO)"); break;
+	case ATARI_MEMORY_ULTIMATE1MB: strcpy(cMemoryTitle, "Ultimate1MB (1088K)"); break;
+	default: strcpy(cMemoryTitle, "64K"); break;
+	}
+	snprintf(cWindowTitle, sizeof(cWindowTitle), "%s - %s - %s",
+		APPLICATION_CAPTION, cMemoryTitle,
+		eVideoStandard == ATARI_VIDEO_NTSC ? "NTSC" : "PAL");
 
 	/* SDL_WINDOW_FULLSCREEN_DESKTOP scales to desktop resolution without
 	   changing the video mode, so the aspect ratio is correct on all
 	   monitors and the desktop is never left in a bad resolution if the
 	   app crashes. */
-	pWindow = SDL_CreateWindow(APPLICATION_CAPTION,
+	pWindow = SDL_CreateWindow(cWindowTitle,
 							   SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 							   (int)lWindowWidth, (int)lWindowHeight,
 							   lFullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
@@ -181,8 +205,7 @@ int main(int argc, char *argv[])
 
 	pAtariContext = _6502_Open();
 	AtariIoOpenWithMemory(pAtariContext, lMode, pDiskFileName, eVideoStandard, eMemoryExpansion);
-	printf("A8E memory: opened %s\n",
-		eMemoryExpansion == ATARI_MEMORY_130XE_128K ? "128K (130XE)" : "64K");
+	printf("A8E memory: opened %s\n", cMemoryTitle);
 	llCycles = CYCLES_PER_LINE *
 		(eVideoStandard == ATARI_VIDEO_NTSC ? LINES_PER_SCREEN_NTSC : LINES_PER_SCREEN_PAL);
 	{

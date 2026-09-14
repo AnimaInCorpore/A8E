@@ -4,6 +4,16 @@
 
 Simple implementation notes for this repository.
 
+- 2026-09-13: `A8E/{Pia.c,AtariIo.c}`, `A8E/tests/memory_expansion_probe.c`,
+  and `A8E/CMakeLists.txt`: ported the validated jsA8E expansion behavior to
+  native A8E. The port now preserves the live CPU/ANTIC window view, restores
+  motherboard RAM through the same shadow transitions, applies profile-specific
+  BASIC/Self-Test bit reuse, reconfigures U1MB modes from a clean window, and
+  reserves the full U1MB `$D380-$D3FF` range. Added a native regression probe
+  covering all AHRM profiles, bank retention, CPU/ANTIC access, and U1MB mode
+  changes. Removed the obsolete PORTB console diagnostic from jsA8E after the
+  memory-transition investigation was resolved.
+
 - 2026-09-13: `jsA8E/js/core/memory.js`, `jsA8E/js/core/cpu.js`,
   `jsA8E/js/core/io.js`, and `A8E/AtariIo.c`: corrected generic XEX RUNAD
   handling so valid low-memory entry points such as Mikie's `$008A` are
@@ -27,6 +37,17 @@ Simple implementation notes for this repository.
 - 2026-09-13: `A8E/A8E.c`: made the native window title include the active
   memory profile and PAL/NTSC standard. The title is generated from the same
   parsed runtime state reported on the console.
+- 2026-09-13: `A8E/{A8E.c,AtariIo.c,AtariIo.h,Pia.c}`: added the canonical
+  RAMBO/COMPY profile names and console switches (`-192R`, `-320R`, `-320C`,
+  `-576R`, `-576C`, `-1088R`, `-U1MB`) and generalized extended-memory storage,
+  bank-bit decoding, and ANTIC window selection. U1MB register/shadow-PIA
+  semantics remain a follow-up layer; `-U1MB` currently selects its 1088K
+  bank geometry.
+- 2026-09-13: `A8E/{AtariIo.c,AtariIo.h,Pia.c,Pia.h}`: added the native U1MB
+  UCTL, UAUX, and COLDF register surface with unlocked-write and config-lock
+  behavior, plus cold-reset initialization. Full U1MB flash, BIOS/PBI, and
+  mode-dependent overlay routing remains pending; the register state is now
+  available for the next AHRM-compliant mapping layer.
 
 - 2026-09-13: `ATR/AtariBlast.md`: recorded the prioritized remaining work for
   AtariBlast. The first item is validation of independent 1088K/U1MB banks;
@@ -150,7 +171,7 @@ Keep reusable inspection points: the public `A8EAutomation` connection and gener
 
 - 2026-08-03: real-content spot verification of the timing changes below via the headless runtime with real XL OS/BASIC ROMs: cold boot reaches the BASIC READY prompt with byte-exact screen contents, the SELF TEST menu renders correctly, and `d1.atr` (DOS 2.x boot + Schränker 3 with its DLI color-ladder title screen) loads and renders cleanly. The full disk-content regression sweep from `legacy/COLOR_CLOCK_ACCURACY.md` remains open.
 
-- 2026-08-03: `A8E/AtariIo.{c,h}`, `jsA8E/js/core/{antic,state,memory}.js`, `jsA8E/js/core/playfield/{renderer_base,mode_2_3,mode_4_5,mode_6_7}.js`, `A8E/tests/antic_timing_probe.c`, `jsA8E/tests/antic_vscrol_timing.test.js`: replaced the fetch-time VSCROL height clamps with a live 4-bit mode-line row counter per AHRM 4.7 in both cores. Region entries latch VSCROL at the mode-line fetch and wrap out-of-range values (GTIA 9++ extended lines now work); region-exit lines end when the counter matches the live VSCROL value latched at the top of the cycle-109 clock action (writes through cycle 108 count), so mid-mode-line VSCROL rewrites shorten, extend, or wrap the line. Exit-line DLIs are armed dynamically at cycle 6 of the scanline whose counter matches VSCROL as of cycle 5 (AHRM 4.8), letting the DLI and height decisions diverge as in the documented turbo double-write trick. Character renderers now derive glyph rows from the row counter with the AHRM tall-line mappings (modes 2/3 rows 10-15 repeat 2-7 and rows 8-9 blank/descend, modes 4/6 repeat rows 0-7, modes 5/7 halve the scanline counter); the old `verticalScrollOffset` plumbing was removed. JS snapshots persist the new row-counter state and tolerate older payloads.
+- 2026-08-03: `A8E/AtariIo.{c,h}`, `jsA8E/js/core/{antic,state,memory}.js`, `jsA8E/js/core/playfield/{renderer_base,mode_2_3,mode_4_5,mode_6_7}.js`, `A8E/tests/antic_timing_probe.c`, `jsA8E/tests/antic_vscrol_timing.test.js`: replaced the fetch-time VSCROL height clamps with a live 4-bit mode-line row counter per AHRM 4.7 in both cores. Region entries latch VSCROL at the mode-line fetch and wrap out-of-range values (GTIA 9++ extended lines now work); region-exit lines end when the counter matches the live VSCROL value latched at the top of the cycle-109 clock action (writes through cycle 108 count), so mid-mode-line VSCROL rewrites shorten, extend, or wrap the line. Exit-line DLIs are armed dynamically at cycle 6 of the scanline whose counter matches VSCROL as of cycle 5 (AHRM 4.8), letting the DLI and height decisions diverge as in the documented turbo double-write trick. Character renderers now derive glyph rows from the row counter with the AHRM tall-line mappings (modes 2/3 rows 10-15 repeat 2-7 and rows 8-9 blank/descend, modes 4/6 repeat rows 0-7, modes 5/7 halve the scanline counter); the old `verticalScrollOffset` plumbing was removed. JS snapshots persist the new row-counter state and tolerate older payloads. 
 
 - 2026-08-03: `A8E/{Antic.c,AtariIo.c,AtariIo.h,6502.c,6502.h}`, `A8E/tests/antic_graphics_modes_probe.c`: ported the jsA8E delayed CHBASE latch to the C core per AHRM 4.4. `Antic_CHBASE` schedules the new value 2 color clocks after the bus write (offset by instruction length minus one via the new `cCurrentInstructionCycles` context field), and character modes 2-7 poll `AtariIo_CurrentChbaseRegister` every render cycle instead of snapshotting CHBASE before the loop, so mid-scanline DLI character-set switches land at the correct beam position in both cores.
 
@@ -270,3 +291,66 @@ Keep reusable inspection points: the public `A8EAutomation` connection and gener
 ### XEX loader target relocation after 16-bit RUNAD fix
 
 The XEX loader's RUNAD check now reads both `$02E0` and `$02E1`. The three-byte expansion moves the `get_byte` and `read_sector` routines and the SIO buffer operands; all internal JSR targets and patch indices in both JavaScript and native loaders must be relocated together. This preserves low-memory RUNAD support without corrupting XEX segment reads.
+- 2026-09-13: `A8E/Pia.c`: connected U1MB UCTL memory modes to the generic
+  bank mapper: mode 00 disables expansion, mode 01 selects 320K RAMBO, mode
+  10 selects 576K COMPY, and mode 11 selects 1088K RAMBO-style banking.
+  UCTL writes immediately resynchronize the active PORTB window.
+- 2026-09-13: `A8E/Pia.c`: applied the U1MB Shadow PIA overlay rule. While the
+  CPU extended-memory window is enabled, PORTB bank writes no longer change
+  BASIC/OS/Self-Test overlays; those controls update only when the CPU window
+  is disabled, matching AHRM 12.3 sequence-dependent behavior.
+- 2026-09-13: `A8E/{AtariIo.c,AtariIo.h,Pia.c}`: added the U1MB UPBI/UCAR
+  configuration register and read-only PBI button status surface. These
+  registers are isolated to the U1MB profile and honor the configuration lock.
+- 2026-09-13: `A8E/README.md`: documented the native RAMBO/COMPY/U1MB command
+  line profiles and clarified that U1MB BIOS/flash/PBI image emulation needs
+  an external image; no synthetic firmware contents are provided.
+- 2026-09-13: `A8E/AtariIo.c`: corrected U1MB register installation so
+  `$D380-$D384` remain OS ROM on ordinary 64K/130XE/RAMBO/COMPY machines and
+  are remapped to U1MB only when `-U1MB` is selected. This prevents the U1MB
+  handlers from corrupting the normal XL/XE startup path.
+- 2026-09-13: `A8E/Pia.c`: removed the eager ORB application during PBCTL
+  direction changes. Applying an uninitialized zero ORB at that point could
+  hide the OS ROM before startup software wrote the intended PORTB value.
+  PORTB mapping remains driven by explicit PORTB writes until effective DDRB
+  handling is completed with pull-up state.
+- 2026-09-13: `A8E/Pia.c`: verified the native startup regression fix. Removing
+  eager ORB application during PBCTL direction changes restores normal OS ROM
+  startup; `A8E` now renders correctly again with default and expanded-memory
+  arguments.
+- 2026-09-13: `A8E/Pia.c`: corrected the expansion bus matrix. RAMBO profiles
+  no longer expose their CPU window to ANTIC; COMPY profiles use the separate
+  ANTIC window, and only U1MB mode 1088K uses a shared CPU/ANTIC window, per
+  AHRM 2.7 and 12.3.
+- 2026-09-13: Native memory-test validation: `-320R` and `-320C` complete
+  successfully. `-576R`, `-576C`, and `-1088R` reach the START prompt but
+  show graphics corruption during bank testing. `-U1MB` begins testing,
+  flickers, and eventually loses the display before the START prompt. These
+  results isolate the remaining work to high-map overlay/ANTIC interaction
+  and U1MB firmware-independent mapping, rather than the basic 320K bank
+  decoder.
+- 2026-09-13: `A8E/Pia.c`: fixed high-capacity RAMBO/COMPY bank writes from
+  being misinterpreted as BASIC/Self-Test overlay changes. The reused PORTB
+  bits are now treated as bank selectors for 576K and 1088K physical profiles;
+  U1MB retains its separate Shadow PIA sequencing rule.
+- 2026-09-13: `A8E/AtariIo.c`: synchronized ANTIC reads with the live CPU
+  window for U1MB's shared 1088K mode. Bank storage is now used only after a
+  bank/window transition, matching jsA8E and preventing one-write-late display
+  glitches during DMA.
+- 2026-09-13: `A8E/{Pia.c,AtariIo.c}`: aligned native shared-window behavior
+  with the validated jsA8E profiles. RAMBO 192K/320K/576K/1088K and U1MB
+  1088K expose the live CPU window to ANTIC; 130XE and COMPY retain separate
+  ANTIC-window rules. This supersedes the earlier native-only interpretation
+  that treated RAMBO as CPU-only.
+- 2026-09-13: `A8E/AtariIo.c`: matched jsA8E's live-window rule for ANTIC
+  reads whenever the CPU extended window is active, including 130XE's
+  separate ANTIC window. This keeps display DMA coherent with CPU writes
+  during the memory test's visual stage.
+- 2026-09-13: `A8E/{AtariIo.h,Pia.c}`: ported persistent expansion state from
+  jsA8E. Native transitions now track initialization and BASIC/Self-Test
+  visibility separately, calculate new overlay state before committing a
+  bank, and preserve high-map forced-off behavior during active CPU windows.
+- 2026-09-13: `A8E/Pia.c`: removed the legacy 130XE `PORTB` bit-6 forcing
+  during expansion writes. jsA8E preserves the complete written byte and
+  derives only the documented bank/window bits; native behavior now matches
+  that rule and avoids altering the test's post-load display state.

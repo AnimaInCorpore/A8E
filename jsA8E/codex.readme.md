@@ -12,14 +12,17 @@ This file is a handoff note for the next session.
 
 - PAL and NTSC selection is working again.
 - `peek(53268)` distinguishes the video standard as expected from the browser console.
-- 128K and several RAMBO profiles can be detected, but the COMPY variants still fail validation.
-- 1088K is still not reliable and should be treated as unresolved.
+- The browser-side AHRM profiles are the behavioral reference for the native
+  port: 130XE, 192K/320K/576K/1088K RAMBO, both COMPY variants, and the
+  initial U1MB model are implemented there.
+- The native port is being validated separately; its high-capacity graphical
+  path is not considered complete until the native regression and title tests
+  agree with jsA8E.
 
 ## What is still broken
 
-- COMPY 320K and COMPY 576K are not yet compatible with the current memory mapping path.
-- 1088K does not behave correctly in the current implementation.
-- The menu marks those entries as `Nonfunctional` so the UI reflects the current status honestly.
+- Native A8E high-capacity validation is the remaining task; this handoff no
+  longer treats the validated jsA8E profiles as broken.
 
 ## Important AHRM reminders
 

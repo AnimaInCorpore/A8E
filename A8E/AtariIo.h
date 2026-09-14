@@ -63,7 +63,14 @@ typedef enum
 typedef enum
 {
 	ATARI_MEMORY_NONE = 0,
-	ATARI_MEMORY_130XE_128K = 1
+	ATARI_MEMORY_130XE_128K = 1,
+	ATARI_MEMORY_RAMBO_192K,
+	ATARI_MEMORY_RAMBO_320K,
+	ATARI_MEMORY_COMPY_320K,
+	ATARI_MEMORY_RAMBO_576K,
+	ATARI_MEMORY_COMPY_576K,
+	ATARI_MEMORY_RAMBO_1088K,
+	ATARI_MEMORY_ULTIMATE1MB
 } AtariMemoryExpansion_t;
 
 #define CYCLE_NEVER 0xffffffffffffffffLL
@@ -83,6 +90,12 @@ typedef enum
 #define IRQ_SERIAL_INPUT_DATA_READY 0x20
 #define IRQ_OTHER_KEY_PRESSED 0x40
 #define IRQ_BREAK_KEY_PRESSED 0x80
+
+#define IO_U1MB_UCTL 0xd380
+#define IO_U1MB_UAUX 0xd381
+#define IO_U1MB_COLDF 0xd383
+#define IO_U1MB_UPBI 0xd382
+#define IO_U1MB_PBI_BUTTON 0xd384
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -173,6 +186,15 @@ typedef struct
 	u8 cExtendedBank;
 	u8 bCpuExtendedWindow;
 	u8 bAnticExtendedWindow;
+	u8 bMemoryExpansionInitialized;
+	u8 bBasicRomEnabled;
+	u8 bSelfTestRomEnabled;
+	u8 cU1mbUctl;
+	u8 cU1mbUaux;
+	u8 cU1mbColdf;
+	u8 cU1mbUpbi;
+	u8 cU1mbPbiButton;
+	u8 bU1mbConfigLocked;
 
 	VideoData_t tVideoData;
 	DrawLineData_t tDrawLineData;

@@ -4,8 +4,15 @@
 
 - Files: `A8E/Pia.c`, `A8E/Pia.h`
 - Purpose: manage port control and ROM/bank switching control paths.
-- Status: verified on 2026-09-10 (`implemented`), including native 130XE banking.
-- Notes: port state affects system mapping and input/control behavior. In the 130XE profile, `PORTB` bits 2-3 select the extended 16K bank, bit 4 controls the CPU window, and bit 5 controls the independent ANTIC window. The main `$4000-$7FFF` RAM is shadowed while the CPU window is active and restored when it is disabled.
-- Issues: larger RAMBO and COMPY banking profiles are not implemented.
-- Todo: add short notes when bank/port side effects are changed.
+- Status: verified on 2026-09-13 (`implemented`), including the AHRM 130XE,
+  RAMBO, COMPY, and Ultimate1MB bank maps.
+- Notes: `PORTB` bank bits, CPU/ANTIC window selection, live CPU-window
+  visibility, motherboard-window shadowing, and BASIC/Self-Test bit reuse now
+  follow the validated jsA8E model. The native U1MB surface implements the
+  write-only UCTL/UAUX range and readable COLDF flag used by jsA8E; U1MB
+  BIOS/flash/RTC/PBI behavior remains outside this port.
+- Issues: native interactive validation of the high-capacity profiles still
+  needs real software/title coverage beyond the generic probe.
+- Todo: keep the profile matrix and overlay transition rules synchronized with
+  `jsA8E/js/core/memory.js` and `jsA8E/js/core/io.js`.
 
