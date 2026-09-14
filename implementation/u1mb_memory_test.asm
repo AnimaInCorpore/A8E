@@ -222,6 +222,27 @@ STAGE2:
         LDA #$00
         STA S2ERRORS
 
+        ; 1088K RAMBO uses all six AHRM bank bits, including PORTB bit 7,
+        ; and must expose writable motherboard RAM while the CPU window is
+        ; active. Check those rules independently of the bulk bank test.
+        JSR CHECK_1088_PORTB
+        JSR CHECK_1088_BASIC
+        JSR CHECK_1088_SELFTEST
+
+        ; Establish sentinels in the hidden motherboard window before any
+        ; bank writes. Both endpoints must survive the complete test.
+        LDA PORTB
+        STA TEMP
+        ORA #$10
+        STA PORTB
+        LDA #$A5
+        STA $4000
+        LDA #$5A
+        STA $7FFF
+        LDA TEMP
+        AND #$EF
+        STA PORTB
+
         ; Write a different signature to every bank.
         LDA #$00
         STA BANK
@@ -263,6 +284,16 @@ S2_WINDOW:
         STA PORTB
         LDA #$A5
         STA $4000
+        LDA $4000
+        CMP #$A5
+        BEQ S2_WINDOW_BASE_1
+        INC S2ERRORS
+S2_WINDOW_BASE_1:
+        LDA $7FFF
+        CMP #$5A
+        BEQ S2_WINDOW_BASE_2
+        INC S2ERRORS
+S2_WINDOW_BASE_2:
         LDA TEMP
         AND #$EF
         STA PORTB
@@ -271,6 +302,88 @@ S2_WINDOW:
         BEQ S2_DONE
         INC S2ERRORS
 S2_DONE:
+        RTS
+
+; Verify the AHRM 1088K RAMBO PORTB map independently. Bank bits are
+; PORTB 1,2,3,5,6,7; bit 4 enables the shared CPU+ANTIC window and bit 0 is
+; held high so the test continues to execute from RAM.
+CHECK_1088_PORTB:
+        LDA MODE
+        CMP #$01
+        BNE CHECK_1088_PORTB_DONE
+        LDA #$00
+        STA BANK
+CHECK_1088_PORTB_LOOP:
+        JSR SELECT_BANK
+        LDA BANK
+        AND #$07
+        ASL A
+        STA TEMP
+        LDA BANK
+        AND #$38
+        ASL A
+        ASL A
+        ORA TEMP
+        ORA #$01
+        STA PATTERN
+        LDA PORTB
+        CMP PATTERN
+        BEQ CHECK_1088_PORTB_NEXT
+        INC S2ERRORS
+CHECK_1088_PORTB_NEXT:
+        INC BANK
+        LDA BANK
+        CMP COUNT
+        BNE CHECK_1088_PORTB_LOOP
+        LDA #$00
+        STA BANK
+        JSR SELECT_BANK
+CHECK_1088_PORTB_DONE:
+        RTS
+
+; In 1088K RAMBO mode PORTB bit 1 is a bank bit, so BASIC must be disabled
+; while the CPU extended window is active. A write/read probe at $A000 makes
+; this visible without depending on the ROM contents.
+CHECK_1088_BASIC:
+        LDA MODE
+        CMP #$01
+        BNE CHECK_1088_BASIC_DONE
+        LDA #$00
+        STA BANK
+        JSR SELECT_BANK
+        LDA $A000
+        STA TEMP
+        LDA #$5A
+        STA $A000
+        CMP $A000
+        BEQ CHECK_1088_BASIC_RESTORE
+        INC S2ERRORS
+CHECK_1088_BASIC_RESTORE:
+        LDA TEMP
+        STA $A000
+CHECK_1088_BASIC_DONE:
+        RTS
+
+; In 1088K RAMBO mode PORTB bit 7 is also a bank bit, so the Self-Test ROM
+; must not overlay $5000-$57FF while the CPU extended window is active.
+CHECK_1088_SELFTEST:
+        LDA MODE
+        CMP #$01
+        BNE CHECK_1088_SELFTEST_DONE
+        LDA #$00
+        STA BANK
+        JSR SELECT_BANK
+        LDA $5000
+        STA TEMP
+        LDA #$A6
+        STA $5000
+        CMP $5000
+        BEQ CHECK_1088_SELFTEST_RESTORE
+        INC S2ERRORS
+CHECK_1088_SELFTEST_RESTORE:
+        LDA TEMP
+        STA $5000
+CHECK_1088_SELFTEST_DONE:
         RTS
 
 ; Stage 3 checks the expected CPU/ANTIC window configuration.
@@ -315,9 +428,11 @@ S3_RESTORE:
         STA PORTB
         RTS
 
-; Stage 4 presents a short visual ANTIC DMA test using the expanded bank.
+; Stage 4 presents short visual ANTIC DMA tests using the first and last
+; expanded banks. Testing both endpoints exercises the low and high 1088K
+; bank bits instead of only proving that bank zero can be displayed.
 ; The CPU cannot read back ANTIC DMA data, so this is intentionally reported
-; after the user confirms the displayed pattern with START or SELECT.
+; after the user confirms each displayed pattern with START or SELECT.
 STAGE4:
         LDA PORTB
         STA S4SAVE_PORTB
@@ -330,40 +445,7 @@ STAGE4:
 
         LDA #$00
         STA BANK
-        JSR SELECT_BANK
-        LDA #$21
-        STA PATTERN
-        LDA #$00
-        STA PTR
-        LDA #$40
-        STA PTR+1
-S4_FILL:
-        LDY #$00
-S4_FILL_BYTE:
-        LDA PATTERN
-        STA (PTR),Y
-        EOR #$03
-        STA PATTERN
-        INY
-        BNE S4_FILL_BYTE
-        INC PTR+1
-        LDA PTR+1
-        CMP #$44
-        BNE S4_FILL
-
-        LDA #$68
-        STA PTR
-        LDA #$41
-        STA PTR+1
-        LDX #$00
-        LDY #$00
-S4_PROMPT:
-        LDA PROMPT_TEXT,X
-        STA (PTR),Y
-        INX
-        INY
-        CPX #$17
-        BNE S4_PROMPT
+        JSR S4_PREPARE_BANK
 
         ; Keep the expanded window available to ANTIC while CPU access is off
         ; for separate-window configurations.
@@ -411,8 +493,53 @@ S4_WAIT_KEY:
 S4_PASS_KEY:
         LDA #$00
         STA S4ERRORS
-        JMP S4_RESTORE_DISPLAY
+        JMP S4_START_HIGH_BANK
 S4_FAIL_KEY:
+        LDA #$01
+        STA S4ERRORS
+
+S4_START_HIGH_BANK:
+        ; Repeat the visual check in bank 63, the endpoint that exercises
+        ; PORTB bits 5-7 in the 1088K map.
+S4_RELEASE_KEY:
+        LDA $D01F
+        AND #$03
+        CMP #$03
+        BNE S4_RELEASE_KEY
+        LDA #$3F
+        STA BANK
+        JSR S4_PREPARE_BANK
+        LDA PORTB
+        STA TEMP
+        LDA MODE
+        CMP #$02
+        BEQ S4_HIGH_ANTIC_ONLY
+        CMP #$04
+        BEQ S4_HIGH_ANTIC_ONLY
+        CMP #$07
+        BNE S4_HIGH_SET_DISPLAY
+S4_HIGH_ANTIC_ONLY:
+        LDA TEMP
+        ORA #$10
+        AND #$DF
+        STA PORTB
+S4_HIGH_SET_DISPLAY:
+        LDX #$20
+S4_HIGH_WAIT_OUT:
+        LDY #$00
+S4_HIGH_WAIT_IN:
+        DEY
+        BNE S4_HIGH_WAIT_IN
+        DEX
+        BNE S4_HIGH_WAIT_OUT
+
+S4_HIGH_WAIT_KEY:
+        LDA $D01F
+        AND #$01
+        BEQ S4_RESTORE_DISPLAY
+        LDA $D01F
+        AND #$02
+        BNE S4_HIGH_WAIT_KEY
         LDA #$01
         STA S4ERRORS
 
@@ -428,6 +555,45 @@ S4_RESTORE_DISPLAY:
         STA $D400
         LDA S4SAVE_PORTB
         STA PORTB
+        RTS
+
+; Fill the selected bank's display area and prompt. The display list itself
+; remains in motherboard RAM at $3000 and uses $4000 as its LMS address.
+S4_PREPARE_BANK:
+        JSR SELECT_BANK
+        LDA #$21
+        STA PATTERN
+        LDA #$00
+        STA PTR
+        LDA #$40
+        STA PTR+1
+S4_FILL:
+        LDY #$00
+S4_FILL_BYTE:
+        LDA PATTERN
+        STA (PTR),Y
+        EOR #$03
+        STA PATTERN
+        INY
+        BNE S4_FILL_BYTE
+        INC PTR+1
+        LDA PTR+1
+        CMP #$44
+        BNE S4_FILL
+
+        LDA #$68
+        STA PTR
+        LDA #$41
+        STA PTR+1
+        LDX #$00
+        LDY #$00
+S4_PROMPT:
+        LDA PROMPT_TEXT,X
+        STA (PTR),Y
+        INX
+        INY
+        CPX #$17
+        BNE S4_PROMPT
         RTS
 
 ; Select the bank layout associated with MODE. Bit 4=0 enables the window.
@@ -758,7 +924,7 @@ SHOW_STAGE4_RESULT:
         BNE SHOW_STAGE4_FAIL
         LDX #$00
 SHOW_STAGE4_LOOP:
-        LDA ANTIC_PASS_TEXT,X
+        LDA GFX_PASS_TEXT,X
         STA SCREEN+320,X
         INX
         CPX #$0E
@@ -767,7 +933,7 @@ SHOW_STAGE4_LOOP:
 SHOW_STAGE4_FAIL:
         LDX #$00
 SHOW_STAGE4_FAIL_LOOP:
-        LDA ANTIC_FAIL_TEXT,X
+        LDA GFX_FAIL_TEXT,X
         STA SCREEN+320,X
         INX
         CPX #$0E
@@ -820,6 +986,10 @@ ANTIC_PASS_TEXT:
         .BYTE $21,$2E,$34,$29,$23,$00,$23,$26,$27,$00,$30,$21,$33,$33
 ANTIC_FAIL_TEXT:
         .BYTE $21,$2E,$34,$29,$23,$00,$23,$26,$27,$00,$26,$21,$29,$2C
+GFX_PASS_TEXT:
+        .BYTE $21,$2E,$34,$29,$23,$00,$27,$26,$38,$00,$30,$21,$33,$33
+GFX_FAIL_TEXT:
+        .BYTE $21,$2E,$34,$29,$23,$00,$27,$26,$38,$00,$26,$21,$29,$2C
 
 ; Relocate absolute screen stores to the OS-selected SAVMSC address.
 RELOCATE_SCREEN:

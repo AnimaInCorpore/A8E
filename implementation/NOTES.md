@@ -4,6 +4,47 @@
 
 Simple implementation notes for this repository.
 
+- 2026-09-14: `jsA8E/index.html`: removed the obsolete `Nonfunctional`
+  label from the validated `1088K (RAMBO)` profile and marked the separate
+  `Ultimate1MB (1MB)` profile as `(WIP)` to reflect its remaining
+  Ultimate1MB-specific work.
+
+- 2026-09-14: `implementation/memory_stress_test.asm` and
+  `implementation/MEMORY_STRESS_TEST.XEX`: corrected the smaller-RAMBO
+  `PORTB MAP` probe. For `320R` and `192K`, bit 7 now tests Self-Test ROM
+  write isolation while the overlay is active, then verifies that the
+  original expanded-RAM pattern returns after the overlay is disabled.
+
+- 2026-09-14: `implementation/u1mb_memory_test.asm` and
+  `implementation/U1MB_MEMORY_TEST.XEX`: corrected the Atari screen-code
+  order for the Stage 4 label, so the visual result now displays `ANTIC GFX`
+  instead of `ANTIC GXF`.
+
+- 2026-09-13: `implementation/u1mb_memory_test.asm` and
+  `implementation/U1MB_MEMORY_TEST.XEX`: gave the Stage 4 visual result its
+  own `ANTIC GFX PASS/FAIL` label. Stage 3 now remains clearly identified as
+  `ANTIC CFG PASS/FAIL`, so the two ANTIC checks are distinguishable on screen.
+
+- 2026-09-13: `implementation/u1mb_memory_test.asm` and
+  `implementation/U1MB_MEMORY_TEST.XEX`: fixed the Stage 2 motherboard-RAM
+  sentinel check. The `$4000`/`$7FFF` sentinels are now read while the
+  extended window is closed; the expanded-bank pattern is checked only after
+  the window is reopened. This removes the false `SYS CHECKS FAIL` reported
+  by functional expansions whose bank access was working correctly.
+
+- 2026-09-13: `implementation/{u1mb_memory_test.asm,memory_stress_test.asm}`
+  and their XEX outputs: strengthened the memory diagnostics for practical
+  AHRM expansion compliance. The generic test now checks the exact 1088K
+  RAMBO PORTB map, BASIC/Self-Test visibility, both motherboard-window
+  endpoints, and visual ANTIC DMA in banks 0 and 63. The stress test now runs
+  its PORTB control stage normally and validates bit 7 as a bank bit for
+  1088K RAMBO. The ANTIC checks remain partly visual because ANTIC output is
+  not readable by the CPU.
+
+- 2026-09-13: `jsA8E/index.html`: removed the stale `Nonfunctional` labels
+  from the 320K and 576K COMPY menu profiles after their memory-bank and
+  ANTIC-window behavior was validated.
+
 - 2026-09-13: `A8E/{Pia.c,AtariIo.c}`, `A8E/tests/memory_expansion_probe.c`,
   and `A8E/CMakeLists.txt`: ported the validated jsA8E expansion behavior to
   native A8E. The port now preserves the live CPU/ANTIC window view, restores

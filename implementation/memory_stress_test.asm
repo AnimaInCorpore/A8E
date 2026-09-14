@@ -95,22 +95,20 @@ NEXT_STRESS_PASS:
         CMP #$20
         BNE STRESS_PASS
 
+        ; Run the profile-specific PORTB control check as part of the normal
+        ; certification flow. It covers Self-Test overlay behavior for RAMBO
+        ; profiles and the high bank bit for 1088K RAMBO.
+        JSR TEST_RAMBO_SELFTEST
         JSR SHOW_RESULT
-        ; The Self-Test overlay probe is intentionally not part of the normal
-        ; stress run.  PORTB bit 7 changes the $5000-$57FF bus mapping and can
-        ; interfere with firmware state in a running machine.  Keep the
-        ; routine below for an isolated hardware experiment, but do not let a
-        ; general RAM test enter that temporary view.
-        LDA #$02
-        STA CTRL_STATUS
         JSR SHOW_CONTROL_RESULT
         JMP DONE
 
-; Optional isolated probe for the Self-Test ROM overlay used by RAMBO
-; profiles.  It is not called by the normal stress test (see above).
-; Mikie can switch PORTB bit 7 while executing from the expanded window.
+; Profile-specific PORTB control probe. For 1088K RAMBO, bit 7 is a bank bit;
+; for the smaller RAMBO profiles below, it selects the Self-Test overlay.
 TEST_RAMBO_SELFTEST:
         LDA MODE
+        CMP #$01
+        BEQ CONTROL_TEST
         CMP #$03
         BEQ CONTROL_TEST
         CMP #$05
@@ -137,16 +135,27 @@ CONTROL_TEST:
 CONTROL_BANK:
         JSR SELECT_BANK
         JSR MAKE_PATTERN
+        LDA MODE
+        CMP #$01
+        BEQ CONTROL_1088_BANK
         LDA PATTERN
         STA $5000
         STA $57FF
+        LDA PORTB
+        EOR #$80
+        STA PORTB
+        ; Self-Test ROM now has priority over $5000-$57FF. Capture the ROM
+        ; bytes, attempt writes through the overlay, and require the reads to
+        ; remain unchanged. The RAM pattern is checked after the overlay is
+        ; disabled again below.
         LDA $5000
         STA SAVE0
         LDA $57FF
         STA SAVE1
-        LDA PORTB
-        EOR #$80
-        STA PORTB
+        LDA PATTERN
+        EOR #$FF
+        STA $5000
+        STA $57FF
         LDA $5000
         CMP SAVE0
         BEQ CONTROL_READ_2
@@ -169,11 +178,40 @@ CONTROL_VERIFY_2:
         CMP PATTERN
         BEQ CONTROL_NEXT
         INC CTRL_ERRORS
+        JMP CONTROL_NEXT
+
+; In 1088K RAMBO, toggling bit 7 must select the paired bank, not the
+; Self-Test ROM. Write distinct values on both sides of the transition and
+; verify that returning to the original bank restores its value.
+CONTROL_1088_BANK:
+        LDA PATTERN
+        STA $5000
+        LDA PORTB
+        EOR #$80
+        STA PORTB
+        LDA PATTERN
+        EOR #$FF
+        STA SAVE0
+        STA $5000
+        LDA $5000
+        CMP SAVE0
+        BEQ CONTROL_1088_REENABLE
+        INC CTRL_ERRORS
+CONTROL_1088_REENABLE:
+        LDA PORTB
+        EOR #$80
+        STA PORTB
+        LDA $5000
+        CMP PATTERN
+        BEQ CONTROL_NEXT
+        INC CTRL_ERRORS
 CONTROL_NEXT:
         INC BANK
         LDA BANK
         CMP COUNT
-        BNE CONTROL_BANK
+        BEQ CONTROL_DONE
+        JMP CONTROL_BANK
+CONTROL_DONE:
         ; Always leave the normal motherboard-RAM/OS view active after the
         ; temporary Self-Test ROM overlay check.
         LDA #$FF
@@ -663,12 +701,12 @@ SHOW_CONTROL_NA_LOOP:
         BNE SHOW_CONTROL_NA_LOOP
         RTS
 CONTROL_PASS_TEXT:
-        .BYTE $30,$2F,$32,$34,$22,$00,$32,$2F,$2D,$00,$30,$21,$33,$33
+        .BYTE $30,$2F,$32,$34,$22,$00,$2D,$21,$30,$00,$30,$21,$33,$33
 CONTROL_FAIL_TEXT:
-        .BYTE $30,$2F,$32,$34,$22,$00,$32,$2F,$2D,$00,$26,$21,$29,$2C
+        .BYTE $30,$2F,$32,$34,$22,$00,$2D,$21,$30,$00,$26,$21,$29,$2C
 CONTROL_NA_TEXT:
         ; Atari screen codes: N/A uses $2E, $0F, $21.
-        .BYTE $30,$2F,$32,$34,$22,$00,$32,$2F,$2D,$00,$2E,$0F,$21,$00
+        .BYTE $30,$2F,$32,$34,$22,$00,$2D,$21,$30,$00,$2E,$0F,$21,$00
 
 ; Relocate absolute screen stores to the OS-selected SAVMSC address.
 RELOCATE_SCREEN:
