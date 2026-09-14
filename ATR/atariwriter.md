@@ -1,68 +1,69 @@
-# AtariWriter Plus XE: ingenieria inversa de la carga
+# AtariWriter Plus XE: boot process reverse engineering
 
-Fecha: 2026-09-14  
+Date: 2026-09-14  
 Branch: `atariwriter`  
-Imagen: `ATR/AtariWriterPlusXE.atr`
+Image: `ATR/AtariWriterPlusXE.atr`
 
 ## Conclusion
 
-AtariWriter Plus XE necesita una maquina XL/XE con 128 KiB y expansion
-130XE, el ATR en `D1:`, DOS/CIO/SIO funcionales, y la deteccion de cartucho
-XL/XE correcta mediante `TRIG3` (`$D013`). No necesita un Atari 850, una
-impresora ni un handler `R:`.
+AtariWriter Plus XE requires an XL/XE machine with 128 KiB and a 130XE memory
+expansion, the ATR mounted in `D1:`, working DOS/CIO/SIO services, and correct
+XL/XE cartridge detection through `TRIG3` (`$D013`). It does not require an
+Atari 850, a printer, or an `R:` handler.
 
-La causa del bucle era `TRIG3=1` en jsA8E. En XL/XE ese registro no es un
-tercer joystick liberado: refleja la linea RD5 y debe valer `0` cuando ningun
-cartucho externo presenta ROM en `$A000-$BFFF`. El OS interpretaba el `1` como
-cartucho presente, validaba `RAMSUM` durante el `WARMSV` solicitado por
-AtariWriter y convertia ese arranque calido en un cold start. Con `TRIG3=0`,
-el OS sigue la ruta sin cartucho y AtariWriter llega al menu.
+The reboot loop was caused by `TRIG3=1` in jsA8E. On XL/XE machines, this
+register is not a released third joystick trigger: it reflects the RD5 line and
+must read `0` when no external cartridge is providing ROM at `$A000-$BFFF`.
+The OS interpreted `1` as cartridge present, validated `RAMSUM` during the
+`WARMSV` requested by AtariWriter, and converted that warm start into a cold
+start. With `TRIG3=0`, the OS follows the no-cartridge path and AtariWriter
+reaches its menu.
 
-## Imagen y sistema de archivos
+## Disk image and file system
 
-El ATR es una imagen DOS 2.0S valida de 720 sectores de 128 bytes: 92.160
-bytes de datos mas una cabecera ATR de 16 bytes. Las cadenas DOS se obtuvieron
-de los bytes 125-127 de cada sector.
+The ATR is a valid DOS 2.0S image with 720 128-byte sectors: 92,160 bytes of
+data plus a 16-byte ATR header. The DOS sector chains were extracted from
+bytes 125-127 of each sector.
 
-| Fichero | Sectores | Primer sector | Cadena relevante |
+| File | Sectors | First sector | Relevant chain |
 |---|---:|---:|---|
-| `DOS.SYS` | 37 | 4 | cargador DOS |
-| `DUP.SYS` | 42 | 41 | utilidades DOS |
+| `DOS.SYS` | 37 | 4 | DOS loader |
+| `DUP.SYS` | 42 | 41 | DOS utilities |
 | `AUTORUN.SYS` | 6 | 83 | `83,84,85,86,87,505` |
 | `AP.OBJ` | 210 | 88 | `88..289,499..502,506,516,524,543` |
-| `PROOF` | 112 | 290 | corrector opcional |
-| `PD` | 33 | 406 | controlador de impresion |
-| `MM.OBJ` | 91 | 420 | mail merge opcional |
+| `PROOF` | 112 | 290 | optional spell checker |
+| `PD` | 33 | 406 | printer driver |
+| `MM.OBJ` | 91 | 420 | optional mail merge component |
 
-`AP.OBJ` esta fragmentado. Un lector DOS debe seguir su cadena de sectores y
-no puede tratar el fichero como un rango contiguo. No hay firmware 850,
-handler `R:` ni controlador serie adicional en la imagen.
+`AP.OBJ` is fragmented. A DOS reader must follow its sector chain and cannot
+treat the file as a contiguous sector range. The image contains no Atari 850
+firmware, `R:` handler, or additional serial driver.
 
-## Cadena de ejecucion extraida
+## Extracted execution chain
 
-1. DOS carga `AUTORUN.SYS`.
-2. `AUTORUN.SYS` contiene segmentos `$2000-$20B0` y `$20B5-$22AE`; su
-   `RUNAD` es `$223B`.
-3. Abre `D:AP.OBJ` por IOCB/CIO (`CIOV=$E456`), lo lee en bloques y cierra el
-   IOCB. La carga depende del DOS invitado, no de un atajo del host.
-4. `AP.OBJ` es un XEX de 26.190 bytes con segmentos dispersos y
-   `RUNAD=$BB3B`.
-5. El programa prueba RAM extendida, intenta opcionalmente abrir `R:`, instala
-   `DOSINI=$2800`, pone `COLDST=$00` y llama a `WARMSV`.
-6. El segundo estadio del arranque calido termina en el menu de usuario.
+1. DOS loads `AUTORUN.SYS`.
+2. `AUTORUN.SYS` contains segments `$2000-$20B0` and `$20B5-$22AE`; its
+   `RUNAD` is `$223B`.
+3. It opens `D:AP.OBJ` through IOCB/CIO (`CIOV=$E456`), reads it in blocks,
+   and closes the IOCB. Loading depends on the guest DOS, not on a host-side
+   shortcut.
+4. `AP.OBJ` is a 26,190-byte XEX with scattered segments and `RUNAD=$BB3B`.
+5. The program tests extended RAM, optionally attempts to open `R:`, installs
+   `DOSINI=$2800`, sets `COLDST=$00`, and calls `WARMSV`.
+6. The second stage of the warm start reaches the user menu.
 
-## Requisito de memoria 130XE
+## 130XE memory requirement
 
-Los primeros segmentos de `AP.OBJ` escriben, en este orden:
+The first `AP.OBJ` segments perform the following writes in order:
 
-| Orden | Segmento XEX |
+| Order | XEX segment |
 |---:|---|
 | 1 | `$D301=$EF` |
-| 2-6 | 4.454 bytes en `$4000-$4E3D` |
+| 2-6 | 4,454 bytes at `$4000-$4E3D` |
 | 7 | `$D301=$EB` |
 | 8 | `$D301=$FF` |
 
-`AUTORUN.SYS` tambien ejecuta en `$2263-$227D` una prueba explicita:
+`AUTORUN.SYS` also runs an explicit test at `$2263-$227D`:
 
 ```asm
 LDA #$EF
@@ -78,74 +79,80 @@ BNE $2280
 JMP $2000
 ```
 
-En 64 KiB falla deliberadamente y deja `COLDST=$09`. En 130XE, `$EF` y `$EB`
-seleccionan bancos distintos; la ventana CPU es `$4000-$7FFF`, la RAM base
-oculta debe conservarse y ANTIC permanece independiente cuando su bit de
-ventana no esta activo. Estas reglas corresponden a AHRM 2.7.
+On a 64 KiB machine, this deliberately fails and leaves `COLDST=$09`. On a
+130XE, `$EF` and `$EB` select different banks; the CPU window is
+`$4000-$7FFF`, the hidden base RAM must be preserved, and ANTIC remains
+independent while its window-enable bit is inactive. These rules correspond
+to AHRM 2.7.
 
-## El 850 y `R:` son opcionales
+## The Atari 850 and `R:` are optional
 
-En `$BC21`, AtariWriter intenta `OPEN "R:"`. Si no existe, envia polls SIO
-Type 1 `$50/$3F`. Si hubiera respuesta, copiaria un DCB, descargaria el booter
-850 y ejecutaria `$0506`. Sin respuesta, el bus debe permanecer silencioso.
+At `$BC21`, AtariWriter attempts `OPEN "R:"`. If the device is unavailable,
+it sends Type 1 SIO polls `$50/$3F`. If a response were received, it would copy
+a DCB, download the Atari 850 booter, and execute `$0506`. Without a response,
+the bus must remain silent.
 
-La ausencia del 850 no es un error fatal: la ruta termina en `$BC19`, limpia
-`$0606` y salta a `$E474`. Por tanto, no se deben fabricar ACK, NAK, DCB,
-booter ni handler. La hipotesis anterior que atribuia el bucle al timeout SIO
-queda descartada.
+The absence of an Atari 850 is not fatal: the path ends at `$BC19`, clears
+`$0606`, and jumps to `$E474`. Therefore, the emulator must not fabricate an
+ACK, NAK, DCB, booter, or handler. The earlier hypothesis that attributed the
+loop to an SIO timeout is ruled out.
 
-## Vector de arranque y causa exacta
+## Boot vector and exact cause
 
-Los stubs de la ROM XL/XE usada son:
+The XL/XE ROM used for the investigation contains these stubs:
 
 ```asm
 $E474  JMP $C290    ; WARMSV
 $E477  JMP $C2C8    ; COLDSV
 ```
 
-Los vectores no estaban corruptos. Antes de `$E474`, AtariWriter habia dejado
-`DOSINI=$2800`, `RUNAD=$BB3B` y `COLDST=$00`. La decision equivocada se tomaba
-dentro del OS en `$C290`.
+The vectors were not corrupted. Before `$E474`, AtariWriter had set
+`DOSINI=$2800`, `RUNAD=$BB3B`, and `COLDST=$00`. The incorrect decision was
+made inside the OS at `$C290`.
 
-AHRM 2.8 especifica que `TRIG3=1` significa que un cartucho externo presenta
-RD5, `TRIG3=0` significa que no lo hace, y BASIC interno no afecta esa linea.
-jsA8E inicializaba los cuatro triggers como joysticks liberados, incluido
-`TRIG3=1`. El OS copiaba ese valor a `GINTLK` y trataba el warm start como el
-caso de cartucho.
+AHRM 2.8 specifies that `TRIG3=1` means an external cartridge is asserting
+RD5, `TRIG3=0` means that it is not, and internal BASIC does not affect this
+line. jsA8E initialized all four triggers as released joystick inputs,
+including `TRIG3=1`. The OS copied this value to `GINTLK` and handled the warm
+start as the cartridge-present case.
 
-La ruta de cartucho llama a `$C4C9`, que suma `$BFF0-$C0EF`. El boot con BASIC
-visible habia dejado `RAMSUM=$52`; AtariWriter desactiva BASIC y los 16 bytes
-de `$BFF0-$BFFF` pasan a ser RAM a cero, por lo que la suma es `$9B`. La
-desigualdad envia el OS a `$C2C8`, borra RAM y vuelve a bootear `D1:`. No era
-un `CPU.reset()` disparado por el navegador: era una decision reproducible del
-OS invitado causada por una entrada de hardware incorrecta.
+The cartridge path calls `$C4C9`, which sums `$BFF0-$C0EF`. The boot with
+BASIC visible had left `RAMSUM=$52`; AtariWriter disables BASIC, exposing the
+16 bytes at `$BFF0-$BFFF` as zero-filled RAM, so the sum becomes `$9B`. The
+mismatch sends the OS to `$C2C8`, clears RAM, and boots `D1:` again. This was
+not a browser-triggered `CPU.reset()`: it was a reproducible guest OS decision
+caused by an incorrect hardware input.
 
-Con `TRIG3=0`, tambien queda `GINTLK=0`; el OS reconoce que no hay cartucho,
-omite la validacion de cartucho y conserva `DOSINI` durante `WARMSV`.
+With `TRIG3=0`, `GINTLK` also remains `0`; the OS recognizes that no cartridge
+is present, skips cartridge validation, and preserves `DOSINI` during
+`WARMSV`.
 
-## Cambios genericos implementados
+## Generic changes implemented
 
-- `TRIG3` inicia en `0` en los nucleos JavaScript y C cuando no hay cartucho.
-- `releaseAll()` ya no puede convertir RD5 en un joystick liberado.
-- PIA PORTB separa ORB de DDRB. Tras reset, DDRB es `$00` y los pull-ups
-  producen un valor MMU efectivo `$FF`; escribir DDRB recalcula el mapa de
-  ROM y RAM extendida inmediatamente, conforme a AHRM 2.5-2.7.
-- La automatizacion headless ahora transmite el perfil de expansion solicitado,
-  evitando que una prueba declarada 130XE se ejecute silenciosamente en 64 KiB.
-- Se agrego `pia_xlxe_defaults.test.js` para cubrir RD5/TRIG3 y DDRB/pull-ups.
+- `TRIG3` initializes to `0` in the JavaScript and C cores when no cartridge
+  is present.
+- `releaseAll()` can no longer turn RD5 into a released joystick input.
+- PIA PORTB keeps ORB and DDRB separate. After reset, DDRB is `$00`, and the
+  pull-ups produce an effective MMU value of `$FF`; writing DDRB immediately
+  recalculates ROM and extended-memory mapping, in accordance with AHRM
+  2.5-2.7.
+- Headless automation now forwards the requested memory-expansion profile,
+  preventing a test configured for a 130XE from silently running with 64 KiB.
+- `pia_xlxe_defaults.test.js` was added to cover RD5/TRIG3 and DDRB pull-up
+  behavior.
 
-No hay condiciones por nombre de ATR, direcciones privadas de AtariWriter ni
-modificaciones de la imagen.
+There are no conditions based on the ATR name, no AtariWriter-specific
+addresses, and no modifications to the disk image.
 
-## Verificacion
+## Verification
 
-La ejecucion corregida se mantuvo 80.083.406 ciclos con `D1:` y
-`130xe-128k`. AtariWriter solicito un solo `WARMSV`; no hubo cold start
-posterior, `COLDST` permanecio `$00`, `TRIG3/GINTLK` permanecieron `$00`, y la
-pantalla mostro el menu completo: `Create File`, `Edit File`, `Verify
-Spelling`, `Print File`, `Global Format`, `Mail Merge`, indices de ambas
-unidades y las operaciones de carga/guardado.
+The corrected emulator ran for 80,083,406 cycles with the ATR in `D1:` and
+the `130xe-128k` profile. AtariWriter requested one `WARMSV`; no subsequent
+cold start occurred, `COLDST` remained `$00`, `TRIG3/GINTLK` remained `$00`,
+and the screen displayed the complete menu: `Create File`, `Edit File`,
+`Verify Spelling`, `Print File`, `Global Format`, `Mail Merge`, both drive
+indexes, and the load/save operations.
 
-Tambien pasan las regresiones de PIA, memoria bancaria 130XE,
-potenciometros, snapshots y automatizacion headless. El nucleo C compila en
-Release; solo conserva el warning de enlace `LNK4098` ya existente.
+The PIA, 130XE banked-memory, potentiometer, snapshot, and headless automation
+regressions also pass. The C core builds successfully in Release mode; it only
+retains the pre-existing `LNK4098` linker warning.
