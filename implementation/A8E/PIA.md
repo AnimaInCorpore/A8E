@@ -8,9 +8,11 @@ default comes from the native hardware register table and follows AHRM 2.8.
 
 - Files: `A8E/Pia.c`, `A8E/Pia.h`
 - Purpose: manage port control and ROM/bank switching control paths.
-- Status: verified on 2026-09-13 (`implemented`), including the AHRM 130XE,
+- Status: verified on 2026-09-14 (`implemented`), including the AHRM 130XE,
   RAMBO, COMPY, and Ultimate1MB bank maps.
-- Notes: `PORTB` bank bits, CPU/ANTIC window selection, live CPU-window
+- Notes: `TRIG3` now follows the no-cartridge RD5 default, and effective
+  `PORTB` pull-ups/`DDRB` writes update mapping at reset and during runtime.
+  `PORTB` bank bits, CPU/ANTIC window selection, live CPU-window
   visibility, motherboard-window shadowing, and BASIC/Self-Test bit reuse now
   follow the validated jsA8E model. The native U1MB surface implements the
   write-only UCTL/UAUX range and readable COLDF flag used by jsA8E; U1MB

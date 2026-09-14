@@ -1,41 +1,62 @@
 # jsA8E Continuation Notes
 
+Status reviewed on 2026-09-14. This file is a handoff summary, not the
+authoritative user documentation; see [README.md](README.md) and
+[AUTOMATION.md](AUTOMATION.md) for the current public behavior.
+
 This file is a handoff note for the next session.
 
 ## What we were trying to do
 
-- Restore the browser-side memory-expansion selector after the PAL/NTSC work had been reset to a clean baseline.
-- Keep the implementation limited to `jsA8E` and avoid touching unrelated emulator code.
-- Verify that the selected memory profile travels from the UI into the boot/reset path and then into the memory map.
+- Keep the browser-side memory-expansion selector and PAL/NTSC boot selection
+  aligned with the runtime configuration.
+- Keep the implementation generic and AHRM-driven rather than title-specific.
+- Maintain parity between browser, headless, and native memory-window behavior.
 
 ## What was verified
 
-- PAL and NTSC selection is working again.
+- PAL and NTSC selection works through boot and reset.
 - `peek(53268)` distinguishes the video standard as expected from the browser console.
-- The browser-side AHRM profiles are the behavioral reference for the native
-  port: 130XE, 192K/320K/576K/1088K RAMBO, both COMPY variants, and the
-  initial U1MB model are implemented there.
-- The native port is being validated separately; its high-capacity graphical
-  path is not considered complete until the native regression and title tests
-  agree with jsA8E.
+- Browser and native AHRM profiles cover 130XE, 192K/320K/576K/1088K RAMBO,
+  both COMPY variants, and the initial U1MB model.
+- Generic browser memory, XEX, ANTIC, CPU, POKEY, snapshot, automation, and MCP
+  regressions pass; native CMake probes cover the corresponding hardware paths.
+- AtariBlast and Mikie complete their normal startup paths after the generic
+  XEX RUNAD/loader, IRQ, and memory-window corrections.
 
-## What is still broken
+## What is still incomplete
 
-- Native A8E high-capacity validation is the remaining task; this handoff no
-  longer treats the validated jsA8E profiles as broken.
+- Ultimate1MB BIOS/flash, RTC, PBI devices, and external peripherals are not
+  emulated.
+- Raster-effect verification against real content and a small set of AHRM
+  corner cases remain open; see `legacy/COLOR_CLOCK_ACCURACY.md`.
 
 ## Important AHRM reminders
 
-- COMPY expansions use separate ANTIC access behavior, unlike the simpler RAMBO cases.
-- RAMBO and COMPY profiles do not share the same banking pattern.
-- The 1088K mapping is the most complex variant and likely needs a careful bit-by-bit comparison against AHRM and Altirra.
+- COMPY expansions use separate ANTIC access behavior, unlike the simpler RAMBO cases; this is covered by the profile matrix and memory diagnostics.
+- RAMBO and COMPY profiles do not share the same banking pattern; all listed AHRM maps are exercised by the native probe and the reusable XEX diagnostics.
+- The 1088K mapping has been checked for its 64-bank PORTB layout, shared CPU/ANTIC window, overlay behavior, bank retention, and high-bank visual DMA path.
 
-## Likely next debugging targets
+## Validation already covered
 
-- Compare `PORTB` banking bits against AHRM and Altirra for COMPY and 1088K.
-- Re-check how the CPU and ANTIC windows are restored after bank changes.
-- Confirm that BASIC / self-test mapping bits are preserved exactly when extended memory is active.
-- Verify whether the banked window should be mirrored, inverted, or held separately for specific profiles.
+- `PORTB` bank-bit layouts and CPU/ANTIC window transitions are covered by
+  `A8E/tests/memory_expansion_probe.c`, `U1MB_MEMORY_TEST.XEX`, and
+  `MEMORY_STRESS_TEST.XEX`.
+- Motherboard-RAM preservation, BASIC/Self-Test overlay priority, bank
+  retention, and the 1088K high-bank path are covered by the memory diagnostics.
+- The browser regression suite covers the corresponding memory, XEX, PIA,
+  ANTIC, CPU, POKEY, automation, snapshot, and MCP paths.
+
+## Open validation
+
+- A full cycle-by-cycle comparison against an Altirra trace is still useful for
+  future AHRM corner cases, but it is no longer a prerequisite for the generic
+  bank-map implementation.
+- Karate Champion and Animal Party still need final title-level startup
+  confirmation; their DLI/NMI and SIO paths are covered by the generic fixes
+  and diagnostic work.
+- Ultimate1MB firmware-dependent behavior (BIOS/flash, RTC, and PBI) remains
+  outside the current model.
 
 ## Relevant files
 
@@ -50,4 +71,5 @@ This file is a handoff note for the next session.
 
 ## Short summary for the next session
 
-The clean PAL/NTSC base is good. The remaining work is memory-expansion correctness, especially COMPY and 1088K. Start by comparing the current banking logic with AHRM before making more changes.
+The PAL/NTSC and memory-expansion baseline is now validated. Future changes
+should start with the AHRM and preserve generic behavior across all profiles.

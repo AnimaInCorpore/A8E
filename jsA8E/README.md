@@ -13,13 +13,39 @@ Browser-based Atari 800 XL emulator port of the native C/SDL `A8E` implementatio
 
 ## Current Emulation Status
 
-The current JS renderer includes the recent raster-timing pass:
+The current JS renderer includes the raster-timing pass:
 
 - visible playfield/background rendering is on the per-color-clock path
 - visible player/missile output is interleaved on the scanline timing path
 - visible blank/background-only lines now spend the leading color-burst clocks invisibly before drawing the rest of the line
+- VBI and DLI NMIs follow the AHRM cycle-7/cycle-8 latch and gating model
+- VSCROL uses the live mode-line row counter and documented deadline behavior
+- mid-scanline CHBASE writes use the AHRM two-color-clock delayed latch
 
-The browser timing pass now covers the legacy-style active-line geometry, HSCROL handling, visible PMG interleaving, and blank-line color-burst behavior. Remaining work is broader regression verification against raster-effect content and any localized title-specific differences that show up during that sweep. The current verification checklist lives in [../legacy/COLOR_CLOCK_ACCURACY.md](../legacy/COLOR_CLOCK_ACCURACY.md).
+The browser timing pass now covers the legacy-style active-line geometry, HSCROL handling, visible PMG interleaving, blank-line color-burst behavior, VBI/DLI timing, VSCROL, and CHBASE timing. Remaining work is broader regression verification against raster-effect content and any localized title-specific differences that show up during that sweep. The current verification checklist lives in [../legacy/COLOR_CLOCK_ACCURACY.md](../legacy/COLOR_CLOCK_ACCURACY.md).
+
+## Extended Memory
+
+The Memory selector and automation API support the AHRM profiles below:
+
+| Profile | Automation value |
+|---------|------------------|
+| 64K | `none` |
+| 128K (130XE) | `130xe-128k` |
+| 192K (RAMBO) | `rambo-192k` |
+| 320K (RAMBO) | `rambo-320k` |
+| 320K (COMPY) | `compy-320k` |
+| 576K (RAMBO) | `rambo-576k` |
+| 576K (COMPY) | `compy-576k` |
+| 1088K (RAMBO) | `rambo-1088k` |
+| Ultimate1MB (1MB) | `ultimate1mb` *(WIP)* |
+
+RAMBO and COMPY bank layouts, CPU/ANTIC windows, BASIC/Self-Test overlays,
+and bank persistence are implemented. Ultimate1MB currently provides the AHRM
+memory mapping and UCTL (`$D380`), UAUX (`$D381`), and COLDF (`$D383`) register
+behavior, with UCTL modes for 64K, 320K RAMBO, 576K COMPY, and 1088K-compatible
+mapping. Ultimate1MB BIOS/flash, RTC, PBI devices, and external peripherals
+are not yet emulated.
 
 ## Run
 
@@ -35,7 +61,7 @@ python -m http.server 8000
 - Tooltip version text is loaded from `jsA8E/version.json` at runtime.
 - The GitHub workflow `.github/workflows/update-jsa8e-version.yml` updates that file automatically when a release is published.
 - Local/manual update is just:
-  - set `jsA8E/version.json` to the new tag (for example `v1.1.0`)
+  - set `jsA8E/version.json` to the new tag (for example `v1.3.0`)
   - commit and push
 
 ## ROM and Boot Requirements

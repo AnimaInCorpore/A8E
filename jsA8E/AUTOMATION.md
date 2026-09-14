@@ -15,7 +15,7 @@ jsA8E exposes one grouped automation contract through two entrypaths:
 - The grouped surface is the primary contract: `system`, `media`, `input`, `debug`, `dev`, `artifacts`, and `events`.
 - Flat aliases remain at the root for compatibility, so older calls such as `api.start()` or `api.captureScreenshot()` still work.
 - Browser main-thread mode, browser worker mode, and headless Node mode use the same public semantics.
-- `memoryExpansion` is part of the boot/reset config surface and can be selected from the browser UI or passed through `system.reset(...)` / `system.boot(...)` for the common 64K, 130XE, RAMBO, and COMPY profiles.
+- `memoryExpansion` is part of the boot/reset config surface and can be selected from the browser UI or passed through `system.reset(...)` / `system.boot(...)` for the 64K, 130XE, RAMBO, COMPY, and initial Ultimate1MB profiles. Accepted values are `none`, `130xe-128k`, `rambo-192k`, `rambo-320k`, `compy-320k`, `rambo-576k`, `compy-576k`, `rambo-1088k`, and `ultimate1mb`.
 
 For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomation(options)`. It loads the same core and automation scripts into a Node `vm` context, creates the no-worker backend, and returns `{ api, app, context, dispose() }`. The returned `api` is the same grouped automation surface documented below.
 

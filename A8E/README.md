@@ -53,8 +53,11 @@ The native core includes the current raster-timing pass:
 - visible scanlines draw playfield/background state on the per-color-clock path
 - visible player/missile output is interleaved on the scanline timing path
 - visible blank/background-only lines spend the leading color-burst clocks invisibly before drawing the rest of the line
+- VBI and DLI NMIs follow the AHRM cycle-7/cycle-8 latch and gating model
+- VSCROL uses the live mode-line row counter and documented deadline behavior
+- mid-scanline CHBASE writes use the AHRM two-color-clock delayed latch
 
-The native timing pass now covers the legacy-style active-line geometry, HSCROL handling, visible PMG interleaving, and blank-line color-burst behavior. Remaining work is continued regression verification against real raster-effect content and any localized title-specific differences that turn up during that sweep. See [../legacy/COLOR_CLOCK_ACCURACY.md](../legacy/COLOR_CLOCK_ACCURACY.md) for the current verification status.
+The native timing pass now covers the legacy-style active-line geometry, HSCROL handling, visible PMG interleaving, blank-line color-burst behavior, VBI/DLI timing, VSCROL, and CHBASE timing. Remaining work is continued regression verification against real raster-effect content and any localized title-specific differences that turn up during that sweep. See [../legacy/COLOR_CLOCK_ACCURACY.md](../legacy/COLOR_CLOCK_ACCURACY.md) for the current verification status.
 
 ### Memory Expansion
 
@@ -67,8 +70,10 @@ A8E -320C game.atr
 
 The main `$4000-$7FFF` RAM window is preserved while the CPU window is
 switched. RAMBO and COMPY profiles use the AHRM bank-bit layouts and shared or
-separate ANTIC windows. `-U1MB` provides the UCTL mode selector and U1MB bank
-geometry; BIOS/flash and PBI device images are not bundled with A8E yet.
+separate ANTIC windows. The supported profiles are `-128K`, `-192R`, `-320R`,
+`-320C`, `-576R`, `-576C`, and `-1088R`. `-U1MB` provides the UCTL-controlled
+64K, 320K, 576K, and 1088K-compatible modes plus the core U1MB register
+surface; BIOS/flash, RTC, and PBI device images are not bundled with A8E yet.
 
 **Command Line:**
 ```text
@@ -84,14 +89,18 @@ A8E [options] [disk.atr|program.xex]
 * `-192R`, `-320R`, `-320C`, `-576R`, `-576C`, `-1088R`: Select the matching
   AHRM RAMBO or COMPY memory map.
 * `-U1MB`: Select the Ultimate1MB memory model and its UCTL-controlled bank
-  modes. Flash/BIOS/PBI emulation requires a corresponding image and remains
-  pending.
+  modes. Flash/BIOS/RTC/PBI emulation requires corresponding device support and
+  remains pending.
 * `-d` / `-D`: Enable audio diagnostics. Writes per-frame buffer and underrun/overrun metrics to `a8e_audio_debug.csv` in the current directory. The file is overwritten on each run.
 
 At startup, A8E prints the selected memory profile, for example
 `A8E memory: opened 128K (130XE)`, or `A8E memory: opened 64K` when the default
 profile is active. This makes it possible to verify that `-128K` reached the
 native runtime before loading a program.
+
+When configured with `-DBUILD_TESTING=ON`, CMake also builds native probes for
+ANTIC timing, ANTIC DMA and graphics modes, POKEY POT scanning, and all AHRM
+memory-expansion profiles.
 
 ## Controls
 

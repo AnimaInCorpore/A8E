@@ -27,7 +27,7 @@ https://www.virtualdub.org/downloads/Altirra%20Hardware%20Reference%20Manual.pdf
 
 ## Current Emulation Status
 
-Recent raster-timing work landed in both cores:
+Both emulator cores currently include the following raster-timing behavior:
 
 - Visible scanlines now render playfield/background state on the per-color-clock path.
 - Visible player/missile output is interleaved on the scanline timing path in both implementations.
@@ -36,12 +36,57 @@ Recent raster-timing work landed in both cores:
 - Vertical scrolling runs on a live 4-bit mode-line row counter with the AHRM VSCROL deadlines (entry latch at cycle 0, exit comparison through cycle 108, DLI decision through cycle 5), enabling GTIA 9++-style extended mode lines and mid-line VSCROL rewrites.
 - Mid-scanline CHBASE writes latch with the AHRM 2-color-clock delay in both cores.
 
-The implementation pass for legacy-style per-color-clock rendering is now in place in both cores. Remaining work is verification against real raster-effect content and closing any title-specific differences that show up during that sweep.
+PAL and NTSC machine timing, palettes, `$D014`, POKEY behavior, XEX/ATR loading, and the browser WebGL/2D rendering paths are implemented in the corresponding native and browser cores.
 
-- regression verification against real raster-effect content (including VSCROL corner-case titles such as Atomix Plus! and GTIA 9++ demos)
-- follow-up on any localized title-specific timing differences found during that verification
+The legacy-style per-color-clock rendering pass is implemented in both cores. Remaining work is verification against real raster-effect content (including VSCROL corner cases such as Atomix Plus! and GTIA 9++ demos) and any localized title-specific timing differences found during that sweep.
 
 For the current verification checklist and signoff notes, see [legacy/COLOR_CLOCK_ACCURACY.md](legacy/COLOR_CLOCK_ACCURACY.md).
+
+### Extended Memory
+
+The native and browser implementations support the AHRM memory-map profiles below. The native version selects them on the command line; the browser version exposes them in the Memory selector and through the automation API.
+
+| Profile | Native switch | Browser/API profile |
+|---------|---------------|---------------------|
+| 64K | *(default)* | `none` |
+| 128K (130XE) | `-128K` | `130xe-128k` |
+| 192K (RAMBO) | `-192R` | `rambo-192k` |
+| 320K (RAMBO) | `-320R` | `rambo-320k` |
+| 320K (COMPY) | `-320C` | `compy-320k` |
+| 576K (RAMBO) | `-576R` | `rambo-576k` |
+| 576K (COMPY) | `-576C` | `compy-576k` |
+| 1088K (RAMBO) | `-1088R` | `rambo-1088k` |
+| Ultimate1MB (1MB) | `-U1MB` | `ultimate1mb` *(WIP)* |
+
+RAMBO and COMPY bank-bit layouts, CPU/ANTIC window behavior, BASIC/Self-Test overlays, and bank persistence are implemented and covered by native and browser regression probes. Ultimate1MB currently provides its AHRM memory mapping and core UCTL/UAUX/COLDF control-register behavior, including selectable 64K, 320K, 576K, and 1088K modes. Ultimate1MB BIOS/flash, RTC, PBI devices, and external peripheral images are not yet emulated.
+
+The repository includes two standalone Atari diagnostics for expanded-memory validation: [`U1MB_MEMORY_TEST.XEX`](implementation/U1MB_MEMORY_TEST.XEX) performs full bank, system-window, configuration, and visual ANTIC checks; [`MEMORY_STRESS_TEST.XEX`](implementation/MEMORY_STRESS_TEST.XEX) performs repeated bank-switching and PORTB-map checks. See [implementation/memory_tests.md](implementation/memory_tests.md).
+
+### Regression Tests
+
+The browser regression suite can be run without a browser or ROM files:
+
+```sh
+cd jsA8E
+npm run test:automation
+```
+
+The native CMake project includes probe targets for ANTIC timing, ANTIC DMA and graphics modes, POKEY POT scanning, and memory-expansion behavior. Configure with `-DBUILD_TESTING=ON` to include those targets in the build.
+
+### Compatibility Validation
+
+Several programs that previously failed during loading now reach their normal
+startup screens in the emulator:
+
+- **AtariBlast** completes its mixed-geometry ATR load and reaches the game screen.
+- **Mikie V1.12** completes its banked XEX load and reaches the control screen.
+- **AtariWriter Plus XE** completes its 130XE startup sequence and reaches the user menu.
+- **Karate Champion** and **Animal Party** are also covered by the generic DLI/NMI
+  and SIO compatibility work; their full title-specific startup validation remains in progress.
+
+These results come from generic fixes to XEX RUNAD handling, memory-bank/window
+behavior, IRQ state, and XL/XE hardware defaults; no title-specific workarounds
+are used.
 
 ## ROM Requirements
 

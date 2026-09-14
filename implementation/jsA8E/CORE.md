@@ -4,7 +4,7 @@
 
 - Files: `jsA8E/js/core/cpu.js`, `jsA8E/js/core/cpu_tables.js`, `jsA8E/js/core/antic.js`, `jsA8E/js/core/gtia.js`, `jsA8E/js/core/pokey.js`, `jsA8E/js/core/pokey_sio.js`, `jsA8E/js/core/memory.js`, `jsA8E/js/core/io.js`, `jsA8E/js/core/atari.js`, `jsA8E/js/core/hw.js`, `jsA8E/js/core/playfield/playfield.js`, `jsA8E/js/core/playfield/renderer_base.js`, `jsA8E/js/core/state.js`, `jsA8E/js/core/snapshot_codec.js`
 - Purpose: mirror Atari hardware behavior in JavaScript with timing-compatible execution.
-- Status: updated on 2026-08-03 (`partial`).
+- Status: updated on 2026-09-14 (`partial`).
 
 ## Architecture
 

@@ -6,15 +6,34 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+- Native and browser support for the AHRM 130XE, RAMBO, COMPY, and initial
+  Ultimate1MB memory profiles, including native memory-expansion regression
+  probes and the reusable `U1MB_MEMORY_TEST.XEX` and `MEMORY_STRESS_TEST.XEX`
+  diagnostics.
+- Browser headless automation and MCP coverage for grouped lifecycle, media,
+  debugger, HostFS, assembler, snapshot, artifact, and memory-profile flows.
+
 ### Changed
 - Documentation now consistently states that Atari 800 XL PAL hardware-emulation implementation work should use `AHRM/index.md` as the reference baseline (applied across non-AHRM Markdown docs).
 - Native `A8E` build caption/version is now injected at compile time from `jsA8E/version.json` (with `dev` fallback when unavailable).
 - Browser `jsA8E` frame timing now accumulates CPU cycles and runs whole-frame steps with capped catch-up to reduce visible speed jitter.
 - Browser rendering now requests `desynchronized` WebGL contexts and hints `canvas` transforms for smoother presentation.
+- Native and browser memory-window transitions now preserve motherboard RAM,
+  honor profile-specific CPU/ANTIC windows and BASIC/Self-Test overlay rules,
+  and expose the initial Ultimate1MB UCTL/UAUX/COLDF register model.
+- Native and browser XEX loaders now accept valid low-memory 16-bit RUNAD
+  targets after relocating their internal loader routines and SIO buffer
+  patches.
 
 ### Fixed
 - Native `A8E` now ignores out-of-range SDL keysyms (e.g. macOS Command/LGUI) when mapping to Atari key codes; previously hitting ⌘ would index past the key table and crash the emulator.
 - Hardened `jsA8E` SIO disk sector access checks across read/write/verify paths to reject invalid offsets consistently.
+- POKEY IRQ requests now follow level-sensitive source state when `IRQEN`
+  disables a source, preventing stale queued IRQs from corrupting XEX startup.
+- XL/XE cartridge detection now reports `TRIG3` low without an external
+  cartridge, and effective PORTB pull-ups/`DDRB` writes update memory mapping
+  consistently in native, browser, and headless paths.
 
 ## v1.1.1 - 2026-02-17
 
