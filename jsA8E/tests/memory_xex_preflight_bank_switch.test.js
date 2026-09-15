@@ -275,6 +275,26 @@ function test130XeAnticKeepsMotherboardRamWhenOnlyCpuWindowIsEnabled() {
   assert.equal(ctx.ioData.memoryExpansionRead(ctx, 0x4000, true), 0x22);
 }
 
+function testPowerCycleRebuilds130XeVolatileState() {
+  const runtime = createRuntime();
+  runtime.hardReset({ memoryExpansion: "130xe-128k", portB: 0xef });
+
+  const ctx = runtime._testMachine.ctx;
+  ctx.ram[0x4000] = 0x5a;
+  assert.equal(runtime.getBankState().memoryExpansion.profile, "130xe-128k");
+  assert.equal(runtime.getBankState().memoryExpansion.cpuWindowEnabled, true);
+
+  runtime.powerCycle({ memoryExpansion: "130xe-128k", portB: 0xff });
+
+  const bankState = runtime.getBankState();
+  assert.equal(bankState.portB, 0xff);
+  assert.equal(bankState.memoryExpansion.profile, "130xe-128k");
+  assert.equal(bankState.memoryExpansion.currentBank, 3);
+  assert.equal(bankState.memoryExpansion.cpuWindowEnabled, false);
+  assert.equal(bankState.memoryExpansion.anticWindowEnabled, false);
+  assert.equal(ctx.ram[0x4000], 0);
+}
+
 testPortBWriteSegmentIsAllowed();
 testPortBSwitchCanOpenSelfTestRam();
 testPortBSwitchCanOpenBasicRam();
@@ -284,5 +304,6 @@ testInitadTraceCanDisableBasicFromAlreadyLoadedCode();
 testInitadTraceIgnoresNonAccumulatorLoadsBeforeSta();
 testInitadTraceDoesNotUseFutureSegments();
 test130XeAnticKeepsMotherboardRamWhenOnlyCpuWindowIsEnabled();
+testPowerCycleRebuilds130XeVolatileState();
 
 console.log("memory_xex_preflight_bank_switch.test.js passed");

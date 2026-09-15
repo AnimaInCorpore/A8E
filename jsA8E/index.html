@@ -128,7 +128,7 @@
             </label>
             <div class="iconControls iconControlsPrimary">
               <button id="btnStart" class="primaryIconBtn" title="Start emulation and run the loaded Atari system." aria-label="Start emulation and run the loaded Atari system."><i class="fa-solid fa-play"></i></button>
-              <button id="btnReset" class="primaryIconBtn" disabled title="Reset the emulated Atari to its startup state while keeping the loaded files." aria-label="Reset the emulated Atari to its startup state while keeping the loaded files."><i class="fa-solid fa-rotate-right"></i></button>
+              <button id="btnReset" class="primaryIconBtn" disabled title="Full machine restart (powercycle). Rebuilds the emulated Atari from a blank machine state while keeping loaded files." aria-label="Full machine restart (powercycle). Rebuilds the emulated Atari from a blank machine state while keeping loaded files."><i class="fa-solid fa-rotate-right"></i></button>
               <button id="btnAudio" class="toggle-btn active primaryIconBtn" title="Toggle emulator audio output on or off." aria-label="Toggle emulator audio output on or off.">
                 <i class="fa-solid fa-volume-high audio-on"></i>
                 <i class="fa-solid fa-volume-xmark audio-off"></i>
@@ -230,6 +230,9 @@
       <section class="screenPanel">
         <div class="screenViewport">
           <canvas id="screen" width="336" height="240"></canvas>
+          <div class="screenOverlay">
+            <div id="diskActivity" class="disk-activity" aria-live="polite" aria-atomic="true"></div>
+          </div>
         </div>
         <section id="joystickPanel" class="joystickPanel" hidden aria-label="On-screen joystick controls">
           <div class="joystickPanelInner">
@@ -626,6 +629,7 @@
     <script src="js/app/automation_api.js"></script>
     <script src="js/app/hostfs_ui.js"></script>
     <script src="js/app/disk_library_ui.js"></script>
+    <script src="js/app/disk_activity_ui.js"></script>
     <script src="js/app/assembler_ui.js"></script>
     <script src="js/app/snapshot_ui.js"></script>
     <script src="js/app/version.js"></script>

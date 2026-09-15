@@ -4,6 +4,29 @@
 
 Simple implementation notes for this repository.
 
+- 2026-09-15: `jsA8E/js/core/atari.js`: registered the worker-provided disk
+  activity bridge with the app's disk observer fan-out. This restores disk
+  activity notifications in the worker backend while keeping them outside the
+  SIO response and timing path.
+
+- 2026-09-14: `jsA8E/js/core/{memory,atari,app_proxy}.js`,
+  `jsA8E/emulator_worker.js`, and `jsA8E/{index.html,js/app/ui.js}`: separated
+  the web toolbar action into a full machine restart (power-cycle). It now
+  stops the running machine, releases inputs, rebuilds volatile RAM and the
+  selected expansion-bank state, reinitializes the machine, and starts it
+  again while preserving loaded ROMs, disk images, and H: files. The virtual
+  keyboard F5/reset path remains the ordinary XL/XE hardware reset and keeps
+  its existing warm-reset semantics.
+
+- 2026-09-14: `jsA8E/js/core/{pokey_sio,memory,atari,app_proxy}.js`,
+  `jsA8E/emulator_worker.js`, `jsA8E/js/app/disk_activity_ui.js`,
+  `jsA8E/index.html`, and `jsA8E/style.css`: refined the transient lower-right
+  disk-activity OSD to match the Altirra-style blinking drive indicator and
+  placed it in a dedicated high-z-index screen overlay above the canvas:
+  yellow for reads and orange for writes/formats. Activity is forwarded
+  through the worker without changing SIO response bytes or timing; the
+  focused SIO regression verifies the write event context.
+
 - 2026-09-14: `jsA8E/js/core/disk_library.js`, `jsA8E/js/core/{memory,pokey_sio,atari}.js`,
   `jsA8E/js/core/app_proxy.js`, `jsA8E/emulator_worker.js`, and
   `jsA8E/js/app/disk_library_ui.js`: added the initial worker-owned multi-drive

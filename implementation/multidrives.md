@@ -50,6 +50,27 @@ The implementation should keep the UI state synchronized with the emulator
 state after mounting, unmounting, resets, snapshot restoration, and other
 operations that can change mounted media.
 
+### Disk activity notification
+
+The emulator screen shall provide a small, non-interactive on-screen
+notification in its lower-right corner when a mounted disk is accessed. The
+notification shall be a small blinking rectangular drive indicator showing
+only the drive number, such as `D1:`. Read activity shall use a yellow
+indicator, while write and format activity shall use orange.
+
+The notification is an application-layer display concern. It may be delivered
+from the worker to the UI, but it must not alter SIO response bytes, command
+ordering, or emulated timing. Repeated activity should refresh the same
+indicator rather than create an unbounded queue. The first version should
+blink the indicator and hide it after a short timeout.
+
+Implementation status: the worker-backed emulator registers its construction-
+time disk-activity bridge with the app observer fan-out. This ensures that
+valid SIO activity reaches the browser OSD in both worker and in-page modes.
+The behavior was validated in Chrome with a mounted ATR: `status` and `read`
+operations produced a visible yellow `D1:` indicator. The bridge remains
+outside the SIO response and timing path.
+
 ## Supported files
 
 The first version shall accept:
@@ -197,6 +218,8 @@ Required integration points include:
 - Unmount or replace an image when the corresponding checkbox changes.
 - Observe disk writes, format operations, and other mutations to mounted image
   bytes.
+- Emit read/write/status/verify/format activity events for the screen OSD from
+  the application layer without changing the SIO protocol path.
 - Mark the affected library entry dirty and persist the updated bytes through
   the serialized flush strategy described above.
 - Refresh the UI size, status, and download data after modifications.
@@ -303,6 +326,11 @@ The feature is complete when all of the following are true:
 11. Deleting or replacing an entry cannot leave an invalid mounted-drive state.
 12. The feature does not regress the existing HostFS workflow or direct disk
     loading workflow.
+13. Valid mounted disk activity displays the correct `D1:`-`D4:` drive number
+    in a blinking lower-right OSD indicator; reads are yellow and writes are
+    orange.
+14. The activity notification does not change SIO protocol responses, timing,
+    or disk data behavior.
 
 ## Open decisions
 

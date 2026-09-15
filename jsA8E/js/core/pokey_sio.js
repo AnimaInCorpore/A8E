@@ -234,6 +234,22 @@
       }
     }
 
+    // Application-layer UI observers may display disk activity after a valid
+    // operation has been accepted. This callback is outside the SIO response
+    // path and must not affect protocol bytes or timing (AHRM 9.1, 10.2).
+    function notifyDiskActivity(io, mounted, operation) {
+      if (!mounted || typeof io.diskActivityObserver !== "function") return;
+      try {
+        io.diskActivityObserver({
+          imageIndex: mounted.imageIndex | 0,
+          deviceSlot: mounted.deviceSlot | 0,
+          operation: String(operation || "access"),
+        });
+      } catch {
+        // UI observers must never affect emulated SIO behavior.
+      }
+    }
+
     function diskDevice(devId) {
       function onCommandFrame(ctx, now, cmd, aux1, aux2) {
         const io = ctx.ioData;
@@ -260,6 +276,7 @@
           }
           buf.set(disk.subarray(si.offset, si.offset + si.bytes), 2);
           queueAckData(ctx, now, 2, si.bytes);
+          notifyDiskActivity(io, mounted, "read");
           return;
         }
 
@@ -314,6 +331,7 @@
             buf[6] = 0x31;
           }
           queueSerinResponse(ctx, now, 7);
+          notifyDiskActivity(io, mounted, "status");
           return;
         }
 
@@ -350,6 +368,7 @@
           }
           disk.fill(0, DISK_HEADER_SIZE);
           notifyDiskMediaChanged(io, mounted);
+          notifyDiskActivity(io, mounted, "format");
           queueAckComplete(ctx, now);
           return;
         }
@@ -407,12 +426,14 @@
           }
           writeAckStatus(buf, ok ? CHAR_COMPLETE : CHAR_ERROR);
           queueSerinResponse(ctx, now, 2);
+          if (ok) notifyDiskActivity(io, mounted, "verify");
           return;
         }
 
         // WRITE / PUT: write sector payload.
         disk.set(buf.subarray(payloadOffset, payloadOffset + si.bytes), si.offset);
         notifyDiskMediaChanged(io, mounted);
+        notifyDiskActivity(io, mounted, "write");
         queueAckComplete(ctx, now);
       }
 

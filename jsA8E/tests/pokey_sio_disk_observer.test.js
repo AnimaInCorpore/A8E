@@ -40,7 +40,7 @@ function loadApi() {
   });
 }
 
-function makeContext(observer) {
+function makeContext(observer, activityObserver) {
   const bytes = new Uint8Array(16 + 3 * 128 + 128);
   bytes[4] = 128;
   const ioData = {
@@ -62,6 +62,7 @@ function makeContext(observer) {
     deviceSlots: new Int16Array([3, -1, -1, -1, -1, -1, -1, -1]),
     diskImages: [{ bytes: new Uint8Array(1) }, { bytes: new Uint8Array(1) }, { bytes: new Uint8Array(1) }, { bytes: bytes, size: bytes.length }],
     diskMediaChangeObserver: observer,
+    diskActivityObserver: activityObserver,
   };
   return {
     cycleCounter: 0,
@@ -72,8 +73,12 @@ function makeContext(observer) {
 
 function main() {
   const observed = [];
+  const activities = [];
   const api = loadApi();
-  const ctx = makeContext(function (imageIndex) { observed.push(imageIndex); });
+  const ctx = makeContext(
+    function (imageIndex) { observed.push(imageIndex); },
+    function (activity) { activities.push(activity); },
+  );
   const command = [0x31, 0x57, 0x01, 0x00];
   command.push(checksum(command));
   command.forEach(function (value) { api.seroutWrite(ctx, value); });
@@ -85,6 +90,10 @@ function main() {
 
   assert.deepEqual(Array.from(ctx.ioData.diskImages[3].bytes.subarray(16, 144)), Array.from(payload));
   assert.deepEqual(observed, [3]);
+  assert.equal(activities.length, 1);
+  assert.equal(activities[0].imageIndex, 3);
+  assert.equal(activities[0].deviceSlot, 0);
+  assert.equal(activities[0].operation, "write");
   assert.equal(ctx.ioData.sioBuffer[0], "A".charCodeAt(0));
   assert.equal(ctx.ioData.sioBuffer[1], "C".charCodeAt(0));
   console.log("pokey_sio_disk_observer.test.js passed");

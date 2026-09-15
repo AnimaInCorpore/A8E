@@ -647,6 +647,32 @@
     };
     let debugRuntime = null;
     let diskLibrary = null;
+    const diskActivityListeners = new Set();
+
+    function notifyDiskActivity(activity) {
+      diskActivityListeners.forEach(function (listener) {
+        try {
+          listener(activity || null);
+        } catch {
+          // UI observers must never affect emulated behavior.
+        }
+      });
+    }
+
+    function onDiskActivity(listener) {
+      if (typeof listener !== "function") return function () {};
+      diskActivityListeners.add(listener);
+      return function () {
+        diskActivityListeners.delete(listener);
+      };
+    }
+
+    // Worker-backed apps provide the bridge callback at construction time.
+    // Register it with the same observer fan-out used by the in-page UI so
+    // SIO activity can cross the worker boundary without touching SIO timing.
+    if (opts && typeof opts.onDiskActivity === "function") {
+      onDiskActivity(opts.onDiskActivity);
+    }
 
     function onDiskMediaChanged(imageIndex, deviceSlot) {
       if (diskLibrary && typeof diskLibrary.onDiskMediaChanged === "function") {
@@ -796,9 +822,11 @@
       pokeyAudioResetState: pokeyAudioResetState,
       pokeyAudioSetTurbo: pokeyAudioSetTurbo,
       onDiskMediaChanged: onDiskMediaChanged,
+      onDiskActivity: notifyDiskActivity,
       memoryExpansion: memoryExpansion,
     });
     const memoryHardReset = memoryRuntime.hardReset;
+    const memoryPowerCycle = memoryRuntime.powerCycle;
     const memoryLoadOsRom = memoryRuntime.loadOsRom;
     const loadBasicRom = memoryRuntime.loadBasicRom;
     const memoryLoadDiskToDeviceSlot = memoryRuntime.loadDiskToDeviceSlot;
@@ -1328,6 +1356,27 @@
       updateDebug("reset");
     }
 
+    function powerCycle(options) {
+      if (!isReady()) return;
+      debugRuntime.resetExecutionState();
+      if (options && typeof options === "object" && options.memoryExpansion !== undefined) {
+        memoryExpansion = normalizeMemoryExpansion(options.memoryExpansion) || memoryExpansion;
+      }
+      pauseInternal("powercycle");
+      if (releaseAllKeys) releaseAllKeys();
+      machine.cycleAccum = 0;
+      machine.frameCycleAccum = 0;
+      memoryPowerCycle(options || null);
+      video.pixels.fill(0);
+      video.priority.fill(0);
+      if (video.presentPixels) video.presentPixels.fill(0);
+      if (video.presentPriority) video.presentPriority.fill(0);
+      publishVideoFrame();
+      if (!skipRendering) paint();
+      updateDebug("powercycle");
+      start();
+    }
+
     function setTurbo(v) {
       const next = !!v;
       if (next === turbo) return;
@@ -1395,6 +1444,7 @@
       start: start,
       pause: pause,
       reset: reset,
+      powerCycle: powerCycle,
       setTurbo: setTurbo,
       getTurbo: function () { return turbo; },
       setSioTurbo: setSioTurbo,
@@ -1439,6 +1489,7 @@
       hasMountedDiskForDeviceSlot: hasMountedDiskForDeviceSlot,
       diskLibrary: diskLibrary,
       getDiskLibrary: function () { return diskLibrary; },
+      onDiskActivity: onDiskActivity,
       hDevice: hDevice,
       hasOsRom: hasOsRom,
       hasBasicRom: hasBasicRom,

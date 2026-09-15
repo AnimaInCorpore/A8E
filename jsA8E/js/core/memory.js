@@ -1028,6 +1028,8 @@
         typeof opts.onDiskMediaChanged === "function"
           ? opts.onDiskMediaChanged
           : null;
+      const diskActivityObserver =
+        typeof opts.onDiskActivity === "function" ? opts.onDiskActivity : null;
       let memoryWriteHook = null;
       machine.memoryExpansion = createMemoryExpansionState(
         opts && opts.memoryExpansion !== undefined ? opts.memoryExpansion : "none",
@@ -1134,6 +1136,7 @@
         io.floatingPointRom = media.floatingPointRom;
         io.memoryExpansion = machine.memoryExpansion;
         io.diskMediaChangeObserver = diskMediaChangeObserver;
+        io.diskActivityObserver = diskActivityObserver;
       }
 
       function getMemoryExpansionState() {
@@ -1640,6 +1643,32 @@
             // ignore
           }
         }
+      }
+
+      // A power-cycle starts from a fresh volatile machine state while
+      // keeping externally owned media (ROMs, disks, and H: files) attached.
+      // The ordinary hard reset intentionally does not discard RAM or the
+      // active expansion-bank contents because it models the XL/XE RESET line.
+      function powerCycle(options) {
+        const resetOptions =
+          options && typeof options === "object" ? Object.assign({}, options) : {};
+        let profile = getMemoryExpansionState().profile;
+        if (resetOptions.memoryExpansion !== undefined && resetOptions.memoryExpansion !== null) {
+          profile = normalizeMemoryExpansionProfile(resetOptions.memoryExpansion) || profile;
+        }
+
+        // RAM contents are undefined after a real power cycle. The emulator
+        // uses a deterministic blank volatile state so startup is repeatable.
+        machine.ctx.ram.fill(0);
+        machine.ctx.sram.fill(0);
+
+        // Recreate the expansion state itself, rather than only resetting its
+        // control flags. This drops stale 130XE/COMPY/RAMBO bank contents and
+        // the previous CPU/ANTIC window bookkeeping.
+        machine.memoryExpansion = createMemoryExpansionState(profile);
+        applyUltimate1mbMemoryMode(machine.memoryExpansion);
+        delete resetOptions.memoryExpansion;
+        hardReset(resetOptions);
       }
 
       function loadOsRom(arrayBuffer) {
@@ -2161,6 +2190,7 @@
       return {
         setupMemoryMap: setupMemoryMap,
         hardReset: hardReset,
+        powerCycle: powerCycle,
         loadOsRom: loadOsRom,
         loadBasicRom: loadBasicRom,
         loadDiskToDeviceSlot: loadDiskToDeviceSlot,

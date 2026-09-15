@@ -24,6 +24,7 @@
     start: 4000,
     pause: 4000,
     reset: 5000,
+    powerCycle: 5000,
     stepInstruction: 4000,
     stepOver: 4000,
     getDebugState: 4000,
@@ -965,6 +966,7 @@
     let requestSeq = 1;
     const debugListeners = new Set();
     const memoryAccessListeners = new Set();
+    const diskActivityListeners = new Set();
     const diskLibraryProxy = createDiskLibraryProxy(sendRequest);
     let keyboardMappingMode =
       opts && opts.keyboardMappingMode === "original"
@@ -1085,6 +1087,16 @@
           fn(next);
         } catch {
           // ignore listener errors
+        }
+      });
+    }
+
+    function emitDiskActivity(activity) {
+      diskActivityListeners.forEach(function (listener) {
+        try {
+          listener(activity || null);
+        } catch {
+          // UI listeners must not affect worker communication.
         }
       });
     }
@@ -1294,6 +1306,11 @@
         return;
       }
 
+      if (data.type === "diskActivity") {
+        emitDiskActivity(data.activity || null);
+        return;
+      }
+
       if (data.type === "response") {
         const id = data.id | 0;
         const pendingRequest = pendingRequests.get(id) || null;
@@ -1376,6 +1393,14 @@
             normalizeMemoryExpansion(options.memoryExpansion) || state.memoryExpansion;
         }
         return sendRequest("reset", options || null);
+      },
+      powerCycle: function (options) {
+        state.running = true;
+        if (options && typeof options === "object" && options.memoryExpansion !== undefined) {
+          state.memoryExpansion =
+            normalizeMemoryExpansion(options.memoryExpansion) || state.memoryExpansion;
+        }
+        return sendRequest("powerCycle", options || null);
       },
       setTurbo: function (v) {
         state.turbo = !!v;
@@ -1621,6 +1646,13 @@
         return diskLibraryProxy.api;
       },
       diskLibrary: diskLibraryProxy.api,
+      onDiskActivity: function (listener) {
+        if (typeof listener !== "function") return function () {};
+        diskActivityListeners.add(listener);
+        return function () {
+          diskActivityListeners.delete(listener);
+        };
+      },
       hasOsRom: function () {
         return !!state.hasOsRom;
       },
@@ -1697,6 +1729,12 @@
       {app.getVideoStandard = function () { return normalizeVideoStandard(legacyOpts.videoStandard) || "pal"; };}
     if (app && typeof app.getMemoryExpansion !== "function")
       {app.getMemoryExpansion = function () { return normalizeMemoryExpansion(legacyOpts.memoryExpansion) || "none"; };}
+    if (app && typeof app.powerCycle !== "function")
+      {app.powerCycle = function (options) {
+        const result = app.reset(options);
+        if (typeof app.start === "function") app.start();
+        return result;
+      };}
     if (app && typeof app.setBreakpoints !== "function")
       {app.setBreakpoints = function () {};}
     if (app && typeof app.stepInstruction !== "function")

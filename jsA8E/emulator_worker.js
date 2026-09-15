@@ -439,6 +439,18 @@
     });
   }
 
+  function postDiskActivity(activity) {
+    if (!activity || typeof activity !== "object") return;
+    self.postMessage({
+      type: "diskActivity",
+      activity: {
+        imageIndex: activity.imageIndex | 0,
+        deviceSlot: activity.deviceSlot | 0,
+        operation: String(activity.operation || "access"),
+      },
+    });
+  }
+
   function attachHostFsListener() {
     if (hostFsUnsubscribe) {
       hostFsUnsubscribe();
@@ -606,6 +618,7 @@
           const force = !state || state.reason !== "frame";
           queueDebugState(state, force);
         },
+        onDiskActivity: postDiskActivity,
         keyboardMappingMode:
           msg.keyboardMappingMode === "original" ? "original" : "translated",
       });
@@ -628,6 +641,7 @@
           const force = !state || state.reason !== "frame";
           queueDebugState(state, force);
         },
+        onDiskActivity: postDiskActivity,
         keyboardMappingMode:
           msg.keyboardMappingMode === "original" ? "original" : "translated",
       });
@@ -732,6 +746,9 @@
         break;
       case "reset":
         app.reset(data);
+        break;
+      case "powerCycle":
+        if (typeof app.powerCycle === "function") app.powerCycle(data);
         break;
       case "setTurbo":
         app.setTurbo(!!data.value);
@@ -868,6 +885,10 @@
         app.reset(data);
         postState();
         return buildControlAck("reset");
+      case "powerCycle":
+        if (typeof app.powerCycle === "function") app.powerCycle(data);
+        postState();
+        return buildControlAck("powerCycle");
       case "stepInstruction":
         if (typeof app.stepInstructionAsync === "function") {
           return app.stepInstructionAsync();

@@ -458,6 +458,70 @@ button:hover:not(:disabled) {
   justify-content: center;
   overflow: hidden;
   background: transparent;
+  position: relative;
+}
+
+.screenOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.disk-activity {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 3;
+  pointer-events: none;
+  width: 34px;
+  height: 23px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+  background: rgba(9, 18, 32, 0.75);
+  box-shadow: 0 1px 7px rgba(0, 0, 0, 0.55);
+  color: #ffe04b;
+  font: 600 12px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: 0.03em;
+  opacity: 0;
+  transform: translateY(2px);
+}
+
+.disk-activity.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.disk-activity-read {
+  border-color: #ffe04b;
+  color: #ffe04b;
+  background: rgba(255, 210, 48, 0.2);
+}
+
+.disk-activity-write {
+  border-color: #ff9d2e;
+  color: #ff9d2e;
+  background: rgba(255, 132, 28, 0.22);
+}
+
+.disk-activity-pulse-0,
+.disk-activity-pulse-1 {
+  animation: disk-activity-blink 180ms steps(1, end) 4;
+}
+
+@keyframes disk-activity-blink {
+  0%,
+  100% {
+    filter: brightness(0.85);
+    opacity: 0.55;
+  }
+  50% {
+    filter: brightness(1.65);
+    opacity: 1;
+  }
 }
 
 .screenViewport.drag-over {

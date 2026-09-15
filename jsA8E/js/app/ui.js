@@ -1627,7 +1627,7 @@
     });
 
     btnReset.addEventListener("click", function () {
-      app.reset();
+      app.powerCycle();
       updateStatus();
       focusCanvas(false);
     });
@@ -2145,6 +2145,13 @@
         app: app,
         panel: document.getElementById("diskLibraryPanel"),
         button: btnDiskLibrary,
+      });
+    }
+
+    if (window.A8EDiskActivityUI && app) {
+      window.A8EDiskActivityUI.init({
+        app: app,
+        element: document.getElementById("diskActivity"),
       });
     }
 
