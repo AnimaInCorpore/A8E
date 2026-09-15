@@ -410,15 +410,6 @@
     if (raw.pokey && typeof raw.pokey === "object") {
       out.pokey = Object.assign({}, raw.pokey);
     }
-    if (raw.nmiDiagnostics && typeof raw.nmiDiagnostics === "object") {
-      out.nmiDiagnostics = Object.assign({}, raw.nmiDiagnostics);
-      if (raw.nmiDiagnostics.lastEvent)
-        out.nmiDiagnostics.lastEvent = Object.assign({}, raw.nmiDiagnostics.lastEvent);
-      if (raw.nmiDiagnostics.lastService)
-        out.nmiDiagnostics.lastService = Object.assign({}, raw.nmiDiagnostics.lastService);
-      if (raw.nmiDiagnostics.lastRequest)
-        out.nmiDiagnostics.lastRequest = Object.assign({}, raw.nmiDiagnostics.lastRequest);
-    }
     if (raw.faultType) out.faultType = String(raw.faultType);
     if (raw.faultMessage) out.faultMessage = String(raw.faultMessage);
     return out;

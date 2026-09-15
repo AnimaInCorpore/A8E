@@ -25,9 +25,6 @@
         timer1Cycle: CYCLE_NEVER,
         timer2Cycle: CYCLE_NEVER,
         timer4Cycle: CYCLE_NEVER,
-        // Diagnostic counters for POKEY timer-4 IRQ investigation.
-        pokeyTimer4IrqCount: 0,
-        pokeyTimer4LastIrqCycle: CYCLE_NEVER,
         // PIA data-direction registers and port B output latch. PIA reset
         // leaves both DDRs at zero; external pull-ups determine PORTB's
         // effective MMU value until the OS enables its outputs.
@@ -48,12 +45,6 @@
         sioInSize: 0,
         // Read-sector ACK is followed by a separate Complete/data phase.
         sioPendingReadSize: 0,
-        // Bounded SIO trace for external diagnostics; it does not affect SIO.
-        sioDiagnostics: {
-          eventCount: 0,
-          events: [],
-          limit: 512,
-        },
         // POKEY-ish randomness state (LFSR)
         pokeyLfsr17: 0x1ffff,
         pokeyLfsr17LastCycle: 0,
@@ -85,26 +76,6 @@
           enabledByCycle7: 0,
           enabledByCycle8: 0,
           enabledOnCycle7Mask: 0,
-        },
-        // Non-invasive ANTIC/CPU NMI diagnostics for timing investigations.
-        nmiDiagnostics: {
-          dliScheduled: 0,
-          dliLatched: 0,
-          dliSuppressed: 0,
-          vbiScheduled: 0,
-          vbiLatched: 0,
-          vbiSuppressed: 0,
-          nmiRequested: 0,
-          nmiCoalesced: 0,
-          nmiCoalescedDli: 0,
-          nmiCoalescedVbi: 0,
-          nmiCoalescedOther: 0,
-          nmiServiced: 0,
-          nmiRtiCount: 0,
-          nmiRtsWhileActive: 0,
-          lastRequest: null,
-          lastEvent: null,
-          lastService: null,
         },
         chbaseTiming: {
           rawValue: 0,

@@ -734,41 +734,9 @@
         skctl: ctx.sram[IO_SKCTL_SKSTAT] & 0xff,
         timer4PeriodCpuCycles: pokeyTimerPeriodCpuCycles(ctx, 4) >>> 0,
         timer4Cycle: io.timer4Cycle,
-        timer4IrqCount: io.pokeyTimer4IrqCount >>> 0,
-        timer4LastIrqCycle: io.pokeyTimer4LastIrqCycle,
         cpuIrqPending: ctx.irqPending | 0,
         cpuInterruptMask: CPU.getPs(ctx) & 0x04 ? 1 : 0,
       };
-      if (!ctx.ioData.nmiDiagnostics) {
-        ctx.ioData.nmiDiagnostics = {
-          dliScheduled: 0,
-          dliLatched: 0,
-          dliSuppressed: 0,
-          vbiScheduled: 0,
-          vbiLatched: 0,
-          vbiSuppressed: 0,
-          nmiRequested: 0,
-          nmiCoalesced: 0,
-          nmiCoalescedDli: 0,
-          nmiCoalescedVbi: 0,
-          nmiCoalescedOther: 0,
-          nmiServiced: 0,
-          nmiRtiCount: 0,
-          nmiRtsWhileActive: 0,
-          lastRequest: null,
-          lastEvent: null,
-          lastService: null,
-        };
-      }
-      state.nmiDiagnostics = ctx.ioData.nmiDiagnostics;
-      state.nmiDiagnostics.cpuNmiPending = ctx.nmiPending | 0;
-      state.nmiDiagnostics.cpuNmiActive = ctx.nmiActive | 0;
-      if (io.sioDiagnostics) {
-        state.sioDiagnostics = {
-          eventCount: io.sioDiagnostics.eventCount >>> 0,
-          events: io.sioDiagnostics.events.slice(),
-        };
-      }
       return state;
     }
 

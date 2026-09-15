@@ -222,24 +222,6 @@
   function nmi(ctx) {
     // NMI is edge-driven; keep one pending request instead of re-entering
     // immediately from nested timed events.
-    const diagnostics = ctx.ioData && ctx.ioData.nmiDiagnostics;
-    if (diagnostics) {
-      const nmist = ctx.ram[0xd40f] & 0xff;
-      const source = (nmist & 0x80) !== 0 ? "dli" : ((nmist & 0x40) !== 0 ? "vbi" : "other");
-      diagnostics.nmiRequested = (diagnostics.nmiRequested | 0) + 1;
-      diagnostics.lastRequest = {
-        source: source,
-        cycle: ctx.cycleCounter >>> 0,
-        line: ctx.ioData.video.currentDisplayLine | 0,
-        lineCycle: ((ctx.ioData.clock - ctx.ioData.displayListFetchCycle) | 0),
-        nmist: nmist,
-      };
-      if (ctx.nmiPending) {
-        diagnostics.nmiCoalesced = (diagnostics.nmiCoalesced | 0) + 1;
-        const key = "nmiCoalesced" + source.charAt(0).toUpperCase() + source.slice(1);
-        diagnostics[key] = (diagnostics[key] | 0) + 1;
-      }
-    }
     ctx.nmiPending = 1;
   }
   function servicePendingNmi(ctx) {
@@ -250,15 +232,6 @@
     if (!ctx.nmiPending) return;
     ctx.nmiPending = 0;
     ctx.nmiActive = 1;
-    const diagnostics = ctx.ioData && ctx.ioData.nmiDiagnostics;
-    if (diagnostics) {
-      diagnostics.nmiServiced = (diagnostics.nmiServiced | 0) + 1;
-      diagnostics.lastService = {
-        cycle: ctx.cycleCounter >>> 0,
-        line: ctx.ioData.video.currentDisplayLine | 0,
-        pc: ctx.cpu.pc & 0xffff,
-      };
-    }
     serviceInterrupt(ctx, 0xfffa, 0, ctx.cpu.pc);
     ctx.cycleCounter += 7;
   }
@@ -282,26 +255,6 @@
     ctx.irqPending = 0;
     ctx.nmiPending = 0;
     ctx.nmiActive = 0;
-    const diagnostics = ctx.ioData && ctx.ioData.nmiDiagnostics;
-    if (diagnostics) {
-      diagnostics.dliScheduled = 0;
-      diagnostics.dliLatched = 0;
-      diagnostics.dliSuppressed = 0;
-      diagnostics.vbiScheduled = 0;
-      diagnostics.vbiLatched = 0;
-      diagnostics.vbiSuppressed = 0;
-      diagnostics.nmiRequested = 0;
-      diagnostics.nmiCoalesced = 0;
-      diagnostics.nmiCoalescedDli = 0;
-      diagnostics.nmiCoalescedVbi = 0;
-      diagnostics.nmiCoalescedOther = 0;
-      diagnostics.nmiServiced = 0;
-      diagnostics.nmiRtiCount = 0;
-      diagnostics.nmiRtsWhileActive = 0;
-      diagnostics.lastRequest = null;
-      diagnostics.lastEvent = null;
-      diagnostics.lastService = null;
-    }
     cpu.pc = ctx.ram[0xfffc] | (ctx.ram[0xfffd] << 8);
     ctx.cycleCounter += 7;
   }
@@ -791,9 +744,6 @@
   }
   function opRTI(ctx) {
     const cpu = ctx.cpu;
-    if (ctx.nmiActive && ctx.ioData && ctx.ioData.nmiDiagnostics)
-      ctx.ioData.nmiDiagnostics.nmiRtiCount =
-        (ctx.ioData.nmiDiagnostics.nmiRtiCount | 0) + 1;
     cpu.sp = (cpu.sp + 1) & 0xff;
     setPs(ctx, ctx.ram[0x100 + cpu.sp]);
     cpu.sp = (cpu.sp + 1) & 0xff;
@@ -807,9 +757,6 @@
   }
   function opRTS(ctx) {
     const cpu = ctx.cpu;
-    if (ctx.nmiActive && ctx.ioData && ctx.ioData.nmiDiagnostics)
-      ctx.ioData.nmiDiagnostics.nmiRtsWhileActive =
-        (ctx.ioData.nmiDiagnostics.nmiRtsWhileActive | 0) + 1;
     cpu.sp = (cpu.sp + 1) & 0xff;
     cpu.pc = ctx.ram[0x100 + cpu.sp] & 0xff;
     cpu.sp = (cpu.sp + 1) & 0xff;

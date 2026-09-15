@@ -58,7 +58,6 @@ function makeContext(observer, activityObserver) {
     serialOutputNeedDataCycle: 0,
     serialOutputTransmissionDoneCycle: 0,
     serialInputDataReadyCycle: 0,
-    sioDiagnostics: { eventCount: 0, events: [] },
     deviceSlots: new Int16Array([3, -1, -1, -1, -1, -1, -1, -1]),
     diskImages: [{ bytes: new Uint8Array(1) }, { bytes: new Uint8Array(1) }, { bytes: new Uint8Array(1) }, { bytes: bytes, size: bytes.length }],
     diskMediaChangeObserver: observer,

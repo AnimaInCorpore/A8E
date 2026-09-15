@@ -4,6 +4,10 @@
 
 Simple implementation notes for this repository.
 
+- 2026-09-15: removed obsolete game-specific investigation scripts, the CDP
+  diagnostic runner, and the unused SIO/NMI/POKEY diagnostic counters. The
+  reusable automation debugger and regression tests remain available.
+
 - 2026-09-15: `jsA8E/js/core/atari.js`: registered the worker-provided disk
   activity bridge with the app's disk observer fan-out. This restores disk
   activity notifications in the worker backend while keeping them outside the
@@ -184,22 +188,6 @@ Process rule: review this file before planning any improvement, and update it af
 Maintenance rule: temporary diagnostics and single-purpose test routines must be removed after the related bug is confirmed, unless they are generalized into reusable regression tests. Avoid accumulating one-off test hooks in the emulator.
 
 Keep reusable inspection points: the public `A8EAutomation` connection and general-purpose memory, CPU, state, trace, disassembly, breakpoint, and input controls may remain available for future investigations. Remove only game-specific wrappers, probes, counters, and cache-busters once their investigation is complete.
-
-- 2026-09-10: `jsA8E/js/core/{state,pokey_sio,atari,app_proxy}.js`, `jsA8E/emulator_worker.js`: added a bounded, non-invasive SIO event trace to identify disk-loader stalls. It records command/sector requests, queued responses, and SERIN reads without changing SIO timing or data behavior; remove it after the investigation unless generalized for future diagnostics.
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: extended the temporary Animal Party SIO capture to include loader variables, POKEY serial registers, and disassembly in the same run, avoiding unreliable post-reload inspection.
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: included the NMI/IRQ vectors and handler disassembly in the Animal Party capture to identify the source of the loader's `$A527` wait flag.
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: reduced the Animal Party capture output to the final SIO events while retaining the full CPU/vector diagnostics.
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: compacted disassembly in the Animal Party capture so the NMI/IRQ handler flow remains visible without truncating the result.
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: added timed post-button samples of the Animal Party loader flag and POKEY status to distinguish a transient load phase from a stable wait loop.
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: added an optional pre-button screenshot mode so the automated test can verify it reaches the presentation screen before sending joystick input.
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: made pre-button screenshot mode wait 30 seconds; the earlier 12-second capture was still a black loading state and could not validate the intended button transition.
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: corrected the button-phase capture to use Worker-backed state and include post-button SIO events; the prior reproduction now confirms the presentation wait state at `$9088` and a return to the boot loop after the pulse.
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: compacted button-phase samples to avoid duplicating full SIO state in every timed CPU sample.
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: added a memory window around `$8180` to compare the post-button sector-126 load with the ATR payload.
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: added a compact pre-buffer capture for the Animal Party DCB and candidate load windows, without changing machine state.
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: corrected the candidate load window from `$8180` to `$8100`, matching the DCB buffer low/high bytes (`$8101`).
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: added the actual post-button DCB buffer (`$0881`) to the temporary Animal Party inspection, after decoding the DCB fields correctly; this remains diagnostic-only.
-- 2026-09-10: `jsA8E/tests/cdp_diagnostic.js`: extended the post-button capture with `$0881` and `$02FC`, the buffer and completion flag used by the ATR boot loader.
 - 2026-09-10: `jsA8E/js/core/{state,memory,io,pokey_sio}.js`: separated disk READ responses into the Acknowledgment and Complete/data phases described by AHRM SIO, preserving the pending phase through snapshots; this is the first Animal Party compatibility experiment and remains under verification.
 - 2026-09-10: `A8E/Pokey.c`, `jsA8E/js/core/pokey_sio.js`: added generic AHRM handling for disk `$3F` high-speed index queries and silent routing for absent Type 1/3/4 peripherals. Disk IDs use the high-speed query; non-disk devices do not receive fabricated responses.
 

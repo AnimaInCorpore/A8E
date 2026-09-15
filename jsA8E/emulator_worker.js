@@ -193,26 +193,6 @@
     if (typeof raw.opcode === "number") out.opcode = (raw.opcode | 0) & 0xff;
     if (raw.faultType) out.faultType = String(raw.faultType);
     if (raw.faultMessage) out.faultMessage = String(raw.faultMessage);
-    if (raw.nmiDiagnostics && typeof raw.nmiDiagnostics === "object") {
-      out.nmiDiagnostics = Object.assign({}, raw.nmiDiagnostics);
-      if (raw.nmiDiagnostics.lastEvent)
-        out.nmiDiagnostics.lastEvent = Object.assign({}, raw.nmiDiagnostics.lastEvent);
-      if (raw.nmiDiagnostics.lastService)
-        out.nmiDiagnostics.lastService = Object.assign({}, raw.nmiDiagnostics.lastService);
-      if (raw.nmiDiagnostics.lastRequest)
-        out.nmiDiagnostics.lastRequest = Object.assign({}, raw.nmiDiagnostics.lastRequest);
-    }
-    if (raw.sioDiagnostics && typeof raw.sioDiagnostics === "object") {
-      out.sioDiagnostics = {
-        eventCount: raw.sioDiagnostics.eventCount >>> 0,
-        limit: raw.sioDiagnostics.limit | 0,
-        events: Array.isArray(raw.sioDiagnostics.events)
-          ? raw.sioDiagnostics.events.map(function (event) {
-              return Object.assign({}, event);
-            })
-          : [],
-      };
-    }
     return out;
   }
 
