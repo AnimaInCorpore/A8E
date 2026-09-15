@@ -1,6 +1,6 @@
 # POKEY
 
-> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL/NTSC hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
 
 - Files: `A8E/Pokey.c`, `A8E/Pokey.h`
 - Purpose: provide sound generation, timers, keyboard, and serial timing.

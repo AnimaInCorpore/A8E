@@ -1,6 +1,6 @@
 # Color-Clock Accuracy
 
-> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL/NTSC hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
 
 This document tracks signoff status for `A8E/AtariIo.c` and `jsA8E/js/core/`
 against the AHRM-specified scanline timing model. The implementation pass is
@@ -16,7 +16,7 @@ between the legacy code and the AHRM is resolved in favor of the AHRM.
 The key AHRM sections that govern color-clock accuracy are:
 
 - [4.2 Display timing](../AHRM/4.%20ANTIC/2.%20Display%20timing.md) — 114
-  machine cycles per scanline, PAL 312-line / 49.86 Hz frame.
+  machine cycles per scanline; PAL uses a 312-line / 49.86 Hz frame and NTSC uses a 262-line / 59.94 Hz frame.
 - [4.14 Scan line timing](../AHRM/4.%20ANTIC/14.%20Scan%20line%20timing.md) —
   per-cycle DMA steal positions (refresh, display list, playfield, P/M),
   virtual DMA, and the event timing chart.

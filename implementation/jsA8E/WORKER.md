@@ -1,6 +1,6 @@
 # Worker Boundary
 
-> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL/NTSC hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
 
 - Files: `jsA8E/emulator_worker.js`, `jsA8E/js/core/app_proxy.js`
 - Purpose: run emulation away from the main thread and exchange events/data with UI/audio.

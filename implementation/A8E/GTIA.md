@@ -1,6 +1,6 @@
 # GTIA
 
-> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL/NTSC hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
 
 - Files: `A8E/Gtia.c`, `A8E/Gtia.h`, `A8E/AtariIo.c`
 - Purpose: render player/missile behavior and resolve priorities/collisions.

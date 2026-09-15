@@ -4,7 +4,7 @@ XL/XE `TRIG3` is the external cartridge RD5 sense line and defaults low when
 no cartridge maps `$A000-$BFFF`; internal BASIC does not affect it. This
 default comes from the native hardware register table and follows AHRM 2.8.
 
-> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL/NTSC hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
 
 - Files: `A8E/Pia.c`, `A8E/Pia.h`
 - Purpose: manage port control and ROM/bank switching control paths.

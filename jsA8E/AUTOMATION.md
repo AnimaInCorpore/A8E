@@ -1,6 +1,6 @@
 # jsA8E Automation API
 
-> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL/NTSC hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
 
 Public automation reference for jsA8E.
 
@@ -54,7 +54,7 @@ Many methods accept duration arguments (`ms`, `holdMs`, `afterMs`, `interKeyDela
 | `1000` or `"1000"` or `"1000cycles"` | 1000 CPU cycles |
 | `"10ms"` | 10 milliseconds of emulated time |
 | `"2s"` | 2 seconds of emulated time |
-| `"3frames"` | 3 PAL frames |
+| `"3frames"` | 3 frames at the selected video standard |
 
 **Millisecond-based durations** (`holdMs`, `afterMs`, `interKeyDelayMs`, `ms` in `waitForTime`):
 
@@ -105,7 +105,7 @@ The browser bootstrap also exposes the selected video standard through `window.A
 | `dispose()` | Disposes the app and detaches the automation facade. |
 | `waitForPause(options)` | Waits for a pause event. Supports `reason`, `timeoutMs`, and `immediate`. |
 | `waitForTime(msOrOptions)` | Waits by real or emulated time. Pass a bare number/string (`500`, `"500ms"`, `"2s"`) or `{ ms, clock, timeoutMs }`. Use `clock: "emulated"` for emulated-time waits; default is `"real"`. Real-time waits are the safer choice when `turbo` is enabled or the CPU may be in a tight loop. |
-| `waitForFrames(countOrOptions)` | Waits for N PAL frames using cycle-counter progress. Pass a bare frame count or `{ count, timeoutMs }`. |
+| `waitForFrames(countOrOptions)` | Waits for N frames at the selected video standard using cycle-counter progress. Pass a bare frame count or `{ count, timeoutMs }`. |
 | `waitForCycles(countOrOptions)` | Waits for N emulated CPU cycles. Pass a bare number, a unit string (`"10ms"`, `"3frames"`), or `{ count, timeoutMs }`. |
 | `getSystemState(options)` | Same as the root method. |
 

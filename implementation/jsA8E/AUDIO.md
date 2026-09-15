@@ -1,6 +1,6 @@
 # Audio
 
-> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL/NTSC hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
 
 - Files: `jsA8E/js/audio/runtime.js`, `jsA8E/js/audio/worklet.js`
 - Purpose: output low-latency emulator audio in the browser.

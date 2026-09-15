@@ -1,6 +1,6 @@
 # Automation / Public Machine API
 
-> Hardware emulation reference: Before implementing any Atari 800 XL PAL machine related hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
+> Hardware emulation reference: Before implementing any Atari 800 XL PAL/NTSC hardware emulation, use the [AHRM](/AHRM/index.md) as reference.
 
 - Files: `jsA8E/js/app/automation_api.js`, `jsA8E/js/app/automation/utils.js`, `jsA8E/js/app/ui.js`, `jsA8E/js/core/app_proxy.js`, `jsA8E/emulator_worker.js`, `jsA8E/js/core/atari.js`, `jsA8E/js/core/debugger.js`, `jsA8E/js/core/memory.js`, `jsA8E/js/core/input.js`, `jsA8E/js/core/hostfs.js`, `jsA8E/js/core/assembler_core.js`, `jsA8E/js/core/snapshot_codec.js`, `jsA8E/headless.js`, `jsA8E/mcp_server.js`, `jsA8E/tests/mcp_server.test.js`, `jsA8E/package.json`
 - Purpose: provide the stable shared control surface for jsA8E so UI code, in-browser tools, external automation, MCP clients, and browser-less harnesses all drive the same machine API, with headless Node bootstrap as the preferred path for non-interactive agent/CI automation and the MCP bridge as the Codex-style adapter layer.
