@@ -227,6 +227,7 @@ body {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -296,6 +297,41 @@ body {
 
 .iconControlsPrimary {
   gap: 6px;
+}
+
+.layoutSchemeControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(8, 12, 20, 0.55);
+  flex-shrink: 0;
+}
+
+.layoutSchemeBtn {
+  width: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+.layoutSchemeBtn:hover:not(:disabled),
+.layoutSchemeBtn:focus-visible {
+  color: var(--text);
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.layoutSchemeBtn.active {
+  color: var(--text);
+  border-color: rgba(92, 200, 255, 0.55);
+  background: rgba(92, 200, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(92, 200, 255, 0.08);
 }
 
 .toolbarCollapseBtn {
@@ -431,8 +467,13 @@ button:hover:not(:disabled) {
 }
 
 .layout {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "screen"
+    "input"
+    "tools";
+  align-content: start;
   padding: 14px;
   flex: 1 1 0;
   min-height: 0;
@@ -440,13 +481,79 @@ button:hover:not(:disabled) {
   gap: 10px;
 }
 
+.layout[data-layout-scheme="work"],
+.layout[data-layout-scheme="development"] {
+  grid-template-columns: minmax(240px, 0.38fr) minmax(0, 1fr);
+  grid-template-areas:
+    "tools screen"
+    "input input";
+  align-items: start;
+}
+
 .screenPanel {
+  grid-area: screen;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
   width: 100%;
+}
+
+.inputPanelRow {
+  grid-area: input;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.34fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.inputPanelRow > #keyboardPanel {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.inputPanelRow > #joystickPanel {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.layoutTools {
+  grid-area: tools;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.layoutTools > .disklibPanel,
+.layoutTools > .hostfsPanel,
+.layoutTools > .assemblerPanel,
+.layoutTools > .snapshotPanel {
+  width: 100%;
+  max-width: none;
+  margin-top: 0;
+  align-self: stretch;
+}
+
+.layout[data-layout-scheme="development"] .assemblerPanel {
+  height: clamp(280px, 46vh, 620px);
+  min-height: 280px;
+  max-height: 70vh;
+}
+
+.layout[data-layout-scheme="development"] .layoutTools > #assemblerPanel {
+  order: 1;
+}
+
+.layout[data-layout-scheme="development"] .layoutTools > #hostfsPanel {
+  order: 2;
+}
+
+.layout[data-layout-scheme="development"] .layoutTools > #diskLibraryPanel {
+  order: 3;
 }
 
 .screenViewport {
@@ -1619,8 +1726,30 @@ canvas.crtEnabled {
     overflow: auto;
   }
   .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "screen"
+      "input"
+      "tools";
     flex: none;
     overflow-y: auto;
+  }
+  .inputPanelRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .inputPanelRow > #keyboardPanel,
+  .inputPanelRow > #joystickPanel {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .inputPanelRow > #keyboardPanel {
+    order: 1;
+  }
+  .inputPanelRow > #joystickPanel {
+    order: 2;
+  }
+  .layoutTools {
+    width: 100%;
   }
   .keyboardPanel {
     width: 100%;
@@ -1648,6 +1777,10 @@ canvas.crtEnabled {
 }
 
 @media (max-width: 600px) {
+  .layoutSchemeControls {
+    margin-left: auto;
+  }
+
   .fileBtnPrimary {
     flex: 1 1 100%;
   }

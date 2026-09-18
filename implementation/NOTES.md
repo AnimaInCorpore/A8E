@@ -4,6 +4,22 @@
 
 Simple implementation notes for this repository.
 
+- 2026-09-18: `jsA8E/{index.html,style.css,js/app/ui.js}`: added the first
+  extensible presentation-layout presets. `Emulation`, `Work`, and
+  `Development` are selectable beside the lifecycle controls, persist through
+  `localStorage`, and rearrange the existing screen, keyboard, joystick,
+  HostFS, Disk Library, and assembler/debugger panels without resetting the
+  emulator. The disk activity overlay remains anchored to the screen viewport.
+- 2026-09-18: `jsA8E/js/app/ui.js`: in the desktop `Work` layout, the canvas no
+  longer reserves vertical space for the joystick because that control is in
+  the row below the screen. Mobile layouts keep the reservation while panels
+  are stacked.
+- 2026-09-18: `jsA8E/{index.html,style.css}`: layout selectors are now compact
+  icon-only buttons positioned immediately before the secondary-tools expand
+  button, with labels retained through tooltip and ARIA text.
+- 2026-09-18: `jsA8E/{index.html,js/app/ui.js}`: `Work` is now the default
+  layout when no saved presentation preference exists.
+
 - 2026-09-15: removed obsolete game-specific investigation scripts, the CDP
   diagnostic runner, and the unused SIO/NMI/POKEY diagnostic counters. The
   reusable automation debugger and regression tests remain available.

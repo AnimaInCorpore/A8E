@@ -163,6 +163,56 @@
     return normalized;
   }
 
+  const LAYOUT_SCHEME_STORAGE_KEY = "a8e_layout_scheme";
+  const LAYOUT_SCHEMES = Object.freeze({
+    emulation: { label: "Emulation", panels: [], joystick: true },
+    work: {
+      label: "Work",
+      panels: ["diskLibraryPanel", "hostfsPanel"],
+      joystick: true,
+    },
+    development: {
+      label: "Development",
+      panels: ["assemblerPanel", "hostfsPanel", "diskLibraryPanel"],
+      joystick: false,
+    },
+  });
+
+  function normalizeLayoutScheme(value) {
+    const text = String(value === undefined || value === null ? "" : value)
+      .trim()
+      .toLowerCase();
+    return Object.prototype.hasOwnProperty.call(LAYOUT_SCHEMES, text)
+      ? text
+      : null;
+  }
+
+  function resolveLayoutSchemePreference() {
+    try {
+      if (window.localStorage) {
+        const stored = normalizeLayoutScheme(
+          window.localStorage.getItem(LAYOUT_SCHEME_STORAGE_KEY),
+        );
+        if (stored) return stored;
+      }
+    } catch {
+      // ignore storage failures
+    }
+    return "work";
+  }
+
+  function persistLayoutSchemePreference(value) {
+    const normalized = normalizeLayoutScheme(value) || "work";
+    try {
+      if (window.localStorage) {
+        window.localStorage.setItem(LAYOUT_SCHEME_STORAGE_KEY, normalized);
+      }
+    } catch {
+      // ignore storage failures
+    }
+    return normalized;
+  }
+
   function resolveWorkerPreference() {
     const boot =
       window.A8E_BOOT_OPTIONS && typeof window.A8E_BOOT_OPTIONS === "object"
@@ -216,6 +266,9 @@
     );
     const memoryExpansionPreference = persistMemoryExpansionPreference(
       resolveMemoryExpansionPreference(),
+    );
+    const layoutSchemePreference = persistLayoutSchemePreference(
+      resolveLayoutSchemePreference(),
     );
     let screenViewport = canvas.parentElement;
     let layoutRoot =
@@ -313,8 +366,10 @@
       let cssW = maxW;
       let cssH = Math.round(cssW / aspect);
 
-      // In normal page layout, fit into both width and visible height while
-      // reserving space only for joystick. Keyboard may be below visible area.
+        // In normal page layout, fit into both width and visible height while
+        // reserving space only for a joystick that shares the screen column.
+        // Work places the joystick in the row below the screen on desktop, so
+        // its height must not reduce the screen's available height there.
       // In fullscreen, fit only inside fullscreen viewport bounds.
       if (isViewportFullscreen()) {
         const vv = window.visualViewport;
@@ -343,7 +398,14 @@
             : window.innerHeight;
           availableNormalH = Math.floor(visibleBottomNormal - rect.top - 8);
         }
-        availableNormalH -= reservedPanelHeight(joystickPanel);
+        const isWideWorkLayout =
+          layoutRoot &&
+          layoutRoot.dataset.layoutScheme === "work" &&
+          (typeof window.matchMedia !== "function" ||
+            !window.matchMedia("(max-width: 980px)").matches);
+        if (!isWideWorkLayout) {
+          availableNormalH -= reservedPanelHeight(joystickPanel);
+        }
         const normalMaxH = Math.max(
           1,
           availableNormalH || Math.floor(rect.height || nativeScreenH),
@@ -503,6 +565,9 @@
     const btnSnapshots = document.getElementById("btnSnapshots");
     const videoStandardSelect = document.getElementById("videoStandardSelect");
     const memoryExpansionSelect = document.getElementById("memoryExpansionSelect");
+    const layoutSchemeButtons = Array.from(
+      document.querySelectorAll("[data-layout-scheme]"),
+    );
     const secondaryControls = document.getElementById("secondaryControls");
 
     function getKeyboardMappingModeFromUi() {
@@ -530,6 +595,51 @@
           : memoryExpansionPreference,
       ) || "none";
       if (memoryExpansionSelect.value !== next) memoryExpansionSelect.value = next;
+    }
+
+    function updateLayoutSchemeButtons(value) {
+      layoutSchemeButtons.forEach(function (button) {
+        const active = button.getAttribute("data-layout-scheme") === value;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+    }
+
+    function setPresetPanel(panel, button, visible) {
+      if (!panel) return;
+      panel.hidden = !visible;
+      if (button) button.classList.toggle("active", !!visible);
+    }
+
+    function applyLayoutScheme(value) {
+      const normalized = normalizeLayoutScheme(value) || "work";
+      const scheme = LAYOUT_SCHEMES[normalized];
+      const visiblePanels = new Set(scheme.panels || []);
+      if (layoutRoot) layoutRoot.dataset.layoutScheme = normalized;
+      updateLayoutSchemeButtons(normalized);
+
+      // The assembler panel contains the source debugger, breakpoints, and
+      // step controls, so it is the Development preset's debugger column.
+      const presetPanels = [
+        ["diskLibraryPanel", btnDiskLibrary],
+        ["hostfsPanel", btnHostFs],
+        ["assemblerPanel", btnAssembler],
+      ];
+      presetPanels.forEach(function ([panelId, button]) {
+        setPresetPanel(
+          document.getElementById(panelId),
+          button,
+          visiblePanels.has(panelId),
+        );
+      });
+      setPresetPanel(document.getElementById("snapshotPanel"), btnSnapshots, false);
+
+      if (btnKeyboard && keyboardPanel) setKeyboardEnabled(true);
+      if (btnJoystick && joystickPanel) {
+        setJoystickEnabled(scheme.joystick !== false);
+      }
+      resizeCrtCanvas();
+      queueKeyboardScaleConsistencyCheck();
     }
 
     const romOs = document.getElementById("romOs");
@@ -762,6 +872,15 @@
         }
       });
     }
+
+    layoutSchemeButtons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        const next = persistLayoutSchemePreference(
+          button.getAttribute("data-layout-scheme"),
+        );
+        applyLayoutScheme(next);
+      });
+    });
 
     if (
       !useWorkerApp &&
@@ -2192,6 +2311,8 @@
         focusCanvas: focusCanvas,
       });
     }
+
+    applyLayoutScheme(layoutSchemePreference);
   }
 
   window.A8EUI = {

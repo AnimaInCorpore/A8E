@@ -135,6 +135,17 @@
               </button>
             </div>
           </div>
+          <div class="layoutSchemeControls" role="group" aria-label="Presentation layout">
+            <button id="btnLayoutEmulation" class="layoutSchemeBtn" type="button" data-layout-scheme="emulation" aria-pressed="false" title="Use the Emulation layout." aria-label="Use the Emulation layout.">
+              <i class="fa-solid fa-gamepad" aria-hidden="true"></i>
+            </button>
+            <button id="btnLayoutWork" class="layoutSchemeBtn active" type="button" data-layout-scheme="work" aria-pressed="true" title="Use the Work layout." aria-label="Use the Work layout.">
+              <i class="fa-solid fa-briefcase" aria-hidden="true"></i>
+            </button>
+            <button id="btnLayoutDevelopment" class="layoutSchemeBtn" type="button" data-layout-scheme="development" aria-pressed="false" title="Use the Development layout." aria-label="Use the Development layout.">
+              <i class="fa-solid fa-code" aria-hidden="true"></i>
+            </button>
+          </div>
           <button
             id="btnControlsCollapse"
             class="toolbarCollapseBtn"
@@ -234,6 +245,8 @@
             <div id="diskActivity" class="disk-activity" aria-live="polite" aria-atomic="true"></div>
           </div>
         </div>
+      </section>
+      <div id="inputPanelRow" class="inputPanelRow">
         <section id="joystickPanel" class="joystickPanel" hidden aria-label="On-screen joystick controls">
           <div class="joystickPanelInner">
             <div class="cx40" id="joystickArea">
@@ -263,7 +276,6 @@
             </div>
           </div>
         </section>
-      </section>
       <section
         id="keyboardPanel"
         class="keyboardPanel"
@@ -372,6 +384,8 @@
           </div>
         </div>
       </section>
+      </div>
+      <div class="layoutTools" aria-label="Tool panels">
       <section id="diskLibraryPanel" class="disklibPanel" hidden aria-label="Persistent disk image library">
         <div class="disklib-titlebar">
           <i class="fa-solid fa-hard-drive disklib-title-icon"></i>
@@ -577,6 +591,7 @@
           <span class="snapshot-status">Ready.</span>
         </div>
       </section>
+      </div>
     </main>
 
     <script src="js/shared/util.js"></script>
