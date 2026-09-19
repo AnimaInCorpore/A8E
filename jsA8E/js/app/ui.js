@@ -165,11 +165,11 @@
 
   const LAYOUT_SCHEME_STORAGE_KEY = "a8e_layout_scheme";
   const LAYOUT_SCHEMES = Object.freeze({
-    emulation: { label: "Emulation", panels: [], joystick: true },
+    emulation: { label: "Emulation", panels: [], joystick: false },
     work: {
       label: "Work",
       panels: ["diskLibraryPanel", "hostfsPanel"],
-      joystick: true,
+      joystick: false,
     },
     development: {
       label: "Development",
@@ -478,13 +478,6 @@
       onCrtContextRestored = null;
     }
 
-    function isMobile() {
-      return (
-        window.innerWidth <= 980 ||
-        (window.matchMedia && window.matchMedia("(max-width: 980px)").matches)
-      );
-    }
-
     function cleanup() {
       if (didCleanup) return;
       didCleanup = true;
@@ -634,10 +627,8 @@
       });
       setPresetPanel(document.getElementById("snapshotPanel"), btnSnapshots, false);
 
-      if (btnKeyboard && keyboardPanel) setKeyboardEnabled(true);
-      if (btnJoystick && joystickPanel) {
-        setJoystickEnabled(scheme.joystick !== false);
-      }
+      if (btnKeyboard && keyboardPanel) setKeyboardEnabled(false);
+      if (btnJoystick && joystickPanel) setJoystickEnabled(false);
       resizeCrtCanvas();
       queueKeyboardScaleConsistencyCheck();
     }
@@ -2245,9 +2236,7 @@
       setJoystickEnabled(btnJoystick.classList.contains("active"));
     }
     if (btnKeyboard && keyboardPanel) {
-      const keyboardActive = !isMobile();
-      btnKeyboard.classList.toggle("active", keyboardActive);
-      setKeyboardEnabled(keyboardActive);
+      setKeyboardEnabled(false);
     }
 
     // H: device file manager panel

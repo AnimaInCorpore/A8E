@@ -2199,6 +2199,15 @@ canvas.crtEnabled {
   outline: 2px dashed var(--accent);
   outline-offset: -3px;
 }
+.disklib-table-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
 .disklib-cols-header,
 .disklib-row {
   display: grid;
@@ -2212,12 +2221,14 @@ canvas.crtEnabled {
   border-bottom: 1px solid var(--sub-panel-inner-border);
   color: var(--sub-panel-dim);
   font-size: var(--fs-xs);
+  min-width: 580px;
   flex-shrink: 0;
 }
 .disklib-list {
   flex: 1 1 auto;
+  min-width: 580px;
   overflow-y: auto;
-  overflow-x: auto;
+  overflow-x: hidden;
   min-height: 96px;
 }
 .disklib-row {

@@ -1341,7 +1341,7 @@
         audioSampleRate: audioBridge.getSampleRateHint(),
         audioEnabled: !!opts.audioEnabled,
         turbo: !!opts.turbo,
-        sioTurbo: opts.sioTurbo !== false,
+        sioTurbo: opts.sioTurbo === true,
         optionOnStart: !!opts.optionOnStart,
         videoStandard: videoStandard,
         memoryExpansion: state.memoryExpansion,

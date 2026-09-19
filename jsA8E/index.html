@@ -196,7 +196,7 @@
                 <i class="fa-solid fa-forward-fast turbo-badge"></i>
               </span>
             </button>
-            <button id="btnSioTurbo" class="toggle-btn active" title="Toggle SIO turbo mode. This accelerates only SIO disk transfer timing and does not speed up overall CPU execution." aria-label="Toggle SIO turbo mode. This accelerates only SIO disk transfer timing and does not speed up overall CPU execution.">
+            <button id="btnSioTurbo" class="toggle-btn" title="Enable SIO turbo mode. This accelerates only SIO disk transfer timing and does not speed up overall CPU execution." aria-label="Enable SIO turbo mode. This accelerates only SIO disk transfer timing and does not speed up overall CPU execution.">
               <span class="fa-layers fa-fw turbo-stack">
                 <i class="fa-solid fa-floppy-disk"></i>
                 <i class="fa-solid fa-forward-fast turbo-badge"></i>
@@ -208,7 +208,7 @@
                 <i class="fa-solid fa-slash joystick-off-mark"></i>
               </span>
             </button>
-            <button id="btnKeyboard" class="toggle-btn active" title="Hide the on-screen keyboard controls." aria-label="Hide the on-screen keyboard controls.">
+            <button id="btnKeyboard" class="toggle-btn" title="Show the on-screen keyboard controls." aria-label="Show the on-screen keyboard controls.">
               <span class="fa-layers fa-fw keyboard-stack">
                 <i class="fa-solid fa-keyboard"></i>
                 <i class="fa-solid fa-slash keyboard-off-mark"></i>
@@ -415,17 +415,19 @@
           </button>
         </div>
         <div class="disklib-drop-zone">
-          <div class="disklib-cols-header">
-            <span class="disklib-col disklib-col-chk"><input type="checkbox" class="disklib-master-chk" title="Select or deselect all" /></span>
-            <span class="disklib-col disklib-col-name">Name</span>
-            <span class="disklib-col disklib-col-size">Size</span>
-            <span class="disklib-col disklib-col-drive">D1:</span>
-            <span class="disklib-col disklib-col-drive">D2:</span>
-            <span class="disklib-col disklib-col-drive">D3:</span>
-            <span class="disklib-col disklib-col-drive">D4:</span>
-            <span class="disklib-col disklib-col-actions"></span>
+          <div class="disklib-table-scroll">
+            <div class="disklib-cols-header">
+              <span class="disklib-col disklib-col-chk"><input type="checkbox" class="disklib-master-chk" title="Select or deselect all" /></span>
+              <span class="disklib-col disklib-col-name">Name</span>
+              <span class="disklib-col disklib-col-size">Size</span>
+              <span class="disklib-col disklib-col-drive">D1:</span>
+              <span class="disklib-col disklib-col-drive">D2:</span>
+              <span class="disklib-col disklib-col-drive">D3:</span>
+              <span class="disklib-col disklib-col-drive">D4:</span>
+              <span class="disklib-col disklib-col-actions"></span>
+            </div>
+            <div class="disklib-list"></div>
           </div>
-          <div class="disklib-list"></div>
           <div class="disklib-drop-hint"><i class="fa-solid fa-upload"></i> Drop ATR or XEX files here</div>
         </div>
         <div class="disklib-statusbar">

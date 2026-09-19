@@ -7,6 +7,7 @@ node_modules/
 ATARIBAS.ROM
 ATARIXL.ROM
 .cache/
+src-tauri/target/
 *.atr
 *.xex
 !implementation/U1MB_MEMORY_TEST.XEX
