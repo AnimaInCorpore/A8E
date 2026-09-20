@@ -90,6 +90,7 @@
     const statSep     = panel.querySelector(".hostfs-stat-sep");
     const statSel     = panel.querySelector(".hostfs-stat-sel");
     const statTotal   = panel.querySelector(".hostfs-stat-total");
+    const runStatus   = panel.querySelector(".hostfs-run-status");
 
     let sortBy  = "name"; // "name" | "size" | "type"
     let sortAsc = true;
@@ -307,6 +308,51 @@
       }
     }
 
+    function _setRunStatus(message) {
+      if (!runStatus) return;
+      runStatus.textContent = message || "";
+      runStatus.hidden = !message;
+    }
+
+    function _runXex(name, button) {
+      const data = hostFs.readFile(name);
+      if (!data) {
+        _setRunStatus("Unable to read " + name);
+        return;
+      }
+
+      button.disabled = true;
+      button.title = "Loading " + name + "...";
+      _setRunStatus("Loading " + name + "...");
+
+      const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+      Promise.resolve().then(function () {
+        if (typeof app.loadDiskToDeviceSlotDetailed === "function") {
+          return app.loadDiskToDeviceSlotDetailed(buffer, name, 0, null);
+        }
+        return app.loadDiskToDeviceSlot(buffer, name, 0);
+      }).then(function () {
+        const running = typeof app.isRunning === "function" && app.isRunning();
+        if (running && typeof app.reset === "function") {
+          return Promise.resolve(app.reset());
+        }
+        if (!running && typeof app.isReady === "function" && app.isReady() &&
+            typeof app.start === "function") {
+          return Promise.resolve(app.start());
+        }
+        if (!running) throw new Error("Emulator is not ready");
+        return null;
+      }).then(function () {
+        _setRunStatus("Running " + name + " from D1:");
+      }).catch(function (err) {
+        console.error("HostFS XEX run failed:", err);
+        _setRunStatus("Run failed: " + name);
+      }).then(function () {
+        button.disabled = false;
+        button.title = "Run " + name;
+      });
+    }
+
     function _createRow(info) {
       const row = document.createElement("div");
       row.className = "hostfs-row" + (selected.has(info.name) ? " selected" : "");
@@ -384,6 +430,18 @@
       // Actions
       const actCell = document.createElement("span");
       actCell.className = "hostfs-col hostfs-col-actions";
+
+      if (/\.xex$/i.test(info.name)) {
+        const runBtn = document.createElement("button");
+        runBtn.className = "hostfs-action-btn hostfs-action-run";
+        runBtn.title = "Run " + info.name;
+        runBtn.innerHTML = '<i class="fa-solid fa-play"></i>';
+        runBtn.addEventListener("click", function (e) {
+          e.stopPropagation();
+          _runXex(info.name, runBtn);
+        });
+        actCell.appendChild(runBtn);
+      }
 
       const dlBtn   = document.createElement("button");
       dlBtn.className = "hostfs-action-btn";

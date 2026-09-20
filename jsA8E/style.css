@@ -1994,7 +1994,7 @@ canvas.crtEnabled {
   font-size: var(--fs-xs);
 }
 .hostfs-col-actions {
-  width: 52px;
+  width: 74px;
   flex-shrink: 0;
   justify-content: flex-end;
   gap: 2px;
@@ -2062,6 +2062,10 @@ canvas.crtEnabled {
   color: var(--danger);
   background: rgba(200, 64, 48, 0.1);
 }
+.hostfs-action-run:hover:not(:disabled) {
+  color: var(--success, #70e070);
+  background: rgba(112, 224, 112, 0.1);
+}
 .hostfs-action-btn:disabled {
   opacity: 0.25;
   cursor: not-allowed;
@@ -2077,6 +2081,13 @@ canvas.crtEnabled {
   color: var(--sub-panel-dim);
   font-size: var(--fs-xs);
   flex-shrink: 0;
+}
+.hostfs-run-status {
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .hostfs-stat-sel {
   color: var(--accent);

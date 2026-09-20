@@ -456,3 +456,7 @@ The XEX loader's RUNAD check now reads both `$02E0` and `$02E1`. The three-byte 
   enabled, ANTIC now reads the preserved motherboard `$4000-$7FFF` view rather
   than the CPU's live bank; enabling the independent ANTIC window still exposes
   that selected bank. This follows AHRM 2.7 and is covered by a regression.
+- 2026-09-20: `jsA8E/js/app/hostfs_ui.js`: added a row-level Run action for
+  `.XEX` files in HostFS. The action reads the file from H:, loads it into D1:
+  through the existing emulator loader, and resets/starts the machine. This is
+  a direct UI loader path, not an Atari-side CIO command executed through H:.

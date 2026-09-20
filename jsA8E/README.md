@@ -116,6 +116,14 @@ The H: device panel exposes a virtual host filesystem to the emulated Atari.
 - Files are accessible from the Atari via the `H:` device (e.g. `OPEN #1,4,0,"H:FILE.TXT"`).
 - Select files to download them to the browser or delete them.
 - File list supports sorting by name, type, and size.
+- `.XEX` files have a row-level **Run** action that reads the file from H:,
+  loads it into D1:, and starts the emulator. This is a direct emulator action;
+  it does not add an Atari-side CIO command for executing files through H:.
+
+To use it, open the HostFS panel, locate an existing `.XEX`, and click the
+play icon in that file's action column. The status bar reports the load and
+run state. The emulator must have its ROMs loaded and be ready before running
+the file.
 
 ## Assembler
 
