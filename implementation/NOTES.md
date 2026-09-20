@@ -470,3 +470,11 @@ The XEX loader's RUNAD check now reads both `$02E0` and `$02E1`. The three-byte 
   acknowledgements, `stepOverAsync()` validation, object linking, `.SET`
   redefinition, and case-insensitive automation symbol lookup remain follow-up
   items.
+- 2026-09-20: `jsA8E/js/app/ui.js`: identified a pending UI improvement for the
+  top-bar run/pause control. While a worker lifecycle request is in flight, the
+  UI currently disables the control; a future change should coalesce repeated
+  clicks and apply the last requested start/pause state after the worker ACK.
+- 2026-09-20: jsA8E: added a separate application fullscreen control. The
+  existing fullscreen button and F11 continue to maximize only the Atari
+  display; the new workspace button maximizes the complete browser app, keeping
+  the toolbar, screen, Disk Library, HostFS, and other panels visible.

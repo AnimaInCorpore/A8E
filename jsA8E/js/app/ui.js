@@ -545,6 +545,7 @@
     const btnReset = document.getElementById("btnReset");
     const btnControlsCollapse = document.getElementById("btnControlsCollapse");
     const btnFullscreen = document.getElementById("btnFullscreen");
+    const btnAppFullscreen = document.getElementById("btnAppFullscreen");
     const btnTurbo = document.getElementById("btnTurbo");
     const btnSioTurbo = document.getElementById("btnSioTurbo");
     const btnAudio = document.getElementById("btnAudio");
@@ -1050,6 +1051,10 @@
       return getFullscreenElement() === screenViewport;
     }
 
+    function isAppFullscreen() {
+      return getFullscreenElement() === document.documentElement;
+    }
+
     function updateFullscreenButton() {
       if (!btnFullscreen) return;
       const active = isViewportFullscreen();
@@ -1064,6 +1069,23 @@
         active
           ? "Exit fullscreen mode and return to the normal emulator layout."
           : "Enter fullscreen mode for the emulator display area.",
+      );
+    }
+
+    function updateAppFullscreenButton() {
+      if (!btnAppFullscreen) return;
+      const active = isAppFullscreen();
+      btnAppFullscreen.innerHTML = active
+        ? '<i class="fa-solid fa-compress"></i>'
+        : '<i class="fa-solid fa-window-maximize"></i>';
+      btnAppFullscreen.title = active
+        ? "Exit fullscreen mode for the complete emulator workspace."
+        : "Enter fullscreen mode for the complete emulator workspace.";
+      btnAppFullscreen.setAttribute(
+        "aria-label",
+        active
+          ? "Exit fullscreen mode for the complete emulator workspace."
+          : "Enter fullscreen mode for the complete emulator workspace.",
       );
     }
 
@@ -1089,15 +1111,46 @@
     }
 
     function toggleFullscreen() {
-      const op = isViewportFullscreen()
-        ? exitFullscreen()
-        : requestFullscreen(screenViewport);
+      let op;
+      if (isViewportFullscreen()) {
+        op = exitFullscreen();
+      } else if (getFullscreenElement()) {
+        op = exitFullscreen().then(function () {
+          return requestFullscreen(screenViewport);
+        });
+      } else {
+        op = requestFullscreen(screenViewport);
+      }
       Promise.resolve(op)
         .then(function () {
           updateFullscreenButton();
+          updateAppFullscreenButton();
           resizeCrtCanvas();
           queueKeyboardScaleConsistencyCheck();
           focusCanvas(false);
+        })
+        .catch(function () {
+          // Fullscreen error - silently ignore
+        });
+    }
+
+    function toggleAppFullscreen() {
+      let op;
+      if (isAppFullscreen()) {
+        op = exitFullscreen();
+      } else if (getFullscreenElement()) {
+        op = exitFullscreen().then(function () {
+          return requestFullscreen(document.documentElement);
+        });
+      } else {
+        op = requestFullscreen(document.documentElement);
+      }
+      Promise.resolve(op)
+        .then(function () {
+          updateFullscreenButton();
+          updateAppFullscreenButton();
+          resizeCrtCanvas();
+          queueKeyboardScaleConsistencyCheck();
         })
         .catch(function () {
           // Fullscreen error - silently ignore
@@ -1754,8 +1807,15 @@
       });
     }
 
+    if (btnAppFullscreen) {
+      btnAppFullscreen.addEventListener("click", function () {
+        toggleAppFullscreen();
+      });
+    }
+
     onFullscreenChange = function () {
       updateFullscreenButton();
+      updateAppFullscreenButton();
       resizeCrtCanvas();
       queueKeyboardScaleConsistencyCheck();
       if (isViewportFullscreen()) showFullscreenHint();

@@ -659,6 +659,27 @@ button:hover:not(:disabled) {
   padding: 0;
 }
 
+html:fullscreen {
+  background: var(--bg);
+}
+html:-webkit-full-screen {
+  background: var(--bg);
+}
+html:fullscreen body {
+  min-height: 100vh;
+  overflow: auto;
+}
+html:-webkit-full-screen body {
+  min-height: 100vh;
+  overflow: auto;
+}
+html:fullscreen .layout {
+  min-height: 100vh;
+}
+html:-webkit-full-screen .layout {
+  min-height: 100vh;
+}
+
 .keyboardPanel {
   width: min(100%, 1083px);
   border: 0;
