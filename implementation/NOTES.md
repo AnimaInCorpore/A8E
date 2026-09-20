@@ -474,6 +474,11 @@ The XEX loader's RUNAD check now reads both `$02E0` and `$02E1`. The three-byte 
   top-bar run/pause control. While a worker lifecycle request is in flight, the
   UI currently disables the control; a future change should coalesce repeated
   clicks and apply the last requested start/pause state after the worker ACK.
+  This is now implemented as a GUI-only promise queue; the worker and emulator
+  lifecycle behavior remain unchanged. While pending, the run/pause button
+  shows a spinner and an explicit busy style so the disabled state is visible.
+  If Start is still pending, the first Pause click is accepted as one queued
+  intent and subsequent clicks are blocked until that intent is confirmed.
 - 2026-09-20: jsA8E: added a separate application fullscreen control. The
   existing fullscreen button and F11 continue to maximize only the Atari
   display; the new workspace button maximizes the complete browser app, keeping

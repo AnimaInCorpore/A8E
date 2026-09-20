@@ -42,3 +42,13 @@ The broader compiler/debugger review and its follow-up findings are recorded in
 - Todo: keep UI behavior notes current after control or layout changes; keep browser-facing automation examples aligned with the grouped `window.A8EAutomation` surface when the UI adds new development features. `updateStatus()` now reconciles config toggle states (turbo, SIO turbo, audio, option on start, keyboard mapping) with the app's live getters so snapshot restore or any other internal config change keeps the toolbar in sync. Improve run/pause transition handling by coalescing clicks while a worker lifecycle request is in flight and executing the final requested state after the worker acknowledges the current request, instead of making the toolbar appear unresponsive while it is busy.
 
 - 2026-08-17: historical checkpoint. Confirmed the browser UI was stable for general use: PAL/NTSC selection worked through boot, `peek(53268)` differentiated PAL and NTSC, and the browser palette was split by video standard. The later memory-expansion verification is recorded in `implementation/memory_tests.md` and the current `jsA8E` README.
+### Run/Pause Request Handling
+
+The top-bar run/pause control serializes lifecycle requests in the GUI. While
+the worker confirms a request, the button shows a busy spinner and blocks
+duplicate clicks. If Start is still pending, the first Pause click is retained
+as one queued GUI intent and submitted after Start completes.
+
+This behavior is limited to the UI. It does not modify the emulator core or
+worker execution model; final response time still depends on the worker
+reaching an event-loop boundary and acknowledging the request.

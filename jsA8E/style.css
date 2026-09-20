@@ -371,6 +371,14 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.primaryIconBtn.pending:disabled {
+  opacity: 1;
+  color: var(--accent);
+  border-color: rgba(92, 200, 255, 0.65);
+  background: rgba(92, 200, 255, 0.12);
+  cursor: wait;
+}
+
 button:hover:not(:disabled) {
   border-color: rgba(255, 255, 255, 0.18);
 }

@@ -334,7 +334,9 @@
     let workerRenderWidth = 0;
     let workerRenderHeight = 0;
     let pendingRunPauseAction = null;
+    let queuedRunPauseAction = null;
     let runPauseRequestToken = 0;
+    let runPauseQueue = Promise.resolve();
 
     function readFlexGapPx(el) {
       if (!el || !window.getComputedStyle) return 0;
@@ -962,14 +964,20 @@
 
     window.addEventListener("beforeunload", cleanup);
 
-    function setRunPauseButton(running, pendingAction) {
-      btnStart.innerHTML = running
-        ? '<i class="fa-solid fa-pause"></i>'
-        : '<i class="fa-solid fa-play"></i>';
-      const label = pendingAction === "pause"
-        ? "Pausing emulation..."
-        : pendingAction === "start"
-          ? "Starting emulation..."
+    function setRunPauseButton(running, pendingAction, queuedAction) {
+      const busyAction = queuedAction || pendingAction;
+      btnStart.innerHTML = busyAction
+        ? '<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>'
+        : running
+          ? '<i class="fa-solid fa-pause"></i>'
+          : '<i class="fa-solid fa-play"></i>';
+      btnStart.classList.toggle("pending", !!busyAction);
+      const label = queuedAction === "pause"
+        ? "Pause queued. Waiting for the emulator worker..."
+        : pendingAction === "pause"
+          ? "Pausing emulation..."
+          : pendingAction === "start"
+            ? "Starting emulation..."
           : running
             ? "Pause emulation. Use this button again to continue from the current state."
             : "Start emulation and run the loaded Atari system.";
@@ -980,7 +988,7 @@
       );
       btnStart.setAttribute(
         "aria-busy",
-        pendingAction ? "true" : "false",
+        busyAction ? "true" : "false",
       );
     }
 
@@ -1012,9 +1020,18 @@
     }
 
     function setButtons(running) {
-      const busy = !!pendingRunPauseAction;
-      setRunPauseButton(getRunPauseDisplayState(running), pendingRunPauseAction);
-      btnStart.disabled = !app.isReady() || busy;
+      const busy = !!pendingRunPauseAction || !!queuedRunPauseAction;
+      setRunPauseButton(
+        getRunPauseDisplayState(running),
+        pendingRunPauseAction,
+        queuedRunPauseAction,
+      );
+      // Keep Start clickable while it is pending so one Pause intent can be
+      // queued; once Pause is requested, the native button is disabled.
+      btnStart.disabled =
+        !app.isReady() ||
+        pendingRunPauseAction === "pause" ||
+        !!queuedRunPauseAction;
       btnReset.disabled = !app.isReady() || busy;
     }
 
@@ -1745,23 +1762,19 @@
       });
     }
 
-    function handleRunPauseRequest(action, runRequest) {
-      const requestToken = ++runPauseRequestToken;
-      pendingRunPauseAction = action;
-      setButtons(app.isRunning());
-      let result;
-      try {
-        result = runRequest();
-      } catch (err) {
-        pendingRunPauseAction = null;
-        setButtons(app.isRunning());
-        console.error(
-          'Failed to ' + (action === "pause" ? "pause" : "start") + " emulation:",
-          err,
-        );
-        return;
-      }
-      Promise.resolve(result)
+    function enqueueRunPauseRequest(action, runRequest, requestToken) {
+      runPauseQueue = runPauseQueue
+        .catch(function () {
+          // Keep the UI queue usable after a failed lifecycle request.
+        })
+        .then(function () {
+          if (queuedRunPauseAction === action) {
+            queuedRunPauseAction = null;
+            pendingRunPauseAction = action;
+            setButtons(app.isRunning());
+          }
+          return Promise.resolve().then(runRequest);
+        })
         .catch(function (err) {
           console.error(
             'Failed to ' + (action === "pause" ? "pause" : "start") + " emulation:",
@@ -1771,11 +1784,29 @@
         .finally(function () {
           if (requestToken !== runPauseRequestToken) return;
           pendingRunPauseAction = null;
+          queuedRunPauseAction = null;
           updateStatus();
         });
     }
 
+    function handleRunPauseRequest(action, runRequest) {
+      const requestToken = ++runPauseRequestToken;
+      pendingRunPauseAction = action;
+      setButtons(app.isRunning());
+      enqueueRunPauseRequest(action, runRequest, requestToken);
+    }
+
     btnStart.addEventListener("click", function () {
+      if (queuedRunPauseAction) return;
+      if (pendingRunPauseAction === "start") {
+        queuedRunPauseAction = "pause";
+        const requestToken = ++runPauseRequestToken;
+        setButtons(app.isRunning());
+        enqueueRunPauseRequest("pause", function () {
+          return app.pause();
+        }, requestToken);
+        return;
+      }
       if (pendingRunPauseAction) return;
       if (app.isRunning()) {
         handleRunPauseRequest("pause", function () {
