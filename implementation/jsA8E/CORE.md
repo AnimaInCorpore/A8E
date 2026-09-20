@@ -59,6 +59,8 @@ PM graphics are drawn interleaved with playfield pixels via `drawPlayerMissilesC
 
 Pot scans track an accumulated counter rather than a fixed 28-cycle divider. Slow scans advance once per scanline; fast scans advance once per machine cycle and can expose the `229` terminal count (held for one extra cycle before forcing `ALLPOT` low). Scans run through the terminal hold cycle even after `ALLPOT` has cleared. `SKCTL` mode changes resync the active scan counter from the current cycle. JS snapshots preserve mid-scan state (`lastCycle`, `terminalCycle`, current count).
 
+POKEY IRQ state follows the AHRM 5.7 level-sensitive model. A write to `IRQEN/$D20E` recomputes the CPU IRQ level from the active-low `IRQST` bits and enabled sources in both directions. This preserves an asserted keyboard IRQ when the OS temporarily changes `IRQEN`, allowing consecutive key presses to reach the OS keyboard handler and `$02FC` just as on hardware.
+
 ## CPU
 
 All documented and undocumented opcodes are implemented, including the fake6502/Lorenz suite: `ANE`, `LXA`, `ARR`, `LAS`, `SHA`, `SHX`, `SHY`, `TAS`, `RRA`, `SBX`, with the `SHX`/`SHY` write-address glitch and the `RRA`/`ISC` decimal-cycle cancellation.

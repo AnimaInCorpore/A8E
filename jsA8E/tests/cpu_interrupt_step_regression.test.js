@@ -107,6 +107,21 @@ function testNmiCanNestWhilePreviousHandlerIsActive() {
   assert.equal(ctx.nmiActive, 1, "nested NMI should keep the active state set");
 }
 
+function testPokeyIrqReconciliationTracksActiveSource() {
+  const { cpuApi, ctx } = makeContext();
+
+  ctx.ram[0xd20e] = 0xbf;
+  ctx.sram[0xd20e] = 0x40;
+  ctx.irqPending = 0;
+  cpuApi.reconcileIrq(ctx);
+  assert.equal(ctx.irqPending, 1, "enabled active POKEY source should assert IRQ");
+
+  ctx.ram[0xd20e] = 0xff;
+  cpuApi.reconcileIrq(ctx);
+  assert.equal(ctx.irqPending, 0, "cleared POKEY source should release IRQ");
+}
+
 testPendingNmiConsumesOnlyInterruptEntryStep();
 testPendingIrqConsumesOnlyInterruptEntryStep();
 testNmiCanNestWhilePreviousHandlerIsActive();
+testPokeyIrqReconciliationTracksActiveSource();

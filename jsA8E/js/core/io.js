@@ -426,10 +426,10 @@
             sram[addr] = v;
             // IRQST bits read as 1 for disabled sources.
             ram[addr] |= ~v & 0xff;
-            // POKEY IRQ is level-sensitive. Disabling its sources must not
-            // leave a software-queued interrupt for a later CLI.
-            if (CPU && typeof CPU.clearIrqPending === "function")
-              CPU.clearIrqPending(ctx);
+            // POKEY IRQ is level-sensitive. Reconcile both disabling and
+            // re-enabling so an already asserted source remains visible.
+            if (CPU && typeof CPU.reconcileIrq === "function")
+              CPU.reconcileIrq(ctx);
             break;
 
           case IO_SKCTL_SKSTAT:

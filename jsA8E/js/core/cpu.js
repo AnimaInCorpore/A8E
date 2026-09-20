@@ -401,13 +401,13 @@
     return value;
   }
 
-  function clearIrqPending(ctx) {
+  function reconcileIrq(ctx) {
     if (!ctx) return;
-    // POKEY IRQST is active-low and IRQEN is a mask. Keep a pending level only
-    // when at least one currently enabled POKEY source is still asserted.
+    // POKEY IRQST is active-low and IRQEN is a mask. Recompute the level in
+    // both directions so re-enabling an asserted source cannot lose its IRQ.
     const irqst = ctx.ram[0xd20e] & 0xff;
     const irqen = ctx.sram[0xd20e] & 0xff;
-    if (((~irqst) & irqen & 0x7f) === 0) ctx.irqPending = 0;
+    ctx.irqPending = ((~irqst) & irqen & 0x7f) !== 0 ? 1 : 0;
   }
   function writeAccess(ctx, value) {
     const addr = ctx.accessAddress & 0xffff;
@@ -1280,7 +1280,7 @@
     clearPcHook: clearPcHook,
     setMemoryWriteHook: setMemoryWriteHook,
     setMemoryAccessHook: setMemoryAccessHook,
-    clearIrqPending: clearIrqPending,
+    reconcileIrq: reconcileIrq,
     // exposed for debugging/tests
     getPs: getPs,
     setPs: setPs,

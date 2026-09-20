@@ -36,6 +36,9 @@ the Atari execute a command such as `RUN "H:PROGRAM.XEX"`, and it does not
 change the H: CIO implementation. The assembler panel's Run action remains a
 separate save/assemble/load/start workflow; the HostFS action runs an already
 existing XEX.
+
+The broader compiler/debugger review and its follow-up findings are recorded in
+[`COMPILER_DEBUGGER.md`](COMPILER_DEBUGGER.md).
 - Todo: keep UI behavior notes current after control or layout changes; keep browser-facing automation examples aligned with the grouped `window.A8EAutomation` surface when the UI adds new development features. `updateStatus()` now reconciles config toggle states (turbo, SIO turbo, audio, option on start, keyboard mapping) with the app's live getters so snapshot restore or any other internal config change keeps the toolbar in sync.
 
 - 2026-08-17: historical checkpoint. Confirmed the browser UI was stable for general use: PAL/NTSC selection worked through boot, `peek(53268)` differentiated PAL and NTSC, and the browser palette was split by video standard. The later memory-expansion verification is recorded in `implementation/memory_tests.md` and the current `jsA8E` README.
