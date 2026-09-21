@@ -460,10 +460,11 @@
       if (pulse3 && audctl & 0x02) st.hp2Latch = st.channels[1].output & 1;
     }
 
-    // Per-channel non-linear volume (~3 dB/step). Index 15 => 1.0 (normalized).
+    // Approximate the POKEY's 4-bit DAC: mostly binary-weighted with the
+    // documented wider transitions at 3->4, 7->8, and 11->12.
     const POKEY_CHAN_VOL_TABLE = [
-      0.000, 0.008, 0.011, 0.016, 0.022, 0.031, 0.044, 0.063,
-      0.088, 0.125, 0.177, 0.250, 0.354, 0.500, 0.707, 1.000,
+      0.000, 0.061, 0.121, 0.182, 0.273, 0.333, 0.394, 0.455,
+      0.545, 0.606, 0.667, 0.727, 0.818, 0.879, 0.939, 1.000,
     ];
     // Soft-clip compressed maximum: 1.0 + 3.0 * 0.75 (all 4 ch at vol=15).
     const POKEY_MIX_COMPRESSED_MAX = 3.25;

@@ -483,3 +483,8 @@ The XEX loader's RUNAD check now reads both `$02E0` and `$02E1`. The three-byte 
   existing fullscreen button and F11 continue to maximize only the Atari
   display; the new workspace button maximizes the complete browser app, keeping
   the toolbar, screen, Disk Library, HostFS, and other panels visible.
+- 2026-09-20: jsA8E/js/core/pokey.js: replaced the exponential browser mixer
+  volume curve with an AHRM-informed, approximately binary-weighted 4-bit DAC
+  table. The approximation preserves the documented wider transitions at
+  volume changes 3->4, 7->8, and 11->12; hardware-level calibration remains
+  pending real-device or reference-emulator captures.
