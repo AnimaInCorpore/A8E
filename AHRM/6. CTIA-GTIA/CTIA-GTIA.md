@@ -1,2 +1,1 @@
-## Chapter 6 CTIA/GTIA
-
+# Chapter 6 CTIA/GTIA

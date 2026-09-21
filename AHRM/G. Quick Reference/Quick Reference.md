@@ -1,2 +1,1 @@
-## Appendix G Quick Reference
-
+# Appendix G Quick Reference

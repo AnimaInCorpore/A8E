@@ -1,2 +1,1 @@
-## Chapter 12 Internal devices
-
+# Chapter 12 Internal devices

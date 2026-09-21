@@ -1,2 +1,1 @@
-## Appendix E Analog Audio Model
-
+# Appendix E Analog Audio Model

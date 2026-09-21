@@ -1,2 +1,1 @@
-## Appendix D Analog Video Model
-
+# Appendix D Analog Video Model

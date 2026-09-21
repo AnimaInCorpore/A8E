@@ -1,2 +1,1 @@
-## Appendix C Physical Tape Format
-
+# Appendix C Physical Tape Format

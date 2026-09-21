@@ -1,2 +1,1 @@
-## Chapter 2 System Architecture
-
+# Chapter 2 System Architecture
