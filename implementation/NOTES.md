@@ -488,3 +488,6 @@ The XEX loader's RUNAD check now reads both `$02E0` and `$02E1`. The three-byte 
   table. The approximation preserves the documented wider transitions at
   volume changes 3->4, 7->8, and 11->12; hardware-level calibration remains
   pending real-device or reference-emulator captures.
+- 2026-09-20: A8E/Pokey.c: ported the AHRM-informed 4-bit POKEY DAC volume
+  table from jsA8E so native and browser mixers now use the same channel
+  weighting and transition points.

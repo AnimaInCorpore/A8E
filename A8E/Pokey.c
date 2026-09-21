@@ -351,11 +351,12 @@ static void PokeyAudio_Callback(void *userdata, Uint8 *stream, int len)
 	}
 }
 
-/* Per-channel non-linear volume (~3 dB/step). vol=15 -> 8000 units.
+/* Approximate the POKEY's 4-bit DAC with mostly binary-weighted levels.
+   The wider 3->4, 7->8, and 11->12 transitions follow the AHRM behavior.
    Soft-clip threshold = 8000; 4-ch max compressed ~= 26000. */
 static const int32_t g_pokey_chan_vol[16] = {
-	0, 63, 88, 125, 177, 250, 354, 500,
-	707, 1000, 1414, 2000, 2828, 4000, 5657, 8000};
+	0, 488, 968, 1456, 2184, 2664, 3152, 3640,
+	4360, 4848, 5336, 5816, 6544, 7032, 7512, 8000};
 
 static void PokeyAudio_RecomputeClocks(PokeyAudioChannel_t *pChannels, u8 audctl)
 {
