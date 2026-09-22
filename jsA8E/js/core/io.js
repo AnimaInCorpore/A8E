@@ -81,12 +81,48 @@
     const pokeySeroutWrite = cfg.pokeySeroutWrite;
     const pokeySerinRead = cfg.pokeySerinRead;
     const pokeyPotUpdate = cfg.pokeyPotUpdate;
+    const ioRegisterAddress = cfg.ioRegisterAddress;
+    const IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE =
+      cfg.IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
     const TRIG_REGS = [
       IO_GRAFP3_TRIG0,
       IO_GRAFM_TRIG1,
       IO_COLPM0_TRIG2,
       IO_COLPM1_TRIG3,
     ];
+
+    // POKEY IRQs (AHRM 5.7, 14.4): IRQST bits are active low. A source
+    // latches its bit only while enabled in IRQEN, and the IRQ line stays
+    // asserted while any enabled bit is pending. Bit 3 is not latched; it
+    // shows the idle serial output shift register.
+    function updateIrqLine(ctx) {
+      const pending = ~ctx.ram[IO_IRQEN_IRQST] & ctx.sram[IO_IRQEN_IRQST] & 0xff;
+      ctx.irqPending = pending ? 1 : 0;
+    }
+
+    // Events of a disabled source are lost (AHRM 5.7).
+    function raisePokeyIrq(ctx, mask) {
+      if (ctx.sram[IO_IRQEN_IRQST] & mask) ctx.ram[IO_IRQEN_IRQST] &= ~mask & 0xff;
+      updateIrqLine(ctx);
+    }
+
+    // IRQST bit 3 reads 0 while the serial output shift register is idle and
+    // requests an IRQ whenever IRQEN bit 3 is set (AHRM 14.4).
+    function setSerialOutputIdle(ctx, idle) {
+      if (idle) {
+        ctx.ram[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE & 0xff;
+      } else {
+        ctx.ram[IO_IRQEN_IRQST] |= IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
+      }
+      updateIrqLine(ctx);
+    }
+
+    // ram[IO_PORTA] holds the joystick input. Output bits read back as the
+    // AND of ORA and that input (AHRM 2.5).
+    function piaPortARead(ctx) {
+      const outputBits = ctx.ioData.valuePortA & 0xff;
+      return ctx.ram[IO_PORTA] & (ctx.sram[IO_PORTA] | (~outputBits & 0xff)) & 0xff;
+    }
 
     function piaPortBWrite(ctx, value) {
       const io = ctx.ioData;
@@ -210,7 +246,7 @@
     }
 
     function ioAccess(ctx, value) {
-      const addr = ctx.accessAddress & 0xffff;
+      const addr = ioRegisterAddress(ctx.accessAddress & 0xffff);
       const ram = ctx.ram;
       const sram = ctx.sram;
       const io = ctx.ioData;
@@ -330,17 +366,18 @@
 
           case IO_SEROUT_SERIN:
             sram[addr] = v;
-            // On real POKEY, writing SEROUT fills the output shift register:
-            // bit 3 (XMTDON) → 1: transmission now in progress
-            // bit 4 (output data needed) → 1: buffer now full
-            ram[IO_IRQEN_IRQST] |= 0x18;
+            // Writing SEROUT starts shifting a byte out: IRQST bit 3 shows
+            // the transmission in progress.
+            setSerialOutputIdle(ctx, false);
             pokeySeroutWrite(ctx, v);
             break;
 
           case IO_IRQEN_IRQST:
+            // Disabling a source resets its latched status bit; bit 3 is not
+            // latched and ignores IRQEN (AHRM 14.4).
             sram[addr] = v;
-            // IRQST bits read as 1 for disabled sources.
-            ram[addr] |= ~v & 0xff;
+            ram[addr] |= ~v & ~IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE & 0xff;
+            updateIrqLine(ctx);
             break;
 
           case IO_SKCTL_SKSTAT:
@@ -368,7 +405,7 @@
               return io.valuePortA & 0xff;
             }
             sram[addr] = v;
-            break;
+            return piaPortARead(ctx);
 
           case IO_PORTB:
             if ((sram[IO_PBCTL] & 0x04) === 0) {
@@ -379,13 +416,11 @@
             break;
 
           case IO_PACTL:
-            sram[addr] = v;
-            ram[addr] = (v & 0x0d) | 0x30;
-            break;
-
           case IO_PBCTL:
+            // Bits 5-0 read back as written; bits 7-6 are the (unmodeled)
+            // IRQ flags (AHRM 14.5).
             sram[addr] = v;
-            ram[addr] = (v & 0x0d) | 0x30;
+            ram[addr] = v & 0x3f;
             break;
 
           // --- ANTIC ---
@@ -482,8 +517,8 @@
             break;
 
           case IO_NMIRES_NMIST:
-            // Writing clears pending NMI status bits.
-            ram[addr] = 0x00;
+            // Writing clears pending NMI status bits; bits 4-0 always read 1.
+            ram[addr] = 0x1f;
             break;
 
           case IO_VCOUNT:
@@ -505,7 +540,7 @@
       switch (addr) {
         case IO_PORTA:
           if ((sram[IO_PACTL] & 0x04) === 0) return io.valuePortA & 0xff;
-          return ram[addr] & 0xff;
+          return piaPortARead(ctx);
 
         case IO_PORTB:
           if ((sram[IO_PBCTL] & 0x04) === 0) return io.valuePortB & 0xff;
@@ -528,9 +563,8 @@
           return ram[addr] & 0xff;
 
         case IO_SEROUT_SERIN:
-          // On real POKEY, reading SERIN acknowledges the data-ready condition:
-          // bit 5 (serial input data ready) → 1: byte consumed, not ready
-          ram[IO_IRQEN_IRQST] |= 0x20;
+          // Reading SERIN has no IRQ side effect; software acknowledges the
+          // data-ready IRQ through IRQEN (AHRM 5.6, 5.7).
           return pokeySerinRead(ctx);
 
         case IO_AUDF1_POT0:
@@ -554,8 +588,40 @@
       }
     }
 
+    // The XL Reset key drives the reset lines of the 6502, ANTIC and the PIA
+    // (AHRM 2.4). ANTIC clears NMIEN and DMACTL (AHRM 4.1). The PIA clears
+    // every register (AHRM 2.5), so port B reads the pull-ups: OS ROM in,
+    // BASIC and self-test out (AHRM 2.6), and the 6502 fetches the OS reset
+    // vector even when a program had banked the OS out. RAM is left alone.
+    function warmReset(ctx) {
+      const io = ctx.ioData;
+      const ram = ctx.ram;
+      const sram = ctx.sram;
+
+      sram[IO_NMIEN] = 0x00;
+      sram[IO_DMACTL] = 0x00;
+      io.nmiTiming.enabledByCycle7 = 0;
+      io.nmiTiming.enabledByCycle8 = 0;
+      io.nmiTiming.enabledOnCycle7Mask = 0;
+
+      sram[IO_PACTL] = 0x00;
+      ram[IO_PACTL] = 0x00;
+      sram[IO_PBCTL] = 0x00;
+      ram[IO_PBCTL] = 0x00;
+      sram[IO_PORTA] = 0x00;
+      io.valuePortA = 0x00;
+      io.valuePortB = 0x00;
+      piaPortBWrite(ctx, 0xff);
+
+      CPU.reset(ctx);
+    }
+
     return {
       ioAccess: ioAccess,
+      warmReset: warmReset,
+      raisePokeyIrq: raisePokeyIrq,
+      setSerialOutputIdle: setSerialOutputIdle,
+      updateIrqLine: updateIrqLine,
     };
   }
 

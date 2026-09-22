@@ -82,7 +82,9 @@ function testPendingIrqConsumesOnlyInterruptEntryStep() {
   assert.equal(ctx.cpu.pc, 0x5678, "IRQ step should stop at the handler vector");
   assert.equal(ctx.cpu.sp, 0xfc, "IRQ step should push PC/P onto the stack");
   assert.equal(ctx.cycleCounter, 7, "IRQ entry should cost 7 cycles");
-  assert.equal(ctx.irqPending, 0, "IRQ step should consume the pending request");
+  // The IRQ line is a level (AHRM 5.7): it stays asserted until POKEY clears
+  // the source, and the I flag keeps the handler from re-entering.
+  assert.equal(ctx.irqPending, 1, "IRQ entry should leave the IRQ line level alone");
 
   cpuApi.executeOne(ctx);
   assert.equal(ctx.cpu.pc, 0x5679, "IRQ handler opcode should execute on the next CPU step");

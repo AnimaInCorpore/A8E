@@ -174,4 +174,26 @@ if(BUILD_TESTING)
 
   add_test(NAME pokey_pot_scan_probe COMMAND pokey_pot_scan_probe)
   set_tests_properties(pokey_pot_scan_probe PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+  add_executable(cpu_probe
+    tests/cpu_probe.c
+    ${A8E_CORE_SOURCES}
+  )
+
+  target_compile_definitions(cpu_probe PRIVATE A8E_ENABLE_TEST_PROBES=1)
+  a8e_configure_target(cpu_probe)
+
+  add_test(NAME cpu_probe COMMAND cpu_probe)
+  set_tests_properties(cpu_probe PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+  add_executable(system_probe
+    tests/system_probe.c
+    ${A8E_CORE_SOURCES}
+  )
+
+  target_compile_definitions(system_probe PRIVATE A8E_ENABLE_TEST_PROBES=1)
+  a8e_configure_target(system_probe)
+
+  add_test(NAME system_probe COMMAND system_probe)
+  set_tests_properties(system_probe PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 endif()

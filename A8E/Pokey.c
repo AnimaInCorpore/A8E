@@ -1802,6 +1802,7 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue)
 			llNow + SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
 
 		AtariIoCycleTimedEventUpdate(pContext);
+		Pokey_SetSerialOutputIdle(pContext, 0);
 
 		/* --- Data phase (WRITE/PUT/VERIFY) --- */
 		if(cSioOutPhase == 1)
@@ -2194,8 +2195,11 @@ u8 *Pokey_IRQEN_IRQST(_6502_Context_t *pContext, u8 *pValue)
 
 		printf("\n");
 #endif
+		/* Disabling a source resets its latched status bit; bit 3 is not
+		   latched and ignores IRQEN (AHRM 14.4). */
 		SRAM[IO_IRQEN_IRQST] = *pValue;
-		RAM[IO_IRQEN_IRQST] |= ~SRAM[IO_IRQEN_IRQST];
+		RAM[IO_IRQEN_IRQST] |= (u8)~*pValue & (u8)~IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
+		Pokey_UpdateIrqLine(pContext);
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" IRQEN: %02X\n", *pValue);
@@ -2224,4 +2228,36 @@ u8 *Pokey_SKCTL_SKSTAT(_6502_Context_t *pContext, u8 *pValue)
 	}
 
 	return &RAM[IO_SKCTL_SKSTAT];
+}
+
+void Pokey_UpdateIrqLine(_6502_Context_t *pContext)
+{
+	pContext->cIrqPendingFlag = ((u8)~RAM[IO_IRQEN_IRQST] & SRAM[IO_IRQEN_IRQST]) != 0;
+}
+
+/* Events of a disabled source are lost (AHRM 5.7). */
+void Pokey_RaiseIrq(_6502_Context_t *pContext, u8 cMask)
+{
+	if(SRAM[IO_IRQEN_IRQST] & cMask)
+	{
+		RAM[IO_IRQEN_IRQST] &= (u8)~cMask;
+	}
+
+	Pokey_UpdateIrqLine(pContext);
+}
+
+/* IRQST bit 3 reads 0 while the serial output shift register is idle and
+   requests an IRQ whenever IRQEN bit 3 is set (AHRM 14.4). */
+void Pokey_SetSerialOutputIdle(_6502_Context_t *pContext, u8 bIdle)
+{
+	if(bIdle)
+	{
+		RAM[IO_IRQEN_IRQST] &= (u8)~IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
+	}
+	else
+	{
+		RAM[IO_IRQEN_IRQST] |= IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
+	}
+
+	Pokey_UpdateIrqLine(pContext);
 }

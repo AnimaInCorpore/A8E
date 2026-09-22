@@ -235,6 +235,7 @@
           CYCLES_PER_LINE: CYCLES_PER_LINE,
           CYCLE_NEVER: CYCLE_NEVER,
           IO_INIT_VALUES: IO_INIT_VALUES,
+          ioRegisterAddress: hwApi.ioRegisterAddress,
         })
       : null;
   if (!stateApi) throw new Error("A8EState is not loaded");
@@ -408,6 +409,8 @@
           pokeySeroutWrite: pokeySeroutWrite,
           pokeySerinRead: pokeySerinRead,
           pokeyPotUpdate: pokeyPotUpdate,
+          ioRegisterAddress: hwApi.ioRegisterAddress,
+          IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE: IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE,
         })
       : null;
   if (!ioApi) throw new Error("A8EIo is not loaded");
@@ -416,6 +419,9 @@
     window.A8EGtia && window.A8EGtia.createApi
       ? window.A8EGtia.createApi({
           PIXELS_PER_LINE: PIXELS_PER_LINE,
+          IO_COLPF0: IO_COLPF0,
+          IO_COLPF1: IO_COLPF1,
+          IO_COLPF2: IO_COLPF2,
           IO_COLPF3: IO_COLPF3,
           IO_COLPM0_TRIG2: IO_COLPM0_TRIG2,
           IO_COLPM1_TRIG3: IO_COLPM1_TRIG3,
@@ -467,6 +473,8 @@
     window.A8EAntic && window.A8EAntic.createApi
       ? window.A8EAntic.createApi({
           CPU: CPU,
+          raisePokeyIrq: ioApi.raisePokeyIrq,
+          setSerialOutputIdle: ioApi.setSerialOutputIdle,
           Util: Util,
           PIXELS_PER_LINE: PIXELS_PER_LINE,
           CYCLES_PER_LINE: CYCLES_PER_LINE,
@@ -854,6 +862,12 @@
     const inputRuntime = inputApi.createRuntime({
       machine: machine,
       isReady: isReady,
+      warmReset: function () {
+        ioApi.warmReset(machine.ctx);
+      },
+      raisePokeyIrq: function (mask) {
+        ioApi.raisePokeyIrq(machine.ctx, mask);
+      },
     });
     const onKeyDown = inputRuntime.onKeyDown;
     const onKeyUp = inputRuntime.onKeyUp;
@@ -942,6 +956,7 @@
 
     const snapshotHelpers = AtariSnapshot.createApi({
       machine: machine,
+      updateIrqLine: ioApi.updateIrqLine,
       video: video,
       CPU: CPU,
       snapshotCodec: snapshotCodec,

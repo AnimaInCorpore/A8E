@@ -82,7 +82,8 @@ typedef struct _6502_Context
 
 	u8 cNmiPendingFlag;
 	u8 cNmiActiveFlag;
-	u8 cIrqPendingFlag;
+	u8 cIrqPendingFlag; /* IRQ line level, driven by POKEY (AHRM 5.7) */
+	u8 cHaltedFlag; /* set by a KIL opcode; only a reset clears it */
 
 	void *pIoData;
 } _6502_Context_t;
@@ -101,7 +102,6 @@ u16 _6502_DisassembleLive(_6502_Context_t *pContext, u16 sAddress);
 
 void _6502_Nmi(_6502_Context_t *pContext);
 void _6502_Reset(_6502_Context_t *pContext);
-void _6502_Irq(_6502_Context_t *pContext);
 void _6502_Execute(_6502_Context_t *pContext);
 u64 _6502_Run(_6502_Context_t *pContext, u64 llCycles);
 

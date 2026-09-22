@@ -200,7 +200,7 @@
       { addr: IO_GRAFP3_TRIG0, write: 0x00, read: 0x01 },
       { addr: IO_GRAFM_TRIG1, write: 0x00, read: 0x01 },
       { addr: IO_COLPM0_TRIG2, write: 0x00, read: 0x01 },
-      { addr: IO_COLPM1_TRIG3, write: 0x00, read: 0x01 },
+      { addr: IO_COLPM1_TRIG3, write: 0x00, read: 0x00 }, // no cartridge: TRIG3 reads 0 (AHRM 2.8)
       { addr: IO_COLPM2_PAL, write: 0x00, read: 0x01 },
       { addr: IO_COLPM3, write: 0x00, read: 0x0f },
       { addr: IO_COLPF0, write: 0x00, read: 0x0f },
@@ -208,10 +208,10 @@
       { addr: IO_COLPF2, write: 0x00, read: 0x0f },
       { addr: IO_COLPF3, write: 0x00, read: 0x0f },
       { addr: IO_COLBK, write: 0x00, read: 0x0f },
-      { addr: IO_PRIOR, write: 0x00, read: 0xff },
-      { addr: IO_VDELAY, write: 0x00, read: 0xff },
-      { addr: IO_GRACTL, write: 0x00, read: 0xff },
-      { addr: IO_HITCLR, write: 0x00, read: 0xff },
+      { addr: IO_PRIOR, write: 0x00, read: 0x0f }, // write-only GTIA slots read $0F (AHRM 6.1, Table 13)
+      { addr: IO_VDELAY, write: 0x00, read: 0x0f },
+      { addr: IO_GRACTL, write: 0x00, read: 0x0f },
+      { addr: IO_HITCLR, write: 0x00, read: 0x0f },
       { addr: IO_CONSOL, write: 0x00, read: 0x07 },
 
       // POKEY
@@ -228,14 +228,14 @@
       { addr: IO_SKREST_RANDOM, write: 0x00, read: 0xff },
       { addr: IO_POTGO, write: 0x00, read: 0xff },
       { addr: IO_SEROUT_SERIN, write: 0x00, read: 0xff },
-      { addr: IO_IRQEN_IRQST, write: 0x00, read: 0xff },
+      { addr: IO_IRQEN_IRQST, write: 0x00, read: 0xf7 }, // serial output idle: bit 3 reads 0 (AHRM 14.4)
       { addr: IO_SKCTL_SKSTAT, write: 0x00, read: 0xff },
 
       // PIA
-      { addr: IO_PORTA, write: 0xff, read: 0xff },
+      { addr: IO_PORTA, write: 0x00, read: 0xff }, // ORA is $00 after reset (AHRM 14.5)
       { addr: IO_PORTB, write: 0xfd, read: 0xfd },
-      { addr: IO_PACTL, write: 0x00, read: 0x3c },
-      { addr: IO_PBCTL, write: 0x00, read: 0x3c },
+      { addr: IO_PACTL, write: 0x00, read: 0x00 },
+      { addr: IO_PBCTL, write: 0x00, read: 0x00 },
 
       // ANTIC
       { addr: IO_DMACTL, write: 0x00, read: 0xff },
@@ -251,10 +251,22 @@
       { addr: IO_PENH, write: 0x00, read: 0xff },
       { addr: IO_PENV, write: 0x00, read: 0xff },
       { addr: IO_NMIEN, write: 0x00, read: 0xff },
-      { addr: IO_NMIRES_NMIST, write: 0x00, read: 0x00 },
+      { addr: IO_NMIRES_NMIST, write: 0x00, read: 0x1f }, // NMIST bits 4-0 read 1 (AHRM 14.6)
     ];
 
+    // The chips decode only the low address bits, so each register repeats
+    // across the chip's page: GTIA every $20 bytes, POKEY and ANTIC every $10,
+    // the PIA every 4 (AHRM 2.5, 4.1, 5.1, 6.1). Returns the canonical address.
+    function ioRegisterAddress(address) {
+      const page = address & 0xff00;
+      if (page === 0xd000) return address & 0xff1f;
+      if (page === 0xd300) return address & 0xff03;
+      if (page === 0xd200 || page === 0xd400) return address & 0xff0f;
+      return address;
+    }
+
     api = {
+      ioRegisterAddress: ioRegisterAddress,
       PIXELS_PER_LINE: PIXELS_PER_LINE,
       LINES_PER_SCREEN_PAL: LINES_PER_SCREEN_PAL,
       COLOR_CLOCKS_PER_LINE: COLOR_CLOCKS_PER_LINE,

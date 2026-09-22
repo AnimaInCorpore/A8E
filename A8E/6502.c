@@ -152,6 +152,7 @@ void _6502_SHA(_6502_Context_t *);
 void _6502_SHX(_6502_Context_t *);
 void _6502_SHY(_6502_Context_t *);
 void _6502_TAS(_6502_Context_t *);
+void _6502_KIL(_6502_Context_t *);
 
 void _6502_Implicit(_6502_Context_t *);
 void _6502_Immediate(_6502_Context_t *);
@@ -254,6 +255,7 @@ _6502_Code_t m_a6502CodeList[] =
 		{0xf5, 16, 4, AT_ZERO_PAGE_X},
 		{0xfd, 16, 4, AT_ABSOLUTE_X},
 		{0xf9, 16, 4, AT_ABSOLUTE_Y},
+		{0xeb, 16, 2, AT_IMMEDIATE}, /* undocumented SBC #imm (AHRM 3.5, Table 2) */
 		{0xce, 17, 6, AT_ABSOLUTE}, /* DEC */
 		{0xc6, 17, 5, AT_ZERO_PAGE},
 		{0xd6, 17, 6, AT_ZERO_PAGE_X},
@@ -421,6 +423,18 @@ _6502_Code_t m_a6502CodeList[] =
 		{0x9e, 75, 5, AT_ABSOLUTE_Y}, /* SHX */
 		{0x9c, 76, 4, AT_ABSOLUTE_X}, /* SHY */
 		{0x9b, 77, 5, AT_ABSOLUTE_Y}, /* TAS */
+		{0x02, 78, 2, AT_IMPLICIT}, /* KIL */
+		{0x12, 78, 2, AT_IMPLICIT},
+		{0x22, 78, 2, AT_IMPLICIT},
+		{0x32, 78, 2, AT_IMPLICIT},
+		{0x42, 78, 2, AT_IMPLICIT},
+		{0x52, 78, 2, AT_IMPLICIT},
+		{0x62, 78, 2, AT_IMPLICIT},
+		{0x72, 78, 2, AT_IMPLICIT},
+		{0x92, 78, 2, AT_IMPLICIT},
+		{0xb2, 78, 2, AT_IMPLICIT},
+		{0xd2, 78, 2, AT_IMPLICIT},
+		{0xf2, 78, 2, AT_IMPLICIT},
 };
 
 char *m_a6502MnemonicList[] =
@@ -438,7 +452,7 @@ char *m_a6502MnemonicList[] =
 
 		"LAX", "SLO", "LXA", "AAX", "DOP", "TOP",
 		"ASR", "ISC", "SRE", "RLA", "AAC", "ANE", "DCP",
-		"RRA", "SBX", "ARR", "LAS", "SHA", "SHX", "SHY", "TAS"};
+		"RRA", "SBX", "ARR", "LAS", "SHA", "SHX", "SHY", "TAS", "KIL"};
 
 _6502_OpcodeFunction_t m_a6502OpcodeFunctionList[] =
 	{
@@ -521,6 +535,7 @@ _6502_OpcodeFunction_t m_a6502OpcodeFunctionList[] =
 		_6502_SHX,
 		_6502_SHY,
 		_6502_TAS,
+		_6502_KIL,
 };
 
 _6502_AddressTypeFunction_t m_a6502AddressTypeFunctionList[] =
@@ -670,9 +685,13 @@ static u8 _6502_ServicePendingInterrupts(_6502_Context_t *pContext)
 		return 1;
 	}
 
+	/* The IRQ line is level-triggered: it stays asserted until POKEY's
+	   pending status is cleared, so the handler cannot re-enter while I is
+	   set and runs again after RTI if the source was not acknowledged. */
 	if(pContext->cIrqPendingFlag && !PS.i)
 	{
-		_6502_Irq(pContext);
+		_6502_ServiceInterrupt(pContext, 0xfffe, 0, CPU.pc);
+		pContext->llCycleCounter += 7;
 		return 1;
 	}
 
@@ -1098,32 +1117,22 @@ void _6502_Reset(_6502_Context_t *pContext)
 	PS.b = 0;
 	pContext->cNmiPendingFlag = 0;
 	pContext->cNmiActiveFlag = 0;
-	pContext->cIrqPendingFlag = 0;
+	pContext->cHaltedFlag = 0;
 	CPU.pc = RAM[0xfffc] | (RAM[0xfffd] << 8);
 
 	pContext->llCycleCounter += 7;
 }
 
-void _6502_Irq(_6502_Context_t *pContext)
-{
-	if(PS.i)
-	{
-		pContext->cIrqPendingFlag++;
-	}
-	else
-	{
-		if(pContext->cIrqPendingFlag)
-		{
-			pContext->cIrqPendingFlag--;
-		}
-		_6502_ServiceInterrupt(pContext, 0xfffe, 0, CPU.pc);
-		pContext->llCycleCounter += 7;
-	}
-}
-
 void _6502_Execute(_6502_Context_t *pContext)
 {
 	u8 cCode;
+
+	/* A KIL opcode jams the CPU: no fetches and no interrupts until reset (AHRM 3.5). */
+	if(pContext->cHaltedFlag)
+	{
+		pContext->llCycleCounter++;
+		return;
+	}
 
 	if(pContext->llCycleCounter < pContext->llStallCycleCounter)
 	{
@@ -1270,33 +1279,45 @@ void _6502_TYA(_6502_Context_t *pContext)
 	PS.n = CPU.a & 0x80;
 }
 
+/* Signed value of a byte (two's complement), independent of the char signedness. */
+static int _6502_Signed8(u8 cValue)
+{
+	return (cValue & 0x80) ? (int)cValue - 0x100 : (int)cValue;
+}
+
 static void _6502_AdcValue(_6502_Context_t *pContext, u8 cValue)
 {
 	if(PS.d)
 	{
-		/* NMOS 6502 decimal adjust; V computed from binary sum (common emulator behavior). */
+		/* NMOS 6502 decimal ADC (AHRM 3.2): the low nibble is corrected first and
+		 * its carry propagated; N and V come from that intermediate sum before the
+		 * high nibble is corrected, and Z comes from the binary sum. The low-nibble
+		 * correction can never cause a double carry ($0F + $0F = $14). */
 		u8 cA = CPU.a;
-		u16 sSum = (u16)cA + (u16)cValue + (PS.c ? 1 : 0);
-		u8 cBin = (u8)sSum;
+		int iCarryIn = PS.c ? 1 : 0;
+		int iLow = (cA & 0x0f) + (cValue & 0x0f) + iCarryIn;
+		int iSum;
+		int iSignedSum;
 
-		PS.v = !((cA ^ cValue) & 0x80) && ((cA ^ cBin) & 0x80);
-
-		if(((cA & 0x0f) + (cValue & 0x0f) + (PS.c ? 1 : 0)) > 9)
+		if(iLow >= 0x0a)
 		{
-			sSum += 0x06;
+			iLow = ((iLow + 0x06) & 0x0f) + 0x10;
 		}
 
-		PS.c = (sSum > 0x99);
-		if(PS.c)
+		iSum = (cA & 0xf0) + (cValue & 0xf0) + iLow;
+		iSignedSum = _6502_Signed8(cA & 0xf0) + _6502_Signed8(cValue & 0xf0) + iLow;
+
+		PS.n = (iSum & 0x80) != 0;
+		PS.v = iSignedSum < -128 || iSignedSum > 127;
+		PS.z = ((cA + cValue + iCarryIn) & 0xff) == 0;
+
+		if(iSum >= 0xa0)
 		{
-			sSum += 0x60;
+			iSum += 0x60;
 		}
 
-		CPU.a = (u8)sSum;
-
-		/* NMOS 6502: N and Z are set based on the BINARY result, V too. */
-		PS.z = !cBin;
-		PS.n = cBin & 0x80;
+		PS.c = iSum >= 0x100;
+		CPU.a = (u8)iSum;
 	}
 	else
 	{
@@ -1315,29 +1336,33 @@ static void _6502_SbcValue(_6502_Context_t *pContext, u8 cValue)
 {
 	if(PS.d)
 	{
+		/* NMOS 6502 decimal SBC: all flags are those of the binary subtraction;
+		 * the result corrects the low nibble first, then the high nibble. */
 		u8 cA = CPU.a;
-		u16 sDiff = (u16)cA - (u16)cValue - (PS.c ? 0 : 1);
+		int iCarryIn = PS.c ? 1 : 0;
+		u16 sDiff = (u16)cA - (u16)cValue - (iCarryIn ? 0 : 1);
 		u8 cBin = (u8)sDiff;
-		u8 cCarry = (sDiff & 0x100) ? 0 : 1; /* carry==1 means no borrow */
+		int iLow = (cA & 0x0f) - (cValue & 0x0f) + iCarryIn - 1;
+		int iResult;
 
 		PS.v = ((cA ^ cBin) & (cA ^ cValue) & 0x80) != 0;
-
-		if(((cA & 0x0f) - (PS.c ? 0 : 1)) < (cValue & 0x0f))
-		{
-			sDiff -= 0x06;
-		}
-
-		if(!cCarry)
-		{
-			sDiff -= 0x60;
-		}
-
-		CPU.a = (u8)sDiff;
-		PS.c = cCarry;
-
-		/* NMOS 6502: N and Z are set based on the BINARY result, V too. */
+		PS.c = (sDiff & 0x100) ? 0 : 1; /* carry==1 means no borrow */
 		PS.z = !cBin;
 		PS.n = cBin & 0x80;
+
+		if(iLow < 0)
+		{
+			iLow = ((iLow - 0x06) & 0x0f) - 0x10;
+		}
+
+		iResult = (cA & 0xf0) - (cValue & 0xf0) + iLow;
+
+		if(iResult < 0)
+		{
+			iResult -= 0x60;
+		}
+
+		CPU.a = (u8)iResult;
 	}
 	else
 	{
@@ -1883,11 +1908,6 @@ void _6502_ISC(_6502_Context_t *pContext)
 	cValue = *WRITE_ACCESS(&cValue);
 
 	_6502_SbcValue(pContext, cValue);
-
-	if(PS.d)
-	{
-		pContext->llCycleCounter--;
-	}
 }
 
 void _6502_SRE(_6502_Context_t *pContext)
@@ -1967,11 +1987,6 @@ void _6502_RRA(_6502_Context_t *pContext)
 
 	cValue = *WRITE_ACCESS(&cValue);
 	_6502_AdcValue(pContext, cValue);
-
-	if(PS.d)
-	{
-		pContext->llCycleCounter--;
-	}
 }
 
 /* Fake6502-compatible SBX form. */
@@ -2086,6 +2101,13 @@ void _6502_TAS(_6502_Context_t *pContext)
 	cValue = CPU.sp & (u8)(((pContext->sAccessAddress >> 8) + 1) & 0xff);
 
 	WRITE_ACCESS(&cValue);
+}
+
+/* KIL/JAM: lock up until reset (AHRM 3.5). PC stays on the opcode for debugging. */
+void _6502_KIL(_6502_Context_t *pContext)
+{
+	CPU.pc--;
+	pContext->cHaltedFlag = 1;
 }
 
 /********************************************************************

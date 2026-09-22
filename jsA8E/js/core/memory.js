@@ -1105,8 +1105,12 @@
         }
       }
 
+      // Power cycle: RAM starts cleared as at emulator start, so the OS
+      // always takes the cold-start path and boots the mounted media.
       function hardReset(options) {
         getMediaState();
+        machine.ctx.ram.fill(0);
+        machine.ctx.sram.fill(0);
         machine.ctx.cycleCounter = 0;
         machine.ctx.stallCycleCounter = 0;
         machine.ctx.nmiPending = 0;

@@ -71,6 +71,7 @@
       nmiPending: 0,
       nmiActive: 0,
       irqPending: 0,
+      halted: 0, // set by a KIL opcode; only a reset clears it
       breakRun: false,
       instructionCounter: 0,
       currentInstructionPc: 0,
@@ -237,8 +238,13 @@
       servicePendingNmi(ctx);
       return true;
     }
+    // The IRQ line is level-triggered (AHRM 5.7): POKEY keeps it asserted
+    // until the pending status is cleared, so it is not consumed here. The
+    // handler cannot re-enter while I is set and runs again after RTI if the
+    // source was not acknowledged.
     if (ctx.irqPending && !hasFlag(ctx.cpu.ps, FLAG_I)) {
-      irq(ctx);
+      serviceInterrupt(ctx, 0xfffe, 0, ctx.cpu.pc);
+      ctx.cycleCounter += 7;
       return true;
     }
     return false;
@@ -248,22 +254,11 @@
     const cpu = ctx.cpu;
     cpu.sp = 0xfd;
     cpu.ps = (cpu.ps | FLAG_I) & ~(FLAG_D | FLAG_B);
-    ctx.irqPending = 0;
     ctx.nmiPending = 0;
     ctx.nmiActive = 0;
+    ctx.halted = 0;
     cpu.pc = ctx.ram[0xfffc] | (ctx.ram[0xfffd] << 8);
     ctx.cycleCounter += 7;
-  }
-
-  function irq(ctx) {
-    const cpu = ctx.cpu;
-    if (hasFlag(cpu.ps, FLAG_I)) {
-      ctx.irqPending = (ctx.irqPending + 1) & 0xff;
-    } else {
-      if (ctx.irqPending) ctx.irqPending = (ctx.irqPending - 1) & 0xff;
-      serviceInterrupt(ctx, 0xfffe, 0, cpu.pc);
-      ctx.cycleCounter += 7;
-    }
   }
 
   // Addressing modes
@@ -403,20 +398,23 @@
     let ps = cpu.ps;
     value &= 0xff;
     if (hasFlag(ps, FLAG_D)) {
+      // NMOS 6502 decimal ADC (AHRM 3.2): the low nibble is corrected first and
+      // its carry propagated; N and V come from that intermediate sum before the
+      // high nibble is corrected, and Z comes from the binary sum. No extra
+      // cycle is taken (that is 65C02 behavior).
       const a = cpu.a & 0xff;
       const carryIn = ~~hasFlag(ps, FLAG_C);
-      let sum = a + value + carryIn;
-      const bin = sum & 0xff;
-      ps = setFlag(ps, FLAG_V, !((a ^ value) & 0x80) && ((a ^ bin) & 0x80));
+      let low = (a & 0x0f) + (value & 0x0f) + carryIn;
+      if (low >= 0x0a) low = ((low + 0x06) & 0x0f) + 0x10;
+      let sum = (a & 0xf0) + (value & 0xf0) + low;
+      const signedSum = signed8(a & 0xf0) + signed8(value & 0xf0) + low;
 
-      if ((a & 0x0f) + (value & 0x0f) + carryIn > 9) sum += 0x06;
-      const carryOut = sum > 0x99;
-      ps = setFlag(ps, FLAG_C, carryOut);
-      if (carryOut) sum += 0x60;
-
+      ps = setFlag(ps, FLAG_N, sum & 0x80);
+      ps = setFlag(ps, FLAG_V, signedSum < -128 || signedSum > 127);
+      ps = setFlag(ps, FLAG_Z, ((a + value + carryIn) & 0xff) === 0);
+      if (sum >= 0xa0) sum += 0x60;
+      ps = setFlag(ps, FLAG_C, sum >= 0x100);
       cpu.a = sum & 0xff;
-      ps = setZNBits(ps, bin);
-      ctx.cycleCounter++;
     } else {
       const s = (cpu.a & 0xff) + value + ~~hasFlag(ps, FLAG_C);
       ps = setFlag(
@@ -436,20 +434,21 @@
     let ps = cpu.ps;
     value &= 0xff;
     if (hasFlag(ps, FLAG_D)) {
+      // NMOS 6502 decimal SBC: all flags are those of the binary subtraction;
+      // the result corrects the low nibble first, then the high nibble.
       const a = cpu.a & 0xff;
-      const borrowIn = 1 ^ ~~hasFlag(ps, FLAG_C);
-      let diff = a - value - borrowIn;
+      const carryIn = ~~hasFlag(ps, FLAG_C);
+      const diff = a - value - (1 - carryIn);
       const bin = diff & 0xff;
-      const carry = (diff & 0x100) === 0; // carry==1 means no borrow
       ps = setFlag(ps, FLAG_V, ((a ^ bin) & (a ^ value) & 0x80) !== 0);
-
-      if ((a & 0x0f) - borrowIn < (value & 0x0f)) diff -= 0x06;
-      if (!carry) diff -= 0x60;
-
-      cpu.a = diff & 0xff;
-      ps = setFlag(ps, FLAG_C, carry);
+      ps = setFlag(ps, FLAG_C, (diff & 0x100) === 0); // carry==1 means no borrow
       ps = setZNBits(ps, bin);
-      ctx.cycleCounter++;
+
+      let low = (a & 0x0f) - (value & 0x0f) + carryIn - 1;
+      if (low < 0) low = ((low - 0x06) & 0x0f) - 0x10;
+      let result = (a & 0xf0) - (value & 0xf0) + low;
+      if (result < 0) result -= 0x60;
+      cpu.a = result & 0xff;
     } else {
       const a2 = cpu.a & 0xff;
       const d2 = a2 - value - (1 ^ ~~hasFlag(ps, FLAG_C));
@@ -767,6 +766,11 @@
     // This avoids hard crashes on software that executes rare/unstable opcodes.
     return;
   }
+  // KIL/JAM: lock up until reset (AHRM 3.5). PC stays on the opcode for debugging.
+  function opKIL(ctx) {
+    ctx.cpu.pc = (ctx.cpu.pc - 1) & 0xffff;
+    ctx.halted = 1;
+  }
   function opLAX(ctx) {
     const v = readAccess(ctx);
     ctx.cpu.a = v;
@@ -806,7 +810,6 @@
     let v = (readAccess(ctx) + 1) & 0xff;
     v = writeAccess(ctx, v);
     sbcValue(ctx, v);
-    if (hasFlag(ctx.cpu.ps, FLAG_D)) ctx.cycleCounter--;
   }
   function opSRE(ctx) {
     let v = readAccess(ctx);
@@ -848,7 +851,6 @@
     if (oldCarry) v |= 0x80;
     v = writeAccess(ctx, v);
     adcValue(ctx, v);
-    if (hasFlag(ctx.cpu.ps, FLAG_D)) ctx.cycleCounter--;
   }
   function opSBX(ctx) {
     const cpu = ctx.cpu;
@@ -996,6 +998,7 @@
     opSHX,
     opSHY,
     opTAS,
+    opKIL,
   ];
   const CODE_TABLE = CpuTables.buildCodeTable();
   const OPCODE_ADDRESS_FUNCS = new Array(256);
@@ -1008,7 +1011,9 @@
     OPCODE_ADDRESS_FUNCS[i] = ADDRESS_FUNCS[meta.addressType];
     OPCODE_EXEC_FUNCS[i] = OPCODE_FUNCS[meta.opcodeId];
     OPCODE_BASE_CYCLES[i] = meta.cycles & 0xff;
-    OPCODE_IS_UNSUPPORTED[i] = meta.opcodeId === 56 ? 1 : 0;
+    // KIL (78) jams the CPU like real hardware; the fault hook still reports it
+    // so debuggers and the automation layer can detect the crash.
+    OPCODE_IS_UNSUPPORTED[i] = meta.opcodeId === 56 || meta.opcodeId === 78 ? 1 : 0;
   }
 
   function onIllegalOpcode(ctx, opcode) {
@@ -1032,6 +1037,11 @@
   }
 
   function executeOne(ctx) {
+    // A KIL opcode jams the CPU: no fetches and no interrupts until reset.
+    if (ctx.halted) {
+      ctx.cycleCounter++;
+      return;
+    }
     if (ctx.cycleCounter < ctx.stallCycleCounter) {
       ctx.cycleCounter++;
       return;
@@ -1097,6 +1107,21 @@
         ctx.cycleCounter >= ctx.ioCycleTimedEventCycle
       ) {
         ctx.ioCycleTimedEventFunction(ctx);
+      }
+
+      if (ctx.halted) {
+        // Jammed CPU: let the clock (and the timed I/O events) keep running.
+        let haltTarget = cycleTarget;
+        if (
+          ctx.ioCycleTimedEventFunction &&
+          ctx.ioCycleTimedEventCycle < haltTarget
+        ) {
+          haltTarget = ctx.ioCycleTimedEventCycle;
+        }
+        if (haltTarget <= ctx.cycleCounter) haltTarget = ctx.cycleCounter + 1;
+        ctx.cycleCounter = haltTarget;
+        cycles = haltTarget;
+        continue;
       }
 
       if (ctx.cycleCounter >= ctx.stallCycleCounter) {
@@ -1223,7 +1248,6 @@
     setIo: setIo,
     nmi: nmi,
     reset: reset,
-    irq: irq,
     run: run,
     executeOne: executeOne,
     stall: stall,

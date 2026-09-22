@@ -4,11 +4,13 @@
 
 - Files: `jsA8E/js/core/cpu.js`, `jsA8E/js/core/cpu_tables.js`, `jsA8E/js/core/antic.js`, `jsA8E/js/core/gtia.js`, `jsA8E/js/core/pokey.js`, `jsA8E/js/core/pokey_sio.js`, `jsA8E/js/core/memory.js`, `jsA8E/js/core/io.js`, `jsA8E/js/core/atari.js`, `jsA8E/js/core/hw.js`, `jsA8E/js/core/playfield/playfield.js`, `jsA8E/js/core/playfield/renderer_base.js`, `jsA8E/js/core/state.js`, `jsA8E/js/core/snapshot_codec.js`
 - Purpose: mirror Atari hardware behavior in JavaScript with timing-compatible execution.
-- Status: updated on 2026-08-03 (`partial`).
+- Status: updated on 2026-09-22 (`partial`).
 
 ## Architecture
 
 CPU/ANTIC/GTIA/POKEY execution is coordinated through shared machine state. `playfield/playfield.js` owns scanline orchestration, scratch-buffer setup, and active-line geometry. `playfield/renderer_base.js` owns `clockAction`, the DMA scheduler, CHBASE timing, PM interleave, and shared blank-line/background helpers. Per-mode pixel generators live in `playfield/mode_2_3.js`, `mode_4_5.js`, `mode_6_7.js`, and `mode_8_f.js`.
+
+I/O decoding follows AHRM 2.3/2.5/4.1/5.1/6.1: `hw.ioRegisterAddress` folds an address onto its canonical register (GTIA every `$20` bytes, POKEY and ANTIC every `$10`, PIA every 4), `installIoHandlers` installs `ioAccess` at every mirror, and `ioAccess` dispatches on the canonical address. Every other `$D000-$D7FF` address, including unassigned ANTIC/POKEY slots, reads `$FF` (pulled-up XL bus); write-only GTIA slots `$D015-$D01E` read `$0F`, and NMIST bits 4-0 read 1.
 
 State is created up-front by `state.js` into a fixed `ioData` shape. ANTIC and the playfield renderer rely on this fixed shape — `nmiTiming`, `chbaseTiming`, and per-line DMA buffers are never rebuilt lazily in hot paths. Media state is normalized through `getMediaState()` before reset/mount/snapshot work.
 
@@ -33,7 +35,7 @@ Active-line geometry maps GTIA horizontal positions from AHRM 6.2 into the 456-p
 
 DMA steal positions (AHRM 4.14): refresh at cycles 25/29/33/37/41/45/49/53/57 (one-cycle deferral; further blocked refreshes drop); display list instruction at cycle 1; LMS/jump address at cycles 6–7; missile DMA at cycle 0; player DMA at cycles 2–5 (AHRM 4.13).
 
-Playfield DMA is scheduled per line cycle (`scheduledPlayfieldDma` array in `drawLine` state), not charged as a bulk stall. First-row display/name fetches fill a reusable 48-byte line buffer; repeated scanlines reuse buffered bytes. Character modes 2–7 place the character-data fetch in the `+3` cycle slot after the display/name fetch. Late fetches after cycle 105 use the virtual CPU bus path: the active CPU bus address is sampled even when it is `$0000` (JavaScript truthiness is not used as a validity check), and deferred-refresh overlaps return pulled-up `$FF` per AHRM 4.14.
+Playfield DMA is scheduled per line cycle (`scheduledPlayfieldDma` array in `drawLine` state), not charged as a bulk stall. First-row display/name fetches fill a reusable 48-byte line buffer; repeated scanlines reuse buffered bytes. Character modes 2–7 place the character-data fetch in the `+3` cycle slot after the display/name fetch. Late fetches after cycle 105 use the virtual CPU bus path: the active CPU bus address is sampled even when it is `$0000` (JavaScript truthiness is not used as a validity check), and deferred-refresh overlaps read the undriven bus (AHRM 4.14), which the XL's data-bus pull-ups turn into `$FF` (AHRM 2.3).
 
 Mapped bitmap modes consume bytes MSB-first per AHRM 4.5. Mode 8 repeats each two-bit color index across two output cycles (8 hires pixels), while mode A advances through all four two-bit pairs in the byte across four output cycles (4 hires pixels per color index).
 
@@ -53,19 +55,29 @@ PMG DMA fetches happen in `fetchPmgDmaCycle` (in `gtia.js`, called from `clockAc
 
 `PMBASE` is read live at each DMA cycle. This means a DLI write to PMBASE between cycles 5 and 0 of adjacent scanlines applies cleanly; a write during cycles 0–5 of an active scanline will cause a mixed-base fetch for that scanline (missiles use old base, late players use new base). This matches real hardware behavior.
 
-PM graphics are drawn interleaved with playfield pixels via `drawPlayerMissilesClock` called from `clockAction` during `drawLine`. Priority compositing uses a `Uint16Array` priority buffer; all player/missile draw functions mask with `& 0xffff`. Priority constants `PRIO_PF3` and `PRIO_M10_PM0-3` are wired through the full config chain (`atari.js → antic.js → A8EPlayfield → A8EPlayfieldRenderer → renderer_base → mode_*.js`). The interleaved GTIA path now models PM output with a per-line shift-register/state-machine pair per object: a trigger ORs in fresh latch data, resets the size state, and lets mid-image rightward retriggers build overlapping images without moving the already-started copy. PM horizontal origin uses the same AHRM 6.2 coordinate mapping as playfield rendering, so HPOS `$30` lands on the normal playfield left edge (`x=96` in the full 456-pixel line buffer). HSCROL-clipped lines preserve already-composited PMG pixels in both the aperture fill and the trailing border fill.
+PM graphics are drawn interleaved with playfield pixels via `drawPlayerMissilesClock` called from `clockAction` during `drawLine`. Each color clock with an active player or missile is colored by `resolvePriorityClock` from the AHRM 6.7 equations (`prioritySelect`): missiles join their players (or PF3 with the fifth player), GTIA mode 10 codes 0-3 (`PRIO_M10_PMn`) count as players, and the selected color registers are ORed ($00 when nothing is selected; the background keeps the rendered pixel). In hires modes the logic sees PF2 and the PF1 luminance lands on the 1-bits afterwards (AHRM 6.8). Collisions still use the raw signals; the old non-interleaved path (lines 0-7 only) keeps the mask priorities. Priority compositing uses a `Uint16Array` priority buffer; all player/missile draw functions mask with `& 0xffff`. Priority constants `PRIO_PF3` and `PRIO_M10_PM0-3` are wired through the full config chain (`atari.js → antic.js → A8EPlayfield → A8EPlayfieldRenderer → renderer_base → mode_*.js`). The interleaved GTIA path now models PM output with a per-line shift-register/state-machine pair per object: a trigger ORs in fresh latch data, resets the size state, and lets mid-image rightward retriggers build overlapping images without moving the already-started copy. PM horizontal origin uses the same AHRM 6.2 coordinate mapping as playfield rendering, so HPOS `$30` lands on the normal playfield left edge (`x=96` in the full 456-pixel line buffer). HSCROL-clipped lines preserve already-composited PMG pixels in both the aperture fill and the trailing border fill.
 
 ## POKEY / Pot Scan
 
 Pot scans track an accumulated counter rather than a fixed 28-cycle divider. Slow scans advance once per scanline; fast scans advance once per machine cycle and can expose the `229` terminal count (held for one extra cycle before forcing `ALLPOT` low). Scans run through the terminal hold cycle even after `ALLPOT` has cleared. `SKCTL` mode changes resync the active scan counter from the current cycle. JS snapshots preserve mid-scan state (`lastCycle`, `terminalCycle`, current count).
 
+IRQs follow AHRM 5.7/14.4 (`io.js`): IRQST is active low and `raisePokeyIrq` latches a source's bit only while its IRQEN bit is set, so events of disabled sources are lost; an IRQEN write resets the disabled bits. Bit 3 is not latched: `setSerialOutputIdle` shows the serial output state (0 = idle, so IRQST reads `$F7` at rest; a SEROUT write sets it busy) and IRQEN writes leave it alone. `updateIrqLine` sets `ctx.irqPending` as a level (`~IRQST & IRQEN`); the CPU takes the IRQ while it is set and I is clear without consuming it, so no stale IRQs remain after the source is acknowledged. Reading SERIN has no IRQ side effect. Snapshot import recomputes the line from IRQST/IRQEN.
+
+## PIA
+
+`io.js` keeps ORA in `sram[IO_PORTA]`, DDRA in `io.valuePortA`, and the joystick input in `ram[IO_PORTA]`. `piaPortARead` returns `input & (ORA | ~DDRA)`, so port A output bits read as the AND of ORA and the external line (AHRM 2.5). ORA powers on as `$00` (AHRM 14.5). PACTL/PBCTL read back bits 0-5 as written. PORTB still forces bits 2-6 to 1 and ignores DDRB; PIA interrupt flags are not modeled.
+
+## Reset
+
+The F5 key runs `io.warmReset`, the XL Reset key (AHRM 2.4): NMIEN, DMACTL and the NMIEN timing latches clear (AHRM 4.1), the PIA registers clear and `piaPortBWrite(ctx, 0xff)` applies the port B pull-ups (OS ROM in, BASIC and self-test out, RAM under the ROMs kept; AHRM 2.5, 2.6), then the CPU fetches the OS reset vector. RAM is kept, so the OS warm-starts. The UI/automation reset (`memory.hardReset`) is a power cycle: it clears `ram`/`sram` before re-initializing the chips, so the OS always cold-starts and boots the mounted media. TRIG3 is the cartridge sense line and reads 0 (`trigPhysical[3] = 0`, AHRM 2.8); `releaseAll` leaves it alone.
+
 ## CPU
 
-All documented and undocumented opcodes are implemented, including the fake6502/Lorenz suite: `ANE`, `LXA`, `ARR`, `LAS`, `SHA`, `SHX`, `SHY`, `TAS`, `RRA`, `SBX`, with the `SHX`/`SHY` write-address glitch and the `RRA`/`ISC` decimal-cycle cancellation.
+All documented and undocumented opcodes are implemented, including the fake6502/Lorenz suite: `ANE`, `LXA`, `ARR`, `LAS`, `SHA`, `SHX`, `SHY`, `TAS`, `RRA`, `SBX`, with the `SHX`/`SHY` write-address glitch. `$EB` is an alias of `SBC #imm`. The 12 KIL/JAM opcodes set `ctx.halted`: `executeOne`/`run` only advance the clock (timed I/O events keep running), NMI/IRQ are ignored, and only `reset()` clears it (AHRM 3.5). The automation illegal-opcode hook still reports KIL opcodes. Decimal mode follows the NMOS 6502 (AHRM 3.2): `ADC` takes N/V from the intermediate sum and Z from the binary sum, `SBC` flags are binary, and no extra decimal cycle is charged.
 
 ## Snapshots
 
-Snapshot saves default to advancing paused execution to the next frame boundary before encoding, avoiding unstable mid-frame raster state (`timing: "exact"` opts out). Payloads capture CPU registers/counters, RAM + shadow RAM, video buffers, `ioData` timing/custom-chip state (including `nmiTiming`, `chbaseTiming`, `vbiCycle`, the ANTIC mode-line row-counter state, POKEY pot-scan state, ANTIC timing latch), mounted media/ROM bytes, debugger trace/breakpoints, input bookkeeping, and H: device HostFS file set plus open-channel state. Snapshots predating `vbiCycle`/row-counter fields restore with quiescent defaults (safe for the default frame-boundary saves).
+Snapshot saves default to advancing paused execution to the next frame boundary before encoding, avoiding unstable mid-frame raster state (`timing: "exact"` opts out). Payloads capture CPU registers/counters (including the KIL `halted` flag), RAM + shadow RAM, video buffers, `ioData` timing/custom-chip state (including `nmiTiming`, `chbaseTiming`, `vbiCycle`, the ANTIC mode-line row-counter state, POKEY pot-scan state, ANTIC timing latch), mounted media/ROM bytes, debugger trace/breakpoints, input bookkeeping, and H: device HostFS file set plus open-channel state. Snapshots predating `vbiCycle`/row-counter fields restore with quiescent defaults (safe for the default frame-boundary saves).
 
 ## XEX Preflight
 

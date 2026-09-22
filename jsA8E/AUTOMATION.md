@@ -93,7 +93,7 @@ Many methods accept duration arguments (`ms`, `holdMs`, `afterMs`, `interKeyDela
 |---|---|
 | `start()` | Starts emulation and resolves after the backend acknowledges the transition. |
 | `pause()` | Pauses emulation and resolves after the backend acknowledges the transition. |
-| `reset(options)` | Cold-resets the machine. Supports reset-time overrides such as `portB`. |
+| `reset(options)` | Cold-resets (power-cycles) the machine: RAM is cleared, so the OS always cold-starts. Supports reset-time overrides such as `portB`. |
 | `boot(options)` | Convenience wrapper around reset + start. Use `reset: false` or `start: false` to skip parts. |
 | `saveSnapshot(options)` | Saves a versioned full-machine snapshot. Pauses first unless `pauseRunning === false`, in which case it throws if the machine is running. The default save timing is frame-aligned; pass `timing: "exact"` to keep the current paused cycle position. |
 | `loadSnapshot(data, options)` | Loads a snapshot from `ArrayBuffer`, typed array, or similar binary input. `resume` defaults to `"saved"`. |

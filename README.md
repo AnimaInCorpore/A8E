@@ -100,6 +100,13 @@ Both implementations share the same key mappings.
 
 Type normally on the emulated Atari keyboard. **Ctrl** and **Shift** work as modifiers, matching the original Atari 800 XL layout.
 
+| Key | Function |
+|-----|----------|
+| F1 | HELP |
+| F6 or Caps Lock | CAPS |
+| F7 | INVERSE (Atari logo key) |
+| Esc | ESC |
+
 ### Joystick
 
 | Key | Function |

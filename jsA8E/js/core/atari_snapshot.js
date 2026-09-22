@@ -21,6 +21,8 @@
     const machine = config.machine && typeof config.machine === "object" ? config.machine : null;
     const video = config.video && typeof config.video === "object" ? config.video : null;
     const CPU = config.CPU || null;
+    const updateIrqLine =
+      typeof config.updateIrqLine === "function" ? config.updateIrqLine : null;
     const snapshotCodec =
       config.snapshotCodec && typeof config.snapshotCodec === "object"
         ? config.snapshotCodec
@@ -202,6 +204,7 @@
           nmiPending: machine.ctx.nmiPending | 0,
           nmiActive: machine.ctx.nmiActive | 0,
           irqPending: machine.ctx.irqPending | 0,
+          halted: machine.ctx.halted | 0,
           instructionCounter: machine.ctx.instructionCounter >>> 0,
           cycleAccum: +machine.cycleAccum || 0,
           frameCycleAccum: machine.frameCycleAccum | 0,
@@ -330,10 +333,14 @@
       machine.ctx.nmiPending = snapshot.nmiPending ? 1 : 0;
       machine.ctx.nmiActive = snapshot.nmiActive ? 1 : 0;
       machine.ctx.irqPending = snapshot.irqPending | 0;
+      machine.ctx.halted = snapshot.halted ? 1 : 0;
       machine.ctx.instructionCounter = snapshot.instructionCounter >>> 0;
       machine.ctx.breakRun = false;
       machine.ctx.pcHooks = Object.create(null);
       memoryRuntime.importSnapshotState(snapshot.memory);
+      // The IRQ line is a level derived from IRQST/IRQEN; older snapshots
+      // stored an event count that could replay stale IRQs.
+      if (updateIrqLine) updateIrqLine(machine.ctx);
       restoreVideoState(video, snapshot.video);
       cycleTimedEventUpdate(machine.ctx);
       if (hDevice && typeof hDevice.importSnapshotState === "function") {

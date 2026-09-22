@@ -180,7 +180,7 @@ function testIscDecimal() {
   assert.equal(ctx.cpu.a, 0x99, "ISC decimal mode should store the adjusted SBC result");
   assert.equal(ctx.ram[0x0040], 0x01, "ISC should increment memory before subtracting");
   assert.equal(ctx.cpu.pc, 0x2002, "ISC should consume its zero-page operand");
-  assert.equal(ctx.cycleCounter, 5, "ISC should cancel the decimal-mode SBC cycle");
+  assert.equal(ctx.cycleCounter, 5, "ISC should keep its 5-cycle zero-page timing in decimal mode");
   assertFlag(ctx.cpu.ps, FLAG_C, false, "ISC decimal mode should clear carry when the subtraction borrows");
   assertFlag(ctx.cpu.ps, FLAG_Z, false, "ISC decimal mode should keep Z from the binary result");
   assertFlag(ctx.cpu.ps, FLAG_N, true, "ISC decimal mode should keep N from the binary result");
@@ -281,10 +281,10 @@ function testDecimalAdc() {
   });
 
   assert.equal(ctx.cpu.a, 0x00, "ADC decimal mode should store the adjusted result");
-  assert.equal(ctx.cycleCounter, 3, "ADC decimal mode should take the extra cycle");
+  assert.equal(ctx.cycleCounter, 2, "ADC decimal mode should not take an extra cycle on the NMOS 6502");
   assertFlag(ctx.cpu.ps, FLAG_C, true, "ADC decimal mode should set carry for 0x99 + 0x01");
-  assertFlag(ctx.cpu.ps, FLAG_Z, false, "ADC decimal mode should keep Z from the intermediate binary result");
-  assertFlag(ctx.cpu.ps, FLAG_N, true, "ADC decimal mode should keep N from the intermediate binary result");
+  assertFlag(ctx.cpu.ps, FLAG_Z, false, "ADC decimal mode should keep Z from the binary result");
+  assertFlag(ctx.cpu.ps, FLAG_N, true, "ADC decimal mode should take N from the intermediate sum ($A0)");
   assertFlag(ctx.cpu.ps, FLAG_V, false, "ADC decimal mode should leave V clear for 0x99 + 0x01");
 }
 
@@ -295,11 +295,139 @@ function testDecimalSbc() {
   });
 
   assert.equal(ctx.cpu.a, 0x99, "SBC decimal mode should store the adjusted result");
-  assert.equal(ctx.cycleCounter, 3, "SBC decimal mode should take the extra cycle");
+  assert.equal(ctx.cycleCounter, 2, "SBC decimal mode should not take an extra cycle on the NMOS 6502");
   assertFlag(ctx.cpu.ps, FLAG_C, false, "SBC decimal mode should clear carry when the subtraction borrows");
   assertFlag(ctx.cpu.ps, FLAG_Z, false, "SBC decimal mode should keep Z from the intermediate binary result");
   assertFlag(ctx.cpu.ps, FLAG_N, true, "SBC decimal mode should keep N from the intermediate binary result");
   assertFlag(ctx.cpu.ps, FLAG_V, false, "SBC decimal mode should leave V clear for 0x00 - 0x01");
+}
+
+function signed8(value) {
+  return value & 0x80 ? value - 0x100 : value;
+}
+
+// Reference NMOS 6502 decimal ADC (Bruce Clark, "Decimal Mode", Appendix A; AHRM 3.2).
+function referenceDecimalAdc(a, b, carry) {
+  let low = (a & 0x0f) + (b & 0x0f) + carry;
+  if (low >= 0x0a) low = ((low + 0x06) & 0x0f) + 0x10;
+  let sum = (a & 0xf0) + (b & 0xf0) + low;
+  const signedSum = signed8(a & 0xf0) + signed8(b & 0xf0) + low;
+  const n = (sum & 0x80) !== 0;
+  const v = signedSum < -128 || signedSum > 127;
+  const z = ((a + b + carry) & 0xff) === 0;
+  if (sum >= 0xa0) sum += 0x60;
+  return { a: sum & 0xff, c: sum >= 0x100, n: n, v: v, z: z };
+}
+
+// Reference NMOS 6502 decimal SBC: binary flags, nibble-wise corrected result.
+function referenceDecimalSbc(a, b, carry) {
+  const binary = a - b - (1 - carry);
+  const bin = binary & 0xff;
+  let low = (a & 0x0f) - (b & 0x0f) + carry - 1;
+  if (low < 0) low = ((low - 0x06) & 0x0f) - 0x10;
+  let diff = (a & 0xf0) - (b & 0xf0) + low;
+  if (diff < 0) diff -= 0x60;
+  return {
+    a: diff & 0xff,
+    c: binary >= 0,
+    n: (bin & 0x80) !== 0,
+    v: ((a ^ bin) & (a ^ b) & 0x80) !== 0,
+    z: bin === 0,
+  };
+}
+
+function checkDecimalOpcodeAgainstReference(opcode, reference) {
+  const cpuApi = loadCpuApi();
+  const ctx = cpuApi.makeContext();
+  const cpu = ctx.cpu;
+  for (let a = 0; a < 256; a++) {
+    for (let b = 0; b < 256; b++) {
+      for (let carry = 0; carry < 2; carry++) {
+        cpu.pc = 0x2000;
+        cpu.a = a;
+        cpu.ps = FLAG_D | (carry ? FLAG_C : 0);
+        ctx.ram[0x2000] = opcode;
+        ctx.ram[0x2001] = b;
+        ctx.cycleCounter = 0;
+        cpuApi.executeOne(ctx);
+        const expected = reference(a, b, carry);
+        const label = "$" + opcode.toString(16) + " A=" + a + " B=" + b + " C=" + carry;
+        assert.equal(cpu.a, expected.a, label + ": result");
+        assertFlag(cpu.ps, FLAG_C, expected.c, label + ": C");
+        assertFlag(cpu.ps, FLAG_N, expected.n, label + ": N");
+        assertFlag(cpu.ps, FLAG_V, expected.v, label + ": V");
+        assertFlag(cpu.ps, FLAG_Z, expected.z, label + ": Z");
+        assert.equal(ctx.cycleCounter, 2, label + ": cycles");
+      }
+    }
+  }
+}
+
+function testDecimalMatchesNmosReference() {
+  checkDecimalOpcodeAgainstReference(0x69, referenceDecimalAdc);
+  checkDecimalOpcodeAgainstReference(0xe9, referenceDecimalSbc);
+  checkDecimalOpcodeAgainstReference(0xeb, referenceDecimalSbc);
+}
+
+function testAhrmDecimalExamples() {
+  // AHRM 3.2: $0F + $0F -> intermediate $1E, corrected to $14 (no double carry).
+  let ctx = runOpcode(0x69, 0x0f, { a: 0x0f, ps: FLAG_D });
+  assert.equal(ctx.cpu.a, 0x14, "$0F + $0F should correct to $14");
+
+  // AHRM 3.2: $FF + $01 = $66 with Z set.
+  ctx = runOpcode(0x69, 0x01, { a: 0xff, ps: FLAG_D });
+  assert.equal(ctx.cpu.a, 0x66, "$FF + $01 should give $66");
+  assertFlag(ctx.cpu.ps, FLAG_Z, true, "$FF + $01 should set Z from the binary sum");
+
+  // N and V come from the intermediate sum: $79 + $01 = $80 sets both.
+  ctx = runOpcode(0x69, 0x01, { a: 0x79, ps: FLAG_D });
+  assert.equal(ctx.cpu.a, 0x80, "$79 + $01 should give $80");
+  assertFlag(ctx.cpu.ps, FLAG_N, true, "$79 + $01 should set N");
+  assertFlag(ctx.cpu.ps, FLAG_V, true, "$79 + $01 should set V");
+}
+
+function testUndocumentedSbcImmediate() {
+  const ctx = runOpcode(0xeb, 0x11, { a: 0x50, ps: FLAG_C });
+  assert.equal(ctx.cpu.a, 0x3f, "$EB should subtract like SBC #imm");
+  assertFlag(ctx.cpu.ps, FLAG_C, true, "$EB should leave carry set without a borrow");
+  assert.equal(ctx.cpu.pc, 0x2002, "$EB should consume its immediate operand");
+  assert.equal(ctx.cycleCounter, 2, "$EB should take 2 cycles");
+}
+
+function testKilJamsUntilReset() {
+  const kilOpcodes = [0x02, 0x12, 0x22, 0x32, 0x42, 0x52, 0x62, 0x72, 0x92, 0xb2, 0xd2, 0xf2];
+  const cpuApi = loadCpuApi();
+  for (const opcode of kilOpcodes) {
+    const ctx = cpuApi.makeContext();
+    ctx.cpu.pc = 0x2000;
+    ctx.ram[0x2000] = opcode;
+    ctx.ram[0x2001] = 0xea;
+    ctx.ram[0xfffa] = 0x00; // NMI vector -> $3000
+    ctx.ram[0xfffb] = 0x30;
+    ctx.ram[0xfffc] = 0x00; // reset vector -> $4000
+    ctx.ram[0xfffd] = 0x40;
+    cpuApi.executeOne(ctx);
+    const label = "KIL $" + opcode.toString(16);
+    assert.equal(ctx.halted, 1, label + " should jam the CPU");
+    assert.equal(ctx.cpu.pc, 0x2000, label + " should leave PC on the opcode");
+
+    // The jammed CPU ignores NMIs while the clock keeps running.
+    cpuApi.nmi(ctx);
+    ctx.cycleCounter = 100;
+    cpuApi.executeOne(ctx);
+    cpuApi.executeOne(ctx);
+    assert.equal(ctx.cpu.pc, 0x2000, label + ": jammed CPU must not execute or take an NMI");
+    assert.equal(ctx.cycleCounter, 102, label + ": jammed CPU should still advance the clock");
+    assert.equal(ctx.nmiPending, 1, label + ": NMI should stay pending while jammed");
+    ctx.cycleCounter = 200;
+    cpuApi.run(ctx, 300);
+    assert.equal(ctx.cpu.pc, 0x2000, label + ": run() must not execute while jammed");
+    assert.equal(ctx.cycleCounter, 300, label + ": run() should advance the clock while jammed");
+
+    cpuApi.reset(ctx);
+    assert.equal(ctx.halted, 0, label + ": reset should clear the jam");
+    assert.equal(ctx.cpu.pc, 0x4000, label + ": reset should restart at the reset vector");
+  }
 }
 
 testAne();
@@ -316,5 +444,9 @@ testShy();
 testTas();
 testDecimalAdc();
 testDecimalSbc();
+testDecimalMatchesNmosReference();
+testAhrmDecimalExamples();
+testUndocumentedSbcImmediate();
+testKilJamsUntilReset();
 
 console.log("cpu undocumented opcode tests passed");

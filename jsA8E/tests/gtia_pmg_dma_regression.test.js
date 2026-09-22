@@ -24,6 +24,9 @@ function loadGtiaApi() {
 
   return context.window.A8EGtia.createApi({
     PIXELS_PER_LINE: 456,
+    IO_COLPF0: 0xd016,
+    IO_COLPF1: 0xd017,
+    IO_COLPF2: 0xd018,
     IO_COLPF3: 0xd019,
     IO_COLPM0_TRIG2: 0xd012,
     IO_COLPM1_TRIG3: 0xd013,
@@ -225,7 +228,93 @@ function testHpos30MapsToNormalPlayfieldLeftEdge() {
   assert.equal(ctx.ioData.videoOut.pixels[97], 0x77);
 }
 
+// Draws the first color clock of the normal playfield (x=96) with objects at
+// HPOS $30 over an already rendered playfield pixel and returns its color.
+function drawPriorityCase(options) {
+  const api = loadGtiaApi();
+  const ctx = makeCtx();
+  const sram = ctx.sram;
+
+  sram[0xd016] = 0x22; // COLPF0
+  sram[0xd017] = 0x0a; // COLPF1
+  sram[0xd018] = 0x94; // COLPF2
+  sram[0xd019] = 0x44; // COLPF3
+  sram[0xd012] = 0x21; // COLPM0
+  sram[0xd013] = 0x42; // COLPM1
+  sram[0xd014] = 0x46; // COLPM2
+  sram[0xd015] = 0x88; // COLPM3
+  sram[0xd01b] = options.prior;
+  sram[0xd00d] = options.grafP0 || 0;
+  sram[0xd00f] = options.grafP2 || 0;
+  sram[0xd011] = options.grafM || 0;
+  sram[0xd000] = 0x30; // HPOSP0
+  sram[0xd002] = 0x30; // HPOSP2
+  sram[0xd004] = 0x30; // HPOSM0
+  sram[0xd005] = 0x30; // HPOSM1
+  ctx.ioData.currentDisplayListCommand = options.mode || 0x0e;
+  ctx.ioData.videoOut.pixels.fill(options.pixel, 96, 100);
+  ctx.ioData.videoOut.priority.fill(options.priority, 96, 100);
+
+  api.drawPlayerMissilesClock(ctx, 96);
+  return ctx.ioData.videoOut.pixels[96];
+}
+
+function testGtiaPriorityEquations() {
+  const PF0 = { pixel: 0x22, priority: 0x01 };
+  const PF2 = { pixel: 0x94, priority: 0x04 };
+  const BAK = { pixel: 0x00, priority: 0x00 };
+  const cases = [
+    // AHRM 6.7 mode 0: PF2/PF3 mix with P2/P3 ($46 | $94).
+    ["PRIOR=0 P2 over PF2 mixes", PF2, { prior: 0x00, grafP2: 0xff }, 0xd6],
+    // Mode 0: PF0/PF1 mix with P0/P1 ($21 | $22).
+    ["PRIOR=0 P0 over PF0 mixes", PF0, { prior: 0x00, grafP0: 0xff }, 0x23],
+    // Mode 0: PF0/PF1 still win over P2/P3.
+    ["PRIOR=0 PF0 hides P2", PF0, { prior: 0x00, grafP2: 0xff }, 0x22],
+    // Table 16: PRIOR[3:0]=0110 with PF01+P01 gives black.
+    ["PRIOR=6 PF0 and P0 give black", PF0, { prior: 0x06, grafP0: 0xff }, 0x00],
+    ["PRIOR=1 P0 over PF0", PF0, { prior: 0x01, grafP0: 0xff }, 0x21],
+    ["PRIOR=4 PF0 over P0", PF0, { prior: 0x04, grafP0: 0xff }, 0x22],
+    // Multicolor players blend M0 and M1 too ($21 | $42).
+    ["PRIOR=$20 M0+M1 blend", BAK, { prior: 0x20, grafM: 0x0f }, 0x63],
+    ["PRIOR=0 M0 hides M1", BAK, { prior: 0x00, grafM: 0x0f }, 0x21],
+    // The fifth player shows COLPF3 and beats the other playfields.
+    ["PRIOR=$11 fifth player over PF0", PF0, { prior: 0x11, grafM: 0x03 }, 0x44],
+    // GTIA mode 10 codes 0000-0011 act as players (AHRM 6.9): P0 hides
+    // a code-1 pixel unless multicolor players are on.
+    ["PRIOR=$80 P0 over a mode 10 P1 pixel", { pixel: 0x42, priority: 0x200 }, { prior: 0x80, grafP0: 0xff, mode: 0x0f }, 0x21],
+    ["PRIOR=$A0 P0 blends with a mode 10 P1 pixel", { pixel: 0x42, priority: 0x200 }, { prior: 0xa0, grafP0: 0xff, mode: 0x0f }, 0x63],
+  ];
+  for (const [name, playfield, objects, expected] of cases) {
+    const color = drawPriorityCase(Object.assign({}, playfield, objects));
+    assert.equal(color, expected, name + ": got $" + color.toString(16));
+  }
+}
+
+function testHiresPriorityUsesPf2AndPf1Luminance() {
+  // AHRM 6.8: the priority logic sees PF2 in hires modes, and the PF1
+  // luminance lands on the 1-bits afterwards (PF1-tagged pixels).
+  const lit = { pixel: 0x9a, priority: 0x02, mode: 0x02 };
+  const unlit = { pixel: 0x94, priority: 0x04, mode: 0x02 };
+  assert.equal(
+    drawPriorityCase(Object.assign({ prior: 0x04, grafP0: 0xff }, lit)),
+    0x9a,
+    "text in front of a player keeps the PF2 hue",
+  );
+  assert.equal(
+    drawPriorityCase(Object.assign({ prior: 0x01, grafP0: 0xff }, lit)),
+    0x2a,
+    "a player in front lends its hue to the text luminance",
+  );
+  assert.equal(
+    drawPriorityCase(Object.assign({ prior: 0x00, grafP0: 0xff }, unlit)),
+    0x21,
+    "mode 0: P0 wins over the hires PF2 background",
+  );
+}
+
 testVdelayMasksFetchesOnEvenScanlines();
+testGtiaPriorityEquations();
+testHiresPriorityUsesPf2AndPf1Luminance();
 testPlayerDmaKeepsMissileSlotAlive();
 testHposZeroStillRenders();
 testMidImageHposWriteKeepsOriginalStart();

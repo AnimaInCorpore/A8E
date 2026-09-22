@@ -4,6 +4,9 @@
   function createApi(cfg) {
     const PIXELS_PER_LINE = cfg.PIXELS_PER_LINE;
 
+    const IO_COLPF0 = cfg.IO_COLPF0;
+    const IO_COLPF1 = cfg.IO_COLPF1;
+    const IO_COLPF2 = cfg.IO_COLPF2;
     const IO_COLPF3 = cfg.IO_COLPF3;
     const IO_COLPM0_TRIG2 = cfg.IO_COLPM0_TRIG2;
     const IO_COLPM1_TRIG3 = cfg.IO_COLPM1_TRIG3;
@@ -224,79 +227,114 @@
       }
     }
 
-    function drawPlayerClockCell(
-      color,
-      priorityMask,
-      priorityBit,
-      prio,
-      dst,
-      startIndex,
-      special,
-      overlap,
-    ) {
-      const cColor = color & 0xff;
-      const cPriorityMask = priorityMask & 0xffff;
-      const cPriorityBit = priorityBit & 0xffff;
-      const cOverlap = overlap & 0xffff;
-      let collision = 0;
-
-      for (let pi = startIndex | 0, end = (startIndex + 2) | 0; pi < end; pi++) {
-        const p = prio[pi] & 0xffff;
-        if (cOverlap && (p & cOverlap)) {
-          if (special && (p & PRIO_PF1)) {
-            dst[pi] = ((cColor & 0xf0) | dst[pi]) & 0xff;
-          } else if (!(p & cPriorityMask)) {
-            dst[pi] = (cColor | dst[pi]) & 0xff;
-          }
-        } else {
-          if (special && (p & PRIO_PF1)) {
-            dst[pi] = ((dst[pi] & 0x0f) | (cColor & 0xf0)) & 0xff;
-          } else if (!(p & cPriorityMask)) {
-            dst[pi] = cColor;
-          }
-        }
-        prio[pi] = (p | cPriorityBit) & 0xffff;
-        collision |= prio[pi] & 0xffff;
-      }
-
-      if (special) {
-        collision =
-          (collision & ~(PRIO_PF1 | PRIO_PF2)) |
-          (collision & PRIO_PF1 ? PRIO_PF2 : 0);
-      }
-
-      return collision & 0xffff;
+    // In hires modes only the 1-bits collide, and they collide as PF2 (AHRM 6.8).
+    function hiresCollision(collision, special) {
+      if (!special) return collision;
+      return (
+        (collision & ~(PRIO_PF1 | PRIO_PF2)) |
+        (collision & PRIO_PF1 ? PRIO_PF2 : 0)
+      );
     }
 
-    function drawMissileClockCell(
-      color,
-      priorityMask,
-      prio,
-      dst,
-      startIndex,
-      special,
-    ) {
-      const cColor = color & 0xff;
-      const cPriorityMask = priorityMask & 0xffff;
+    // Collisions use the raw object and playfield signals, independent of
+    // color and priority (AHRM 6.6). A player also marks the priority buffer,
+    // so the objects handled after it in the same color clock see it.
+    function playerClockCollision(priorityBit, prio, startIndex, special) {
       let collision = 0;
+      for (let pi = startIndex | 0, end = (startIndex + 2) | 0; pi < end; pi++) {
+        prio[pi] = (prio[pi] | priorityBit) & 0xffff;
+        collision |= prio[pi];
+      }
+      return hiresCollision(collision, special) & 0xffff;
+    }
+
+    function missileClockCollision(prio, startIndex, special) {
+      return hiresCollision((prio[startIndex] | prio[startIndex + 1]) & 0xffff, special) & 0xffff;
+    }
+
+    const PRIORITY_SELECT_BAK = 0x100;
+
+    // GTIA priority logic (AHRM 6.7). players holds P0-P3 in bits 0-3 and
+    // playfields PF0-PF3 in bits 0-3. Returns the enabled layers: SF0-SF3 in
+    // bits 0-3, SP0-SP3 in bits 4-7 and the background SB in bit 8. With
+    // PRIOR[3:0] = 0 players and playfields mix; conflicting priority bits can
+    // turn every layer off (black).
+    function prioritySelect(prior, players, playfields) {
+      const pri0 = (prior & 0x01) !== 0;
+      const pri1 = (prior & 0x02) !== 0;
+      const pri2 = (prior & 0x04) !== 0;
+      const pri3 = (prior & 0x08) !== 0;
+      const multi = (prior & 0x20) !== 0;
+      const pri01 = pri0 || pri1;
+      const pri12 = pri1 || pri2;
+      const pri23 = pri2 || pri3;
+      const pri03 = pri0 || pri3;
+      const p0 = (players & 0x01) !== 0;
+      const p1 = (players & 0x02) !== 0;
+      const p2 = (players & 0x04) !== 0;
+      const p3 = (players & 0x08) !== 0;
+      const p01 = p0 || p1;
+      const p23 = p2 || p3;
+      const pf0 = (playfields & 0x01) !== 0;
+      const pf1 = (playfields & 0x02) !== 0;
+      const pf2 = (playfields & 0x04) !== 0;
+      const pf3 = (playfields & 0x08) !== 0;
+      const pf01 = pf0 || pf1;
+      const pf23 = pf2 || pf3;
+      const sp01 = !(pf01 && pri23) && !(pri2 && pf23);
+      const sp23 = !p01 && !(pf23 && pri12) && !(pf01 && !pri0);
+      const sf3 = pf3 && !(p23 && pri03) && !(p01 && !pri2);
+      const sf01 = !(p23 && pri0) && !(p01 && pri01) && !sf3;
+      let select = 0;
+
+      if (p0 && sp01) select |= 0x10;
+      if (p1 && sp01 && (!p0 || multi)) select |= 0x20;
+      if (p2 && sp23) select |= 0x40;
+      if (p3 && sp23 && (!p2 || multi)) select |= 0x80;
+      if (pf0 && sf01) select |= 0x01;
+      if (pf1 && sf01) select |= 0x02;
+      if (pf2 && !(p23 && pri03) && !(p01 && !pri2) && !sf3) select |= 0x04;
+      if (sf3) select |= 0x08;
+      if (!p01 && !p23 && !pf01 && !pf23) select |= PRIORITY_SELECT_BAK;
+      return select;
+    }
+
+    // Colors one color clock that has at least one player or missile on it.
+    // The selected color registers are ORed together ($00 when nothing is
+    // selected); the background layer keeps the rendered pixel (COLBK or a
+    // GTIA mode 9-11 color). Missiles count as their players, or as PF3 when
+    // the fifth player is enabled (AHRM 6.7). GTIA mode 10 pixel codes
+    // 0000-0011 act as P0-P3 (AHRM 6.9). In hires modes the priority logic
+    // sees PF2, and the PF1 luminance is impressed on the 1-bits on top of any
+    // object (AHRM 6.8).
+    function resolvePriorityClock(sram, players, missiles, prior, special, prio, dst, startIndex) {
+      const fifthPlayer = (prior & 0x10) !== 0 && missiles !== 0;
+      const objects = prior & 0x10 ? players : players | missiles;
 
       for (let pi = startIndex | 0, end = (startIndex + 2) | 0; pi < end; pi++) {
         const p = prio[pi] & 0xffff;
-        if (special && (p & PRIO_PF1)) {
-          dst[pi] = ((dst[pi] & 0x0f) | (cColor & 0xf0)) & 0xff;
-        } else if (!(p & cPriorityMask)) {
-          dst[pi] = cColor;
+        let playfields = p & (PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3);
+        let hiresBit = false;
+        if (special && playfields) {
+          hiresBit = (playfields & PRIO_PF1) !== 0;
+          playfields = PRIO_PF2;
         }
-        collision |= p;
-      }
+        if (fifthPlayer) playfields |= PRIO_PF3;
 
-      if (special) {
-        collision =
-          (collision & ~(PRIO_PF1 | PRIO_PF2)) |
-          (collision & PRIO_PF1 ? PRIO_PF2 : 0);
+        const select = prioritySelect(prior, objects | ((p >> 8) & 0x0f), playfields);
+        let color = 0;
+        if (select & 0x10) color |= sram[IO_COLPM0_TRIG2];
+        if (select & 0x20) color |= sram[IO_COLPM1_TRIG3];
+        if (select & 0x40) color |= sram[IO_COLPM2_PAL];
+        if (select & 0x80) color |= sram[IO_COLPM3];
+        if (select & 0x01) color |= sram[IO_COLPF0];
+        if (select & 0x02) color |= sram[IO_COLPF1];
+        if (select & 0x04) color |= sram[IO_COLPF2];
+        if (select & 0x08) color |= sram[IO_COLPF3];
+        if (select & PRIORITY_SELECT_BAK) color |= dst[pi];
+        if (hiresBit) color = (color & 0xf0) | (sram[IO_COLPF1] & 0x0f);
+        dst[pi] = color & 0xff;
       }
-
-      return collision & 0xffff;
     }
 
     function drawPlayerSpan(
@@ -412,35 +450,6 @@
           (collision & PRIO_PF1 ? PRIO_PF2 : 0);
       }
       return collision & 0xffff;
-    }
-
-    function playerPriorityMask(prior, number) {
-      switch (number | 0) {
-        case 3:
-          if (prior & 0x01) return PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;
-          if (prior & 0x02)
-            {return PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;}
-          if (prior & 0x04)
-            {return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;}
-          if (prior & 0x08) return PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_M10_PM0 | PRIO_M10_PM1 | PRIO_M10_PM2;
-          return 0x00;
-        case 2:
-          if (prior & 0x01) return PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1;
-          if (prior & 0x02) return PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_M10_PM0 | PRIO_M10_PM1;
-          if (prior & 0x04) return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1;
-          if (prior & 0x08) return PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_M10_PM0 | PRIO_M10_PM1;
-          return 0x00;
-        case 1:
-          if (prior & 0x01) return PRIO_PM0 | PRIO_M10_PM0;
-          if (prior & 0x02) return PRIO_PM0 | PRIO_M10_PM0;
-          if (prior & 0x04) return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_M10_PM0;
-          if (prior & 0x08) return PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_M10_PM0;
-          return 0x00;
-        default:
-          if (prior & 0x04) return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
-          if (prior & 0x08) return PRIO_PF0 | PRIO_PF1;
-          return 0x00;
-      }
     }
 
     function missilePriorityMask(prior, number) {
@@ -589,14 +598,6 @@
         IO_SIZEP2_M2PL,
         IO_SIZEP3_M3PL,
       ];
-      const playerColorRegs = [
-        IO_COLPM0_TRIG2,
-        IO_COLPM1_TRIG3,
-        IO_COLPM2_PAL,
-        IO_COLPM3,
-      ];
-      const playerPriorityBits = [PRIO_PM0, PRIO_PM1, PRIO_PM2, PRIO_PM3];
-      const playerOverlapMasks = [prior & 0x20 ? PRIO_PM1 : 0, 0, prior & 0x20 ? PRIO_PM3 : 0, 0];
       const missileHposRegs = [
         IO_HPOSM0_P0PF,
         IO_HPOSM1_P1PF,
@@ -638,21 +639,15 @@
       }
 
       for (let x = visibleSpanStart; x < spanPixelEnd; x += 2) {
+        let players = 0;
+        let missiles = 0;
         let data = sram[IO_GRAFP3_TRIG0] & 0xff;
         let hpos = pmgStartX(sram[IO_HPOSP3_M3PF] & 0xff);
         let size = sram[IO_SIZEP3_M3PL] & 0xff;
         if (x === hpos && data) reloadPlayerShift(playerShift, playerState, 3, data);
         if (playerShift[3] & 0x80) {
-          playerCollision[3] |= drawPlayerClockCell(
-            sram[IO_COLPM3],
-            playerPriorityMask(prior, 3),
-            PRIO_PM3,
-            prio,
-            dst,
-            lineBase + x,
-            special,
-            0,
-          );
+          players |= 0x08;
+          playerCollision[3] |= playerClockCollision(PRIO_PM3, prio, lineBase + x, special);
         }
         advancePlayerShift(playerShift, playerState, 3, size);
 
@@ -661,16 +656,8 @@
         size = sram[IO_SIZEP2_M2PL] & 0xff;
         if (x === hpos && data) reloadPlayerShift(playerShift, playerState, 2, data);
         if (playerShift[2] & 0x80) {
-          playerCollision[2] |= drawPlayerClockCell(
-            sram[IO_COLPM2_PAL],
-            playerPriorityMask(prior, 2),
-            PRIO_PM2,
-            prio,
-            dst,
-            lineBase + x,
-            special,
-            prior & 0x20 ? PRIO_PM3 : 0,
-          );
+          players |= 0x04;
+          playerCollision[2] |= playerClockCollision(PRIO_PM2, prio, lineBase + x, special);
         }
         advancePlayerShift(playerShift, playerState, 2, size);
 
@@ -679,16 +666,8 @@
         size = sram[IO_SIZEP1_M1PL] & 0xff;
         if (x === hpos && data) reloadPlayerShift(playerShift, playerState, 1, data);
         if (playerShift[1] & 0x80) {
-          playerCollision[1] |= drawPlayerClockCell(
-            sram[IO_COLPM1_TRIG3],
-            playerPriorityMask(prior, 1),
-            PRIO_PM1,
-            prio,
-            dst,
-            lineBase + x,
-            special,
-            0,
-          );
+          players |= 0x02;
+          playerCollision[1] |= playerClockCollision(PRIO_PM1, prio, lineBase + x, special);
         }
         advancePlayerShift(playerShift, playerState, 1, size);
 
@@ -697,16 +676,8 @@
         size = sram[IO_SIZEP0_M0PL] & 0xff;
         if (x === hpos && data) reloadPlayerShift(playerShift, playerState, 0, data);
         if (playerShift[0] & 0x80) {
-          playerCollision[0] |= drawPlayerClockCell(
-            sram[IO_COLPM0_TRIG2],
-            playerPriorityMask(prior, 0),
-            PRIO_PM0,
-            prio,
-            dst,
-            lineBase + x,
-            special,
-            prior & 0x20 ? PRIO_PM1 : 0,
-          );
+          players |= 0x01;
+          playerCollision[0] |= playerClockCollision(PRIO_PM0, prio, lineBase + x, special);
         }
         advancePlayerShift(playerShift, playerState, 0, size);
 
@@ -715,14 +686,8 @@
         size = sram[IO_SIZEM_P0PL] & 0xff;
         if (x === hpos && data) reloadMissileShift(missileShift, missileState, 3, data);
         if (missileShift[3] & 0x02) {
-          missileCollision[3] |= drawMissileClockCell(
-            prior & 0x10 ? sram[IO_COLPF3] : sram[IO_COLPM3],
-            missilePriorityMask(prior, 3),
-            prio,
-            dst,
-            lineBase + x,
-            special,
-          );
+          missiles |= 0x08;
+          missileCollision[3] |= missileClockCollision(prio, lineBase + x, special);
         }
         advanceMissileShift(missileShift, missileState, 3, size);
 
@@ -730,14 +695,8 @@
         hpos = pmgStartX(sram[IO_HPOSM2_P2PF] & 0xff);
         if (x === hpos && data) reloadMissileShift(missileShift, missileState, 2, data);
         if (missileShift[2] & 0x02) {
-          missileCollision[2] |= drawMissileClockCell(
-            prior & 0x10 ? sram[IO_COLPF3] : sram[IO_COLPM2_PAL],
-            missilePriorityMask(prior, 2),
-            prio,
-            dst,
-            lineBase + x,
-            special,
-          );
+          missiles |= 0x04;
+          missileCollision[2] |= missileClockCollision(prio, lineBase + x, special);
         }
         advanceMissileShift(missileShift, missileState, 2, size);
 
@@ -745,14 +704,8 @@
         hpos = pmgStartX(sram[IO_HPOSM1_P1PF] & 0xff);
         if (x === hpos && data) reloadMissileShift(missileShift, missileState, 1, data);
         if (missileShift[1] & 0x02) {
-          missileCollision[1] |= drawMissileClockCell(
-            prior & 0x10 ? sram[IO_COLPF3] : sram[IO_COLPM1_TRIG3],
-            missilePriorityMask(prior, 1),
-            prio,
-            dst,
-            lineBase + x,
-            special,
-          );
+          missiles |= 0x02;
+          missileCollision[1] |= missileClockCollision(prio, lineBase + x, special);
         }
         advanceMissileShift(missileShift, missileState, 1, size);
 
@@ -760,16 +713,14 @@
         hpos = pmgStartX(sram[IO_HPOSM0_P0PF] & 0xff);
         if (x === hpos && data) reloadMissileShift(missileShift, missileState, 0, data);
         if (missileShift[0] & 0x02) {
-          missileCollision[0] |= drawMissileClockCell(
-            prior & 0x10 ? sram[IO_COLPF3] : sram[IO_COLPM0_TRIG2],
-            missilePriorityMask(prior, 0),
-            prio,
-            dst,
-            lineBase + x,
-            special,
-          );
+          missiles |= 0x01;
+          missileCollision[0] |= missileClockCollision(prio, lineBase + x, special);
         }
         advanceMissileShift(missileShift, missileState, 0, size);
+
+        if (players | missiles) {
+          resolvePriorityClock(sram, players, missiles, prior, special, prio, dst, lineBase + x);
+        }
       }
 
       let collision = playerCollision[3] & 0xffff;

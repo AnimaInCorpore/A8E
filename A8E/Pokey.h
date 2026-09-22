@@ -56,6 +56,14 @@ u8 *Pokey_SEROUT_SERIN(_6502_Context_t *pContext, u8 *pValue);
 u8 *Pokey_IRQEN_IRQST(_6502_Context_t *pContext, u8 *pValue);
 u8 *Pokey_SKCTL_SKSTAT(_6502_Context_t *pContext, u8 *pValue);
 
+/* POKEY IRQs (AHRM 5.7, 14.4): IRQST bits are active low. A source latches its
+   bit only while enabled in IRQEN, and the IRQ line stays asserted while any
+   enabled bit is pending. Bit 3 is not latched; it shows the idle serial
+   output shift register. */
+void Pokey_UpdateIrqLine(_6502_Context_t *pContext);
+void Pokey_RaiseIrq(_6502_Context_t *pContext, u8 cMask);
+void Pokey_SetSerialOutputIdle(_6502_Context_t *pContext, u8 bIdle);
+
 /* Returns the timer period in CPU cycles for timer 1/2/4. Returns 0 if disabled. */
 u64 Pokey_TimerPeriodCpuCycles(_6502_Context_t *pContext, u8 timer);
 

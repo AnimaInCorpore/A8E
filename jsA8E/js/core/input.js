@@ -30,6 +30,8 @@
     function createRuntime(opts) {
       const machine = opts.machine;
       const isReady = opts.isReady;
+      const warmReset = opts.warmReset;
+      const raisePokeyIrq = opts.raisePokeyIrq;
       let pressedKeys = {};
       let joystickArrowMask = 0;
 
@@ -140,11 +142,17 @@
           machine.ctx.ram[IO_SKCTL_SKSTAT] &= ~0x40;
         }
         machine.ctx.ram[IO_STIMER_KBCODE] = kc & 0xff;
-        machine.ctx.ram[IO_IRQEN_IRQST] &= ~IRQ_OTHER_KEY_PRESSED;
-        if (machine.ctx.sram[IO_IRQEN_IRQST] & IRQ_OTHER_KEY_PRESSED)
-          {CPU.irq(machine.ctx);}
+        raisePokeyIrq(IRQ_OTHER_KEY_PRESSED);
         machine.ctx.ioData.keyPressCounter++;
         machine.ctx.ram[IO_SKCTL_SKSTAT] &= ~0x04;
+      }
+
+      // SKSTAT bit 2 stays low while any key is held (AHRM 5.8).
+      function releaseKeyCode() {
+        if (machine.ctx.ioData.keyPressCounter > 0)
+          {machine.ctx.ioData.keyPressCounter--;}
+        if (machine.ctx.ioData.keyPressCounter === 0)
+          {machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x04;}
       }
 
       function joystickMaskForArrowSym(sym) {
@@ -173,8 +181,9 @@
       }
 
       function cursorKeyCodeForArrowSym(sym) {
-        if (sym === SDLK_UP) return 54 | 0x80; // Ctrl + '-'
-        if (sym === SDLK_DOWN) return 55 | 0x80; // Ctrl + '='
+        // AHRM 5.8 Table 11: '-' = $0E, '=' = $0F, '+' = $06, '*' = $07.
+        if (sym === SDLK_UP) return 0x0e | 0x80; // Ctrl + '-'
+        if (sym === SDLK_DOWN) return 0x0f | 0x80; // Ctrl + '='
         if (sym === SDLK_LEFT) return 6 | 0x80; // Ctrl + '+'
         if (sym === SDLK_RIGHT) return 7 | 0x80; // Ctrl + '*'
         return null;
@@ -245,13 +254,12 @@
         if (sym === 286) {
           joystickArrowMask = 0;
           machine.ctx.ram[IO_PORTA] |= 0x0f;
-          CPU.reset(machine.ctx);
+          if (warmReset) warmReset();
+          else CPU.reset(machine.ctx);
           return true;
         }
         if (sym === 289) {
-          machine.ctx.ram[IO_IRQEN_IRQST] &= ~IRQ_BREAK_KEY_PRESSED;
-          if (machine.ctx.sram[IO_IRQEN_IRQST] & IRQ_BREAK_KEY_PRESSED)
-            {CPU.irq(machine.ctx);}
+          raisePokeyIrq(IRQ_BREAK_KEY_PRESSED);
           return true;
         }
 
@@ -293,6 +301,9 @@
         if (arrowMask) {
           if (releaseJoystickArrow(arrowMask)) {
             machine.ctx.ram[IO_PORTA] |= arrowMask;
+          } else {
+            // Shift+arrow was sent as an Atari cursor key.
+            releaseKeyCode();
           }
           return true;
         }
@@ -329,10 +340,7 @@
         const kc = KEY_CODE_TABLE[sym] !== undefined ? KEY_CODE_TABLE[sym] : 255;
         if (kc === 255) return false;
 
-        if (machine.ctx.ioData.keyPressCounter > 0)
-          {machine.ctx.ioData.keyPressCounter--;}
-        if (machine.ctx.ioData.keyPressCounter === 0)
-          {machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x04;}
+        releaseKeyCode();
         return true;
       }
 
@@ -341,10 +349,10 @@
         joystickArrowMask = 0;
         machine.ctx.ioData.keyPressCounter = 0;
         machine.ctx.ram[IO_PORTA] |= 0x0f;
+        // TRIG3 is the cartridge sense line, not a joystick trigger.
         setTriggerPressed(0, false);
         setTriggerPressed(1, false);
         setTriggerPressed(2, false);
-        setTriggerPressed(3, false);
         machine.ctx.ram[IO_CONSOL] |= 0x07;
         machine.ctx.ram[IO_SKCTL_SKSTAT] |= 0x0c;
       }

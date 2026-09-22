@@ -373,6 +373,134 @@ static int TestMode7FetchesCharacterDataOnOddRepeatedScanlines(void)
 	return 1;
 }
 
+/* Draws one scanline with the given playfield byte under objects at HPOS $30
+   (x=96) and returns the color of the first color clock. */
+static u8 DrawPriorityCase(
+	u8 cMode,
+	u8 cPlayfieldData,
+	u8 cPrior,
+	u8 cGrafP0,
+	u8 cGrafP2,
+	u8 cGrafM,
+	u8 *pcRightPixel)
+{
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+	IoData_t *pIoData = tMachine.pIoData;
+	u8 cColor;
+
+	ProbeMachine_ResetVideo(&tMachine);
+	ProbeMachine_PrepareModeLine(&tMachine, cMode, 8, cMode == 0x02 ? 16 : 9, 0);
+
+	SRAM[IO_COLBK] = 0x00;
+	SRAM[IO_COLPF0] = 0x22;
+	SRAM[IO_COLPF1] = 0x0a;
+	SRAM[IO_COLPF2] = 0x94;
+	SRAM[IO_COLPF3] = 0x44;
+	SRAM[IO_COLPM0_TRIG2] = 0x21;
+	SRAM[IO_COLPM1_TRIG3] = 0x42;
+	SRAM[IO_COLPM2_PAL] = 0x46;
+	SRAM[IO_COLPM3] = 0x88;
+	SRAM[IO_PRIOR] = cPrior;
+	SRAM[IO_CHACTL] = 0x00;
+	SRAM[IO_CHBASE] = 0x20;
+	SRAM[IO_GRAFP0_P1PL] = cGrafP0;
+	SRAM[IO_GRAFP2_P3PL] = cGrafP2;
+	SRAM[IO_GRAFM_TRIG1] = cGrafM;
+	SRAM[IO_HPOSP0_M0PF] = 0x30;
+	SRAM[IO_HPOSP2_M2PF] = 0x30;
+	SRAM[IO_HPOSM0_P0PF] = 0x30;
+	SRAM[IO_HPOSM1_P1PF] = 0x30;
+	if(cMode == 0x02)
+	{
+		/* Character 0 everywhere; its row 0 holds the pixel pattern. */
+		memset(pIoData->tDrawLineData.aPlayfieldLineBuffer, 0x00, sizeof(pIoData->tDrawLineData.aPlayfieldLineBuffer));
+		RAM[0x2000] = cPlayfieldData;
+	}
+	else
+	{
+		memset(pIoData->tDrawLineData.aPlayfieldLineBuffer, cPlayfieldData, sizeof(pIoData->tDrawLineData.aPlayfieldLineBuffer));
+	}
+
+	pIoData->bInDrawLine = 1; /* players and missiles are drawn per clock inside a line */
+	AtariIoDrawLine(pContext);
+
+	cColor = ProbeMachine_PixelAt(&tMachine, 8, 96);
+	if(pcRightPixel)
+	{
+		*pcRightPixel = ProbeMachine_PixelAt(&tMachine, 8, 97);
+	}
+
+	ProbeMachine_Close(&tMachine);
+	return cColor;
+}
+
+static int TestGtiaPriorityEquations(void)
+{
+	/* Mode E bytes: $FF = PF2, $55 = PF0, $00 = background. */
+	static const struct
+	{
+		const char *pName;
+		u8 cData;
+		u8 cPrior;
+		u8 cGrafP0;
+		u8 cGrafP2;
+		u8 cGrafM;
+		u8 cExpected;
+	} aCases[] =
+		{
+			/* AHRM 6.7 mode 0: PF2/PF3 mix with P2/P3 ($46 | $94). */
+			{"PRIOR=0 P2 over PF2 mixes", 0xff, 0x00, 0x00, 0xff, 0x00, 0xd6},
+			/* Mode 0: PF0/PF1 mix with P0/P1 ($21 | $22). */
+			{"PRIOR=0 P0 over PF0 mixes", 0x55, 0x00, 0xff, 0x00, 0x00, 0x23},
+			/* Mode 0: PF0/PF1 still win over P2/P3. */
+			{"PRIOR=0 PF0 hides P2", 0x55, 0x00, 0x00, 0xff, 0x00, 0x22},
+			/* Table 16: PRIOR[3:0]=0110 with PF01+P01 gives black. */
+			{"PRIOR=6 PF0 and P0 give black", 0x55, 0x06, 0xff, 0x00, 0x00, 0x00},
+			{"PRIOR=1 P0 over PF0", 0x55, 0x01, 0xff, 0x00, 0x00, 0x21},
+			{"PRIOR=4 PF0 over P0", 0x55, 0x04, 0xff, 0x00, 0x00, 0x22},
+			/* Multicolor players blend M0 and M1 too ($21 | $42). */
+			{"PRIOR=$20 M0+M1 blend", 0x00, 0x20, 0x00, 0x00, 0x0f, 0x63},
+			{"PRIOR=0 M0 hides M1", 0x00, 0x00, 0x00, 0x00, 0x0f, 0x21},
+			/* The fifth player shows COLPF3 and beats the other playfields. */
+			{"PRIOR=$11 fifth player over PF0", 0x55, 0x11, 0x00, 0x00, 0x03, 0x44},
+	};
+	u32 i;
+
+	for(i = 0; i < sizeof(aCases) / sizeof(aCases[0]); i++)
+	{
+		u8 cColor = DrawPriorityCase(0x0e, aCases[i].cData, aCases[i].cPrior, aCases[i].cGrafP0,
+									 aCases[i].cGrafP2, aCases[i].cGrafM, NULL);
+
+		REQUIRE(cColor == aCases[i].cExpected, "%s: got $%02X instead of $%02X", aCases[i].pName, cColor,
+				aCases[i].cExpected);
+	}
+
+	return 1;
+}
+
+static int TestHiresPriorityUsesPf2AndPf1Luminance(void)
+{
+	u8 cRight;
+	u8 cColor;
+
+	/* AHRM 6.8: the priority logic sees PF2 in hires modes, and the PF1
+	   luminance lands on the 1-bits afterwards. A text pixel in front of a
+	   player (PRIOR=4) keeps the PF2 hue ... */
+	cColor = DrawPriorityCase(0x02, 0xff, 0x04, 0xff, 0x00, 0x00, &cRight);
+	REQUIRE(cColor == 0x9a, "PRIOR=4 text over P0 was $%02X instead of $9A", cColor);
+
+	/* ... while a player in front lends its hue to the text luminance. */
+	cColor = DrawPriorityCase(0x02, 0xff, 0x01, 0xff, 0x00, 0x00, &cRight);
+	REQUIRE(cColor == 0x2a, "PRIOR=1 P0 over text was $%02X instead of $2A", cColor);
+
+	/* Background hires pixels under a player take the player color (mode 0: P0 wins over PF2). */
+	cColor = DrawPriorityCase(0x02, 0x00, 0x00, 0xff, 0x00, 0x00, &cRight);
+	REQUIRE(cColor == 0x21, "PRIOR=0 P0 over hires background was $%02X instead of $21", cColor);
+
+	return 1;
+}
+
 int main(int argc, char *argv[])
 {
 	int bOk = 1;
@@ -394,6 +522,8 @@ int main(int argc, char *argv[])
 	bOk &= TestMode5UsesOneKilobyteChbaseAlignment();
 	bOk &= TestMode5FetchesCharacterDataOnOddRepeatedScanlines();
 	bOk &= TestMode7FetchesCharacterDataOnOddRepeatedScanlines();
+	bOk &= TestGtiaPriorityEquations();
+	bOk &= TestHiresPriorityUsesPf2AndPf1Luminance();
 
 	SDL_Quit();
 

@@ -6,6 +6,13 @@
     const CYCLE_NEVER = cfg.CYCLE_NEVER;
     const CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
     const IO_INIT_VALUES = cfg.IO_INIT_VALUES;
+    const ioRegisterAddress = cfg.ioRegisterAddress;
+
+    // Canonical register addresses, as offsets into the $D000-$D7FF I/O area.
+    const IO_REGISTER_FLAGS = new Uint8Array(0x800);
+    for (let i = 0; i < IO_INIT_VALUES.length; i++) {
+      IO_REGISTER_FLAGS[IO_INIT_VALUES[i].addr - 0xd000] = 1;
+    }
 
     function makeIoData(video) {
       const potValues = new Uint8Array(8);
@@ -50,8 +57,9 @@
         pokeyPotCounter: 0,
         pokeyPotScanActive: false,
         // Raw trigger inputs (1=released, 0=pressed) and GTIA-latched view.
-        trigPhysical: new Uint8Array([1, 1, 1, 1]),
-        trigLatched: new Uint8Array([1, 1, 1, 1]),
+        // TRIG3 is the cartridge sense line: 0 without a cartridge (AHRM 2.8).
+        trigPhysical: new Uint8Array([1, 1, 1, 0]),
+        trigLatched: new Uint8Array([1, 1, 1, 0]),
         currentDisplayListCommand: 0,
         nextDisplayListLine: 8,
         displayListAddress: 0,
@@ -149,8 +157,16 @@
 
     function installIoHandlers(ctx, ioAccess) {
       if (!ioAccess) throw new Error("A8EState: missing ioAccess");
-      for (let i = 0; i < IO_INIT_VALUES.length; i++) {
-        CPU.setIo(ctx, IO_INIT_VALUES[i].addr, ioAccess);
+      for (let address = 0xd000; address < 0xd800; address++) {
+        if (IO_REGISTER_FLAGS[ioRegisterAddress(address) - 0xd000]) {
+          // Every mirror of a register shares its handler.
+          CPU.setIo(ctx, address, ioAccess);
+        } else {
+          // Undecoded addresses read $FF from the XL's pulled-up data bus
+          // (AHRM 2.3); ANTIC and POKEY drive $FF for their unassigned
+          // registers (AHRM 4.1, 5.1).
+          ctx.ram[address] = 0xff;
+        }
       }
     }
 

@@ -937,19 +937,74 @@ static void AtariIo_ReadRomOrDie(FILE *pFile, const char *pRomFileName, void *pB
 static void AtariIoQueueKeyCode(_6502_Context_t *pContext, IoData_t *pIoData, u8 cKeyCode)
 {
 	RAM[IO_STIMER_KBCODE] = cKeyCode;
-	RAM[IO_IRQEN_IRQST] &= ~IRQ_OTHER_KEY_PRESSED;
-	if(SRAM[IO_IRQEN_IRQST] & IRQ_OTHER_KEY_PRESSED)
-	{
-		_6502_Irq(pContext);
-	}
+	Pokey_RaiseIrq(pContext, IRQ_OTHER_KEY_PRESSED);
 	pIoData->lKeyPressCounter++;
 	RAM[IO_SKCTL_SKSTAT] &= ~0x04;
+}
+
+/* SKSTAT bit 2 stays low while any key is held (AHRM 5.8). */
+static void AtariIoReleaseKeyCode(_6502_Context_t *pContext, IoData_t *pIoData)
+{
+	if(pIoData->lKeyPressCounter > 0)
+	{
+		pIoData->lKeyPressCounter--;
+	}
+
+	if(pIoData->lKeyPressCounter == 0)
+	{
+		RAM[IO_SKCTL_SKSTAT] |= 0x04;
+	}
 }
 
 static void AtariIoResetJoystickArrowState(_6502_Context_t *pContext, IoData_t *pIoData)
 {
 	pIoData->cJoystickArrowMask = 0;
 	RAM[IO_PORTA] |= 0x0f;
+}
+
+/* The XL Reset key drives the reset lines of the 6502, ANTIC and the PIA
+   (AHRM 2.4). ANTIC clears NMIEN and DMACTL (AHRM 4.1), and the PIA reset
+   maps the OS ROM back in, so the 6502 fetches the OS reset vector even when
+   a program had banked the OS out. RAM is left alone (warm reset). */
+static void AtariIoWarmReset(_6502_Context_t *pContext, IoData_t *pIoData)
+{
+	AtariIoResetJoystickArrowState(pContext, pIoData);
+	SRAM[IO_NMIEN] = 0x00;
+	SRAM[IO_DMACTL] = 0x00;
+	AtariIoResetNmiEnableTiming(pContext);
+	Pia_Reset(pContext);
+	_6502_Reset(pContext);
+}
+
+/* Shift+arrow sends an Atari cursor key (Ctrl + - = + *, AHRM 5.8 Table 11)
+   instead of moving the joystick. The arrow mask bits match the PORTA bits. */
+static void AtariIoPressArrow(_6502_Context_t *pContext, IoData_t *pIoData, u16 sMod, u8 cArrowMask, u8 cCursorKeyCode)
+{
+	if(sMod & KMOD_SHIFT)
+	{
+		pIoData->cCursorKeyArrowMask |= cArrowMask;
+		AtariIoQueueKeyCode(pContext, pIoData, cCursorKeyCode | 0x80);
+	}
+	else
+	{
+		RAM[IO_PORTA] &= ~cArrowMask;
+		pIoData->cJoystickArrowMask |= cArrowMask;
+	}
+}
+
+static void AtariIoReleaseArrow(_6502_Context_t *pContext, IoData_t *pIoData, u8 cArrowMask)
+{
+	if(pIoData->cJoystickArrowMask & cArrowMask)
+	{
+		RAM[IO_PORTA] |= cArrowMask;
+	}
+	pIoData->cJoystickArrowMask &= ~cArrowMask;
+
+	if(pIoData->cCursorKeyArrowMask & cArrowMask)
+	{
+		pIoData->cCursorKeyArrowMask &= ~cArrowMask;
+		AtariIoReleaseKeyCode(pContext, pIoData);
+	}
 }
 
 typedef struct
@@ -1409,7 +1464,7 @@ static IoInitValue_t m_aIoInitValues[] =
 		{IO_GRAFP3_TRIG0, 0x00, 0x01, Gtia_GRAFP3_TRIG0},
 		{IO_GRAFM_TRIG1, 0x00, 0x01, Gtia_GRAFM_TRIG1},
 		{IO_COLPM0_TRIG2, 0x00, 0x01, Gtia_COLPM0_TRIG2},
-		{IO_COLPM1_TRIG3, 0x00, 0x01, Gtia_COLPM1_TRIG3},
+		{IO_COLPM1_TRIG3, 0x00, 0x00, Gtia_COLPM1_TRIG3}, /* no cartridge: TRIG3 reads 0 (AHRM 2.8) */
 		{IO_COLPM2_PAL, 0x00, 0x01, Gtia_COLPM2_PAL},
 		{IO_COLPM3, 0x00, 0x0f, Gtia_COLPM3},
 		{IO_COLPF0, 0x00, 0x0f, Gtia_COLPF0},
@@ -1417,10 +1472,10 @@ static IoInitValue_t m_aIoInitValues[] =
 		{IO_COLPF2, 0x00, 0x0f, Gtia_COLPF2},
 		{IO_COLPF3, 0x00, 0x0f, Gtia_COLPF3},
 		{IO_COLBK, 0x00, 0x0f, Gtia_COLBK},
-		{IO_PRIOR, 0x00, 0xff, Gtia_PRIOR},
-		{IO_VDELAY, 0x00, 0xff, Gtia_VDELAY},
-		{IO_GRACTL, 0x00, 0xff, Gtia_GRACTL},
-		{IO_HITCLR, 0x00, 0xff, Gtia_HITCLR},
+		{IO_PRIOR, 0x00, 0x0f, Gtia_PRIOR}, /* write-only GTIA slots read $0F (AHRM 6.1, Table 13) */
+		{IO_VDELAY, 0x00, 0x0f, Gtia_VDELAY},
+		{IO_GRACTL, 0x00, 0x0f, Gtia_GRACTL},
+		{IO_HITCLR, 0x00, 0x0f, Gtia_HITCLR},
 		{IO_CONSOL, 0x00, 0x07, Gtia_CONSOL},
 
 		{IO_AUDF1_POT0, 0x00, 0xff, Pokey_AUDF1_POT0},
@@ -1436,13 +1491,13 @@ static IoInitValue_t m_aIoInitValues[] =
 		{IO_SKREST_RANDOM, 0x00, 0xff, Pokey_SKREST_RANDOM},
 		{IO_POTGO, 0x00, 0xff, Pokey_POTGO},
 		{IO_SEROUT_SERIN, 0x00, 0xff, Pokey_SEROUT_SERIN},
-		{IO_IRQEN_IRQST, 0x00, 0xff, Pokey_IRQEN_IRQST},
+		{IO_IRQEN_IRQST, 0x00, 0xf7, Pokey_IRQEN_IRQST}, /* serial output idle: bit 3 reads 0 (AHRM 14.4) */
 		{IO_SKCTL_SKSTAT, 0x00, 0xff, Pokey_SKCTL_SKSTAT},
 
-		{IO_PORTA, 0xff, 0xff, Pia_PORTA},
+		{IO_PORTA, 0x00, 0xff, Pia_PORTA}, /* ORA is $00 after reset (AHRM 14.5) */
 		{IO_PORTB, 0xfd, 0xfd, Pia_PORTB},
-		{IO_PACTL, 0x00, 0x3c, Pia_PACTL},
-		{IO_PBCTL, 0x00, 0x3c, Pia_PBCTL},
+		{IO_PACTL, 0x00, 0x00, Pia_PACTL},
+		{IO_PBCTL, 0x00, 0x00, Pia_PBCTL},
 
 		{IO_DMACTL, 0x00, 0xff, Antic_DMACTL},
 		{IO_CHACTL, 0x00, 0xff, Antic_CHACTL},
@@ -1457,7 +1512,7 @@ static IoInitValue_t m_aIoInitValues[] =
 		{IO_PENH, 0x00, 0xff, Antic_PENH},
 		{IO_PENV, 0x00, 0xff, Antic_PENV},
 		{IO_NMIEN, 0x00, 0xff, Antic_NMIEN},
-		{IO_NMIRES_NMIST, 0x00, 0x00, Antic_NMIRES_NMIST},
+		{IO_NMIRES_NMIST, 0x00, 0x1f, Antic_NMIRES_NMIST}, /* NMIST bits 4-0 read 1 (AHRM 14.6) */
 
 		{0, 0, 0, NULL}};
 
@@ -1468,7 +1523,7 @@ static u8 m_aKeyCodeTable[512] =
 		255, 255, 255, 255, 255, 255, 255, 255, /*   0 */
 		52, 44, 255, 255, 255, 12, 255, 255, /*   8 */
 		255, 255, 255, 255, 255, 255, 255, 255, /*  16 */
-		255, 255, 255, 255, 255, 255, 255, 255, /*  24 */
+		255, 255, 255, 28, 255, 255, 255, 255, /*  24 (27 = Esc) */
 		33, 255, 255, 255, 255, 255, 255, 6, /*  32 */
 		255, 255, 255, 255, 32, 54, 34, 38, /*  40 */
 		50, 31, 30, 26, 24, 29, 27, 51, /*  48 */
@@ -3792,50 +3847,9 @@ static void AtariIo_AdvanceMissileShift(u8 *pcShift, u8 *pcState, u8 cNumber, u8
 	}
 }
 
-static u8 AtariIo_DrawPlayerClockCell(
-	u8 cColor,
-	u8 cPriorityMask,
-	u8 cPriority,
-	u8 *pLinePriorityData,
-	u8 *pLineDestination,
-	u32 lStartX,
-	u8 cSpecial,
-	u8 cOverlap)
+/* In hires modes only the 1-bits collide, and they collide as PF2 (AHRM 6.8). */
+static u8 AtariIo_HiresCollision(u8 cCollision, u8 cSpecial)
 {
-	u8 cCollision = 0;
-	u32 lPixel;
-
-	for(lPixel = lStartX; lPixel < lStartX + 2; lPixel++)
-	{
-		u8 cPixelPriority = pLinePriorityData[lPixel];
-
-		if(cOverlap && (cPixelPriority & cOverlap))
-		{
-			if(cSpecial && (cPixelPriority & PRIO_PF1))
-			{
-				pLineDestination[lPixel] |= cColor & 0xf0;
-			}
-			else if(!(cPixelPriority & cPriorityMask))
-			{
-				pLineDestination[lPixel] |= cColor;
-			}
-		}
-		else
-		{
-			if(cSpecial && (cPixelPriority & PRIO_PF1))
-			{
-				pLineDestination[lPixel] = (pLineDestination[lPixel] & 0x0f) | (cColor & 0xf0);
-			}
-			else if(!(cPixelPriority & cPriorityMask))
-			{
-				pLineDestination[lPixel] = cColor;
-			}
-		}
-
-		pLinePriorityData[lPixel] = cPixelPriority | cPriority;
-		cCollision |= pLinePriorityData[lPixel];
-	}
-
 	if(cSpecial)
 	{
 		cCollision = (cCollision & ~(PRIO_PF1 | PRIO_PF2)) | (cCollision & PRIO_PF1 ? PRIO_PF2 : 0);
@@ -3844,39 +3858,156 @@ static u8 AtariIo_DrawPlayerClockCell(
 	return cCollision;
 }
 
-static u8 AtariIo_DrawMissileClockCell(
-	u8 cColor,
-	u8 cPriorityMask,
-	u8 *pLinePriorityData,
-	u8 *pLineDestination,
-	u32 lStartX,
-	u8 cSpecial)
+/* Collisions use the raw object and playfield signals, independent of color
+   and priority (AHRM 6.6). A player also marks the priority buffer, so the
+   objects handled after it in the same color clock see it. */
+static u8 AtariIo_PlayerClockCollision(u8 cPriority, u8 *pLinePriorityData, u32 lStartX, u8 cSpecial)
 {
 	u8 cCollision = 0;
 	u32 lPixel;
 
 	for(lPixel = lStartX; lPixel < lStartX + 2; lPixel++)
 	{
-		u8 cPixelPriority = pLinePriorityData[lPixel];
-
-		if(cSpecial && (cPixelPriority & PRIO_PF1))
-		{
-			pLineDestination[lPixel] = (pLineDestination[lPixel] & 0x0f) | (cColor & 0xf0);
-		}
-		else if(!(cPixelPriority & cPriorityMask))
-		{
-			pLineDestination[lPixel] = cColor;
-		}
-
-		cCollision |= cPixelPriority;
+		pLinePriorityData[lPixel] |= cPriority;
+		cCollision |= pLinePriorityData[lPixel];
 	}
 
-	if(cSpecial)
+	return AtariIo_HiresCollision(cCollision, cSpecial);
+}
+
+static u8 AtariIo_MissileClockCollision(u8 *pLinePriorityData, u32 lStartX, u8 cSpecial)
+{
+	return AtariIo_HiresCollision(pLinePriorityData[lStartX] | pLinePriorityData[lStartX + 1], cSpecial);
+}
+
+#define PRIORITY_SELECT_BAK 0x100
+
+/* GTIA priority logic (AHRM 6.7). cPlayers holds P0-P3 in bits 0-3 and
+   cPlayfields PF0-PF3 in bits 0-3. Returns the enabled layers: SF0-SF3 in
+   bits 0-3, SP0-SP3 in bits 4-7 and the background SB in bit 8. With
+   PRIOR[3:0] = 0 players and playfields mix; conflicting priority bits can
+   turn every layer off (black). */
+static u16 AtariIo_PrioritySelect(u8 cPrior, u8 cPlayers, u8 cPlayfields)
+{
+	int bPri0 = (cPrior & 0x01) != 0;
+	int bPri1 = (cPrior & 0x02) != 0;
+	int bPri2 = (cPrior & 0x04) != 0;
+	int bPri3 = (cPrior & 0x08) != 0;
+	int bMulti = (cPrior & 0x20) != 0;
+	int bPri01 = bPri0 || bPri1;
+	int bPri12 = bPri1 || bPri2;
+	int bPri23 = bPri2 || bPri3;
+	int bPri03 = bPri0 || bPri3;
+	int bP0 = (cPlayers & 0x01) != 0;
+	int bP1 = (cPlayers & 0x02) != 0;
+	int bP2 = (cPlayers & 0x04) != 0;
+	int bP3 = (cPlayers & 0x08) != 0;
+	int bP01 = bP0 || bP1;
+	int bP23 = bP2 || bP3;
+	int bPf0 = (cPlayfields & 0x01) != 0;
+	int bPf1 = (cPlayfields & 0x02) != 0;
+	int bPf2 = (cPlayfields & 0x04) != 0;
+	int bPf3 = (cPlayfields & 0x08) != 0;
+	int bPf01 = bPf0 || bPf1;
+	int bPf23 = bPf2 || bPf3;
+	int bSp01 = !(bPf01 && bPri23) && !(bPri2 && bPf23);
+	int bSp23 = !bP01 && !(bPf23 && bPri12) && !(bPf01 && !bPri0);
+	int bSf3 = bPf3 && !(bP23 && bPri03) && !(bP01 && !bPri2);
+	int bSf01 = !(bP23 && bPri0) && !(bP01 && bPri01) && !bSf3;
+	u16 sSelect = 0;
+
+	if(bP0 && bSp01)
+		sSelect |= 0x10;
+	if(bP1 && bSp01 && (!bP0 || bMulti))
+		sSelect |= 0x20;
+	if(bP2 && bSp23)
+		sSelect |= 0x40;
+	if(bP3 && bSp23 && (!bP2 || bMulti))
+		sSelect |= 0x80;
+	if(bPf0 && bSf01)
+		sSelect |= 0x01;
+	if(bPf1 && bSf01)
+		sSelect |= 0x02;
+	if(bPf2 && !(bP23 && bPri03) && !(bP01 && !bPri2) && !bSf3)
+		sSelect |= 0x04;
+	if(bSf3)
+		sSelect |= 0x08;
+	if(!bP01 && !bP23 && !bPf01 && !bPf23)
+		sSelect |= PRIORITY_SELECT_BAK;
+
+	return sSelect;
+}
+
+/* Colors one color clock that has at least one player or missile on it. The
+   selected color registers are ORed together ($00 when nothing is selected);
+   the background layer keeps the rendered pixel (COLBK or a GTIA mode 9-11
+   color). Missiles count as their players, or as PF3 when the fifth player is
+   enabled (AHRM 6.7). In hires modes the priority logic sees PF2, and the PF1
+   luminance is impressed on the 1-bits on top of any object (AHRM 6.8). */
+static void AtariIo_ResolvePriorityClock(
+	_6502_Context_t *pContext,
+	u8 cPlayers,
+	u8 cMissiles,
+	u8 cPrior,
+	u8 cSpecial,
+	u8 *pLinePriorityData,
+	u8 *pLineDestination,
+	u32 lStartX)
+{
+	u8 bFifthPlayer = (cPrior & 0x10) && cMissiles;
+	u32 lPixel;
+
+	if(!(cPrior & 0x10))
 	{
-		cCollision = (cCollision & ~(PRIO_PF1 | PRIO_PF2)) | (cCollision & PRIO_PF1 ? PRIO_PF2 : 0);
+		cPlayers |= cMissiles;
 	}
 
-	return cCollision;
+	for(lPixel = lStartX; lPixel < lStartX + 2; lPixel++)
+	{
+		u8 cPlayfields = pLinePriorityData[lPixel] & (PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3);
+		u8 bHiresBit = 0;
+		u8 cColor = 0;
+		u16 sSelect;
+
+		if(cSpecial && cPlayfields)
+		{
+			bHiresBit = (cPlayfields & PRIO_PF1) != 0;
+			cPlayfields = PRIO_PF2;
+		}
+
+		if(bFifthPlayer)
+		{
+			cPlayfields |= PRIO_PF3;
+		}
+
+		sSelect = AtariIo_PrioritySelect(cPrior, cPlayers, cPlayfields);
+
+		if(sSelect & 0x10)
+			cColor |= SRAM[IO_COLPM0_TRIG2];
+		if(sSelect & 0x20)
+			cColor |= SRAM[IO_COLPM1_TRIG3];
+		if(sSelect & 0x40)
+			cColor |= SRAM[IO_COLPM2_PAL];
+		if(sSelect & 0x80)
+			cColor |= SRAM[IO_COLPM3];
+		if(sSelect & 0x01)
+			cColor |= SRAM[IO_COLPF0];
+		if(sSelect & 0x02)
+			cColor |= SRAM[IO_COLPF1];
+		if(sSelect & 0x04)
+			cColor |= SRAM[IO_COLPF2];
+		if(sSelect & 0x08)
+			cColor |= SRAM[IO_COLPF3];
+		if(sSelect & PRIORITY_SELECT_BAK)
+			cColor |= pLineDestination[lPixel];
+
+		if(bHiresBit)
+		{
+			cColor = (cColor & 0xf0) | (SRAM[IO_COLPF1] & 0x0f);
+		}
+
+		pLineDestination[lPixel] = cColor;
+	}
 }
 
 static void AtariIo_ResetPmgClockState(DrawLineData_t *pDrawLineData)
@@ -3886,158 +4017,6 @@ static void AtariIo_ResetPmgClockState(DrawLineData_t *pDrawLineData)
 	memset(pDrawLineData->aPlayerPmgState, 0, sizeof(pDrawLineData->aPlayerPmgState));
 	memset(pDrawLineData->aMissilePmgShift, 0, sizeof(pDrawLineData->aMissilePmgShift));
 	memset(pDrawLineData->aMissilePmgState, 0, sizeof(pDrawLineData->aMissilePmgState));
-}
-
-static u8 AtariIo_PlayerPriorityMask(u8 cPrior, u8 cNumber)
-{
-	switch(cNumber)
-	{
-	case 3:
-		if(cPrior & 0x01)
-		{
-			return PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
-		}
-		if(cPrior & 0x02)
-		{
-			return PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM2;
-		}
-		if(cPrior & 0x04)
-		{
-			return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
-		}
-		if(cPrior & 0x08)
-		{
-			return PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
-		}
-		return 0x00;
-
-	case 2:
-		if(cPrior & 0x01)
-		{
-			return PRIO_PM0 | PRIO_PM1;
-		}
-		if(cPrior & 0x02)
-		{
-			return PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
-		}
-		if(cPrior & 0x04)
-		{
-			return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1;
-		}
-		if(cPrior & 0x08)
-		{
-			return PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1;
-		}
-		return 0x00;
-
-	case 1:
-		if(cPrior & (0x01 | 0x02))
-		{
-			return PRIO_PM0;
-		}
-		if(cPrior & 0x04)
-		{
-			return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0;
-		}
-		if(cPrior & 0x08)
-		{
-			return PRIO_PF0 | PRIO_PF1 | PRIO_PM0;
-		}
-		return 0x00;
-
-	default:
-		if(cPrior & 0x04)
-		{
-			return PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
-		}
-		if(cPrior & 0x08)
-		{
-			return PRIO_PF0 | PRIO_PF1;
-		}
-		return 0x00;
-	}
-}
-
-static u8 AtariIo_MissilePriorityMask(u8 cPrior, u8 cNumber)
-{
-	switch(cNumber)
-	{
-	case 3:
-		if(cPrior & 0x01)
-		{
-			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
-		}
-		if(cPrior & 0x02)
-		{
-			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 : PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM2;
-		}
-		if(cPrior & 0x04)
-		{
-			return cPrior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
-		}
-		if(cPrior & 0x08)
-		{
-			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1 | PRIO_PM2;
-		}
-		return 0x00;
-
-	case 2:
-		if(cPrior & 0x01)
-		{
-			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PM0 | PRIO_PM1;
-		}
-		if(cPrior & 0x02)
-		{
-			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 : PRIO_PM0 | PRIO_PM1 | PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
-		}
-		if(cPrior & 0x04)
-		{
-			return cPrior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0 | PRIO_PM1;
-		}
-		if(cPrior & 0x08)
-		{
-			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PF0 | PRIO_PF1 | PRIO_PM0 | PRIO_PM1;
-		}
-		return 0x00;
-
-	case 1:
-		if(cPrior & 0x01)
-		{
-			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PM0;
-		}
-		if(cPrior & 0x02)
-		{
-			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 : PRIO_PM0;
-		}
-		if(cPrior & 0x04)
-		{
-			return cPrior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3 | PRIO_PM0;
-		}
-		if(cPrior & 0x08)
-		{
-			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PF0 | PRIO_PF1 | PRIO_PM0;
-		}
-		return 0x00;
-
-	default:
-		if(cPrior & 0x01)
-		{
-			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : 0x00;
-		}
-		if(cPrior & 0x02)
-		{
-			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 : 0x00;
-		}
-		if(cPrior & 0x04)
-		{
-			return cPrior & 0x10 ? 0x00 : PRIO_PF0 | PRIO_PF1 | PRIO_PF2 | PRIO_PF3;
-		}
-		if(cPrior & 0x08)
-		{
-			return cPrior & 0x10 ? PRIO_PM0 | PRIO_PM1 | PRIO_PM2 | PRIO_PM3 : PRIO_PF0 | PRIO_PF1;
-		}
-		return 0x00;
-	}
 }
 
 static u8 AtariIo_DrawPlayerSpan(
@@ -4302,6 +4281,9 @@ static void AtariIo_DrawPlayerMissilesClock(_6502_Context_t *pContext)
 
 	for(lClockX = lVisibleSpanStartX; lClockX < lSpanEndX; lClockX += 2)
 	{
+		u8 cPlayers = 0;
+		u8 cMissiles = 0;
+
 		cData = SRAM[IO_GRAFP3_TRIG0];
 		cHpos = SRAM[IO_HPOSP3_M3PF];
 		if(lClockX == AtariIo_PmgStartX(cHpos) && cData)
@@ -4310,15 +4292,8 @@ static void AtariIo_DrawPlayerMissilesClock(_6502_Context_t *pContext)
 		}
 		if(pPlayerShift[3] & 0x80)
 		{
-			aPlayerCollision[3] |= AtariIo_DrawPlayerClockCell(
-				SRAM[IO_COLPM3],
-				AtariIo_PlayerPriorityMask(cPrior, 3),
-				PRIO_PM3,
-				pLinePriorityData,
-				pLineDestination,
-				lClockX,
-				cSpecial,
-				0);
+			cPlayers |= 0x08;
+			aPlayerCollision[3] |= AtariIo_PlayerClockCollision(PRIO_PM3, pLinePriorityData, lClockX, cSpecial);
 		}
 		AtariIo_AdvancePlayerShift(&pPlayerShift[3], &pPlayerState[3], SRAM[IO_SIZEP3_M3PL]);
 
@@ -4330,15 +4305,8 @@ static void AtariIo_DrawPlayerMissilesClock(_6502_Context_t *pContext)
 		}
 		if(pPlayerShift[2] & 0x80)
 		{
-			aPlayerCollision[2] |= AtariIo_DrawPlayerClockCell(
-				SRAM[IO_COLPM2_PAL],
-				AtariIo_PlayerPriorityMask(cPrior, 2),
-				PRIO_PM2,
-				pLinePriorityData,
-				pLineDestination,
-				lClockX,
-				cSpecial,
-				(cPrior & 0x20) ? PRIO_PM3 : 0);
+			cPlayers |= 0x04;
+			aPlayerCollision[2] |= AtariIo_PlayerClockCollision(PRIO_PM2, pLinePriorityData, lClockX, cSpecial);
 		}
 		AtariIo_AdvancePlayerShift(&pPlayerShift[2], &pPlayerState[2], SRAM[IO_SIZEP2_M2PL]);
 
@@ -4350,15 +4318,8 @@ static void AtariIo_DrawPlayerMissilesClock(_6502_Context_t *pContext)
 		}
 		if(pPlayerShift[1] & 0x80)
 		{
-			aPlayerCollision[1] |= AtariIo_DrawPlayerClockCell(
-				SRAM[IO_COLPM1_TRIG3],
-				AtariIo_PlayerPriorityMask(cPrior, 1),
-				PRIO_PM1,
-				pLinePriorityData,
-				pLineDestination,
-				lClockX,
-				cSpecial,
-				0);
+			cPlayers |= 0x02;
+			aPlayerCollision[1] |= AtariIo_PlayerClockCollision(PRIO_PM1, pLinePriorityData, lClockX, cSpecial);
 		}
 		AtariIo_AdvancePlayerShift(&pPlayerShift[1], &pPlayerState[1], SRAM[IO_SIZEP1_M1PL]);
 
@@ -4370,15 +4331,8 @@ static void AtariIo_DrawPlayerMissilesClock(_6502_Context_t *pContext)
 		}
 		if(pPlayerShift[0] & 0x80)
 		{
-			aPlayerCollision[0] |= AtariIo_DrawPlayerClockCell(
-				SRAM[IO_COLPM0_TRIG2],
-				AtariIo_PlayerPriorityMask(cPrior, 0),
-				PRIO_PM0,
-				pLinePriorityData,
-				pLineDestination,
-				lClockX,
-				cSpecial,
-				(cPrior & 0x20) ? PRIO_PM1 : 0);
+			cPlayers |= 0x01;
+			aPlayerCollision[0] |= AtariIo_PlayerClockCollision(PRIO_PM0, pLinePriorityData, lClockX, cSpecial);
 		}
 		AtariIo_AdvancePlayerShift(&pPlayerShift[0], &pPlayerState[0], SRAM[IO_SIZEP0_M0PL]);
 
@@ -4390,13 +4344,8 @@ static void AtariIo_DrawPlayerMissilesClock(_6502_Context_t *pContext)
 		}
 		if(pMissileShift[3] & 0x02)
 		{
-			aMissileCollision[3] |= AtariIo_DrawMissileClockCell(
-				cPrior & 0x10 ? SRAM[IO_COLPF3] : SRAM[IO_COLPM3],
-				AtariIo_MissilePriorityMask(cPrior, 3),
-				pLinePriorityData,
-				pLineDestination,
-				lClockX,
-				cSpecial);
+			cMissiles |= 0x08;
+			aMissileCollision[3] |= AtariIo_MissileClockCollision(pLinePriorityData, lClockX, cSpecial);
 		}
 		AtariIo_AdvanceMissileShift(&pMissileShift[3], &pMissileState[3], 3, SRAM[IO_SIZEM_P0PL]);
 
@@ -4408,13 +4357,8 @@ static void AtariIo_DrawPlayerMissilesClock(_6502_Context_t *pContext)
 		}
 		if(pMissileShift[2] & 0x02)
 		{
-			aMissileCollision[2] |= AtariIo_DrawMissileClockCell(
-				cPrior & 0x10 ? SRAM[IO_COLPF3] : SRAM[IO_COLPM2_PAL],
-				AtariIo_MissilePriorityMask(cPrior, 2),
-				pLinePriorityData,
-				pLineDestination,
-				lClockX,
-				cSpecial);
+			cMissiles |= 0x04;
+			aMissileCollision[2] |= AtariIo_MissileClockCollision(pLinePriorityData, lClockX, cSpecial);
 		}
 		AtariIo_AdvanceMissileShift(&pMissileShift[2], &pMissileState[2], 2, SRAM[IO_SIZEM_P0PL]);
 
@@ -4426,13 +4370,8 @@ static void AtariIo_DrawPlayerMissilesClock(_6502_Context_t *pContext)
 		}
 		if(pMissileShift[1] & 0x02)
 		{
-			aMissileCollision[1] |= AtariIo_DrawMissileClockCell(
-				cPrior & 0x10 ? SRAM[IO_COLPF3] : SRAM[IO_COLPM1_TRIG3],
-				AtariIo_MissilePriorityMask(cPrior, 1),
-				pLinePriorityData,
-				pLineDestination,
-				lClockX,
-				cSpecial);
+			cMissiles |= 0x02;
+			aMissileCollision[1] |= AtariIo_MissileClockCollision(pLinePriorityData, lClockX, cSpecial);
 		}
 		AtariIo_AdvanceMissileShift(&pMissileShift[1], &pMissileState[1], 1, SRAM[IO_SIZEM_P0PL]);
 
@@ -4444,15 +4383,23 @@ static void AtariIo_DrawPlayerMissilesClock(_6502_Context_t *pContext)
 		}
 		if(pMissileShift[0] & 0x02)
 		{
-			aMissileCollision[0] |= AtariIo_DrawMissileClockCell(
-				cPrior & 0x10 ? SRAM[IO_COLPF3] : SRAM[IO_COLPM0_TRIG2],
-				AtariIo_MissilePriorityMask(cPrior, 0),
-				pLinePriorityData,
-				pLineDestination,
-				lClockX,
-				cSpecial);
+			cMissiles |= 0x01;
+			aMissileCollision[0] |= AtariIo_MissileClockCollision(pLinePriorityData, lClockX, cSpecial);
 		}
 		AtariIo_AdvanceMissileShift(&pMissileShift[0], &pMissileState[0], 0, SRAM[IO_SIZEM_P0PL]);
+
+		if(cPlayers | cMissiles)
+		{
+			AtariIo_ResolvePriorityClock(
+				pContext,
+				cPlayers,
+				cMissiles,
+				cPrior,
+				cSpecial,
+				pLinePriorityData,
+				pLineDestination,
+				lClockX);
+		}
 	}
 
 	cCollision = aPlayerCollision[3];
@@ -5330,11 +5277,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 #ifdef VERBOSE_SIO
 		printf("             [%16llu] SERIAL_OUTPUT_TRANSMISSION_DONE request!\n", pContext->llCycleCounter);
 #endif
-		RAM[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE;
-		if(SRAM[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE)
-		{
-			_6502_Irq(pContext);
-		}
+		Pokey_SetSerialOutputIdle(pContext, 1);
 
 		pIoData->llSerialOutputTransmissionDoneCycle = CYCLE_NEVER;
 	}
@@ -5344,11 +5287,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 #ifdef VERBOSE_SIO
 		printf("             [%16llu] SERIAL_OUTPUT_DATA_NEEDED request!\n", pContext->llCycleCounter);
 #endif
-		RAM[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_OUTPUT_DATA_NEEDED;
-		if(SRAM[IO_IRQEN_IRQST] & IRQ_SERIAL_OUTPUT_DATA_NEEDED)
-		{
-			_6502_Irq(pContext);
-		}
+		Pokey_RaiseIrq(pContext, IRQ_SERIAL_OUTPUT_DATA_NEEDED);
 
 		pIoData->llSerialOutputNeedDataCycle = CYCLE_NEVER;
 	}
@@ -5358,11 +5297,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 #ifdef VERBOSE_SIO
 		printf("             [%16llu] SERIAL_INPUT_DATA_READY request!\n", pContext->llCycleCounter);
 #endif
-		RAM[IO_IRQEN_IRQST] &= ~IRQ_SERIAL_INPUT_DATA_READY;
-		if(SRAM[IO_IRQEN_IRQST] & IRQ_SERIAL_INPUT_DATA_READY)
-		{
-			_6502_Irq(pContext);
-		}
+		Pokey_RaiseIrq(pContext, IRQ_SERIAL_INPUT_DATA_READY);
 
 		pIoData->llSerialInputDataReadyCycle = CYCLE_NEVER;
 	}
@@ -5373,11 +5308,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 #ifdef VERBOSE_SIO
 		printf("             [%16llu] TIMER_1 request!\n", pContext->llCycleCounter);
 #endif
-		RAM[IO_IRQEN_IRQST] &= ~IRQ_TIMER_1;
-		if(SRAM[IO_IRQEN_IRQST] & IRQ_TIMER_1)
-		{
-			_6502_Irq(pContext);
-		}
+		Pokey_RaiseIrq(pContext, IRQ_TIMER_1);
 
 		if(period == 0)
 		{
@@ -5398,11 +5329,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 #ifdef VERBOSE_SIO
 		printf("             [%16llu] TIMER_2 request!\n", pContext->llCycleCounter);
 #endif
-		RAM[IO_IRQEN_IRQST] &= ~IRQ_TIMER_2;
-		if(SRAM[IO_IRQEN_IRQST] & IRQ_TIMER_2)
-		{
-			_6502_Irq(pContext);
-		}
+		Pokey_RaiseIrq(pContext, IRQ_TIMER_2);
 
 		if(period == 0)
 		{
@@ -5423,11 +5350,7 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 #ifdef VERBOSE_SIO
 		printf("             [%16llu] TIMER_4 request!\n", pContext->llCycleCounter);
 #endif
-		RAM[IO_IRQEN_IRQST] &= ~IRQ_TIMER_4;
-		if(SRAM[IO_IRQEN_IRQST] & IRQ_TIMER_4)
-		{
-			_6502_Irq(pContext);
-		}
+		Pokey_RaiseIrq(pContext, IRQ_TIMER_4);
 
 		if(period == 0)
 		{
@@ -5445,6 +5368,34 @@ static void AtariIo_CycleTimedEvent(_6502_Context_t *pContext)
 	Pokey_Sync(pContext, pContext->llCycleCounter);
 
 	AtariIoCycleTimedEventUpdate(pContext);
+}
+
+/* The chips decode only the low address bits, so each register repeats
+   across the chip's whole page: GTIA every $20 bytes, POKEY and ANTIC every
+   $10, the PIA every 4 (AHRM 2.5, 4.1, 5.1, 6.1). The access functions use
+   fixed register addresses, so every mirror shares the canonical state. */
+static void AtariIo_SetIoWithMirrors(
+	_6502_Context_t *pContext,
+	u16 sAddress,
+	u8 *(*AccessFunction)(_6502_Context_t *, u8 *))
+{
+	u16 sPage = sAddress & 0xff00;
+	u16 sStride = 0x10;
+	u16 sOffset;
+
+	if(sPage == 0xd000)
+	{
+		sStride = 0x20;
+	}
+	else if(sPage == 0xd300)
+	{
+		sStride = 0x04;
+	}
+
+	for(sOffset = sAddress & (sStride - 1); sOffset < 0x100; sOffset += sStride)
+	{
+		_6502_SetIo(pContext, sPage | sOffset, AccessFunction);
+	}
 }
 
 void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
@@ -5548,12 +5499,17 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 
 	pIoData->tVideoData.pSdlAtariSurface = pSdlAtariSurface;
 
+	/* Undecoded I/O addresses read $FF from the XL's pulled-up data bus
+	   (AHRM 2.3), and ANTIC and POKEY drive $FF for their unassigned
+	   registers (AHRM 4.1, 5.1). */
+	memset(&RAM[0xd000], 0xff, 0x0800);
+
 	while(pIoInitValue->sAddress != 0)
 	{
 		SRAM[pIoInitValue->sAddress] = pIoInitValue->cDefaultValueWrite;
 		RAM[pIoInitValue->sAddress] = pIoInitValue->cDefaultValueRead;
 
-		_6502_SetIo(
+		AtariIo_SetIoWithMirrors(
 			pContext,
 			pIoInitValue->sAddress,
 			pIoInitValue->AccessFunction);
@@ -5712,63 +5668,65 @@ void AtariIoStatus(_6502_Context_t *pContext)
 	printf("\n");
 }
 
+/* m_aKeyCodeTable is indexed by SDL 1.2 keysyms. SDL2 kept the character
+   keys but moved the special keys to SDLK_SCANCODE_MASK codes. */
+static u8 AtariIoKeyCodeForSym(SDL_Keycode tSym)
+{
+	switch(tSym)
+	{
+	case SDLK_F1: /* Help */
+		return 0x11;
+	case SDLK_F6: /* Caps */
+	case SDLK_CAPSLOCK:
+		return 0x3c;
+	case SDLK_F7: /* Inverse */
+		return 0x27;
+	default:
+		break;
+	}
+
+	/* guard against out-of-range SDL keysyms such as the macOS Command/LGUI
+	   key which would otherwise index past the fixed-size lookup table. */
+	if(tSym >= 0 && tSym < (SDL_Keycode)sizeof(m_aKeyCodeTable))
+	{
+		return m_aKeyCodeTable[tSym];
+	}
+
+	return 255;
+}
+
 void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboardEvent)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+
+	/* POKEY has no auto-repeat: the OS repeats a key itself while SKSTAT
+	   bit 2 shows it held (AHRM 5.8), so host repeats must not queue keys. */
+	if(pKeyboardEvent->repeat)
+	{
+		return;
+	}
 
 	if(pKeyboardEvent->type == SDL_KEYDOWN)
 	{
 		switch(pKeyboardEvent->keysym.sym)
 		{
 		case SDLK_UP: // Joystick up  /  Shift: Atari cursor up (Ctrl+'-')
-			if(pKeyboardEvent->keysym.mod & KMOD_SHIFT)
-			{
-				AtariIoQueueKeyCode(pContext, pIoData, 54 | 0x80);
-			}
-			else
-			{
-				RAM[IO_PORTA] &= ~0x01;
-				pIoData->cJoystickArrowMask |= JOYSTICK_ARROW_UP_MASK;
-			}
+			AtariIoPressArrow(pContext, pIoData, pKeyboardEvent->keysym.mod, JOYSTICK_ARROW_UP_MASK, 0x0e);
 
 			break;
 
 		case SDLK_DOWN: // Joystick down  /  Shift: Atari cursor down (Ctrl+'=')
-			if(pKeyboardEvent->keysym.mod & KMOD_SHIFT)
-			{
-				AtariIoQueueKeyCode(pContext, pIoData, 55 | 0x80);
-			}
-			else
-			{
-				RAM[IO_PORTA] &= ~0x02;
-				pIoData->cJoystickArrowMask |= JOYSTICK_ARROW_DOWN_MASK;
-			}
+			AtariIoPressArrow(pContext, pIoData, pKeyboardEvent->keysym.mod, JOYSTICK_ARROW_DOWN_MASK, 0x0f);
 
 			break;
 
 		case SDLK_LEFT: // Joystick left  /  Shift: Atari cursor left (Ctrl+'+')
-			if(pKeyboardEvent->keysym.mod & KMOD_SHIFT)
-			{
-				AtariIoQueueKeyCode(pContext, pIoData, 6 | 0x80);
-			}
-			else
-			{
-				RAM[IO_PORTA] &= ~0x04;
-				pIoData->cJoystickArrowMask |= JOYSTICK_ARROW_LEFT_MASK;
-			}
+			AtariIoPressArrow(pContext, pIoData, pKeyboardEvent->keysym.mod, JOYSTICK_ARROW_LEFT_MASK, 0x06);
 
 			break;
 
 		case SDLK_RIGHT: // Joystick right  /  Shift: Atari cursor right (Ctrl+'*')
-			if(pKeyboardEvent->keysym.mod & KMOD_SHIFT)
-			{
-				AtariIoQueueKeyCode(pContext, pIoData, 7 | 0x80);
-			}
-			else
-			{
-				RAM[IO_PORTA] &= ~0x08;
-				pIoData->cJoystickArrowMask |= JOYSTICK_ARROW_RIGHT_MASK;
-			}
+			AtariIoPressArrow(pContext, pIoData, pKeyboardEvent->keysym.mod, JOYSTICK_ARROW_RIGHT_MASK, 0x07);
 
 			break;
 
@@ -5793,17 +5751,12 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
 			break;
 
 		case SDLK_F5: // RESET
-			AtariIoResetJoystickArrowState(pContext, pIoData);
-			_6502_Reset(pContext);
+			AtariIoWarmReset(pContext, pIoData);
 
 			break;
 
 		case SDLK_F8: // BREAK
-			RAM[IO_IRQEN_IRQST] &= ~IRQ_BREAK_KEY_PRESSED;
-			if(SRAM[IO_IRQEN_IRQST] & IRQ_BREAK_KEY_PRESSED)
-			{
-				_6502_Irq(pContext);
-			}
+			Pokey_RaiseIrq(pContext, IRQ_BREAK_KEY_PRESSED);
 
 			break;
 
@@ -5833,16 +5786,7 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
 
 		default:
 		{
-			/* guard against out-of-range SDL keysyms such as the
-                   macOS Command/LGUI key which would previously index
-                   our fixed-size lookup table and crash the emulator. */
-			int sym = pKeyboardEvent->keysym.sym;
-			u8 cKeyCode = 255;
-
-			if(sym >= 0 && sym < (int)sizeof(m_aKeyCodeTable))
-			{
-				cKeyCode = m_aKeyCodeTable[sym];
-			}
+			u8 cKeyCode = AtariIoKeyCodeForSym(pKeyboardEvent->keysym.sym);
 
 			if(cKeyCode != 255)
 			{
@@ -5868,38 +5812,22 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
 		switch(pKeyboardEvent->keysym.sym)
 		{
 		case SDLK_UP: // Joystick up
-			if(pIoData->cJoystickArrowMask & JOYSTICK_ARROW_UP_MASK)
-			{
-				RAM[IO_PORTA] |= 0x01;
-			}
-			pIoData->cJoystickArrowMask &= ~JOYSTICK_ARROW_UP_MASK;
+			AtariIoReleaseArrow(pContext, pIoData, JOYSTICK_ARROW_UP_MASK);
 
 			break;
 
 		case SDLK_DOWN: // Joystick down
-			if(pIoData->cJoystickArrowMask & JOYSTICK_ARROW_DOWN_MASK)
-			{
-				RAM[IO_PORTA] |= 0x02;
-			}
-			pIoData->cJoystickArrowMask &= ~JOYSTICK_ARROW_DOWN_MASK;
+			AtariIoReleaseArrow(pContext, pIoData, JOYSTICK_ARROW_DOWN_MASK);
 
 			break;
 
 		case SDLK_LEFT: // Joystick left
-			if(pIoData->cJoystickArrowMask & JOYSTICK_ARROW_LEFT_MASK)
-			{
-				RAM[IO_PORTA] |= 0x04;
-			}
-			pIoData->cJoystickArrowMask &= ~JOYSTICK_ARROW_LEFT_MASK;
+			AtariIoReleaseArrow(pContext, pIoData, JOYSTICK_ARROW_LEFT_MASK);
 
 			break;
 
 		case SDLK_RIGHT: // Joystick right
-			if(pIoData->cJoystickArrowMask & JOYSTICK_ARROW_RIGHT_MASK)
-			{
-				RAM[IO_PORTA] |= 0x08;
-			}
-			pIoData->cJoystickArrowMask &= ~JOYSTICK_ARROW_RIGHT_MASK;
+			AtariIoReleaseArrow(pContext, pIoData, JOYSTICK_ARROW_RIGHT_MASK);
 
 			break;
 
@@ -5929,28 +5857,12 @@ void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboar
 
 			break;
 		default:
-		{
-			int sym = pKeyboardEvent->keysym.sym;
-			if(sym >= 0 && sym < (int)sizeof(m_aKeyCodeTable))
+			if(AtariIoKeyCodeForSym(pKeyboardEvent->keysym.sym) != 255)
 			{
-				u8 cKeyCode = m_aKeyCodeTable[sym];
-
-				if(cKeyCode != 255)
-				{
-					if(pIoData->lKeyPressCounter > 0)
-					{
-						pIoData->lKeyPressCounter--;
-					}
-
-					if(pIoData->lKeyPressCounter == 0)
-					{
-						RAM[IO_SKCTL_SKSTAT] |= 0x04;
-					}
-				}
+				AtariIoReleaseKeyCode(pContext, pIoData);
 			}
-		}
 
-		break;
+			break;
 		}
 	}
 }

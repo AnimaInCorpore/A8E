@@ -353,7 +353,7 @@ u8 *Antic_NMIRES_NMIST(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
 	{
-		RAM[IO_NMIRES_NMIST] = 0x00;
+		RAM[IO_NMIRES_NMIST] = 0x1f; /* clears DLI/VBI/RESET; bits 4-0 always read 1 */
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" NMIRES: %02X\n", *pValue);
