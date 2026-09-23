@@ -79,6 +79,8 @@ Several programs that previously failed during loading now reach their normal
 startup screens in the emulator:
 
 - **AtariBlast** completes its mixed-geometry ATR load and reaches the game screen.
+- **Amaurote Plus** starts from XEX and reaches its game menu after the
+  presentation; see [the investigation](ATR/amaurote.md).
 - **Mikie V1.12** completes its banked XEX load and reaches the control screen.
 - **AtariWriter Plus XE** completes its 130XE startup sequence and reaches the user menu.
 - **Karate Champion** and **Animal Party** are also covered by the generic DLI/NMI

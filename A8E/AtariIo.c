@@ -198,8 +198,9 @@ static void AtariIoAdvanceScanline(_6502_Context_t *pContext)
 * copies data to target addresses, calls INITAD ($02E2) after each
 * segment if set, and jumps through RUNAD ($02E0) when the stream ends.
 *
-* Zero page: $43/$44=dest ptr, $45/$46=end addr, $47=buf index,
-*            $48=bytes left, $49/$4A=sector number.
+ * Zero page: $43/$44=dest ptr, $45/$46=end addr, $47=buf index,
+ *            $48=bytes left, $49/$4A=sector number. The stream state
+ *            is saved in reserved loader RAM while INIT code runs.
 * Sector buffer address is patched during XEX->ATR conversion so it
 * does not overlap any segment payload.
 *
@@ -244,44 +245,44 @@ static const u8 aXexBootLoader[] =
 
 		/* $071F: parse_header */
 		0x20,
-		0x81,
-		0x07, /* JSR get_byte ($0781) */
+		0x9B,
+		0x07, /* JSR get_byte ($079B) */
 		0xC9,
 		0xFF, /* CMP #$FF */
 		0xD0,
-		0x4F, /* BNE run_addr ($0775) */
+		0x69, /* BNE run_addr ($078F) */
 		0x20,
-		0x81,
+		0x9B,
 		0x07, /* JSR get_byte */
 		0xC9,
 		0xFF, /* CMP #$FF */
 		0xD0,
-		0x48, /* BNE run_addr ($0775) */
+		0x62, /* BNE run_addr ($078F) */
 		0x20,
-		0x81,
+		0x9B,
 		0x07, /* JSR get_byte ; start_lo */
 		0x85,
 		0x43, /* STA $43 */
 		0x20,
-		0x81,
+		0x9B,
 		0x07, /* JSR get_byte ; start_hi */
 		0x85,
 		0x44, /* STA $44 */
 		0x20,
-		0x81,
+		0x9B,
 		0x07, /* JSR get_byte ; end_lo */
 		0x85,
 		0x45, /* STA $45 */
 		0x20,
-		0x81,
+		0x9B,
 		0x07, /* JSR get_byte ; end_hi */
 		0x85,
 		0x46, /* STA $46 */
 
 		/* $0741: copy_loop */
 		0x20,
-		0x81,
-		0x07, /* JSR get_byte ($0781) */
+		0x9B,
+		0x07, /* JSR get_byte ($079B) */
 		0xA0,
 		0x00, /* LDY #$00 */
 		0x91,
@@ -316,17 +317,34 @@ static const u8 aXexBootLoader[] =
 		0x02, /* LDA $02E3 ; INITAD hi */
 		0xF0,
 		0xBE, /* BEQ parse_header ($071F) ; no init */
+		/* Preserve loader state; INIT code may use the general zero page. */
+		0x8E,
+		0xF9,
+		0x07, /* STX $07F9 */
+		0xA2,
+		0x03, /* LDX #$03 */
+		0xB5,
+		0x47, /* LDA $47,X */
+		0x9D,
+		0xF5,
+		0x07, /* STA $07F5,X */
+		0xCA, /* DEX */
+		0x10,
+		0xF8, /* BPL save_state ($0766) */
+		0xAE,
+		0xF9,
+		0x07, /* LDX $07F9 */
 		/* "JSR ($02E2)" via push return addr and JMP indirect */
 		0xA9,
-		0x07, /* LDA #$07  ; hi byte of ($076A-1) */
+		0x07, /* LDA #$07  ; hi byte of ($0774-1) */
 		0x48, /* PHA */
 		0xA9,
-		0x69, /* LDA #$69  ; lo byte of ($076A-1) */
+		0x79, /* LDA #$79  ; lo byte of ($077A-1) */
 		0x48, /* PHA */
 		0x6C,
 		0xE2,
 		0x02, /* JMP ($02E2) ; INIT routine RTSs to $076A */
-		/* $076A: return from INIT */
+		/* $077A: return from INIT */
 		0xA9,
 		0x00, /* LDA #$00 */
 		0x8D,
@@ -335,11 +353,21 @@ static const u8 aXexBootLoader[] =
 		0x8D,
 		0xE3,
 		0x02, /* STA $02E3 */
+		0xA2,
+		0x03, /* LDX #$03 */
+		0xBD,
+		0xF5,
+		0x07, /* LDA $07F5,X */
+		0x95,
+		0x47, /* STA $47,X */
+		0xCA, /* DEX */
+		0x10,
+		0xF8, /* BPL restore_state ($0784) */
 		0x4C,
 		0x1F,
 		0x07, /* JMP parse_header ($071F) */
 
-		/* $0775: run_addr */
+		/* $078F: run_addr */
 		0xAD,
 		0xE0,
 		0x02, /* LDA $02E0 */
@@ -347,22 +375,22 @@ static const u8 aXexBootLoader[] =
 		0xE1,
 		0x02, /* ORA $02E1 */
 		0xF0,
-		0x03, /* BEQ done ($0780) */
+		0x03, /* BEQ done ($079A) */
 		0x6C,
 		0xE0,
 		0x02, /* JMP ($02E0) */
 		/* $0780: done */
 		0x60, /* RTS */
 
-		/* $0781: get_byte */
+		/* $079B: get_byte */
 		0xA5,
 		0x48, /* LDA $48 */
 		0xD0,
 		0x03, /* BNE have_byte ($0788) */
 		0x20,
-		0x92,
-		0x07, /* JSR read_sector ($0792) */
-		/* $0788: have_byte */
+		0xAC,
+		0x07, /* JSR read_sector ($07AC) */
+		/* $07A2: have_byte */
 		0xA6,
 		0x47, /* LDX $47 */
 		0xBD,
@@ -374,7 +402,7 @@ static const u8 aXexBootLoader[] =
 		0x48, /* DEC $48 */
 		0x60, /* RTS */
 
-		/* $0792: read_sector */
+		/* $07AC: read_sector */
 		0xA9,
 		0x31, /* LDA #$31 */
 		0x8D,
@@ -451,10 +479,10 @@ static const u8 aXexBootLoader[] =
 };
 
 #define XEX_BOOT_LOADER_BASE 0x0700u
-#define XEX_BOOT_PATCH_GETBYTE_BUFLO_INDEX (0x078Bu - XEX_BOOT_LOADER_BASE)
-#define XEX_BOOT_PATCH_GETBYTE_BUFHI_INDEX (0x078Cu - XEX_BOOT_LOADER_BASE)
-#define XEX_BOOT_PATCH_DBUFLO_INDEX (0x07A7u - XEX_BOOT_LOADER_BASE)
-#define XEX_BOOT_PATCH_DBUFHI_INDEX (0x07ACu - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_GETBYTE_BUFLO_INDEX (0x07A5u - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_GETBYTE_BUFHI_INDEX (0x07A6u - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_DBUFLO_INDEX (0x07C1u - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_DBUFHI_INDEX (0x07C6u - XEX_BOOT_LOADER_BASE)
 #define XEX_BOOT_LOADER_RESERVED_START 0x0700u
 #define XEX_BOOT_LOADER_RESERVED_END 0x087Fu
 
@@ -512,12 +540,7 @@ static int XexChooseBootSectorBuffer(
 {
 	u32 lCandidate;
 
-	if(!XexSegmentOverlapsRange(pNormalizedData, lNormalizedSize, 0x0600, 0x067F))
-	{
-		*pBufferAddress = 0x0600;
-		return 1;
-	}
-
+	/* Keep the sector buffer out of the OS/game workspace at $0600-$067F. */
 	for(lCandidate = 0x0880; lCandidate <= 0x4F80; lCandidate += 0x80)
 	{
 		u16 sCandidate = (u16)lCandidate;

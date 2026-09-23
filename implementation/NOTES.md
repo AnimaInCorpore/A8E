@@ -4,6 +4,13 @@
 
 Simple implementation notes for this repository.
 
+- 2026-09-22: `jsA8E/js/core/memory.js` and `A8E/AtariIo.c`: preserve the XEX
+  loader's zero-page sector cursor across `INITAD` calls, and select a sector
+  buffer from available RAM at `$0880` or above, away from the shared
+  `$0600-$067F` workspace. The JavaScript and native loader images and their
+  relocated operands are kept in sync. This resolves the Amaurote Plus XEX
+  startup failure; see [the investigation](../ATR/amaurote.md).
+
 - 2026-09-18: `jsA8E/{index.html,style.css,js/app/ui.js}`: added the first
   extensible presentation-layout presets. `Emulation`, `Work`, and
   `Development` are selectable beside the lifecycle controls, persist through

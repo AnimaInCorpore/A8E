@@ -116,6 +116,7 @@ function testPortBWriteSegmentIsAllowed() {
   assert.equal(result.format, "xex");
   assert.equal(result.xexPreflight.code, "xex_preflight_passed");
   assert.equal(result.xexPreflight.overlaps.length, 0);
+  assert.equal(result.xexPreflight.bufferAddress, 0x0880);
 }
 
 function testPortBSwitchCanOpenSelfTestRam() {
