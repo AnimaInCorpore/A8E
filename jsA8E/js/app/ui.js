@@ -641,7 +641,6 @@
     const disk1 = document.getElementById("disk1");
     const romOsStatus = document.getElementById("romOsStatus");
     const romBasicStatus = document.getElementById("romBasicStatus");
-    const diskStatus = document.getElementById("diskStatus");
     const atariKeyboard = document.getElementById("atariKeyboard");
     const joystickArea = document.getElementById("joystickArea");
     const joystickStick = document.getElementById("joystickStick");
@@ -1721,16 +1720,6 @@
       } else {
         romBasicStatus.classList.remove("fa-circle-check");
         romBasicStatus.classList.add("fa-circle-xmark");
-      }
-
-      // Update disk status icon
-      const d1Mounted = app.hasMountedDiskForDeviceSlot(0);
-      if (d1Mounted) {
-        diskStatus.classList.remove("fa-circle-xmark");
-        diskStatus.classList.add("fa-circle-check");
-      } else {
-        diskStatus.classList.remove("fa-circle-check");
-        diskStatus.classList.add("fa-circle-xmark");
       }
 
       // Reconcile config toggle buttons with the app's current state so that

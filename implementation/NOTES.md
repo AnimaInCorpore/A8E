@@ -4,6 +4,22 @@
 
 Simple implementation notes for this repository.
 
+- 2026-09-23: `jsA8E/index.html`, `jsA8E/style.css`, and `jsA8E/js/app/ui.js`:
+  use a compact icon-only Open Disk control and show disk status through the
+  existing library/mount state instead of a redundant toolbar badge. Use double
+  chevrons for SIO turbo to distinguish it from the disk picker; place Open
+  Disk immediately after the ATARIBAS.ROM loader.
+
+- 2026-09-22: `jsA8E/index.html`: move ROM loading, fullscreen, turbo,
+  keyboard/joystick, and utility-panel controls into the primary toolbar row.
+  Keep only the video-standard and memory-expansion selectors in the collapsible
+  secondary row.
+
+- 2026-09-22: `jsA8E/style.css`: place the top toolbar in a higher stacking
+  layer so the brand help tooltip can paint above the page panels. The toolbar's
+  backdrop filter creates a stacking context, so the tooltip's own z-index
+  could not lift it over later content by itself.
+
 - 2026-09-22: `jsA8E/js/core/memory.js` and `A8E/AtariIo.c`: preserve the XEX
   loader's zero-page sector cursor across `INITAD` calls, and select a sector
   buffer from available RAM at `$0880` or above, away from the shared

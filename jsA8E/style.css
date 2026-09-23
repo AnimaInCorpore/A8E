@@ -52,6 +52,8 @@ body {
 }
 
 .topbar {
+  position: relative;
+  z-index: 200;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1725,6 +1727,26 @@ canvas.crtEnabled {
 .fileBtnPrimary span > .fa-floppy-disk {
   color: var(--accent);
   font-size: 16px;
+}
+
+.diskOpenBtn span {
+  width: 44px;
+  min-height: 44px;
+  padding: 0;
+  background: rgba(8, 12, 20, 0.45);
+  color: var(--muted);
+  font-weight: 500;
+  justify-content: center;
+}
+
+.diskOpenBtn span > .fa-floppy-disk {
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.diskOpenBtn:hover span {
+  color: var(--text);
+  border-color: var(--accent);
 }
 
 .fileBtn .status-icon.fa-circle-check {
