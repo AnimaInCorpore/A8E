@@ -278,6 +278,8 @@
     const keyboardPanel = document.getElementById("keyboardPanel");
     const joystickPanel = document.getElementById("joystickPanel");
     let app = null;
+    let primaryDriveQueue = Promise.resolve();
+    let standbyXexPromise = null;
     const useWorkerApp =
       window.A8EApp &&
       ((typeof window.A8EApp.shouldUseWorker === "function" &&
@@ -2121,6 +2123,7 @@
 
     attachFileInput(romOs, function (buf) {
       app.loadOsRom(buf);
+      return initializeStartupMedia(true);
     });
 
     attachFileInput(romBasic, function (buf) {
@@ -2130,7 +2133,7 @@
     attachFileInput(
       disk1,
       async function (buf, name) {
-        await mountDiskToDrive(buf, name);
+        await mountDiskAndAutoStart(buf, name);
       },
       resolveDiskInputFile,
     );
@@ -2141,16 +2144,86 @@
       return ext === ".atr" || ext === ".xex" || ext === ".zip";
     }
 
-    function autoStartAfterDiskLoad() {
-      if (app.isRunning()) {
-        return Promise.resolve(app.reset());
-      } else if (app.isReady()) {
-        return Promise.resolve(app.start()).then(function () {
-          setButtons(true);
-          focusCanvas(false);
+    function queuePrimaryDriveOperation(operation) {
+      const next = primaryDriveQueue.catch(function () {}).then(operation);
+      primaryDriveQueue = next.catch(function (err) {
+        console.error("Primary drive operation failed:", err);
+      });
+      return next;
+    }
+
+    function waitForDiskLibraryRestore() {
+      const library =
+        app && typeof app.getDiskLibrary === "function"
+          ? app.getDiskLibrary()
+          : null;
+      if (!library || typeof library.isRestored !== "function" || library.isRestored()) {
+        return Promise.resolve();
+      }
+      if (typeof library.onChange !== "function") return Promise.resolve();
+      return new Promise(function (resolve) {
+        let unsubscribe = function () {};
+        const check = function () {
+          if (!library.isRestored()) return;
+          unsubscribe();
+          resolve();
+        };
+        unsubscribe = library.onChange(check);
+        check();
+      });
+    }
+
+    function hasPrimaryDriveMedia() {
+      if (app.hasMountedDiskForDeviceSlot(0)) return true;
+      const library =
+        typeof app.getDiskLibrary === "function" ? app.getDiskLibrary() : null;
+      return !!(
+        library &&
+        typeof library.listFiles === "function" &&
+        library.listFiles().some(function (file) {
+          return (file.mountedSlot | 0) === 0;
+        })
+      );
+    }
+
+    function loadStandbyXex() {
+      if (!standbyXexPromise) {
+        const url = new URL("assets/standby.xex", document.baseURI).toString();
+        standbyXexPromise = window.A8EUtil.fetchOptional(url).then(function (bytes) {
+          if (!bytes) throw new Error("Built-in startup XEX could not be loaded");
+          return bytes;
         });
       }
-      return Promise.resolve();
+      return standbyXexPromise;
+    }
+
+    function restartPrimaryDrive() {
+      if (!app.isReady()) return Promise.resolve();
+      const wasRunning = app.isRunning();
+      return Promise.resolve(app.reset()).then(function () {
+        return wasRunning ? undefined : app.start();
+      }).then(function () {
+        updateStatus();
+        focusCanvas(false);
+      });
+    }
+
+    function initializeStartupMedia(bootMountedMedia) {
+      return queuePrimaryDriveOperation(function () {
+        return waitForDiskLibraryRestore().then(function () {
+          if (hasPrimaryDriveMedia()) return false;
+          return loadStandbyXex().then(function (bytes) {
+            return mountDiskToDrive(bytes, "standby.xex").then(function () {
+              return true;
+            });
+          });
+        }).then(function (standbyMounted) {
+          updateStatus();
+          if (app.isReady() && (bootMountedMedia || standbyMounted)) {
+            return restartPrimaryDrive();
+          }
+        });
+      });
     }
 
     function mountDiskToDrive(buffer, name) {
@@ -2162,10 +2235,19 @@
     }
 
     function mountDiskAndAutoStart(buffer, name) {
-      return mountDiskToDrive(buffer, name).then(function () {
-        updateStatus();
-        return autoStartAfterDiskLoad();
+      return queuePrimaryDriveOperation(function () {
+        return waitForDiskLibraryRestore().then(function () {
+          return mountDiskToDrive(buffer, name);
+        }).then(function () {
+          updateStatus();
+          return restartPrimaryDrive();
+        });
       });
+    }
+
+    function onSnapshotMediaChanged() {
+      updateStatus();
+      return initializeStartupMedia(false);
     }
 
     async function handleScreenDrop(dataTransfer) {
@@ -2300,7 +2382,12 @@
       Util.fetchOptional("../ATARIBAS.ROM"),
     ]).then(function (res) {
       try {
-        if (res[0]) app.loadOsRom(res[0]);
+        if (res[0]) {
+          app.loadOsRom(res[0]);
+          initializeStartupMedia(true).catch(function (err) {
+            console.error("Startup media boot failed:", err);
+          });
+        }
         if (res[1]) app.loadBasicRom(res[1]);
       } catch (e) {
         console.error("Auto-load error:", e);
@@ -2376,12 +2463,15 @@
         app: app,
         panel: document.getElementById("snapshotPanel"),
         button: btnSnapshots,
-        onMediaChanged: updateStatus,
+        onMediaChanged: onSnapshotMediaChanged,
         focusCanvas: focusCanvas,
       });
     }
 
     applyLayoutScheme(layoutSchemePreference);
+    initializeStartupMedia(false).catch(function (err) {
+      console.error("Startup fallback disk could not be mounted:", err);
+    });
   }
 
   window.A8EUI = {

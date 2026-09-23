@@ -119,6 +119,29 @@ function testPortBWriteSegmentIsAllowed() {
   assert.equal(result.xexPreflight.bufferAddress, 0x0880);
 }
 
+function testBuiltInStandbyXexPassesPreflight() {
+  const runtime = createRuntime();
+  const fileBytes = fs.readFileSync(
+    path.join(__dirname, "..", "assets", "standby.xex"),
+  );
+  const xex = new Uint8Array(
+    fileBytes.buffer,
+    fileBytes.byteOffset,
+    fileBytes.byteLength,
+  );
+  const result = runtime.loadDiskToDeviceSlotDetailed(
+    xex.buffer.slice(xex.byteOffset, xex.byteOffset + xex.byteLength),
+    "standby.xex",
+    0,
+    null,
+  );
+
+  assert.equal(result.format, "xex");
+  assert.equal(result.xexPreflight.code, "xex_preflight_passed");
+  assert.equal(result.xexPreflight.runAddress, 0x2000);
+  assert.equal(result.xexPreflight.bufferAddress, 0x0880);
+}
+
 function testPortBSwitchCanOpenSelfTestRam() {
   const runtime = createRuntime();
   const xex = buildXex([
@@ -297,6 +320,7 @@ function testPowerCycleRebuilds130XeVolatileState() {
 }
 
 testPortBWriteSegmentIsAllowed();
+testBuiltInStandbyXexPassesPreflight();
 testPortBSwitchCanOpenSelfTestRam();
 testPortBSwitchCanOpenBasicRam();
 testOptionOnStartDisablesBasicForPreflight();

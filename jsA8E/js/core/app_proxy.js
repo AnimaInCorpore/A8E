@@ -839,7 +839,9 @@
       });
     }
 
-    function snapshotFromWire(items, isReady) {
+    let mountsRestored = false;
+
+    function snapshotFromWire(items, isReady, isRestored) {
       files.clear();
       if (Array.isArray(items)) {
         for (let i = 0; i < items.length; i++) {
@@ -849,6 +851,7 @@
         }
       }
       if (typeof isReady === "boolean") ready = isReady;
+      if (typeof isRestored === "boolean") mountsRestored = isRestored;
       emitChange();
     }
 
@@ -876,6 +879,10 @@
 
     function isReady() {
       return ready;
+    }
+
+    function isRestored() {
+      return mountsRestored;
     }
 
     function addFile(name, data) {
@@ -941,6 +948,7 @@
         listFiles: listFiles,
         getFileInfo: getFileInfo,
         isReady: isReady,
+        isRestored: isRestored,
         addFile: addFile,
         replaceFile: replaceFile,
         mountFile: mountFile,
@@ -1282,7 +1290,11 @@
       }
 
       if (data.type === "diskLibrarySnapshot") {
-        diskLibraryProxy.snapshotFromWire(data.files || [], !!data.ready);
+        diskLibraryProxy.snapshotFromWire(
+          data.files || [],
+          !!data.ready,
+          typeof data.restored === "boolean" ? data.restored : !!data.ready,
+        );
         return;
       }
 

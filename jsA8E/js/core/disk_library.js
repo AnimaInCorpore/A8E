@@ -76,6 +76,7 @@
       const listeners = new Set();
       let db = null;
       let ready = false;
+      let mountsRestored = false;
 
       function emitChange() {
         listeners.forEach(function (listener) {
@@ -282,6 +283,10 @@
 
       function isReady() {
         return ready;
+      }
+
+      function isRestored() {
+        return mountsRestored;
       }
 
       function getEntry(id) {
@@ -614,12 +619,16 @@
             });
           }
         });
-        return pending;
+        return pending.then(function () {
+          mountsRestored = true;
+          emitChange();
+        });
       }
 
       return {
         init: init,
         isReady: isReady,
+        isRestored: isRestored,
         listFiles: listFiles,
         getFileInfo: getFileInfo,
         addFile: addFile,

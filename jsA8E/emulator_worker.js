@@ -415,6 +415,7 @@
     self.postMessage({
       type: "diskLibrarySnapshot",
       ready: typeof diskLibrary.isReady === "function" ? diskLibrary.isReady() : true,
+      restored: typeof diskLibrary.isRestored === "function" ? diskLibrary.isRestored() : true,
       files: diskLibrary.listFiles(),
     });
   }

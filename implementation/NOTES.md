@@ -4,6 +4,21 @@
 
 Simple implementation notes for this repository.
 
+- 2026-09-23: `jsA8E/style.css`: remove the generic flex layout from Disk
+  Library cells. Use a nested grid for filenames and text alignment for the
+  download action so its icon keeps its normal width in the shared final grid
+  column.
+
+- 2026-09-23: `jsA8E/assets/standby.{asm,xex}`, `jsA8E/js/app/ui.js`, and
+  disk-library restore/UI code: supply an internal D1 startup XEX whenever no
+  user ATR/XEX is mounted. Wait for saved library mounts before selecting the
+  fallback; file-picker/drop loads still restart into user media. Library
+  drive edits now update mounted devices without resetting or auto-starting, so
+  users can swap disk sides; the library status only confirms the mount action,
+  and Full Reset stays user-controlled for booting from D1. The standby program
+  draws its instructions in a private screen buffer through a custom ANTIC
+  display list, avoiding CIO E: output.
+
 - 2026-09-23: `jsA8E/index.html`, `jsA8E/style.css`, and `jsA8E/js/app/ui.js`:
   use a compact icon-only Open Disk control and show disk status through the
   existing library/mount state instead of a redundant toolbar badge. Use double

@@ -2294,7 +2294,7 @@ canvas.crtEnabled {
   min-height: 96px;
 }
 .disklib-row {
-  min-width: 580px;
+  /*min-width: 580px;*/
   cursor: pointer;
   border-left: 2px solid transparent;
   transition: background 0.1s;
@@ -2310,16 +2310,17 @@ canvas.crtEnabled {
   border-left-color: var(--accent);
 }
 .disklib-col {
-  display: flex;
-  align-items: center;
   min-width: 0;
 }
 .disklib-col-chk,
 .disklib-col-drive {
-  justify-content: center;
+  text-align: center;
 }
 .disklib-col-name {
-  gap: 6px;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  align-items: center;
+  column-gap: 6px;
   overflow: hidden;
   font-family: monospace;
   white-space: nowrap;
@@ -2329,12 +2330,12 @@ canvas.crtEnabled {
   text-overflow: ellipsis;
 }
 .disklib-col-size {
-  justify-content: flex-end;
+  text-align: right;
   color: var(--sub-panel-dim);
   font-size: var(--fs-xs);
 }
 .disklib-col-actions {
-  justify-content: flex-end;
+  text-align: right;
 }
 .disklib-type {
   min-width: 28px;
@@ -2367,6 +2368,7 @@ canvas.crtEnabled {
   accent-color: #70d090;
 }
 .disklib-action-btn {
+  display: inline-block;
   background: none;
   border: none;
   color: var(--sub-panel-dim);

@@ -59,6 +59,9 @@ async function main() {
 
   await library.init();
   assert.equal(library.isReady(), true);
+  assert.equal(library.isRestored(), false);
+  await library.restoreMounts();
+  assert.equal(library.isRestored(), true);
   const atr = await library.addFile("GAME.ATR", new Uint8Array([1, 2, 3]));
   assert.equal(atr.name, "GAME.ATR");
   assert.equal(library.listFiles()[0].mountedSlot, -1);

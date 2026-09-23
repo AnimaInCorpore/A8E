@@ -76,9 +76,16 @@ Behavior:
 - The emulator only becomes start-ready after both ROMs are loaded.
 - Load ROMs via the top bar file inputs, or
 - Serve from repo root and let auto-load try `../ATARIXL.ROM` and `../ATARIBAS.ROM`.
-- Disk image/program load (`Load Disk`) accepts `.atr`, `.xex`, and `.zip`.
+- Disk image/program load (`Open Disk`) accepts `.atr`, `.xex`, and `.zip`.
   - `.zip` archives are scanned for the first `.atr` (preferred) or `.xex` entry and loaded directly.
   - `.xex` files are converted in-memory to an ATR-compatible boot stream using the same XEX boot loader logic as the native path.
+- When D1 is empty at startup, the browser mounts and starts the built-in
+  `standby.xex`, which displays disk-loading instructions through its own
+  ANTIC display list. Loading a disk through **Open Disk** restarts into it.
+  The Disk Library status confirms each mount action without prompting for a
+  reset. Drive changes take effect without restarting, so the running program
+  can request another side; use **Full Reset** when you want to boot from the
+  current D1 image. Standby auto-start waits until the Atari OS ROM is loaded.
 
 ## Controls
 

@@ -168,12 +168,10 @@
               : library.unmountFile(info.id);
             Promise.resolve(operation)
               .then(function () {
-                setStatus(
-                  driveChk.checked
-                    ? "Mounted " + info.name + " in D" + (drive + 1) + ":"
-                    : "Unmounted " + info.name,
-                  "success",
-                );
+                const message = driveChk.checked
+                  ? "Mounted " + info.name + " in D" + (drive + 1) + ":"
+                  : "Unmounted " + info.name;
+                setStatus(message, "success");
               })
               .catch(function (err) {
                 setStatus(err && err.message ? err.message : "Unable to change drive mount", "error");
