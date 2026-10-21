@@ -37,6 +37,11 @@
         if (ctx.ioData.firstRowScanline) stealDma(ctx, 1);
         return ctx.ram[address & 0xffff] & 0xff;
       };
+    const anticRead =
+      cfg.anticRead ||
+      function (ctx, address) {
+        return ctx.ram[address & 0xffff];
+      };
     const fetchUnbufferedDisplayByte =
       cfg.fetchUnbufferedDisplayByte ||
       function (ctx, address) {
@@ -79,7 +84,6 @@
 
     function drawLineMode23Common(ctx, isMode3) {
       const io = ctx.ioData;
-      const ram = ctx.ram;
       const sram = ctx.sram;
 
       // AHRM 4.7: the 4-bit mode-line row counter selects the glyph row;
@@ -123,7 +127,7 @@
             );
           } else if (glyphRow >= 0) {
             stealDma(ctx, 1);
-            data = ram[(chBase + ch * 8 + glyphRow) & 0xffff] & 0xff;
+            data = anticRead(ctx, (chBase + ch * 8 + glyphRow) & 0xffff);
           } else {
             data = 0;
           }

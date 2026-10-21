@@ -459,6 +459,10 @@ function buildContext(options, animationHost) {
       },
     },
   };
+  // hw.js reads the video standard when the scripts load.
+  if (options && options.videoStandard) {
+    context.A8E_BOOT_OPTIONS = { videoStandard: String(options.videoStandard) };
+  }
   if (options && options.globals && typeof options.globals === "object") {
     Object.assign(context, options.globals);
   }
@@ -485,6 +489,7 @@ async function createHeadlessAutomation(options) {
       sioTurbo: opts.sioTurbo !== false,
       skipRendering: opts.skipRendering !== false,
       optionOnStart: !!opts.optionOnStart,
+      memoryExpansion: opts.memoryExpansion,
       keyboardMappingMode:
         opts.keyboardMappingMode === "original" ? "original" : "translated",
     });

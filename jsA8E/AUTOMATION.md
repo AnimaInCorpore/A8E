@@ -16,7 +16,7 @@ jsA8E exposes one grouped automation contract through two entrypaths:
 - Flat aliases remain at the root for compatibility, so older calls such as `api.start()` or `api.captureScreenshot()` still work.
 - Browser main-thread mode, browser worker mode, and headless Node mode use the same public semantics.
 
-For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomation(options)`. It loads the same core and automation scripts into a Node `vm` context, creates the no-worker backend, and returns `{ api, app, context, dispose() }`. The returned `api` is the same grouped automation surface documented below.
+For browser-less Node usage, `jsA8E/headless.js` exports `createHeadlessAutomation(options)`. It loads the same core and automation scripts into a Node `vm` context, creates the no-worker backend, and returns `{ api, app, context, dispose() }`. The returned `api` is the same grouped automation surface documented below. Pass `videoStandard: "ntsc"` for an NTSC machine (PAL by default) and `memoryExpansion` (`"130xe"`, `"rambo-192k"`, `"rambo-320k"`, `"compy-320k"`, `"rambo-576k"`, `"compy-576k"`, `"rambo-1088k"`; `"none"` by default) for extended memory. In the browser, the video standard comes from `window.A8E_BOOT_OPTIONS.videoStandard` or the stored UI choice.
 
 ## Root API
 
@@ -101,7 +101,7 @@ Many methods accept duration arguments (`ms`, `holdMs`, `afterMs`, `interKeyDela
 | `dispose()` | Disposes the app and detaches the automation facade. |
 | `waitForPause(options)` | Waits for a pause event. Supports `reason`, `timeoutMs`, and `immediate`. |
 | `waitForTime(msOrOptions)` | Waits by real or emulated time. Pass a bare number/string (`500`, `"500ms"`, `"2s"`) or `{ ms, clock, timeoutMs }`. Use `clock: "emulated"` for emulated-time waits; default is `"real"`. Real-time waits are the safer choice when `turbo` is enabled or the CPU may be in a tight loop. |
-| `waitForFrames(countOrOptions)` | Waits for N PAL frames using cycle-counter progress. Pass a bare frame count or `{ count, timeoutMs }`. |
+| `waitForFrames(countOrOptions)` | Waits for N frames of the machine's video standard (PAL or NTSC) using cycle-counter progress. Pass a bare frame count or `{ count, timeoutMs }`. |
 | `waitForCycles(countOrOptions)` | Waits for N emulated CPU cycles. Pass a bare number, a unit string (`"10ms"`, `"3frames"`), or `{ count, timeoutMs }`. |
 | `getSystemState(options)` | Same as the root method. |
 
@@ -155,7 +155,7 @@ All URL loaders share the same fetch controls:
 | `waitForBreakpoint(options)` | Waits for a pause event with `reason = "breakpoint"`. |
 | `getDebugState()` | Returns the current debug snapshot (`pc`, registers, counters, reason, fault metadata). |
 | `getCounters()` | Returns runtime counters such as `cycleCounter` and `instructionCounter`. |
-| `getBankState()` | Returns memory/PIA banking state when available. |
+| `getBankState()` | Returns memory/PIA banking state when available: `portB`, the effective `basicEnabled`/`osEnabled`/`selfTestEnabled` mapping, and the `memoryExpansion` profile. |
 | `getConsoleKeyState()` | Same console-key helper exposed in `input.*`. |
 | `getTraceTail(limit)` | Returns the most recent trace entries. |
 | `readMemory(address)` | Reads one byte from memory. |

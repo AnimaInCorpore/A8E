@@ -823,6 +823,7 @@
       sioTurbo: false,
       audioEnabled: false,
       optionOnStart: false,
+      memoryExpansion: "none",
     };
 
     function applyWorkerStateSnapshot(snapshot) {
@@ -849,6 +850,8 @@
           {state.audioEnabled = !!snapshot.config.audioEnabled;}
         if (typeof snapshot.config.optionOnStart === "boolean")
           {state.optionOnStart = !!snapshot.config.optionOnStart;}
+        if (typeof snapshot.config.memoryExpansion === "string")
+          {state.memoryExpansion = snapshot.config.memoryExpansion;}
         if (typeof snapshot.config.keyboardMappingMode === "string")
           {keyboardMappingMode = snapshot.config.keyboardMappingMode === "original" ? "original" : "translated";}
       }
@@ -1143,7 +1146,9 @@
         turbo: !!opts.turbo,
         sioTurbo: opts.sioTurbo !== false,
         optionOnStart: !!opts.optionOnStart,
+        memoryExpansion: opts.memoryExpansion,
         keyboardMappingMode: keyboardMappingMode,
+        videoStandard: window.A8EHw.createApi().VIDEO_STANDARD,
       },
       [offscreen, audioChannel.port2],
     );
@@ -1196,6 +1201,13 @@
       },
       getOptionOnStart: function () {
         return state.optionOnStart;
+      },
+      setMemoryExpansion: function (profile) {
+        state.memoryExpansion = String(profile || "none");
+        sendCommand("setMemoryExpansion", { value: state.memoryExpansion });
+      },
+      getMemoryExpansion: function () {
+        return state.memoryExpansion;
       },
       setKeyboardMappingMode: function (mode) {
         keyboardMappingMode = mode === "original" ? "original" : "translated";

@@ -196,4 +196,15 @@ if(BUILD_TESTING)
 
   add_test(NAME system_probe COMMAND system_probe)
   set_tests_properties(system_probe PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
+
+  add_executable(memory_expansion_probe
+    tests/memory_expansion_probe.c
+    ${A8E_CORE_SOURCES}
+  )
+
+  target_compile_definitions(memory_expansion_probe PRIVATE A8E_ENABLE_TEST_PROBES=1)
+  a8e_configure_target(memory_expansion_probe)
+
+  add_test(NAME memory_expansion_probe COMMAND memory_expansion_probe)
+  set_tests_properties(memory_expansion_probe PROPERTIES WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 endif()

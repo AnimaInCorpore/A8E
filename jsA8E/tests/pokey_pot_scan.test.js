@@ -38,7 +38,7 @@ function loadPokeyApi() {
   vm.createContext(context);
   vm.runInContext(source, context, { filename: "pokey.js" });
   return context.window.A8EPokeyAudio.createApi({
-    ATARI_CPU_HZ_PAL: 1773447,
+    ATARI_CPU_HZ: 1773447,
     CYCLES_PER_LINE: CYCLES_PER_LINE,
     POKEY_AUDIO_MAX_CATCHUP_CYCLES: 0,
     IO_AUDF1_POT0: IO_AUDF1_POT0,

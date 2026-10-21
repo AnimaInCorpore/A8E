@@ -11,30 +11,30 @@
     0x8D, 0xE2, 0x02, 0x8D, 0xE3, 0x02, 0x85, 0x48,
     0xA9, 0x04, 0x85, 0x49, 0xA9, 0x00, 0x85, 0x4A,
     /* parse_header */
-    0x20, 0x7E, 0x07, 0xC9, 0xFF, 0xD0, 0x4F,
-    0x20, 0x7E, 0x07, 0xC9, 0xFF, 0xD0, 0x48,
-    0x20, 0x7E, 0x07, 0x85, 0x43,
-    0x20, 0x7E, 0x07, 0x85, 0x44,
-    0x20, 0x7E, 0x07, 0x85, 0x45,
-    0x20, 0x7E, 0x07, 0x85, 0x46,
+    0x20, 0x84, 0x07, 0xC9, 0xFF, 0xD0, 0x52,
+    0x20, 0x84, 0x07, 0xC9, 0xFF, 0xD0, 0x4B,
+    0x20, 0x84, 0x07, 0x85, 0x43,
+    0x20, 0x84, 0x07, 0x85, 0x44,
+    0x20, 0x84, 0x07, 0x85, 0x45,
+    0x20, 0x84, 0x07, 0x85, 0x46,
     /* copy_loop */
-    0x20, 0x7E, 0x07, 0xA0, 0x00, 0x91, 0x43,
+    0x20, 0x84, 0x07, 0xA0, 0x00, 0x91, 0x43,
     0xE6, 0x43, 0xD0, 0x02, 0xE6, 0x44,
     /* check_end */
     0xA5, 0x44, 0xC5, 0x46, 0x90, 0xED, 0xD0, 0x06,
     0xA5, 0x45, 0xC5, 0x43, 0xB0, 0xE5,
-    /* check_init: call INITAD if set */
-    0xAD, 0xE3, 0x02, 0xF0, 0xBE,
-    0xA9, 0x07, 0x48, 0xA9, 0x69, 0x48, 0x6C, 0xE2, 0x02,
+    /* check_init: call INITAD if set (16-bit test, zero page is valid) */
+    0xAD, 0xE2, 0x02, 0x0D, 0xE3, 0x02, 0xF0, 0xBB,
+    0xA9, 0x07, 0x48, 0xA9, 0x6C, 0x48, 0x6C, 0xE2, 0x02,
     /* return from INIT: clear INITAD, loop */
     0xA9, 0x00, 0x8D, 0xE2, 0x02, 0x8D, 0xE3, 0x02,
     0x4C, 0x1F, 0x07,
-    /* run_addr */
-    0xAD, 0xE1, 0x02, 0xF0, 0x03, 0x6C, 0xE0, 0x02,
+    /* run_addr: jump through RUNAD if set (16-bit test, zero page is valid) */
+    0xAD, 0xE0, 0x02, 0x0D, 0xE1, 0x02, 0xF0, 0x03, 0x6C, 0xE0, 0x02,
     /* done */
     0x60,
     /* get_byte */
-    0xA5, 0x48, 0xD0, 0x03, 0x20, 0x8F, 0x07,
+    0xA5, 0x48, 0xD0, 0x03, 0x20, 0x95, 0x07,
     0xA6, 0x47, 0xBD, 0x00, 0x06, 0xE6, 0x47, 0xC6, 0x48, 0x60,
     /* read_sector */
     0xA9, 0x31, 0x8D, 0x00, 0x03,
@@ -55,10 +55,10 @@
     0x60
   ];
   const XEX_BOOT_LOADER_BASE = 0x0700;
-  const XEX_BOOT_PATCH_GETBYTE_BUF_LO = 0x0788 - XEX_BOOT_LOADER_BASE;
-  const XEX_BOOT_PATCH_GETBYTE_BUF_HI = 0x0789 - XEX_BOOT_LOADER_BASE;
-  const XEX_BOOT_PATCH_DBUF_LO = 0x07a4 - XEX_BOOT_LOADER_BASE;
-  const XEX_BOOT_PATCH_DBUF_HI = 0x07a9 - XEX_BOOT_LOADER_BASE;
+  const XEX_BOOT_PATCH_GETBYTE_BUF_LO = 0x078e - XEX_BOOT_LOADER_BASE;
+  const XEX_BOOT_PATCH_GETBYTE_BUF_HI = 0x078f - XEX_BOOT_LOADER_BASE;
+  const XEX_BOOT_PATCH_DBUF_LO = 0x07aa - XEX_BOOT_LOADER_BASE;
+  const XEX_BOOT_PATCH_DBUF_HI = 0x07af - XEX_BOOT_LOADER_BASE;
   const XEX_BOOT_LOADER_RESERVED_START = 0x0700;
   const XEX_BOOT_LOADER_RESERVED_END = 0x087f;
   const XEX_SEGMENT_MARKER = 0xff;
@@ -807,6 +807,11 @@
       const getTurbo = opts.getTurbo;
       const pokeyAudioResetState = opts.pokeyAudioResetState;
       const pokeyAudioSetTurbo = opts.pokeyAudioSetTurbo;
+      // Extended memory and the ROM mapping rules live with port B in io.js.
+      const createExtendedMemory = opts.createExtendedMemory;
+      const basicRomMapped = opts.basicRomMapped;
+      const selfTestRomMapped = opts.selfTestRomMapped;
+      const refreshAnticWindow = opts.refreshAnticWindow;
       let memoryWriteHook = null;
 
       function makeDefaultDeviceSlots() {
@@ -1040,11 +1045,11 @@
         // Mirror the C setup: I/O is ROM-mapped and overridden per-register.
         CPU.setRom(ctx, 0xd000, 0xd7ff);
 
+        // The ROM mapping follows the port B pins. Where a ROM is off, ram
+        // already holds the RAM (the shadow copy in sram may be stale).
+
         // BASIC: bit1=0 => enabled (ROM), bit1=1 => disabled (RAM)
-        if (portB & 0x02) {
-          const basicRamVisible = sram.subarray(0xa000, 0xc000);
-          ram.set(basicRamVisible, 0xa000);
-          traceCopy(0xa000, basicRamVisible);
+        if (!basicRomMapped(io, portB)) {
           CPU.setRam(ctx, 0xa000, 0xbfff);
         } else {
           CPU.setRom(ctx, 0xa000, 0xbfff);
@@ -1067,21 +1072,12 @@
             traceCopy(0xd800, io.floatingPointRom);
           }
         } else {
-          const osRamVisible = sram.subarray(0xc000, 0xd000);
-          ram.set(osRamVisible, 0xc000);
-          traceCopy(0xc000, osRamVisible);
           CPU.setRam(ctx, 0xc000, 0xcfff);
-          const fpRamVisible = sram.subarray(0xd800, 0x10000);
-          ram.set(fpRamVisible, 0xd800);
-          traceCopy(0xd800, fpRamVisible);
           CPU.setRam(ctx, 0xd800, 0xffff);
         }
 
-        // Self-test: bit7=0 => enabled (ROM), bit7=1 => disabled (RAM)
-        if (portB & 0x80) {
-          const selfTestRamVisible = sram.subarray(0x5000, 0x5800);
-          ram.set(selfTestRamVisible, 0x5000);
-          traceCopy(0x5000, selfTestRamVisible);
+        // Self-test: bit7=0 => enabled (ROM) while the OS ROM is enabled too.
+        if (!selfTestRomMapped(io, portB)) {
           CPU.setRam(ctx, 0x5000, 0x57ff);
         } else {
           CPU.setRom(ctx, 0x5000, 0x57ff);
@@ -1101,7 +1097,8 @@
           const portB = sanitizePortB(options.portB | 0);
           machine.ctx.ram[IO_PORTB] = portB;
           machine.ctx.sram[IO_PORTB] = portB;
-          machine.ctx.ioData.valuePortB = portB;
+          machine.ctx.ioData.valuePortB = 0xff;
+          machine.ctx.ioData.outputPortB = portB;
         }
       }
 
@@ -1119,6 +1116,7 @@
         machine.ctx.ioData = makeIoData(video);
         machine.ctx.ioData.optionOnStart = !!getOptionOnStart();
         machine.ctx.ioData.sioTurbo = !!getSioTurbo();
+        machine.ctx.ioData.extendedMemory = createExtendedMemory(machine.memoryExpansion);
         copyMediaToIoData();
         machine.ctx.ioData.pokeyAudio = machine.audioState;
         machine.ctx.ioCycleTimedEventFunction = ioCycleTimedEvent;
@@ -1127,6 +1125,7 @@
         applyResetOverrides(options);
         installIoHandlers(machine.ctx, ioAccess);
         setupMemoryMap();
+        refreshAnticWindow(machine.ctx);
         CPU.reset(machine.ctx);
         if (machine.audioState) {
           const turbo = !!getTurbo();
@@ -1292,12 +1291,14 @@
       function getBankState() {
         const media = getMediaState();
         const portB = machine.ctx.sram[IO_PORTB] & 0xff;
+        const io = machine.ctx.ioData;
         return {
           portB: portB,
-          basicEnabled: (portB & 0x02) === 0,
+          basicEnabled: basicRomMapped(io, portB),
           osEnabled: (portB & 0x01) !== 0,
           floatingPointEnabled: (portB & 0x01) !== 0,
-          selfTestEnabled: (portB & 0x80) === 0,
+          selfTestEnabled: selfTestRomMapped(io, portB),
+          memoryExpansion: io.extendedMemory ? io.extendedMemory.profile : "none",
           basicRomLoaded: !!media.basicRom,
           osRomLoaded: !!media.osRom,
           floatingPointRomLoaded: !!media.floatingPointRom,
@@ -1332,6 +1333,7 @@
           timer4Cycle: io.timer4Cycle,
           valuePortA: io.valuePortA | 0,
           valuePortB: io.valuePortB | 0,
+          outputPortB: io.outputPortB | 0,
           sioBuffer: new Uint8Array(io.sioBuffer || 0),
           sioOutIndex: io.sioOutIndex | 0,
           sioOutPhase: io.sioOutPhase | 0,
@@ -1404,6 +1406,13 @@
           keyPressCounter: io.keyPressCounter | 0,
           optionOnStart: !!io.optionOnStart,
           sioTurbo: !!io.sioTurbo,
+          extendedMemory: io.extendedMemory
+            ? {
+                profile: io.extendedMemory.profile,
+                banks: new Uint8Array(io.extendedMemory.banks),
+                mainWindow: new Uint8Array(io.extendedMemory.mainWindow),
+              }
+            : null,
         };
       }
 
@@ -1427,6 +1436,12 @@
         io.timer4Cycle = state.timer4Cycle;
         io.valuePortA = state.valuePortA | 0;
         io.valuePortB = state.valuePortB | 0;
+        // Older snapshots predate ORB; the port B pins (sram, restored
+        // first) are the closest stand-in.
+        io.outputPortB =
+          state.outputPortB !== undefined
+            ? state.outputPortB & 0xff
+            : machine.ctx.sram[IO_PORTB] & 0xff;
         copyBytesTo(io.sioBuffer, state.sioBuffer);
         io.sioOutIndex = state.sioOutIndex | 0;
         io.sioOutPhase = state.sioOutPhase | 0;
@@ -1517,6 +1532,13 @@
         io.keyPressCounter = state.keyPressCounter | 0;
         io.optionOnStart = !!state.optionOnStart;
         io.sioTurbo = !!state.sioTurbo;
+        if (state.extendedMemory && typeof state.extendedMemory === "object") {
+          io.extendedMemory = createExtendedMemory(state.extendedMemory.profile);
+          if (io.extendedMemory) {
+            copyBytesTo(io.extendedMemory.banks, state.extendedMemory.banks);
+            copyBytesTo(io.extendedMemory.mainWindow, state.extendedMemory.mainWindow);
+          }
+        }
         return io;
       }
 
@@ -1608,6 +1630,11 @@
         machine.ctx.breakRun = false;
         installIoHandlers(machine.ctx, ioAccess);
         setupMemoryMap();
+        refreshAnticWindow(machine.ctx);
+        // The snapshot's memory configuration stays on for later power cycles.
+        machine.memoryExpansion = machine.ctx.ioData.extendedMemory
+          ? machine.ctx.ioData.extendedMemory.profile
+          : "none";
         cycleTimedEventUpdate(machine.ctx);
       }
 

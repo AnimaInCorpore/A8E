@@ -77,6 +77,7 @@
     const pokeyPotPrepareSkctlWrite = cfg.pokeyPotPrepareSkctlWrite;
     const pokeyPotStartScan = cfg.pokeyPotStartScan;
     const pokeyRestartTimers = cfg.pokeyRestartTimers;
+    const pokeyArmInactiveTimers = cfg.pokeyArmInactiveTimers;
     const pokeySyncLfsr17 = cfg.pokeySyncLfsr17;
     const pokeySeroutWrite = cfg.pokeySeroutWrite;
     const pokeySerinRead = cfg.pokeySerinRead;
@@ -124,12 +125,146 @@
       return ctx.ram[IO_PORTA] & (ctx.sram[IO_PORTA] | (~outputBits & 0xff)) & 0xff;
     }
 
+    // Port B pins as the MMU sees them: output bits drive ORB and input bits
+    // are pulled up (AHRM 2.6, 2.7). Output bits also read back as ORB (2.5).
+    function piaPortBPins(io) {
+      const direction = io.valuePortB & 0xff;
+      return ((io.outputPortB & direction) | (~direction & 0xff)) & 0xff;
+    }
+
+    // Extended memory configurations: the PORTB bits that select the bank,
+    // and whether bit 5 enables a separate ANTIC window (AHRM 2.7, Table 1).
+    const EXTENDED_MEMORY_PROFILES = {
+      "130xe": { bankMask: 0x0c, separateAnticWindow: true },
+      "rambo-192k": { bankMask: 0x4c, separateAnticWindow: false },
+      "rambo-320k": { bankMask: 0x6c, separateAnticWindow: false },
+      "compy-320k": { bankMask: 0xcc, separateAnticWindow: true },
+      "rambo-576k": { bankMask: 0x6e, separateAnticWindow: false },
+      "compy-576k": { bankMask: 0xce, separateAnticWindow: true },
+      "rambo-1088k": { bankMask: 0xee, separateAnticWindow: false },
+    };
+
+    // The CPU window's bank lives in ram while the window is on, and main
+    // memory $4000-$7FFF waits in mainWindow. Returns null for plain 64K.
+    function createExtendedMemory(profile) {
+      const spec = EXTENDED_MEMORY_PROFILES[profile];
+      if (!spec) return null;
+      let bankCount = 1;
+      for (let bit = 0x01; bit <= 0x80; bit <<= 1) {
+        if (spec.bankMask & bit) bankCount <<= 1;
+      }
+      return {
+        profile: profile,
+        bankMask: spec.bankMask,
+        separateAnticWindow: spec.separateAnticWindow,
+        banks: new Uint8Array(bankCount * 0x4000),
+        mainWindow: new Uint8Array(0x4000),
+      };
+    }
+
+    // Bit 4 enables the CPU window at $4000-$7FFF, bit 5 the ANTIC window
+    // where ANTIC has separate access (AHRM 2.7).
+    function cpuWindowOn(xm, pins) {
+      return !!xm && (pins & 0x10) === 0;
+    }
+
+    function anticWindowOn(xm, pins) {
+      return !!xm && (pins & (xm.separateAnticWindow ? 0x20 : 0x10)) === 0;
+    }
+
+    // The bank selection bits, lowest PORTB bit first.
+    function selectedBank(xm, pins) {
+      let bank = 0;
+      let bankBit = 1;
+      for (let bit = 0x01; bit <= 0x80; bit <<= 1) {
+        if (xm.bankMask & bit) {
+          if (pins & bit) bank |= bankBit;
+          bankBit <<= 1;
+        }
+      }
+      return bank;
+    }
+
+    // Main memory, or the selected bank, behind $4000-$7FFF.
+    function windowMemory(xm, pins, windowOn) {
+      if (!windowOn) return xm.mainWindow;
+      const offset = selectedBank(xm, pins) * 0x4000;
+      return xm.banks.subarray(offset, offset + 0x4000);
+    }
+
+    // Big expansions reuse the BASIC (bit 1) and self-test (bit 7) bits as
+    // bank bits; while the CPU window is on those ROMs are forced off (2.7).
+    function basicRomMapped(io, pins) {
+      const xm = io.extendedMemory;
+      if (xm && (xm.bankMask & 0x02) && cpuWindowOn(xm, pins)) return false;
+      return (pins & 0x02) === 0;
+    }
+
+    // The self-test ROM is mapped only while the OS ROM is enabled (AHRM 2.6).
+    function selfTestRomMapped(io, pins) {
+      const xm = io.extendedMemory;
+      if (xm && (xm.bankMask & 0x80) && cpuWindowOn(xm, pins)) return false;
+      return (pins & 0x81) === 0x01;
+    }
+
+    // Swaps the memory behind $4000-$7FFF when the CPU window or its bank
+    // changes. The self-test ROM has priority over the window (AHRM 2.7), so
+    // while it is mapped the RAM under it stays in the shadow memory.
+    function switchCpuWindow(ctx, oldPins, pins) {
+      const io = ctx.ioData;
+      const xm = io.extendedMemory;
+      const oldWindowOn = cpuWindowOn(xm, oldPins);
+      const windowOn = cpuWindowOn(xm, pins);
+      if (
+        oldWindowOn === windowOn &&
+        (!windowOn || selectedBank(xm, oldPins) === selectedBank(xm, pins))
+      ) {
+        return false;
+      }
+
+      const ram = ctx.ram;
+      const sram = ctx.sram;
+      const oldMemory = windowMemory(xm, oldPins, oldWindowOn);
+      const newMemory = windowMemory(xm, pins, windowOn);
+      oldMemory.set(ram.subarray(0x4000, 0x8000));
+      ram.set(newMemory, 0x4000);
+      if (selfTestRomMapped(io, oldPins)) {
+        oldMemory.set(sram.subarray(0x5000, 0x5800), 0x1000);
+        sram.set(newMemory.subarray(0x1000, 0x1800), 0x5000);
+        if (io.selfTestRom) ram.set(io.selfTestRom, 0x5000);
+      }
+      return true;
+    }
+
+    // ANTIC reads the CPU view unless only one of the windows is on.
+    function refreshAnticWindow(ctx) {
+      const io = ctx.ioData;
+      const xm = io.extendedMemory;
+      const pins = ctx.sram[IO_PORTB] & 0xff;
+      const anticOn = anticWindowOn(xm, pins);
+      io.anticWindow =
+        anticOn === cpuWindowOn(xm, pins) ? null : windowMemory(xm, pins, anticOn);
+    }
+
+    // ANTIC DMA read. With extended memory ANTIC may see other memory than
+    // the CPU at $4000-$7FFF (AHRM 2.7).
+    function anticRead(ctx, address) {
+      const view = ctx.ioData.anticWindow;
+      return view && (address & 0xc000) === 0x4000
+        ? view[address & 0x3fff]
+        : ctx.ram[address & 0xffff];
+    }
+
+    // Maps the OS, BASIC and self-test ROMs for the port B pins (AHRM 2.6).
+    // sram[IO_PORTB] holds the previous pins.
     function piaPortBWrite(ctx, value) {
       const io = ctx.ioData;
       const ram = ctx.ram;
       const sram = ctx.sram;
       const oldV = sram[IO_PORTB] & 0xff;
-      const v = ((value & 0x83) | 0x7c) & 0xff;
+      const v = value & 0xff;
+      const windowSwitched =
+        !!io.extendedMemory && switchCpuWindow(ctx, oldV, v);
 
       function traceCopy(startAddr, source) {
         if (!ctx || typeof ctx.memoryWriteHook !== "function") return;
@@ -151,6 +286,8 @@
           }
         }
       }
+
+      if (windowSwitched) traceCopy(0x4000, ram.subarray(0x4000, 0x8000));
 
       // Bit 0: OS ROM enable (1=ROM, 0=RAM)
       if ((oldV & 0x01) !== (v & 0x01)) {
@@ -188,8 +325,8 @@
       }
 
       // Bit 1: BASIC ROM disable (1=disabled -> RAM, 0=enabled -> ROM)
-      if ((oldV & 0x02) !== (v & 0x02)) {
-        if (v & 0x02) {
+      if (basicRomMapped(io, oldV) !== basicRomMapped(io, v)) {
+        if (!basicRomMapped(io, v)) {
           const basicRamVisible = sram.subarray(0xa000, 0xc000);
           ram.set(basicRamVisible, 0xa000);
           traceCopy(0xa000, basicRamVisible);
@@ -207,8 +344,8 @@
       }
 
       // Bit 7: Self-test ROM disable (1=disabled -> RAM, 0=enabled -> ROM)
-      if ((oldV & 0x80) !== (v & 0x80)) {
-        if (v & 0x80) {
+      if (selfTestRomMapped(io, oldV) !== selfTestRomMapped(io, v)) {
+        if (!selfTestRomMapped(io, v)) {
           const selfTestRamVisible = sram.subarray(0x5000, 0x5800);
           ram.set(selfTestRamVisible, 0x5000);
           traceCopy(0x5000, selfTestRamVisible);
@@ -227,6 +364,7 @@
 
       ram[IO_PORTB] = v;
       sram[IO_PORTB] = v;
+      refreshAnticWindow(ctx);
     }
 
     function syncTriggerReadback(ctx, initializeLatch) {
@@ -343,6 +481,7 @@
             sram[addr] = v;
             if (io.pokeyAudio)
               {pokeyAudioOnRegisterWrite(io.pokeyAudio, addr, v);}
+            pokeyArmInactiveTimers(ctx);
             break;
 
           case IO_POTGO:
@@ -396,6 +535,7 @@
               io.sioInSize = 0;
               io.sioInIndex = 0;
             }
+            pokeyArmInactiveTimers(ctx);
             break;
 
           // --- PIA ---
@@ -410,9 +550,11 @@
           case IO_PORTB:
             if ((sram[IO_PBCTL] & 0x04) === 0) {
               io.valuePortB = v;
+              piaPortBWrite(ctx, piaPortBPins(io));
               return io.valuePortB & 0xff;
             }
-            piaPortBWrite(ctx, v);
+            io.outputPortB = v;
+            piaPortBWrite(ctx, piaPortBPins(io));
             break;
 
           case IO_PACTL:
@@ -611,7 +753,8 @@
       sram[IO_PORTA] = 0x00;
       io.valuePortA = 0x00;
       io.valuePortB = 0x00;
-      piaPortBWrite(ctx, 0xff);
+      io.outputPortB = 0x00;
+      piaPortBWrite(ctx, piaPortBPins(io));
 
       CPU.reset(ctx);
     }
@@ -619,6 +762,12 @@
     return {
       ioAccess: ioAccess,
       warmReset: warmReset,
+      createExtendedMemory: createExtendedMemory,
+      memoryExpansionProfiles: ["none"].concat(Object.keys(EXTENDED_MEMORY_PROFILES)),
+      basicRomMapped: basicRomMapped,
+      selfTestRomMapped: selfTestRomMapped,
+      refreshAnticWindow: refreshAnticWindow,
+      anticRead: anticRead,
       raisePokeyIrq: raisePokeyIrq,
       setSerialOutputIdle: setSerialOutputIdle,
       updateIrqLine: updateIrqLine,

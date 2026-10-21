@@ -4,10 +4,16 @@
   function createApi(cfg) {
     const CPU = cfg.CPU;
     const Util = cfg.Util;
+    // ANTIC DMA reads, which may see extended memory the CPU does not.
+    const anticRead =
+      cfg.anticRead ||
+      function (ctx, address) {
+        return ctx.ram[address & 0xffff];
+      };
 
     const PIXELS_PER_LINE = cfg.PIXELS_PER_LINE;
     const CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
-    const LINES_PER_SCREEN_PAL = cfg.LINES_PER_SCREEN_PAL;
+    const LINES_PER_SCREEN = cfg.LINES_PER_SCREEN;
     const CYCLE_NEVER = cfg.CYCLE_NEVER;
     const FIRST_VISIBLE_LINE = cfg.FIRST_VISIBLE_LINE;
     const LAST_VISIBLE_LINE = cfg.LAST_VISIBLE_LINE;
@@ -121,9 +127,10 @@
         ? window.A8EPlayfield.createApi({
             CPU: CPU,
             Util: Util,
+            anticRead: anticRead,
             PIXELS_PER_LINE: PIXELS_PER_LINE,
             CYCLES_PER_LINE: CYCLES_PER_LINE,
-            LINES_PER_SCREEN_PAL: LINES_PER_SCREEN_PAL,
+            LINES_PER_SCREEN: LINES_PER_SCREEN,
             FIRST_VISIBLE_LINE: FIRST_VISIBLE_LINE,
             LAST_VISIBLE_LINE: LAST_VISIBLE_LINE,
             IO_VCOUNT: IO_VCOUNT,
@@ -171,7 +178,6 @@
 
     function fetchLine(ctx) {
       const io = ctx.ioData;
-      const ram = ctx.ram;
       const sram = ctx.sram;
 
       if (io.video.currentDisplayLine === LAST_VISIBLE_LINE + 1)
@@ -182,8 +188,7 @@
         if (io.video.currentDisplayLine === io.nextDisplayListLine) {
           io.drawLine.displayListInstructionDmaPending = 1;
           const oldCmd = io.currentDisplayListCommand & 0xff;
-          io.currentDisplayListCommand =
-            ram[io.displayListAddress & 0xffff] & 0xff;
+          io.currentDisplayListCommand = anticRead(ctx, io.displayListAddress);
           io.displayListAddress = Util.fixedAdd(
             io.displayListAddress,
             0x03ff,
@@ -260,8 +265,8 @@
           // JMP
           if ((cmd & ANTIC_MODE_BITS) === ANTIC_JUMP_INSTRUCTION) {
             io.displayListAddress =
-              ram[io.displayListAddress & 0xffff] |
-              (ram[(io.displayListAddress + 1) & 0xffff] << 8);
+              anticRead(ctx, io.displayListAddress) |
+              (anticRead(ctx, io.displayListAddress + 1) << 8);
           }
 
           // Wait for VBL (JVB)
@@ -269,15 +274,13 @@
 
           // Load memory scan (LMS)
           if ((cmd & ANTIC_CMD_MASK_DLI_JMP) >= ANTIC_LMS_MIN_INSTRUCTION) {
-            io.displayMemoryAddress =
-              ram[io.displayListAddress & 0xffff] & 0xff;
+            io.displayMemoryAddress = anticRead(ctx, io.displayListAddress);
             io.displayListAddress = Util.fixedAdd(
               io.displayListAddress,
               0x03ff,
               1,
             );
-            io.displayMemoryAddress |=
-              (ram[io.displayListAddress & 0xffff] & 0xff) << 8;
+            io.displayMemoryAddress |= anticRead(ctx, io.displayListAddress) << 8;
             io.displayListAddress = Util.fixedAdd(
               io.displayListAddress,
               0x03ff,
@@ -340,7 +343,7 @@
         ram[IO_NMIRES_NMIST] &= ~NMI_DLI;
       }
 
-      if (io.video.currentDisplayLine >= LINES_PER_SCREEN_PAL) {
+      if (io.video.currentDisplayLine >= LINES_PER_SCREEN) {
         io.video.currentDisplayLine = 0;
         io.nextDisplayListLine = 8;
         io.currentDisplayListCommand = 0;

@@ -43,6 +43,8 @@ A8E [options] [disk.atr|program.xex]
 * `disk.atr` / `program.xex`: Pass an ATR image or Atari executable as the first argument. `.xex` files are converted to a temporary ATR layout at load time. If no argument is passed, the emulator defaults to looking for `d1.atr`.
 * `-f` / `-F`: Launch in fullscreen mode. Uses desktop-resolution fullscreen (`SDL_WINDOW_FULLSCREEN_DESKTOP`) — the display mode is never changed, so the aspect ratio is correct on widescreen monitors and the desktop is never left in a degraded state if the app crashes. The window can be toggled at runtime with **Alt+Enter**.
 * `-b` / `-B`: Boot **with** BASIC enabled. By default, A8E simulates holding the OPTION key to disable BASIC. Passing this flag releases the console buttons.
+* `-n` / `-N`: Run an NTSC machine: 262 scan lines at 59.92 Hz, the 1.79 MHz NTSC CPU clock, the NTSC palette, and `$D014` reads `$0F` so the OS detects NTSC. PAL is the default.
+* `-128K`, `-192R`, `-320R`, `-320C`, `-576R`, `-576C`, `-1088R`: Add extended memory, banked into `$4000-$7FFF` through PORTB (AHRM 2.7). `-128K` is the 130XE; `R` profiles are RAMBO-style (ANTIC sees the CPU window), `C` profiles are COMPY-style (ANTIC has its own window enable, bit 5, like the 130XE). The default is a plain 64K machine.
 
 ## Controls
 

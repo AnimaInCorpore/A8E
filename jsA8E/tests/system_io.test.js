@@ -230,6 +230,8 @@ function testResetKeyResetsAnticAndPia() {
 
   // A program banks BASIC and the OS out, leaves data under both, points
   // the RAM reset vector at itself and runs with display DMA and NMIs on.
+  cpuWrite(system, hw.IO_PBCTL, 0x38);
+  cpuWrite(system, hw.IO_PORTB, 0xff); // DDRB: all outputs, as the OS sets it
   cpuWrite(system, hw.IO_PBCTL, 0x3c);
   cpuWrite(system, hw.IO_PORTB, 0xff); // BASIC out
   cpuWrite(system, 0xa000, 0x77);
@@ -261,9 +263,56 @@ function testResetKeyResetsAnticAndPia() {
   // RAM survives a warm reset, including the RAM under the ROMs.
   assert.equal(ram[0x0600], 0xa5, "reset must not clear main RAM");
   assert.equal(ram[0xa000], 0x77, "reset must leave BASIC mapped out");
+  cpuWrite(system, hw.IO_PORTB, 0xff); // DDRB, still selected after the reset
   cpuWrite(system, hw.IO_PBCTL, 0x3c);
   cpuWrite(system, hw.IO_PORTB, 0xfe);
   assert.equal(ram[0xc000], 0x5a, "RAM under the OS ROM should survive reset");
+}
+
+function testPortBDirectionRegisterAndPullUps() {
+  const system = loadSystem();
+  const hw = system.hw;
+  const ctx = system.ctx;
+  const ram = ctx.ram;
+  const io = ctx.ioData;
+  io.osRom = new Uint8Array(0x1000).fill(0x11);
+  io.floatingPointRom = new Uint8Array(0x2800).fill(0x22);
+  io.basicRom = new Uint8Array(0x2000).fill(0x33);
+  io.selfTestRom = new Uint8Array(0x800).fill(0x44);
+  // The test machine has no ROMs mapped; a PIA reset maps them for the pins.
+  ctx.sram[hw.IO_PORTB] = 0x00;
+  system.io.warmReset(ctx);
+
+  // AHRM 2.5, 2.6: the PIA powers up with port B as inputs, and the
+  // pull-ups map the OS ROM in and BASIC and self-test out.
+  assert.equal(cpuRead(system, hw.IO_PORTB), 0x00, "DDRB should read $00 at power-on");
+  cpuWrite(system, hw.IO_PBCTL, 0x3c);
+  assert.equal(cpuRead(system, hw.IO_PORTB), 0xff, "all-input PORTB should read $FF");
+  assert.equal(ram[0xc000], 0x11, "the OS ROM should be mapped at power-on");
+
+  // ORB drives the MMU only through bits that DDRB makes outputs.
+  cpuWrite(system, hw.IO_PORTB, 0xfe);
+  assert.equal(ram[0xc000], 0x11, "ORB must not unmap the OS through an input bit");
+  cpuWrite(system, hw.IO_PBCTL, 0x38);
+  cpuWrite(system, hw.IO_PORTB, 0x01);
+  cpuWrite(system, hw.IO_PBCTL, 0x3c);
+  cpuWrite(system, 0xc000, 0x5a);
+  assert.equal(ram[0xc000], 0x5a, "DDRB=$01 ORB=$FE should unmap the OS ROM");
+  assert.equal(cpuRead(system, hw.IO_PORTB), 0xfe, "DDRB=$01 ORB=$FE should read $FE");
+
+  // Output bits read back ORB, the unused bits 2-6 included (AHRM 2.5).
+  cpuWrite(system, hw.IO_PBCTL, 0x38);
+  cpuWrite(system, hw.IO_PORTB, 0xff);
+  cpuWrite(system, hw.IO_PBCTL, 0x3c);
+  cpuWrite(system, hw.IO_PORTB, 0x83);
+  assert.equal(cpuRead(system, hw.IO_PORTB), 0x83, "PORTB outputs should read back $83");
+
+  // The self-test ROM needs the OS ROM as well (AHRM 2.6, 14.5).
+  cpuWrite(system, hw.IO_PORTB, 0x7f);
+  assert.equal(ram[0x5000], 0x44, "PORTB=$7F should map the self-test ROM");
+  cpuWrite(system, hw.IO_PORTB, 0x7e);
+  cpuWrite(system, 0x5000, 0x5a);
+  assert.equal(ram[0x5000], 0x5a, "PORTB=$7E must not keep the self-test ROM without the OS");
 }
 
 function testTrig3ReportsNoCartridge() {
@@ -358,6 +407,7 @@ testPokeyIrqLatchesOnlyEnabledSources();
 testIrqLineIsALevelNotACount();
 testSerialOutputCompleteIsUnlatched();
 testResetKeyResetsAnticAndPia();
+testPortBDirectionRegisterAndPullUps();
 testTrig3ReportsNoCartridge();
 testRegisterMirrorsShareCanonicalRegisters();
 testUnassignedAddressesReadPulledUpValues();

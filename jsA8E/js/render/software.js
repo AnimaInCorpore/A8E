@@ -26,10 +26,11 @@
     const VIEW_H = cfg.VIEW_H;
     const VIEW_X = cfg.VIEW_X;
     const VIEW_Y = cfg.VIEW_Y;
+    const VIDEO_STANDARD = cfg.VIDEO_STANDARD;
     const PLAYFIELD_SCRATCH_WIDTH = PIXELS_PER_LINE + 184;
 
     function makeVideo() {
-      const palette = Palette.createAtariPaletteRgb();
+      const palette = Palette.createAtariPaletteRgb(VIDEO_STANDARD);
       return {
         pixels: new Uint8Array(PIXELS_PER_LINE * LINES_PER_SCREEN_PAL),
         priority: new Uint16Array(PIXELS_PER_LINE * LINES_PER_SCREEN_PAL),

@@ -10,10 +10,12 @@
   if (!hwApi) throw new Error("A8EHw is not loaded");
 
   const PIXELS_PER_LINE = hwApi.PIXELS_PER_LINE;
-  const LINES_PER_SCREEN_PAL = hwApi.LINES_PER_SCREEN_PAL;
+  const VIDEO_STANDARD = hwApi.VIDEO_STANDARD;
+  const LINES_PER_SCREEN = hwApi.LINES_PER_SCREEN;
+  const LINES_PER_SCREEN_PAL = hwApi.LINES_PER_SCREEN_PAL; // frame buffer size
   const CYCLES_PER_LINE = hwApi.CYCLES_PER_LINE;
-  const CYCLES_PER_FRAME = LINES_PER_SCREEN_PAL * CYCLES_PER_LINE;
-  const ATARI_CPU_HZ_PAL = hwApi.ATARI_CPU_HZ_PAL;
+  const CYCLES_PER_FRAME = LINES_PER_SCREEN * CYCLES_PER_LINE;
+  const ATARI_CPU_HZ = hwApi.ATARI_CPU_HZ;
   const CYCLE_NEVER = hwApi.CYCLE_NEVER;
   const FIRST_VISIBLE_LINE = hwApi.FIRST_VISIBLE_LINE;
   const LAST_VISIBLE_LINE = hwApi.LAST_VISIBLE_LINE;
@@ -139,13 +141,9 @@
   const alignSnapshotToFrameBoundary = AtariSupport.alignSnapshotToFrameBoundary;
   const restoreVideoState = AtariSupport.restoreVideoState;
   const PLAYFIELD_SCRATCH_VIEW_X = 64;
-  const DEFAULT_PORTB = (function () {
-    for (let i = 0; i < IO_INIT_VALUES.length; i++) {
-      const entry = IO_INIT_VALUES[i];
-      if (entry && entry.addr === IO_PORTB) return entry.write & 0xff;
-    }
-    return 0xfd;
-  })();
+  // PORTB as the XL OS leaves it after booting with BASIC; the XEX preflight
+  // checks segments against this mapping (OPTION held sets bit 1).
+  const DEFAULT_PORTB = 0xfd;
 
   function fillGtiaColorTable(sram, out) {
     out[0] = sram[IO_COLPM0_TRIG2] & 0xff;
@@ -188,6 +186,7 @@
           Palette: Palette,
           PIXELS_PER_LINE: PIXELS_PER_LINE,
           LINES_PER_SCREEN_PAL: LINES_PER_SCREEN_PAL,
+          VIDEO_STANDARD: VIDEO_STANDARD,
           VIEW_W: VIEW_W,
           VIEW_H: VIEW_H,
           VIEW_X: VIEW_X,
@@ -281,7 +280,7 @@
   const pokeyAudioApi =
     window.A8EPokeyAudio && window.A8EPokeyAudio.createApi
       ? window.A8EPokeyAudio.createApi({
-          ATARI_CPU_HZ_PAL: ATARI_CPU_HZ_PAL,
+          ATARI_CPU_HZ: ATARI_CPU_HZ,
           CYCLES_PER_LINE: CYCLES_PER_LINE,
           POKEY_AUDIO_MAX_CATCHUP_CYCLES: POKEY_AUDIO_MAX_CATCHUP_CYCLES,
           CYCLE_NEVER: CYCLE_NEVER,
@@ -324,6 +323,7 @@
   const pokeyPotUpdate = pokeyAudioApi.potUpdate;
   const pokeyTimerPeriodCpuCycles = pokeyAudioApi.timerPeriodCpuCycles;
   const pokeyRestartTimers = pokeyAudioApi.restartTimers;
+  const pokeyArmInactiveTimers = pokeyAudioApi.armInactiveTimers;
   const pokeySeroutWrite = pokeyAudioApi.seroutWrite;
   const pokeySerinRead = pokeyAudioApi.serinRead;
 
@@ -405,6 +405,7 @@
           pokeyPotPrepareSkctlWrite: pokeyPotPrepareSkctlWrite,
           pokeyPotStartScan: pokeyPotStartScan,
           pokeyRestartTimers: pokeyRestartTimers,
+          pokeyArmInactiveTimers: pokeyArmInactiveTimers,
           pokeySyncLfsr17: pokeySyncLfsr17,
           pokeySeroutWrite: pokeySeroutWrite,
           pokeySerinRead: pokeySerinRead,
@@ -418,6 +419,7 @@
   const gtiaApi =
     window.A8EGtia && window.A8EGtia.createApi
       ? window.A8EGtia.createApi({
+          anticRead: ioApi.anticRead,
           PIXELS_PER_LINE: PIXELS_PER_LINE,
           IO_COLPF0: IO_COLPF0,
           IO_COLPF1: IO_COLPF1,
@@ -475,10 +477,11 @@
           CPU: CPU,
           raisePokeyIrq: ioApi.raisePokeyIrq,
           setSerialOutputIdle: ioApi.setSerialOutputIdle,
+          anticRead: ioApi.anticRead,
           Util: Util,
           PIXELS_PER_LINE: PIXELS_PER_LINE,
           CYCLES_PER_LINE: CYCLES_PER_LINE,
-          LINES_PER_SCREEN_PAL: LINES_PER_SCREEN_PAL,
+          LINES_PER_SCREEN: LINES_PER_SCREEN,
           CYCLE_NEVER: CYCLE_NEVER,
           FIRST_VISIBLE_LINE: FIRST_VISIBLE_LINE,
           LAST_VISIBLE_LINE: LAST_VISIBLE_LINE,
@@ -553,6 +556,11 @@
       ? window.A8EDebugger.createApi({ CPU: CPU })
       : null;
   if (!debuggerApi) throw new Error("A8EDebugger is not loaded");
+
+  function normalizeMemoryExpansion(value) {
+    const key = String(value || "none").toLowerCase();
+    return ioApi.memoryExpansionProfiles.indexOf(key) >= 0 ? key : "none";
+  }
 
   // --- UI-facing App ---
   function createApp(opts) {
@@ -629,6 +637,8 @@
       audioFillLevelSmoothed: -1,
       cycleAccum: 0,
       frameCycleAccum: 0,
+      // Extended memory profile (io.js); takes effect on the next power cycle.
+      memoryExpansion: normalizeMemoryExpansion(opts.memoryExpansion),
     };
     let debugRuntime = null;
 
@@ -726,6 +736,10 @@
       },
       pokeyAudioResetState: pokeyAudioResetState,
       pokeyAudioSetTurbo: pokeyAudioSetTurbo,
+      createExtendedMemory: ioApi.createExtendedMemory,
+      basicRomMapped: ioApi.basicRomMapped,
+      selfTestRomMapped: ioApi.selfTestRomMapped,
+      refreshAnticWindow: ioApi.refreshAnticWindow,
     });
     const memoryHardReset = memoryRuntime.hardReset;
     const memoryLoadOsRom = memoryRuntime.loadOsRom;
@@ -1053,9 +1067,9 @@
       if (!turbo && sioFast) mult = SIO_TURBO_EMU_MULTIPLIER;
 
       // Accumulate cycles from real elapsed time. Run CPU every tick to avoid
-      // audio dead ticks, but only present video when a full PAL frame worth
-      // of cycles has elapsed.
-      machine.cycleAccum += (dtMs / 1000) * ATARI_CPU_HZ_PAL * mult;
+      // audio dead ticks, but only present video when a full frame worth of
+      // cycles has elapsed.
+      machine.cycleAccum += (dtMs / 1000) * ATARI_CPU_HZ * mult;
 
       const frameBudget = CYCLES_PER_FRAME;
       // Cap catch-up work to avoid spiral-of-death after long pauses.
@@ -1214,6 +1228,11 @@
         {machine.ctx.ioData.optionOnStart = optionOnStart;}
     }
 
+    // Takes effect on the next power cycle (reset).
+    function setMemoryExpansion(profile) {
+      machine.memoryExpansion = normalizeMemoryExpansion(profile);
+    }
+
     function setKeyboardMappingMode(mode) {
       keyboardMappingMode = mode === "original" ? "original" : "translated";
       if (setKeysKeyboardMappingMode)
@@ -1253,6 +1272,8 @@
       getOptionOnStart: function () { return optionOnStart; },
       setKeyboardMappingMode: setKeyboardMappingMode,
       getKeyboardMappingMode: function () { return keyboardMappingMode; },
+      setMemoryExpansion: setMemoryExpansion,
+      getMemoryExpansion: function () { return machine.memoryExpansion; },
       setBreakpoints: setBreakpoints,
       stepInstruction: stepInstruction,
       stepInstructionAsync: stepInstructionAsync,

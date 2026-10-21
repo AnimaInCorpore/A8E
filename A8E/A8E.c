@@ -24,6 +24,22 @@
 /* Global window handle — used by Pokey.c to update the title bar. */
 SDL_Window *g_pSdlWindow = NULL;
 
+/* Extended memory configurations (AHRM 2.7, Table 1). */
+static const struct
+{
+	const char *pFlag;
+	AtariMemoryExpansion_t eMemoryExpansion;
+} m_aMemoryFlags[] =
+	{
+		{"-128K", ATARI_MEMORY_130XE},
+		{"-192R", ATARI_MEMORY_RAMBO_192K},
+		{"-320R", ATARI_MEMORY_RAMBO_320K},
+		{"-320C", ATARI_MEMORY_COMPY_320K},
+		{"-576R", ATARI_MEMORY_RAMBO_576K},
+		{"-576C", ATARI_MEMORY_COMPY_576K},
+		{"-1088R", ATARI_MEMORY_RAMBO_1088K},
+};
+
 /********************************************************************
 *
 *
@@ -44,11 +60,17 @@ int main(int argc, char *argv[])
 	u32 lLastTicks = 0;
 	u32 lCounter;
 	u8 cDisassembleFlag = 0;
-	u64 llCycles = CYCLES_PER_LINE * LINES_PER_SCREEN_PAL;
+	u64 llCyclesPerFrame;
+	u64 llCycles;
+	u32 lFramePeriodMs;
 	u32 lMode = 0;
+	AtariVideoStandard_t eVideoStandard = ATARI_VIDEO_PAL;
+	AtariMemoryExpansion_t eMemoryExpansion = ATARI_MEMORY_64K;
+	u32 lFlag;
 	char *pDiskFileName = "d1.atr";
 	u32 lAtariScreenWidth = 336;
 	u32 lAtariScreenHeight = 240;
+	u32 lLogicalWidth;
 	u32 lWindowWidth = 0;
 	u32 lWindowHeight = 0;
 	u32 lWindowScale = 2;
@@ -65,6 +87,14 @@ int main(int argc, char *argv[])
 	{
 		if(argv[lIndex][0] == '-')
 		{
+			for(lFlag = 0; lFlag < sizeof(m_aMemoryFlags) / sizeof(m_aMemoryFlags[0]); lFlag++)
+			{
+				if(SDL_strcasecmp(argv[lIndex], m_aMemoryFlags[lFlag].pFlag) == 0)
+				{
+					eMemoryExpansion = m_aMemoryFlags[lFlag].eMemoryExpansion;
+				}
+			}
+
 			switch(argv[lIndex][1])
 			{
 			case 'b':
@@ -79,6 +109,12 @@ int main(int argc, char *argv[])
 
 				break;
 
+			case 'n':
+			case 'N':
+				eVideoStandard = ATARI_VIDEO_NTSC;
+
+				break;
+
 			default:
 				break;
 			}
@@ -89,7 +125,10 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	lWindowWidth = lAtariScreenWidth * lWindowScale;
+	/* Hires pixels are 0.857:1 on NTSC and 1.04:1 on PAL (AHRM 4.2), so the
+	   336-pixel wide picture is shown 288 or 349 square pixels wide. */
+	lLogicalWidth = eVideoStandard == ATARI_VIDEO_NTSC ? 288 : 349;
+	lWindowWidth = lLogicalWidth * lWindowScale;
 	lWindowHeight = lAtariScreenHeight * lWindowScale;
 
 	/* SDL_WINDOW_FULLSCREEN_DESKTOP scales to desktop resolution without
@@ -125,7 +164,7 @@ int main(int argc, char *argv[])
 
 	/* Logical size lets the renderer scale the Atari output to fill the
 	   window (or screen in fullscreen) while preserving the aspect ratio. */
-	SDL_RenderSetLogicalSize(pRenderer, (int)lAtariScreenWidth, (int)lAtariScreenHeight);
+	SDL_RenderSetLogicalSize(pRenderer, (int)lLogicalWidth, (int)lAtariScreenHeight);
 
 	pScreenTexture = SDL_CreateTexture(pRenderer, SDL_PIXELFORMAT_ARGB8888,
 									   SDL_TEXTUREACCESS_STREAMING, (int)lAtariScreenWidth, (int)lAtariScreenHeight);
@@ -156,7 +195,20 @@ int main(int argc, char *argv[])
 	_6502_Init();
 
 	pAtariContext = _6502_Open();
-	AtariIoOpen(pAtariContext, lMode, pDiskFileName);
+	AtariIoOpenMachine(pAtariContext, lMode, pDiskFileName, eVideoStandard, eMemoryExpansion);
+
+	/* 114 cycles per scan line, 312 lines on PAL and 262 on NTSC (AHRM 4.2). */
+	if(eVideoStandard == ATARI_VIDEO_NTSC)
+	{
+		llCyclesPerFrame = CYCLES_PER_LINE * LINES_PER_SCREEN_NTSC;
+		lFramePeriodMs = (u32)((llCyclesPerFrame * 1000 + ATARI_CPU_HZ_NTSC / 2) / ATARI_CPU_HZ_NTSC);
+	}
+	else
+	{
+		llCyclesPerFrame = CYCLES_PER_LINE * LINES_PER_SCREEN_PAL;
+		lFramePeriodMs = (u32)((llCyclesPerFrame * 1000 + ATARI_CPU_HZ_PAL / 2) / ATARI_CPU_HZ_PAL);
+	}
+	llCycles = llCyclesPerFrame;
 
 	_6502_Reset(pAtariContext);
 
@@ -164,7 +216,7 @@ int main(int argc, char *argv[])
 	{
 		if(cDisassembleFlag)
 		{
-			lCounter = CYCLES_PER_LINE * LINES_PER_SCREEN_PAL / 3;
+			lCounter = (u32)(llCyclesPerFrame / 3);
 
 			while(lCounter)
 			{
@@ -181,7 +233,7 @@ int main(int argc, char *argv[])
 		{
 			_6502_Run(pAtariContext, llCycles);
 
-			llCycles += CYCLES_PER_LINE * LINES_PER_SCREEN_PAL;
+			llCycles += llCyclesPerFrame;
 		}
 
 		AtariIoDrawScreen(pAtariContext, pScreenSurface, lAtariScreenWidth, lAtariScreenHeight);
@@ -260,14 +312,14 @@ int main(int argc, char *argv[])
 				}
 			}
 
-			/* Fallback: if audio throttling didn't engage (audio disabled or buffer very empty),
-			   use time-based delay to prevent runaway speed. */
-			if(!didThrottle)
+			/* Without audio, pace the frames by time. While audio plays, its
+			   buffer is the clock and an extra delay would starve it. */
+			if(!didThrottle && SDL_GetAudioStatus() != SDL_AUDIO_PLAYING)
 			{
 				u32 elapsed = SDL_GetTicks() - lLastTicks;
-				if(elapsed < 18) /* slightly under 20ms to let buffer build */
+				if(elapsed < lFramePeriodMs)
 				{
-					SDL_Delay(18 - elapsed);
+					SDL_Delay(lFramePeriodMs - elapsed);
 				}
 			}
 		}

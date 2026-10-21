@@ -348,6 +348,7 @@
     const btnReset = document.getElementById("btnReset");
     const btnControlsCollapse = document.getElementById("btnControlsCollapse");
     const btnFullscreen = document.getElementById("btnFullscreen");
+    const btnAppFullscreen = document.getElementById("btnAppFullscreen");
     const btnTurbo = document.getElementById("btnTurbo");
     const btnSioTurbo = document.getElementById("btnSioTurbo");
     const btnAudio = document.getElementById("btnAudio");
@@ -358,6 +359,17 @@
     const btnHostFs = document.getElementById("btnHostFs");
     const btnAssembler = document.getElementById("btnAssembler");
     const btnSnapshots = document.getElementById("btnSnapshots");
+    const videoStandardSelect = document.getElementById("videoStandardSelect");
+    const memoryExpansionSelect = document.getElementById("memoryExpansionSelect");
+    if (memoryExpansionSelect) {
+      try {
+        const stored = window.localStorage.getItem("jsA8E.memoryExpansion");
+        if (stored) memoryExpansionSelect.value = stored;
+      } catch {
+        // storage may be unavailable
+      }
+      if (!memoryExpansionSelect.value) memoryExpansionSelect.value = "none";
+    }
     const secondaryControls = document.getElementById("secondaryControls");
 
     function getKeyboardMappingModeFromUi() {
@@ -599,6 +611,7 @@
         turbo: btnTurbo.classList.contains("active"),
         sioTurbo: btnSioTurbo.classList.contains("active"),
         optionOnStart: btnOptionOnStart.classList.contains("active"),
+        memoryExpansion: memoryExpansionSelect ? memoryExpansionSelect.value : "none",
         keyboardMappingMode: getKeyboardMappingModeFromUi(),
       }, workerPreference));
       resizeCrtCanvas();
@@ -613,6 +626,7 @@
           turbo: btnTurbo.classList.contains("active"),
           sioTurbo: btnSioTurbo.classList.contains("active"),
           optionOnStart: btnOptionOnStart.classList.contains("active"),
+          memoryExpansion: memoryExpansionSelect ? memoryExpansionSelect.value : "none",
           keyboardMappingMode: getKeyboardMappingModeFromUi(),
         }, workerPreference));
       } catch (e) {
@@ -644,6 +658,7 @@
               turbo: btnTurbo.classList.contains("active"),
               sioTurbo: btnSioTurbo.classList.contains("active"),
               optionOnStart: btnOptionOnStart.classList.contains("active"),
+              memoryExpansion: memoryExpansionSelect ? memoryExpansionSelect.value : "none",
               keyboardMappingMode: getKeyboardMappingModeFromUi(),
             }, workerPreference));
             resizeCrtCanvas();
@@ -744,6 +759,10 @@
       return getFullscreenElement() === screenViewport;
     }
 
+    function isAppFullscreen() {
+      return getFullscreenElement() === document.documentElement;
+    }
+
     function updateFullscreenButton() {
       if (!btnFullscreen) return;
       const active = isViewportFullscreen();
@@ -759,6 +778,19 @@
           ? "Exit fullscreen mode and return to the normal emulator layout."
           : "Enter fullscreen mode for the emulator display area.",
       );
+    }
+
+    function updateAppFullscreenButton() {
+      if (!btnAppFullscreen) return;
+      const active = isAppFullscreen();
+      const label = active
+        ? "Exit fullscreen mode for the complete emulator workspace."
+        : "Enter fullscreen mode for the complete emulator workspace.";
+      btnAppFullscreen.innerHTML = active
+        ? '<i class="fa-solid fa-compress"></i>'
+        : '<i class="fa-solid fa-window-maximize"></i>';
+      btnAppFullscreen.title = label;
+      btnAppFullscreen.setAttribute("aria-label", label);
     }
 
     function showFullscreenHint() {
@@ -782,13 +814,22 @@
       }, 2500);
     }
 
+    // Enters fullscreen for el, leaving the other fullscreen mode first.
+    function enterFullscreen(el) {
+      if (!getFullscreenElement()) return requestFullscreen(el);
+      return Promise.resolve(exitFullscreen()).then(function () {
+        return requestFullscreen(el);
+      });
+    }
+
     function toggleFullscreen() {
       const op = isViewportFullscreen()
         ? exitFullscreen()
-        : requestFullscreen(screenViewport);
+        : enterFullscreen(screenViewport);
       Promise.resolve(op)
         .then(function () {
           updateFullscreenButton();
+          updateAppFullscreenButton();
           resizeCrtCanvas();
           queueKeyboardScaleConsistencyCheck();
           focusCanvas(false);
@@ -1448,8 +1489,21 @@
       });
     }
 
+    // The workspace fullscreen keeps the toolbar and the panels visible.
+    if (btnAppFullscreen) {
+      btnAppFullscreen.addEventListener("click", function () {
+        const op = isAppFullscreen()
+          ? exitFullscreen()
+          : enterFullscreen(document.documentElement);
+        Promise.resolve(op).catch(function () {
+          // Fullscreen error - silently ignore
+        });
+      });
+    }
+
     onFullscreenChange = function () {
       updateFullscreenButton();
+      updateAppFullscreenButton();
       resizeCrtCanvas();
       queueKeyboardScaleConsistencyCheck();
       if (isViewportFullscreen()) showFullscreenHint();
@@ -1492,6 +1546,42 @@
     bindToggleButton(btnOptionOnStart, function (active) {
       app.setOptionOnStart(active);
     });
+
+    if (memoryExpansionSelect) {
+      memoryExpansionSelect.addEventListener("change", function () {
+        try {
+          window.localStorage.setItem("jsA8E.memoryExpansion", memoryExpansionSelect.value);
+        } catch {
+          // storage may be unavailable
+        }
+        app.setMemoryExpansion(memoryExpansionSelect.value);
+        app.reset();
+        updateStatus();
+        focusCanvas(false);
+      });
+    }
+
+    if (videoStandardSelect) {
+      const currentStandard = window.A8EHw.createApi().VIDEO_STANDARD;
+      videoStandardSelect.value = currentStandard;
+      videoStandardSelect.addEventListener("change", function () {
+        const next = videoStandardSelect.value;
+        if (
+          !window.confirm(
+            "Switch to " + next.toUpperCase() + "? The page reloads and mounted disks are unloaded.",
+          )
+        ) {
+          videoStandardSelect.value = currentStandard;
+          return;
+        }
+        try {
+          window.localStorage.setItem("jsA8E.videoStandard", next);
+        } catch {
+          // storage may be unavailable
+        }
+        window.location.reload();
+      });
+    }
 
     function getKeyboardButtonFromTarget(target) {
       if (!atariKeyboard || !target || !target.closest) return null;

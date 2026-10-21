@@ -5,7 +5,7 @@
     const CPU = cfg.CPU;
     const PIXELS_PER_LINE = cfg.PIXELS_PER_LINE;
     const CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
-    const LINES_PER_SCREEN_PAL = cfg.LINES_PER_SCREEN_PAL;
+    const LINES_PER_SCREEN = cfg.LINES_PER_SCREEN;
 
     const IO_COLBK = cfg.IO_COLBK;
     const IO_COLPM0_TRIG2 = cfg.IO_COLPM0_TRIG2;
@@ -97,6 +97,13 @@
       }
     }
 
+    // ANTIC DMA reads, which may see extended memory the CPU does not.
+    const anticRead =
+      cfg.anticRead ||
+      function (ctx, address) {
+        return ctx.ram[address & 0xffff];
+      };
+
     function stealDma(ctx, cycles) {
       const count = cycles | 0;
       if (count <= 0) return;
@@ -148,7 +155,7 @@
 
       if (io.firstRowScanline) {
         const value = playfieldDmaAllowedAtCycle(ctx, cycleOffset)
-          ? (schedulePlayfieldDma(ctx, cycleOffset, 1), ctx.ram[address & 0xffff] & 0xff)
+          ? (schedulePlayfieldDma(ctx, cycleOffset, 1), anticRead(ctx, address))
           : readVirtualPlayfieldBus(ctx, cycleOffset);
         lineBuffer[index] = value & 0xff;
       }
@@ -159,7 +166,7 @@
     function fetchUnbufferedDisplayByte(ctx, address, cycleOffset) {
       if (playfieldDmaAllowedAtCycle(ctx, cycleOffset)) {
         schedulePlayfieldDma(ctx, cycleOffset, 1);
-        return ctx.ram[address & 0xffff] & 0xff;
+        return anticRead(ctx, address);
       }
       return readVirtualPlayfieldBus(ctx, cycleOffset);
     }
@@ -173,13 +180,13 @@
 
       if (lineCycle >= VCOUNT_UPDATE_CYCLE) {
         const currentLine = io.video.currentDisplayLine | 0;
-        const nextLine = (currentLine + 1) % LINES_PER_SCREEN_PAL;
+        const nextLine = (currentLine + 1) % LINES_PER_SCREEN;
         if (
-          currentLine === (LINES_PER_SCREEN_PAL - 1) &&
+          currentLine === (LINES_PER_SCREEN - 1) &&
           lineCycle === VCOUNT_UPDATE_CYCLE
         ) {
           // AHRM 4.10: the final line exposes one extra VCOUNT value for cycle 111 only.
-          ctx.ram[IO_VCOUNT] = (LINES_PER_SCREEN_PAL >> 1) & 0xff;
+          ctx.ram[IO_VCOUNT] = (LINES_PER_SCREEN >> 1) & 0xff;
         } else {
           ctx.ram[IO_VCOUNT] = (nextLine >> 1) & 0xff;
         }
@@ -328,25 +335,25 @@
       return 7 - glyphRow;
     }
 
-    function fetchCharacterRow8(ram, chBase, ch, row, chactl) {
+    function fetchCharacterRow8(ctx, chBase, ch, row, chactl) {
       const glyphRow = resolveCharacterRow(row, chactl);
       if (glyphRow < 0) return 0;
-      return ram[(chBase + ch * 8 + glyphRow) & 0xffff] & 0xff;
+      return anticRead(ctx, (chBase + ch * 8 + glyphRow) & 0xffff);
     }
 
-    function fetchCharacterRow10(ram, chBase, ch, row, chactl) {
+    function fetchCharacterRow10(ctx, chBase, ch, row, chactl) {
       const glyphRow = row & 0xff;
-      if (ch < 0x60) return fetchCharacterRow8(ram, chBase, ch, glyphRow, chactl);
+      if (ch < 0x60) return fetchCharacterRow8(ctx, chBase, ch, glyphRow, chactl);
       if (glyphRow < 2) return 0;
-      if (glyphRow < 8) return fetchCharacterRow8(ram, chBase, ch, glyphRow, chactl);
-      if (glyphRow < 10) return fetchCharacterRow8(ram, chBase, ch, glyphRow - 8, chactl);
+      if (glyphRow < 8) return fetchCharacterRow8(ctx, chBase, ch, glyphRow, chactl);
+      if (glyphRow < 10) return fetchCharacterRow8(ctx, chBase, ch, glyphRow - 8, chactl);
       return 0;
     }
 
-    function fetchCharacterRow16(ram, chBase, ch, row, chactl) {
+    function fetchCharacterRow16(ctx, chBase, ch, row, chactl) {
       const glyphRow = row & 0xff;
       if (glyphRow >= 16) return 0;
-      return fetchCharacterRow8(ram, chBase, ch, glyphRow >> 1, chactl);
+      return fetchCharacterRow8(ctx, chBase, ch, glyphRow >> 1, chactl);
     }
 
     function drawBackgroundClipped(ctx, dst, prio, dstIndex, startX, cycles) {

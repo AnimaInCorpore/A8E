@@ -45,11 +45,33 @@
 #define APPLICATION_CAPTION "A8E " A8E_BUILD_VERSION " (c) Sascha Springer"
 
 #define PIXELS_PER_LINE 456
+#define LINES_PER_SCREEN_NTSC 262
 #define LINES_PER_SCREEN_PAL 312
+#define LINES_PER_SCREEN_MAX LINES_PER_SCREEN_PAL
 #define COLOR_CLOCKS_PER_LINE (PIXELS_PER_LINE / 2)
 #define CYCLES_PER_LINE (COLOR_CLOCKS_PER_LINE / 2)
 
+#define ATARI_CPU_HZ_NTSC 1789773u
 #define ATARI_CPU_HZ_PAL 1773447u
+
+typedef enum
+{
+	ATARI_VIDEO_PAL,
+	ATARI_VIDEO_NTSC
+} AtariVideoStandard_t;
+
+/* Extended memory configurations from AHRM 2.7, Table 1. */
+typedef enum
+{
+	ATARI_MEMORY_64K,
+	ATARI_MEMORY_130XE,
+	ATARI_MEMORY_RAMBO_192K,
+	ATARI_MEMORY_RAMBO_320K,
+	ATARI_MEMORY_COMPY_320K,
+	ATARI_MEMORY_RAMBO_576K,
+	ATARI_MEMORY_COMPY_576K,
+	ATARI_MEMORY_RAMBO_1088K
+} AtariMemoryExpansion_t;
 
 #define CYCLE_NEVER 0xffffffffffffffffLL
 
@@ -101,6 +123,9 @@ typedef struct
 
 typedef struct
 {
+	AtariVideoStandard_t eVideoStandard;
+	u32 lLinesPerScreen; /* scan lines per frame: 312 PAL, 262 NTSC (AHRM 4.2) */
+
 	u64 llCycle;
 	u64 llDisplayListFetchCycle;
 	u64 llDliCycle;
@@ -143,8 +168,17 @@ typedef struct
 	u8 bModeLineScrollExit;
 	u8 bModeLineExitDli;
 	u8 bModeLineEndsThisLine;
-	u8 cValuePortA;
-	u8 cValuePortB;
+	u8 cValuePortA; /* DDRA */
+	u8 cValuePortB; /* DDRB */
+	u8 cOutputPortB; /* ORB; SRAM[IO_PORTB] holds the port B pin levels */
+
+	/* Extended memory (AHRM 2.7). The CPU window's bank lives in RAM while
+	   the window is on, and main memory $4000-$7FFF waits in pMainWindow. */
+	u8 cBankMask; /* PORTB bits that select the bank, 0 without extended memory */
+	u8 bSeparateAnticWindow; /* bit 5 enables the ANTIC window (130XE, COMPY) */
+	u8 *pExtendedMemory;
+	u8 *pMainWindow;
+	u8 *pAnticWindow; /* what ANTIC reads at $4000-$7FFF when that is not the CPU view */
 	u8 cReadValuePortA; /* PORTA input register as last read (AHRM 2.5) */
 
 	VideoData_t tVideoData;
@@ -172,6 +206,12 @@ typedef struct
 } IoData_t;
 
 void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName);
+void AtariIoOpenMachine(
+	_6502_Context_t *pContext,
+	u32 lMode,
+	char *pDiskFileName,
+	AtariVideoStandard_t eVideoStandard,
+	AtariMemoryExpansion_t eMemoryExpansion);
 void AtariIoClose(_6502_Context_t *pContext);
 
 void AtariIoCycleTimedEventUpdate(_6502_Context_t *pContext);

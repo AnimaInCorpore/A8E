@@ -2,7 +2,7 @@
   "use strict";
 
   function createApi(cfg) {
-    const ATARI_CPU_HZ_PAL = cfg.ATARI_CPU_HZ_PAL;
+    const ATARI_CPU_HZ = cfg.ATARI_CPU_HZ;
     const CYCLES_PER_LINE = cfg.CYCLES_PER_LINE;
     const POKEY_AUDIO_MAX_CATCHUP_CYCLES = cfg.POKEY_AUDIO_MAX_CATCHUP_CYCLES;
 
@@ -51,8 +51,8 @@
       const ringSize = POKEY_AUDIO_RING_SIZE;
       const st = {
         sampleRate: sampleRate || 48000,
-        cpuHzBase: ATARI_CPU_HZ_PAL,
-        cpuHz: ATARI_CPU_HZ_PAL,
+        cpuHzBase: ATARI_CPU_HZ,
+        cpuHz: ATARI_CPU_HZ,
         cyclesPerSampleFp: 0,
         cyclesPerSampleFpBase: 0,
         targetBufferSamples: POKEY_AUDIO_TARGET_BUFFER_SAMPLES,
@@ -129,7 +129,7 @@
     function pokeyAudioRecomputeCyclesPerSample(st) {
       if (!st) return;
       const sr = st.sampleRate || 48000;
-      const hz = st.cpuHz || ATARI_CPU_HZ_PAL;
+      const hz = st.cpuHz || ATARI_CPU_HZ;
       let cps = Math.floor((hz * POKEY_FP_ONE) / sr);
       if (cps < 1) cps = 1;
       st.cyclesPerSampleFpBase = cps;
@@ -173,7 +173,7 @@
 
     function pokeyAudioSetTurbo(st, turbo) {
       if (!st) return;
-      st.cpuHz = (st.cpuHzBase || ATARI_CPU_HZ_PAL) * (turbo ? 4 : 1);
+      st.cpuHz = (st.cpuHzBase || ATARI_CPU_HZ) * (turbo ? 4 : 1);
       pokeyAudioRecomputeCyclesPerSample(st);
     }
 
@@ -460,20 +460,29 @@
       if (pulse3 && audctl & 0x02) st.hp2Latch = st.channels[1].output & 1;
     }
 
-    // Per-channel non-linear volume (~3 dB/step). Index 15 => 1.0 (normalized).
-    const POKEY_CHAN_VOL_TABLE = [
-      0.000, 0.008, 0.011, 0.016, 0.022, 0.031, 0.044, 0.063,
-      0.088, 0.125, 0.177, 0.250, 0.354, 0.500, 0.707, 1.000,
+    // Channel DAC output in 0.01 V steps: the volume bits weigh 0.12, 0.26,
+    // 0.56 and 1.12 V (AHRM E.2).
+    const POKEY_CHAN_LEVEL = [
+      0, 12, 26, 38, 56, 68, 82, 94, 112, 124, 138, 150, 168, 180, 194, 206,
     ];
-    // Soft-clip compressed maximum: 1.0 + 3.0 * 0.75 (all 4 ch at vol=15).
-    const POKEY_MIX_COMPRESSED_MAX = 3.25;
+    const POKEY_MIX_LEVEL_MAX = 206 * 4;
+    // The summed DAC output saturates (AHRM E.2): linear up to 14% of the
+    // four-channel maximum, then exponential. Maps the level sum to 0..1.
+    const POKEY_MIX_OUTPUT = new Float32Array(POKEY_MIX_LEVEL_MAX + 1);
+    for (let i = 0; i <= POKEY_MIX_LEVEL_MAX; i++) {
+      const x = i / POKEY_MIX_LEVEL_MAX;
+      POKEY_MIX_OUTPUT[i] =
+        x <= 0.14
+          ? 2.171 * x
+          : 2.171 * (0.14 + (1 - Math.exp(-2.85 * (x - 0.14))) / 2.85);
+    }
 
     function pokeyAudioMixCycleSample(st) {
       const audctl = st.audctl & 0xff;
       const pair12 = (audctl & 0x10) !== 0;
       const pair34 = (audctl & 0x08) !== 0;
       const twoTone = (st.skctl & 0x08) !== 0;
-      let sum = 0.0;
+      let sum = 0;
 
       for (let i = 0; i < 4; i++) {
         if (i === 0 && pair12) continue;
@@ -495,13 +504,10 @@
           if (i === 1 && audctl & 0x02) bit ^= st.hp2Latch & 1;
         }
 
-        sum += POKEY_CHAN_VOL_TABLE[vol] * bit;
+        sum += POKEY_CHAN_LEVEL[vol] * bit;
       }
 
-      // Soft-clip: compress beyond one channel's max (transistor output stage).
-      if (sum > 1.0) sum = 1.0 + (sum - 1.0) * 0.75;
-
-      return sum / POKEY_MIX_COMPRESSED_MAX;
+      return POKEY_MIX_OUTPUT[sum];
     }
 
     function pokeyAudioNextPulseCycles(counter, clockCh) {
@@ -1109,6 +1115,36 @@
       cycleTimedEventUpdate(ctx);
     }
 
+    // POKEY counters always run (AHRM 5.3), but a timer whose period was 0
+    // at the last STIMER (AUDF=0, a linked low channel or initialization
+    // mode) is parked at CYCLE_NEVER. Start such timers once AUDF, AUDCTL or
+    // SKCTL gives them a period, without touching running timers' phase.
+    function pokeyArmInactiveTimers(ctx) {
+      const io = ctx.ioData;
+      const now = ctx.cycleCounter;
+      let changed = false;
+
+      const p1 = pokeyTimerPeriodCpuCycles(ctx, 1);
+      if (io.timer1Cycle === CYCLE_NEVER && p1) {
+        io.timer1Cycle = now + p1;
+        changed = true;
+      }
+
+      const p2 = pokeyTimerPeriodCpuCycles(ctx, 2);
+      if (io.timer2Cycle === CYCLE_NEVER && p2) {
+        io.timer2Cycle = now + p2;
+        changed = true;
+      }
+
+      const p4 = pokeyTimerPeriodCpuCycles(ctx, 4);
+      if (io.timer4Cycle === CYCLE_NEVER && p4) {
+        io.timer4Cycle = now + p4;
+        changed = true;
+      }
+
+      if (changed) cycleTimedEventUpdate(ctx);
+    }
+
     return {
       createState: pokeyAudioCreateState,
       setTargetBufferSamples: pokeyAudioSetTargetBufferSamples,
@@ -1126,6 +1162,7 @@
       potUpdate: pokeyPotUpdate,
       timerPeriodCpuCycles: pokeyTimerPeriodCpuCycles,
       restartTimers: pokeyRestartTimers,
+      armInactiveTimers: pokeyArmInactiveTimers,
       seroutWrite: pokeySioApi.seroutWrite,
       serinRead: pokeySioApi.serinRead,
     };

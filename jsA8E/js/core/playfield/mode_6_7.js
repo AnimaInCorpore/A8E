@@ -73,7 +73,6 @@
 
     function drawLineMode67Common(ctx, fetchCharacterRow, vScrollBase, shouldStealDma) {
       const io = ctx.ioData;
-      const ram = ctx.ram;
       const sram = ctx.sram;
 
       // AHRM 4.7: mode 6 rows 8-15 repeat rows 0-7; mode 7 counts its
@@ -121,9 +120,9 @@
               : 0;
           } else if (shouldStealDma(vScrollLine)) {
             stealDma(ctx, 1);
-            data = fetchCharacterRow(ram, chBase, ch, vScrollLine, chactl);
+            data = fetchCharacterRow(ctx, chBase, ch, vScrollLine, chactl);
           } else {
-            data = fetchCharacterRow(ram, chBase, ch, vScrollLine, chactl);
+            data = fetchCharacterRow(ctx, chBase, ch, vScrollLine, chactl);
           }
           mask = 0x80;
         }

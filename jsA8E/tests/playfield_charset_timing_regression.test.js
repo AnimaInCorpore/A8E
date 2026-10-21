@@ -44,7 +44,7 @@ function createBaseApi(context) {
     },
     PIXELS_PER_LINE: 456,
     CYCLES_PER_LINE: 114,
-    LINES_PER_SCREEN_PAL: 312,
+    LINES_PER_SCREEN: 312,
     IO_COLBK: IO_COLBK,
     IO_COLPM0_TRIG2: 0xd012,
     IO_CHBASE: IO_CHBASE,
@@ -167,10 +167,11 @@ function testCharacterRowReflectsVertically() {
     ram[chBase + row] = 0x10 + row;
   }
 
-  assert.equal(baseApi.fetchCharacterRow8(ram, chBase, 0, 2, 0x00), 0x12);
-  assert.equal(baseApi.fetchCharacterRow8(ram, chBase, 0, 2, 0x04), 0x15);
-  assert.equal(baseApi.fetchCharacterRow16(ram, chBase, 0, 6, 0x00), 0x13);
-  assert.equal(baseApi.fetchCharacterRow16(ram, chBase, 0, 6, 0x04), 0x14);
+  const ctx = { ram: ram, ioData: {} };
+  assert.equal(baseApi.fetchCharacterRow8(ctx, chBase, 0, 2, 0x00), 0x12);
+  assert.equal(baseApi.fetchCharacterRow8(ctx, chBase, 0, 2, 0x04), 0x15);
+  assert.equal(baseApi.fetchCharacterRow16(ctx, chBase, 0, 6, 0x00), 0x13);
+  assert.equal(baseApi.fetchCharacterRow16(ctx, chBase, 0, 6, 0x04), 0x14);
 }
 
 function testMode23UsesDelayedChbaseAndLatchesChactlPerScanline() {

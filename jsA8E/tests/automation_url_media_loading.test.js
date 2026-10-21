@@ -73,9 +73,9 @@ function loadAutomationApi(fetchImpl) {
   context.A8EHw = {
     createApi: function () {
       return {
-        ATARI_CPU_HZ_PAL: 1773447,
+        ATARI_CPU_HZ: 1773447,
         CYCLES_PER_LINE: 114,
-        LINES_PER_SCREEN_PAL: 312,
+        LINES_PER_SCREEN: 312,
       };
     },
   };

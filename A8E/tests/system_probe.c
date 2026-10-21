@@ -6,6 +6,7 @@
 #include "6502.h"
 #include "Antic.h"
 #include "AtariIo.h"
+#include "Gtia.h"
 #include "Pia.h"
 #include "Pokey.h"
 
@@ -347,6 +348,8 @@ static int TestResetKeyResetsAnticAndPia(void)
 
 	/* A program banks BASIC and the OS out, leaves data under both, points
 	   the RAM reset vector at itself and runs with display DMA and NMIs on. */
+	CpuWrite(pContext, IO_PBCTL, 0x38);
+	CpuWrite(pContext, IO_PORTB, 0xff); /* DDRB: all outputs, as the OS sets it */
 	CpuWrite(pContext, IO_PBCTL, 0x3c);
 	CpuWrite(pContext, IO_PORTB, 0xff); /* BASIC out */
 	CpuWrite(pContext, 0xa000, 0x77);
@@ -380,6 +383,7 @@ static int TestResetKeyResetsAnticAndPia(void)
 	/* RAM survives a warm reset, including the RAM under the ROMs. */
 	REQUIRE(pContext->pMemory[0x0600] == 0xa5, "Reset cleared main RAM");
 	REQUIRE(pContext->pMemory[0xa000] == 0x77, "BASIC was mapped back in by reset");
+	CpuWrite(pContext, IO_PORTB, 0xff); /* DDRB, still selected after the reset */
 	CpuWrite(pContext, IO_PBCTL, 0x3c);
 	CpuWrite(pContext, IO_PORTB, 0xfe);
 	REQUIRE(pContext->pMemory[0xc000] == 0x5a, "RAM under the OS ROM was lost across reset");
@@ -505,6 +509,155 @@ static int TestSerialOutputCompleteIsUnlatched(void)
 	return 1;
 }
 
+static int TestNtscGtiaReadsNtscInPalRegister(void)
+{
+	_6502_Context_t *pContext = _6502_Open();
+
+	REQUIRE(pContext != NULL, "machine open failed");
+	AtariIoOpenMachine(pContext, 0, NULL, ATARI_VIDEO_NTSC, ATARI_MEMORY_64K);
+
+	/* AHRM 6.1: $D014 reads $0F on an NTSC GTIA ($01 on PAL). */
+	REQUIRE(CpuRead(pContext, IO_COLPM2_PAL) == 0x0f, "NTSC $D014 read $%02X instead of $0F", pContext->tCpu.a);
+	REQUIRE(CpuRead(pContext, 0xd0f4) == 0x0f, "NTSC $D0F4 read $%02X instead of $0F", pContext->tCpu.a);
+	REQUIRE(((IoData_t *)pContext->pIoData)->lLinesPerScreen == LINES_PER_SCREEN_NTSC, "NTSC frame is not 262 lines");
+
+	AtariIoClose(pContext);
+	_6502_Close(pContext);
+	return 1;
+}
+
+static int TestPortBDirectionRegisterAndPullUps(void)
+{
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+	IoData_t *pIoData = tMachine.pIoData;
+	u8 cNotOs;
+	u8 cNotSelfTest;
+
+	REQUIRE(pContext != NULL, "machine open failed");
+	cNotOs = (u8)~pIoData->pOsRom[0];
+	cNotSelfTest = (u8)~pIoData->pSelfTestRom[0];
+
+	/* AHRM 2.5, 2.6: the PIA powers up with port B as inputs, and the
+	   pull-ups map the OS ROM in and BASIC and self-test out. */
+	REQUIRE(CpuRead(pContext, IO_PORTB) == 0x00, "DDRB read $%02X at power-on", pContext->tCpu.a);
+	CpuWrite(pContext, IO_PBCTL, 0x3c);
+	REQUIRE(CpuRead(pContext, IO_PORTB) == 0xff, "all-input PORTB read $%02X instead of $FF", pContext->tCpu.a);
+	REQUIRE(pContext->pMemory[0xc000] == pIoData->pOsRom[0], "OS ROM not mapped at power-on");
+	CpuWrite(pContext, 0xa000, 0x77);
+	REQUIRE(pContext->pMemory[0xa000] == 0x77, "BASIC ROM mapped at power-on");
+
+	/* ORB drives the MMU only through bits that DDRB makes outputs. */
+	CpuWrite(pContext, IO_PORTB, 0xfe);
+	REQUIRE(pContext->pMemory[0xc000] == pIoData->pOsRom[0], "ORB unmapped the OS through an input bit");
+	CpuWrite(pContext, IO_PBCTL, 0x38);
+	CpuWrite(pContext, IO_PORTB, 0x01);
+	CpuWrite(pContext, IO_PBCTL, 0x3c);
+	CpuWrite(pContext, 0xc000, cNotOs);
+	REQUIRE(pContext->pMemory[0xc000] == cNotOs, "DDRB=$01 ORB=$FE left the OS ROM mapped");
+	REQUIRE(CpuRead(pContext, IO_PORTB) == 0xfe, "DDRB=$01 ORB=$FE read $%02X", pContext->tCpu.a);
+
+	/* Output bits read back ORB, the unused bits 2-6 included (AHRM 2.5). */
+	CpuWrite(pContext, IO_PBCTL, 0x38);
+	CpuWrite(pContext, IO_PORTB, 0xff);
+	CpuWrite(pContext, IO_PBCTL, 0x3c);
+	CpuWrite(pContext, IO_PORTB, 0x83);
+	REQUIRE(CpuRead(pContext, IO_PORTB) == 0x83, "PORTB outputs read $%02X instead of $83", pContext->tCpu.a);
+
+	/* The self-test ROM needs the OS ROM as well (AHRM 2.6, 14.5). */
+	CpuWrite(pContext, IO_PORTB, 0x7f);
+	REQUIRE(pContext->pMemory[0x5000] == pIoData->pSelfTestRom[0], "PORTB=$7F did not map the self-test ROM");
+	CpuWrite(pContext, IO_PORTB, 0x7e);
+	CpuWrite(pContext, 0x5000, cNotSelfTest);
+	REQUIRE(pContext->pMemory[0x5000] == cNotSelfTest, "PORTB=$7E kept the self-test ROM without the OS ROM");
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
+static int TestParkedTimerStartsWhenAudfArrives(void)
+{
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+	IoData_t *pIoData = tMachine.pIoData;
+	u64 llTimer4Cycle;
+
+	REQUIRE(pContext != NULL, "machine open failed");
+
+	/* AHRM 5.3: the counters always run, so a timer whose period was 0 at
+	   the STIMER write must start once AUDF gives it a period. */
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x03);
+	CpuWrite(pContext, IO_AUDCTL_ALLPOT, 0x00);
+	CpuWrite(pContext, IO_AUDF1_POT0, 0x00);
+	CpuWrite(pContext, IO_AUDF4_POT6, 0x20);
+	CpuWrite(pContext, IO_STIMER_KBCODE, 0x00);
+	REQUIRE(pIoData->llTimer1Cycle == CYCLE_NEVER, "AUDF1=0 did not park timer 1");
+	REQUIRE(pIoData->llTimer4Cycle != CYCLE_NEVER, "timer 4 did not start");
+	llTimer4Cycle = pIoData->llTimer4Cycle;
+
+	CpuWrite(pContext, IO_IRQEN_IRQST, IRQ_TIMER_1);
+	CpuWrite(pContext, IO_AUDF1_POT0, 0x10);
+	REQUIRE(pIoData->llTimer1Cycle != CYCLE_NEVER, "AUDF1 did not start the parked timer 1");
+	REQUIRE(pIoData->llTimer4Cycle == llTimer4Cycle, "arming timer 1 moved the running timer 4");
+
+	/* Timer 1 then fires and latches its IRQST bit. */
+	pContext->pMemory[PROGRAM_ADDRESS] = 0x4c; /* JMP PROGRAM_ADDRESS */
+	pContext->pMemory[PROGRAM_ADDRESS + 1] = (u8)(PROGRAM_ADDRESS & 0xff);
+	pContext->pMemory[PROGRAM_ADDRESS + 2] = (u8)(PROGRAM_ADDRESS >> 8);
+	pContext->tCpu.pc = PROGRAM_ADDRESS;
+	pContext->tCpu.ps.i = 1;
+	_6502_Run(pContext, pIoData->llTimer1Cycle + 16);
+	REQUIRE((pContext->pMemory[IO_IRQEN_IRQST] & IRQ_TIMER_1) == 0,
+			"timer 1 did not fire (IRQST=$%02X)", pContext->pMemory[IO_IRQEN_IRQST]);
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
+static int TestXexLoaderRunsZeroPageEntryPoints(void)
+{
+	/* INIT at $0090 and RUN at $0080 have a zero high byte, so the boot loader
+	   must test both bytes of INITAD and RUNAD. */
+	static const u8 aXex[] =
+		{
+			0xff, 0xff,
+			0x90, 0x00, 0x95, 0x00, 0xa9, 0xa5, 0x8d, 0x01, 0x30, 0x60, /* LDA #$A5 / STA $3001 / RTS */
+			0xe2, 0x02, 0xe3, 0x02, 0x90, 0x00, /* INITAD = $0090 */
+			0x80, 0x00, 0x87, 0x00, 0xa9, 0x5a, 0x8d, 0x00, 0x30, 0x4c, 0x85, 0x00, /* LDA #$5A / STA $3000 / JMP * */
+			0xe0, 0x02, 0xe1, 0x02, 0x80, 0x00, /* RUNAD = $0080 */
+		};
+	const char *pFileName = "system_probe_zpentry.xex";
+	_6502_Context_t *pContext;
+	FILE *pFile;
+	u64 llCycles = 0;
+	u32 lFrame;
+	int bWritten;
+
+	pFile = fopen(pFileName, "wb");
+	REQUIRE(pFile != NULL, "cannot create %s", pFileName);
+	bWritten = fwrite(aXex, sizeof(aXex), 1, pFile) == 1;
+	fclose(pFile);
+	REQUIRE(bWritten, "cannot write %s", pFileName);
+
+	pContext = _6502_Open();
+	AtariIoOpen(pContext, 0, (char *)pFileName);
+	remove(pFileName);
+	_6502_Reset(pContext);
+
+	for(lFrame = 0; lFrame < 400; lFrame++)
+	{
+		llCycles += CYCLES_PER_LINE * LINES_PER_SCREEN_PAL;
+		_6502_Run(pContext, llCycles);
+	}
+
+	REQUIRE(pContext->pMemory[0x3001] == 0xa5, "INIT at $0090 did not run ($3001=$%02X)", pContext->pMemory[0x3001]);
+	REQUIRE(pContext->pMemory[0x3000] == 0x5a, "RUN at $0080 did not run ($3000=$%02X)", pContext->pMemory[0x3000]);
+
+	AtariIoClose(pContext);
+	_6502_Close(pContext);
+	return 1;
+}
+
 int main(int argc, char *argv[])
 {
 	int lPassed = 1;
@@ -528,6 +681,10 @@ int main(int argc, char *argv[])
 	lPassed &= TestPokeyIrqLatchesOnlyEnabledSources();
 	lPassed &= TestIrqLineIsALevelNotACount();
 	lPassed &= TestSerialOutputCompleteIsUnlatched();
+	lPassed &= TestNtscGtiaReadsNtscInPalRegister();
+	lPassed &= TestPortBDirectionRegisterAndPullUps();
+	lPassed &= TestParkedTimerStartsWhenAudfArrives();
+	lPassed &= TestXexLoaderRunsZeroPageEntryPoints();
 
 	SDL_Quit();
 

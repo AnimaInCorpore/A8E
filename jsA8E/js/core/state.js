@@ -33,8 +33,13 @@
         timer2Cycle: CYCLE_NEVER,
         timer4Cycle: CYCLE_NEVER,
         // PIA shadow ports (for output mode)
-        valuePortA: 0,
-        valuePortB: 0,
+        valuePortA: 0, // DDRA
+        valuePortB: 0, // DDRB
+        outputPortB: 0, // ORB; sram[IO_PORTB] holds the port B pin levels
+        // Extended memory (io.js createExtendedMemory) and the view ANTIC
+        // reads at $4000-$7FFF when it differs from the CPU view.
+        extendedMemory: null,
+        anticWindow: null,
         // SIO state (ported from Pokey.c)
         sioBuffer: new Uint8Array(1024),
         sioOutIndex: 0,

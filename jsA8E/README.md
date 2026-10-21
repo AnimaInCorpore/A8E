@@ -67,7 +67,7 @@ Additional browser-only triggers:
 
 ## UI Toggles / Features
 
-- Start/Pause, Reset, Fullscreen
+- Start/Pause, Reset, display fullscreen, workspace fullscreen (the whole page, toolbar and panels included)
 - CPU Turbo (`~4x` speed multiplier)
 - SIO Turbo (accelerates SIO transfer timing only)
 - Audio On/Off
@@ -75,6 +75,8 @@ Additional browser-only triggers:
 - On-screen Atari keyboard toggle
 - Keyboard map toggle (translated symbol mapping for local keyboard layouts vs. original Atari layout)
 - Option-on-Start toggle (hold OPTION during boot, BASIC-off style boot behavior)
+- Video selector: PAL or NTSC (262 lines, 60 Hz, NTSC palette). The choice is stored in the browser; switching reloads the page, so mounted disks are unloaded.
+- Memory selector: 64K or an extended memory configuration from AHRM 2.7 (128K 130XE, RAMBO 192K/320K/576K/1088K, COMPY 320K/576K). The choice is stored in the browser; changing it restarts the machine and keeps the mounted disks.
 
 On smaller/mobile layouts, the virtual keyboard starts hidden by default.
 
@@ -85,6 +87,7 @@ The H: device panel exposes a virtual host filesystem to the emulated Atari.
 - Upload files or entire folders via the toolbar or drag-and-drop.
 - Files are accessible from the Atari via the `H:` device (e.g. `OPEN #1,4,0,"H:FILE.TXT"`).
 - Select files to download them to the browser or delete them.
+- `.XEX` files have a Run button that mounts the file in D1: and boots it.
 - File list supports sorting by name, type, and size.
 
 ## Assembler
@@ -149,6 +152,7 @@ jsA8E now also ships a supported Node bootstrap at `jsA8E/headless.js` for brows
 - For external agents, CI harnesses, screenshot/snapshot jobs, and other scripted control flows, this is the preferred integration path.
 - `createHeadlessAutomation(options)` loads the same core and automation scripts into a Node `vm` context, creates the no-worker app backend, and attaches the normal grouped automation API.
 - `options.roms.os` and `options.roms.basic` accept `ArrayBuffer`, typed arrays, `Buffer`, byte arrays, or filesystem paths.
+- `options.videoStandard` (`"pal"` or `"ntsc"`, default PAL) selects the machine, and `options.memoryExpansion` (`"none"`, `"130xe"`, `"rambo-192k"`, `"rambo-320k"`, `"compy-320k"`, `"rambo-576k"`, `"compy-576k"`, `"rambo-1088k"`) adds extended memory.
 - Headless mode uses the 2D/software renderer, keeps audio disabled by default, and drives continuous execution through a synthetic `requestAnimationFrame` loop so wait helpers and `system.start()` work without a browser.
 - `HostFS` falls back to the existing in-memory mode unless you inject your own `indexedDB` global through `options.globals`.
 

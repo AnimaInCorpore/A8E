@@ -6,13 +6,24 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+### Added
+- NTSC machines in native `A8E` (`-n`) and browser `jsA8E` (Video selector, `videoStandard` headless option): 262 lines, 1.79 MHz, the AHRM D.2 NTSC palette, and `$D014` = `$0F`. Based on PR #5 by Leonel Rivas.
+- Extended memory from AHRM 2.7 in both cores: 130XE 128K, RAMBO 192K/320K/576K/1088K, and COMPY 320K/576K, including separate ANTIC access (native `-128K` ... `-1088R`, browser Memory selector, `memoryExpansion` headless option). Based on PR #5 by Leonel Rivas.
+- Browser `jsA8E` workspace fullscreen button and a HostFS Run button for `.XEX` files (from PR #5 by Leonel Rivas).
+
 ### Changed
+- PIA port B now has a data direction register in both cores; input lines read the pull-ups and the ROM mapping follows the port pins (AHRM 2.5, 2.6).
+- The POKEY mixer in both cores now uses the AHRM E.2 DAC bit weights and output saturation curve.
 - Documentation now consistently states that Atari 800 XL PAL hardware-emulation implementation work should use `AHRM/index.md` as the reference baseline (applied across non-AHRM Markdown docs).
 - Native `A8E` build caption/version is now injected at compile time from `jsA8E/version.json` (with `dev` fallback when unavailable).
 - Browser `jsA8E` frame timing now accumulates CPU cycles and runs whole-frame steps with capped catch-up to reduce visible speed jitter.
 - Browser rendering now requests `desynchronized` WebGL contexts and hints `canvas` transforms for smoother presentation.
 
 ### Fixed
+- The XEX boot loader now tests both bytes of RUNAD/INITAD, so programs with zero-page entry points start (from PR #5 by Leonel Rivas).
+- POKEY timers parked by STIMER now start when their AUDF value arrives, so programs that write AUDF after STIMER get timer IRQs (from PR #5 by Leonel Rivas).
+- Native audio no longer goes silent when SDL negotiates a different device format.
+- Restoring a `jsA8E` snapshot no longer loses RAM that sits under a banked-out ROM.
 - Native `A8E` now ignores out-of-range SDL keysyms (e.g. macOS Command/LGUI) when mapping to Atari key codes; previously hitting ⌘ would index past the key table and crash the emulator.
 - Hardened `jsA8E` SIO disk sector access checks across read/write/verify paths to reject invalid offsets consistently.
 

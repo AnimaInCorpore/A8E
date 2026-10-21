@@ -417,6 +417,10 @@
         sioTurbo: !!(app && typeof app.getSioTurbo === "function" && app.getSioTurbo()),
         audioEnabled: !!(app && typeof app.getAudioEnabled === "function" && app.getAudioEnabled()),
         optionOnStart: !!(app && typeof app.getOptionOnStart === "function" && app.getOptionOnStart()),
+        memoryExpansion:
+          app && typeof app.getMemoryExpansion === "function"
+            ? app.getMemoryExpansion()
+            : "none",
         keyboardMappingMode:
           app && typeof app.getKeyboardMappingMode === "function"
             ? app.getKeyboardMappingMode()
@@ -437,6 +441,12 @@
   }
 
   async function initApp(msg) {
+    // hw.js reads the video standard when the core scripts load.
+    if (msg.videoStandard) {
+      self.A8E_BOOT_OPTIONS = Object.assign({}, self.A8E_BOOT_OPTIONS, {
+        videoStandard: String(msg.videoStandard),
+      });
+    }
     ensureCoreLoaded();
 
     setupAudioBridgePort(msg.audioPort || null);
@@ -503,6 +513,7 @@
         turbo: !!msg.turbo,
         sioTurbo: msg.sioTurbo !== false,
         optionOnStart: !!msg.optionOnStart,
+        memoryExpansion: msg.memoryExpansion,
         onDebugState: function (state) {
           const force = !state || state.reason !== "frame";
           queueDebugState(state, force);
@@ -523,6 +534,7 @@
         turbo: !!msg.turbo,
         sioTurbo: msg.sioTurbo !== false,
         optionOnStart: !!msg.optionOnStart,
+        memoryExpansion: msg.memoryExpansion,
         onDebugState: function (state) {
           const force = !state || state.reason !== "frame";
           queueDebugState(state, force);
@@ -635,6 +647,9 @@
         break;
       case "setOptionOnStart":
         app.setOptionOnStart(!!data.value);
+        break;
+      case "setMemoryExpansion":
+        app.setMemoryExpansion(String(data.value || "none"));
         break;
       case "setKeyboardMappingMode":
         if (app.setKeyboardMappingMode) {

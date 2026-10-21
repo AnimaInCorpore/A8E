@@ -49,7 +49,7 @@ function loadPlayfieldApi(stepperFactory) {
     },
     PIXELS_PER_LINE: 456,
     CYCLES_PER_LINE: 114,
-    LINES_PER_SCREEN_PAL: 312,
+    LINES_PER_SCREEN: 312,
     FIRST_VISIBLE_LINE: 0,
     LAST_VISIBLE_LINE: 239,
     IO_COLBK: IO_COLBK,

@@ -3,15 +3,32 @@
 
   let api = null;
 
+  // The video standard is fixed when the page (or headless runtime) loads;
+  // the UI reloads the page to switch it.
+  function resolveVideoStandard() {
+    const boot = typeof window !== "undefined" ? window.A8E_BOOT_OPTIONS : null;
+    return boot && String(boot.videoStandard).toLowerCase() === "ntsc"
+      ? "ntsc"
+      : "pal";
+  }
+
   function createApi() {
     if (api) return api;
 
     // --- Constants (from AtariIo.h / Antic.h / Gtia.h / Pokey.h / Pia.h) ---
     const PIXELS_PER_LINE = 456;
     const LINES_PER_SCREEN_PAL = 312;
+    const LINES_PER_SCREEN_NTSC = 262;
     const COLOR_CLOCKS_PER_LINE = PIXELS_PER_LINE / 2;
     const CYCLES_PER_LINE = COLOR_CLOCKS_PER_LINE / 2; // 114
     const ATARI_CPU_HZ_PAL = 1773447;
+    const ATARI_CPU_HZ_NTSC = 1789773;
+    // Scan lines per frame and machine clock of the selected standard (AHRM
+    // 4.2). Frame buffers keep the PAL size.
+    const VIDEO_STANDARD = resolveVideoStandard();
+    const IS_NTSC = VIDEO_STANDARD === "ntsc";
+    const LINES_PER_SCREEN = IS_NTSC ? LINES_PER_SCREEN_NTSC : LINES_PER_SCREEN_PAL;
+    const ATARI_CPU_HZ = IS_NTSC ? ATARI_CPU_HZ_NTSC : ATARI_CPU_HZ_PAL;
     const CYCLE_NEVER = Infinity;
 
     const FIRST_VISIBLE_LINE = 8;
@@ -201,7 +218,8 @@
       { addr: IO_GRAFM_TRIG1, write: 0x00, read: 0x01 },
       { addr: IO_COLPM0_TRIG2, write: 0x00, read: 0x01 },
       { addr: IO_COLPM1_TRIG3, write: 0x00, read: 0x00 }, // no cartridge: TRIG3 reads 0 (AHRM 2.8)
-      { addr: IO_COLPM2_PAL, write: 0x00, read: 0x01 },
+      // $D014 identifies the GTIA: $01 for PAL, $0F for NTSC (AHRM 6.1).
+      { addr: IO_COLPM2_PAL, write: 0x00, read: IS_NTSC ? 0x0f : 0x01 },
       { addr: IO_COLPM3, write: 0x00, read: 0x0f },
       { addr: IO_COLPF0, write: 0x00, read: 0x0f },
       { addr: IO_COLPF1, write: 0x00, read: 0x0f },
@@ -233,7 +251,8 @@
 
       // PIA
       { addr: IO_PORTA, write: 0x00, read: 0xff }, // ORA is $00 after reset (AHRM 14.5)
-      { addr: IO_PORTB, write: 0xfd, read: 0xfd },
+      // PIA reset: port B is all inputs, so the pins read the pull-ups.
+      { addr: IO_PORTB, write: 0xff, read: 0xff },
       { addr: IO_PACTL, write: 0x00, read: 0x00 },
       { addr: IO_PBCTL, write: 0x00, read: 0x00 },
 
@@ -268,10 +287,15 @@
     api = {
       ioRegisterAddress: ioRegisterAddress,
       PIXELS_PER_LINE: PIXELS_PER_LINE,
+      VIDEO_STANDARD: VIDEO_STANDARD,
+      LINES_PER_SCREEN: LINES_PER_SCREEN,
       LINES_PER_SCREEN_PAL: LINES_PER_SCREEN_PAL,
+      LINES_PER_SCREEN_NTSC: LINES_PER_SCREEN_NTSC,
       COLOR_CLOCKS_PER_LINE: COLOR_CLOCKS_PER_LINE,
       CYCLES_PER_LINE: CYCLES_PER_LINE,
+      ATARI_CPU_HZ: ATARI_CPU_HZ,
       ATARI_CPU_HZ_PAL: ATARI_CPU_HZ_PAL,
+      ATARI_CPU_HZ_NTSC: ATARI_CPU_HZ_NTSC,
       CYCLE_NEVER: CYCLE_NEVER,
       FIRST_VISIBLE_LINE: FIRST_VISIBLE_LINE,
       LAST_VISIBLE_LINE: LAST_VISIBLE_LINE,

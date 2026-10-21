@@ -243,6 +243,23 @@ body {
   display: none;
 }
 
+.toolbarSelect {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.toolbarSelect select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 7px 8px;
+  font-size: var(--fs-sm);
+}
+
 .iconControls {
   display: inline-flex;
   align-items: center;
@@ -1827,6 +1844,10 @@ canvas.crtEnabled {
   color: var(--danger);
   background: rgba(200, 64, 48, 0.1);
 }
+.hostfs-action-run:hover:not(:disabled) {
+  color: var(--state-ok);
+  background: rgba(74, 222, 128, 0.1);
+}
 .hostfs-action-btn:disabled {
   opacity: 0.25;
   cursor: not-allowed;
@@ -1842,6 +1863,13 @@ canvas.crtEnabled {
   color: var(--sub-panel-dim);
   font-size: var(--fs-xs);
   flex-shrink: 0;
+}
+.hostfs-run-status {
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .hostfs-stat-sel {
   color: var(--accent);

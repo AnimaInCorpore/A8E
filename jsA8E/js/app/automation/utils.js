@@ -19,15 +19,15 @@
     window.A8EHw && typeof window.A8EHw.createApi === "function"
       ? window.A8EHw.createApi()
       : null;
-  const ATARI_CPU_HZ_PAL =
-    hwApi && typeof hwApi.ATARI_CPU_HZ_PAL === "number"
-      ? hwApi.ATARI_CPU_HZ_PAL
+  const ATARI_CPU_HZ =
+    hwApi && typeof hwApi.ATARI_CPU_HZ === "number"
+      ? hwApi.ATARI_CPU_HZ
       : 1773447;
   const CYCLES_PER_FRAME =
     hwApi &&
     typeof hwApi.CYCLES_PER_LINE === "number" &&
-    typeof hwApi.LINES_PER_SCREEN_PAL === "number"
-      ? (hwApi.CYCLES_PER_LINE | 0) * (hwApi.LINES_PER_SCREEN_PAL | 0)
+    typeof hwApi.LINES_PER_SCREEN === "number"
+      ? (hwApi.CYCLES_PER_LINE | 0) * (hwApi.LINES_PER_SCREEN | 0)
       : 35568;
 
   function getObjectTag(value) {
@@ -273,10 +273,10 @@
       unit === "second" ||
       unit === "seconds"
     ) {
-      return Math.max(0, Math.round(n * ATARI_CPU_HZ_PAL));
+      return Math.max(0, Math.round(n * ATARI_CPU_HZ));
     }
     if (unit === "ms" || unit === "millisecond" || unit === "milliseconds") {
-      return Math.max(0, Math.round((n * ATARI_CPU_HZ_PAL) / 1000));
+      return Math.max(0, Math.round((n * ATARI_CPU_HZ) / 1000));
     }
     if (
       unit === "us" ||
@@ -284,7 +284,7 @@
       unit === "microsecond" ||
       unit === "microseconds"
     ) {
-      return Math.max(0, Math.round((n * ATARI_CPU_HZ_PAL) / 1000000));
+      return Math.max(0, Math.round((n * ATARI_CPU_HZ) / 1000000));
     }
     if (unit === "frame" || unit === "frames") {
       return Math.max(0, Math.round(n * CYCLES_PER_FRAME));

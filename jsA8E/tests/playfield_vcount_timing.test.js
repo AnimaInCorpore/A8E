@@ -29,7 +29,7 @@ function loadRendererBaseApi() {
     },
     PIXELS_PER_LINE: 456,
     CYCLES_PER_LINE: 114,
-    LINES_PER_SCREEN_PAL: 312,
+    LINES_PER_SCREEN: 312,
     IO_COLBK: 0xd01a,
     IO_COLPM0_TRIG2: 0xd012,
     IO_PRIOR: 0xd01b,

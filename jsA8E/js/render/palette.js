@@ -8,7 +8,7 @@
   };
 
   // Returns Uint8Array length 256*3 (RGB triplets) matching the C palette logic.
-  function createAtariPaletteRgb() {
+  function createAtariPaletteRgb(videoStandard) {
     const palette = new Uint8Array(256 * 3);
     const hueAngle = [
       0.0, 163.0, 150.0, 109.0, 42.0, 17.0, -3.0, -14.0, -26.0, -53.0, -80.0,
@@ -29,7 +29,11 @@
           dY = ((lum + BRIGHTNESS) / (15.0 + BRIGHTNESS)) * CONTRAST;
         }
 
-        const angle = (hueAngle[hue] / 180.0) * Math.PI;
+        // NTSC hues are evenly spaced phase delays from the color burst at
+        // 180 degrees, typically about 24 degrees each (AHRM D.2).
+        const degrees =
+          videoStandard === "ntsc" ? 180.0 - 24.0 * (hue - 1) : hueAngle[hue];
+        const angle = (degrees / 180.0) * Math.PI;
         const dR = dY + dS * Math.sin(angle);
         const dG =
           dY -

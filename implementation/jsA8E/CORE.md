@@ -65,7 +65,11 @@ IRQs follow AHRM 5.7/14.4 (`io.js`): IRQST is active low and `raisePokeyIrq` lat
 
 ## PIA
 
-`io.js` keeps ORA in `sram[IO_PORTA]`, DDRA in `io.valuePortA`, and the joystick input in `ram[IO_PORTA]`. `piaPortARead` returns `input & (ORA | ~DDRA)`, so port A output bits read as the AND of ORA and the external line (AHRM 2.5). ORA powers on as `$00` (AHRM 14.5). PACTL/PBCTL read back bits 0-5 as written. PORTB still forces bits 2-6 to 1 and ignores DDRB; PIA interrupt flags are not modeled.
+`io.js` keeps ORA in `sram[IO_PORTA]`, DDRA in `io.valuePortA`, and the joystick input in `ram[IO_PORTA]`. `piaPortARead` returns `input & (ORA | ~DDRA)`, so port A output bits read as the AND of ORA and the external line (AHRM 2.5). ORA powers on as `$00` (AHRM 14.5). PACTL/PBCTL read back bits 0-5 as written. Port B keeps DDRB in `io.valuePortB` and ORB in `io.outputPortB`; `piaPortBPins` gives ORB on outputs and the `$FF` pull-ups on inputs, and `piaPortBWrite` maps the ROMs and the extended memory windows for those pins (AHRM 2.5-2.7). PIA interrupt flags are not modeled.
+
+## Video Standard and Extended Memory
+
+`hw.js` reads `A8E_BOOT_OPTIONS.videoStandard` when the scripts load and exports `VIDEO_STANDARD`, `LINES_PER_SCREEN` (312 or 262) and `ATARI_CPU_HZ`; NTSC also selects the AHRM D.2 palette and `$D014` = `$0F`, and VCOUNT keeps the cycle-111 end-of-frame anomaly on both standards (AHRM 4.10). `io.js` defines `EXTENDED_MEMORY_PROFILES` (AHRM 2.7 Table 1): `switchCpuWindow` swaps the selected bank into `ram[$4000-$7FFF]`, and `anticRead` serves ANTIC fetches from `anticWindow` when ANTIC has its own bank (130XE/COMPY bit 5). `memory.hardReset` creates the banks for `machine.memoryExpansion`, and snapshots carry `outputPortB` plus the banks.
 
 ## Reset
 
@@ -77,11 +81,11 @@ All documented and undocumented opcodes are implemented, including the fake6502/
 
 ## Snapshots
 
-Snapshot saves default to advancing paused execution to the next frame boundary before encoding, avoiding unstable mid-frame raster state (`timing: "exact"` opts out). Payloads capture CPU registers/counters (including the KIL `halted` flag), RAM + shadow RAM, video buffers, `ioData` timing/custom-chip state (including `nmiTiming`, `chbaseTiming`, `vbiCycle`, the ANTIC mode-line row-counter state, POKEY pot-scan state, ANTIC timing latch), mounted media/ROM bytes, debugger trace/breakpoints, input bookkeeping, and H: device HostFS file set plus open-channel state. Snapshots predating `vbiCycle`/row-counter fields restore with quiescent defaults (safe for the default frame-boundary saves).
+Snapshot saves default to advancing paused execution to the next frame boundary before encoding, avoiding unstable mid-frame raster state (`timing: "exact"` opts out). Payloads capture CPU registers/counters (including the KIL `halted` flag), RAM + shadow RAM, video buffers, `ioData` timing/custom-chip state (including `nmiTiming`, `chbaseTiming`, `vbiCycle`, the ANTIC mode-line row-counter state, POKEY pot-scan state, ANTIC timing latch), mounted media/ROM bytes, debugger trace/breakpoints, input bookkeeping, and H: device HostFS file set plus open-channel state. Snapshots predating `vbiCycle`/row-counter fields restore with quiescent defaults (safe for the default frame-boundary saves). `setupMemoryMap` only maps ROMs over RAM; it no longer copies the shadow memory back into RAM, which lost RAM under banked-out ROMs on restore.
 
 ## XEX Preflight
 
-XEX mount preflight simulates the file's writes in load order, so a segment that writes `D301` can bank ROM out before later bytes target extended address ranges. Writes that are still ROM-backed at the time they execute are rejected. The default reset `PORTB` value is derived from the real `IO_PORTB` initialization entry (`$FD`) and inherits the `Option-on-Start` policy when no explicit override is supplied.
+XEX mount preflight simulates the file's writes in load order, so a segment that writes `D301` can bank ROM out before later bytes target extended address ranges. Writes that are still ROM-backed at the time they execute are rejected. The default reset `PORTB` value is `DEFAULT_PORTB` (`$FD`, as the XL OS leaves it after booting with BASIC) and inherits the `Option-on-Start` policy when no explicit override is supplied.
 
 ## Issues
 - Broader real-content raster verification (chained DLIs, PMG priority ladders, wide-playfield artifacts) is still incomplete.

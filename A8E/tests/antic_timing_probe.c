@@ -25,7 +25,7 @@ typedef struct
 		}                                                                \
 	} while(0)
 
-static ProbeMachine_t ProbeMachine_Open(void)
+static ProbeMachine_t ProbeMachine_OpenStandard(AtariVideoStandard_t eVideoStandard)
 {
 	ProbeMachine_t tMachine;
 
@@ -38,10 +38,15 @@ static ProbeMachine_t ProbeMachine_Open(void)
 		return tMachine;
 	}
 
-	AtariIoOpen(tMachine.pContext, 0, NULL);
+	AtariIoOpenMachine(tMachine.pContext, 0, NULL, eVideoStandard, ATARI_MEMORY_64K);
 	tMachine.pIoData = (IoData_t *)tMachine.pContext->pIoData;
 
 	return tMachine;
+}
+
+static ProbeMachine_t ProbeMachine_Open(void)
+{
+	return ProbeMachine_OpenStandard(ATARI_VIDEO_PAL);
 }
 
 static void ProbeMachine_Close(ProbeMachine_t *pMachine)
@@ -517,6 +522,50 @@ static int TestVcountUpdatesAtCycle111(void)
 	return 1;
 }
 
+/* AHRM 4.2, 4.10: the frame wraps after line 311 (PAL) or 261 (NTSC), and
+   cycle 111 of the last line reads VCOUNT $9C (PAL) or $83 (NTSC). */
+static int CheckFrameEnd(AtariVideoStandard_t eVideoStandard, u32 lLines, u8 cLastVcount)
+{
+	ProbeMachine_t tMachine = ProbeMachine_OpenStandard(eVideoStandard);
+	_6502_Context_t *pContext = tMachine.pContext;
+	IoData_t *pIoData = tMachine.pIoData;
+	const u64 llLineStartCycle = 0x2000;
+
+	REQUIRE(pContext != NULL, "machine open failed");
+
+	ProbeMachine_ResetTiming(&tMachine);
+	pIoData->tVideoData.lCurrentDisplayLine = lLines - 2;
+	pIoData->llDisplayListFetchCycle = llLineStartCycle;
+	ProbeMachine_RunCurrentScanline(&tMachine);
+	REQUIRE(pIoData->tVideoData.lCurrentDisplayLine == lLines - 1,
+			"line %u was followed by %u", lLines - 2, pIoData->tVideoData.lCurrentDisplayLine);
+	ProbeMachine_RunCurrentScanline(&tMachine);
+	REQUIRE(pIoData->tVideoData.lCurrentDisplayLine == 0,
+			"line %u was followed by %u instead of 0", lLines - 1, pIoData->tVideoData.lCurrentDisplayLine);
+
+	ProbeMachine_ResetTiming(&tMachine);
+	pIoData->bInDrawLine = 1;
+	pIoData->tVideoData.lCurrentDisplayLine = lLines - 1;
+	pIoData->llDisplayListFetchCycle = llLineStartCycle;
+	pIoData->llCycle = llLineStartCycle + 111;
+	pContext->llCycleCounter = llLineStartCycle + CYCLES_PER_LINE;
+	AtariIoTimingProbeStepClock(pContext);
+	REQUIRE(pContext->pMemory[IO_VCOUNT] == cLastVcount,
+			"cycle 111 of the last line read VCOUNT $%02X instead of $%02X", pContext->pMemory[IO_VCOUNT], cLastVcount);
+	AtariIoTimingProbeStepClock(pContext);
+	REQUIRE(pContext->pMemory[IO_VCOUNT] == 0x00,
+			"cycle 112 of the last line read VCOUNT $%02X instead of $00", pContext->pMemory[IO_VCOUNT]);
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
+static int TestFrameEndPalAndNtsc(void)
+{
+	return CheckFrameEnd(ATARI_VIDEO_PAL, 312, 0x9c) &&
+		   CheckFrameEnd(ATARI_VIDEO_NTSC, 262, 0x83);
+}
+
 static int TestJvbDliReplayBehavior(void)
 {
 	ProbeMachine_t tMachine = ProbeMachine_Open();
@@ -694,6 +743,7 @@ int main(int argc, char *argv[])
 	lPassed &= TestVscrolExitLineFollowsLiveVscrol();
 	lPassed &= TestVscrolExitDliDeadlineCycle5();
 	lPassed &= TestVcountUpdatesAtCycle111();
+	lPassed &= TestFrameEndPalAndNtsc();
 	lPassed &= TestJvbDliReplayBehavior();
 	lPassed &= TestDliEnableOnCycle7DelaysByOneCycle();
 	lPassed &= TestDliEnableOnCycle8IsTooLate();

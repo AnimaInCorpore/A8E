@@ -27,9 +27,10 @@ function loadAppHarness() {
 
   const hwBase = {
     PIXELS_PER_LINE: 8,
+    LINES_PER_SCREEN: 4,
     LINES_PER_SCREEN_PAL: 4,
     CYCLES_PER_LINE: 5,
-    ATARI_CPU_HZ_PAL: 1000,
+    ATARI_CPU_HZ: 1000,
     CYCLE_NEVER: Infinity,
     FIRST_VISIBLE_LINE: 0,
     LAST_VISIBLE_LINE: 1,
@@ -402,6 +403,7 @@ function loadAppHarness() {
         ioAccess: function () {
           return 0;
         },
+        memoryExpansionProfiles: ["none"],
       };
     },
   };
@@ -536,7 +538,7 @@ function loadAppHarness() {
     getRestoreCount: function () {
       return restoreCount;
     },
-    frameBudget: hwApi.LINES_PER_SCREEN_PAL * hwApi.CYCLES_PER_LINE,
+    frameBudget: hwApi.LINES_PER_SCREEN * hwApi.CYCLES_PER_LINE,
   };
 }
 

@@ -129,9 +129,11 @@ static u32 PokeyAudio_ClampU32(u32 v, u32 lo, u32 hi)
 	return v;
 }
 
-static u32 Pokey_CpuHz(void)
+static u32 Pokey_CpuHz(_6502_Context_t *pContext)
 {
-	return ATARI_CPU_HZ_PAL;
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+
+	return pIoData->eVideoStandard == ATARI_VIDEO_NTSC ? ATARI_CPU_HZ_NTSC : ATARI_CPU_HZ_PAL;
 }
 
 static u32 PokeyAudio_RingWrap(u32 idx, u32 ring_size, u32 ring_mask)
@@ -267,11 +269,33 @@ static void PokeyAudio_Callback(void *userdata, Uint8 *stream, int len)
 	}
 }
 
-/* Per-channel non-linear volume (~3 dB/step). vol=15 -> 8000 units.
-   Soft-clip threshold = 8000; 4-ch max compressed ~= 26000. */
-static const int32_t g_pokey_chan_vol[16] = {
-	0, 63, 88, 125, 177, 250, 354, 500,
-	707, 1000, 1414, 2000, 2828, 4000, 5657, 8000};
+/* Channel DAC output in 0.01 V steps: the volume bits weigh 0.12, 0.26, 0.56
+   and 1.12 V (AHRM E.2). */
+static const int32_t g_pokey_chan_level[16] = {
+	0, 12, 26, 38, 56, 68, 82, 94,
+	112, 124, 138, 150, 168, 180, 194, 206};
+
+#define POKEY_MIX_LEVEL_MAX (206 * 4)
+#define POKEY_MIX_OUTPUT_MAX 26000
+
+/* The summed DAC output saturates (AHRM E.2): linear up to 14% of the
+   four-channel maximum, then exponential. Maps the level sum to the output. */
+static int32_t g_pokey_mix_output[POKEY_MIX_LEVEL_MAX + 1];
+
+static void PokeyAudio_InitMixTable(void)
+{
+	u32 i;
+
+	for(i = 0; i <= POKEY_MIX_LEVEL_MAX; i++)
+	{
+		double x = (double)i / POKEY_MIX_LEVEL_MAX;
+		double y = x <= 0.14
+			? 2.171 * x
+			: 2.171 * (0.14 + (1.0 - exp(-2.85 * (x - 0.14))) / 2.85);
+
+		g_pokey_mix_output[i] = (int32_t)(y * POKEY_MIX_OUTPUT_MAX + 0.5);
+	}
+}
 
 static void PokeyAudio_RecomputeClocks(PokeyAudioChannel_t *pChannels, u8 audctl)
 {
@@ -656,24 +680,10 @@ static int32_t PokeyAudio_MixCycleLevel(PokeyState_t *pPokey, PokeyAudioChannel_
 			}
 		}
 
-		sum += g_pokey_chan_vol[vol] * (int32_t)bit;
+		sum += g_pokey_chan_level[vol] * (int32_t)bit;
 	}
 
-	/* Soft-clip: compress beyond one channel's max (transistor output stage). */
-	if(sum > 8000)
-	{
-		sum = 8000 + (sum - 8000) * 3 / 4;
-	}
-	if(sum < 0)
-	{
-		sum = 0;
-	}
-	if(sum > 28000)
-	{
-		sum = 28000;
-	}
-
-	return sum;
+	return g_pokey_mix_output[sum];
 }
 
 static PokeyState_t *Pokey_GetState(_6502_Context_t *pContext)
@@ -767,6 +777,44 @@ u64 Pokey_TimerPeriodCpuCycles(_6502_Context_t *pContext, u8 timer)
 	}
 }
 
+/* POKEY counters always run (AHRM 5.3), but a timer whose period was 0 when
+   STIMER was written (AUDF=0, a linked low channel or initialization mode) is
+   parked at CYCLE_NEVER. Start such timers once AUDF, AUDCTL or SKCTL gives
+   them a period, without touching the phase of timers that are running. */
+static void Pokey_ArmInactiveTimers(_6502_Context_t *pContext)
+{
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+	u64 llNow = PokeyMasterReferenceCycle(pContext);
+	u64 period;
+	int bChanged = 0;
+
+	period = Pokey_TimerPeriodCpuCycles(pContext, 1);
+	if(pIoData->llTimer1Cycle == CYCLE_NEVER && period)
+	{
+		pIoData->llTimer1Cycle = llNow + period;
+		bChanged = 1;
+	}
+
+	period = Pokey_TimerPeriodCpuCycles(pContext, 2);
+	if(pIoData->llTimer2Cycle == CYCLE_NEVER && period)
+	{
+		pIoData->llTimer2Cycle = llNow + period;
+		bChanged = 1;
+	}
+
+	period = Pokey_TimerPeriodCpuCycles(pContext, 4);
+	if(pIoData->llTimer4Cycle == CYCLE_NEVER && period)
+	{
+		pIoData->llTimer4Cycle = llNow + period;
+		bChanged = 1;
+	}
+
+	if(bChanged)
+	{
+		AtariIoCycleTimedEventUpdate(pContext);
+	}
+}
+
 void Pokey_Init(_6502_Context_t *pContext)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
@@ -785,10 +833,11 @@ void Pokey_Init(_6502_Context_t *pContext)
 		return;
 	}
 	memset(pPokey, 0, sizeof(PokeyState_t));
+	PokeyAudio_InitMixTable();
 
 	/* Prefer 48kHz to avoid common host-side resampling. */
 	pPokey->sample_rate_hz = 48000;
-	pPokey->cpu_hz = Pokey_CpuHz();
+	pPokey->cpu_hz = Pokey_CpuHz(pContext);
 	pPokey->cycles_per_sample_fp =
 		(((u64)pPokey->cpu_hz) << 32) / (u64)pPokey->sample_rate_hz;
 	pPokey->cycles_per_sample_fp_base = pPokey->cycles_per_sample_fp;
@@ -861,8 +910,11 @@ void Pokey_Init(_6502_Context_t *pContext)
 		pPokey->audio_subsystem_started = 1;
 	}
 
-	if(SDL_OpenAudio(&want, &pPokey->have) < 0)
+	/* Without an obtained spec SDL converts the mono 16-bit stream to whatever
+	   the device uses (WASAPI typically wants 32-bit float stereo). */
+	if(SDL_OpenAudio(&want, NULL) < 0)
 	{
+		fprintf(stderr, "A8E audio: SDL_OpenAudio failed: %s\n", SDL_GetError());
 		if(pPokey->audio_subsystem_started)
 		{
 			SDL_QuitSubSystem(SDL_INIT_AUDIO);
@@ -871,19 +923,7 @@ void Pokey_Init(_6502_Context_t *pContext)
 		pIoData->pPokey = pPokey;
 		return;
 	}
-
-	/* Keep implementation simple: require the format we generate. */
-	if(pPokey->have.format != AUDIO_S16SYS || pPokey->have.channels != 1 || pPokey->have.freq <= 0)
-	{
-		SDL_CloseAudio();
-		if(pPokey->audio_subsystem_started)
-		{
-			SDL_QuitSubSystem(SDL_INIT_AUDIO);
-			pPokey->audio_subsystem_started = 0;
-		}
-		pIoData->pPokey = pPokey;
-		return;
-	}
+	pPokey->have = want;
 
 	pPokey->sample_rate_hz = (u32)pPokey->have.freq;
 	pPokey->cycles_per_sample_fp =
@@ -1403,6 +1443,7 @@ u8 *Pokey_AUDF1_POT0(_6502_Context_t *pContext, u8 *pValue)
 				pPokey->aChannels[0].audf = *pValue;
 			}
 		}
+		Pokey_ArmInactiveTimers(pContext);
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDF1: %02X\n", *pValue);
@@ -1450,6 +1491,7 @@ u8 *Pokey_AUDF2_POT2(_6502_Context_t *pContext, u8 *pValue)
 				pPokey->aChannels[1].audf = *pValue;
 			}
 		}
+		Pokey_ArmInactiveTimers(pContext);
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDF2: %02X\n", *pValue);
@@ -1497,6 +1539,7 @@ u8 *Pokey_AUDF3_POT4(_6502_Context_t *pContext, u8 *pValue)
 				pPokey->aChannels[2].audf = *pValue;
 			}
 		}
+		Pokey_ArmInactiveTimers(pContext);
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDF3: %02X\n", *pValue);
@@ -1544,6 +1587,7 @@ u8 *Pokey_AUDF4_POT6(_6502_Context_t *pContext, u8 *pValue)
 				pPokey->aChannels[3].audf = *pValue;
 			}
 		}
+		Pokey_ArmInactiveTimers(pContext);
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDF4: %02X\n", *pValue);
@@ -1592,6 +1636,7 @@ u8 *Pokey_AUDCTL_ALLPOT(_6502_Context_t *pContext, u8 *pValue)
 				PokeyAudio_RecomputeClocks(pPokey->aChannels, pPokey->audctl);
 			}
 		}
+		Pokey_ArmInactiveTimers(pContext);
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" AUDCTL: %02X\n", *pValue);
@@ -2217,6 +2262,7 @@ u8 *Pokey_SKCTL_SKSTAT(_6502_Context_t *pContext, u8 *pValue)
 		Pokey_Sync(pContext, pContext->llCycleCounter);
 		Pokey_PotPrepareSkctlWrite(pContext);
 		SRAM[IO_SKCTL_SKSTAT] = *pValue;
+		Pokey_ArmInactiveTimers(pContext);
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" SKCTL: %02X\n", *pValue);

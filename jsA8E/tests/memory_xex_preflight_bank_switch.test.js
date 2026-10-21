@@ -70,6 +70,10 @@ function createRuntime(options) {
     getTurbo: function () { return false; },
     pokeyAudioResetState: function () {},
     pokeyAudioSetTurbo: function () {},
+    createExtendedMemory: function () { return null; },
+    basicRomMapped: function (io, pins) { return (pins & 0x02) === 0; },
+    selfTestRomMapped: function (io, pins) { return (pins & 0x81) === 0x01; },
+    refreshAnticWindow: function () {},
   });
 
   runtime.loadOsRom(new Uint8Array(0x4000).buffer);

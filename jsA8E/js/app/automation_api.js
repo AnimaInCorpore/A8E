@@ -15,15 +15,15 @@
     window.A8EHw && typeof window.A8EHw.createApi === "function"
       ? window.A8EHw.createApi()
       : null;
-  const ATARI_CPU_HZ_PAL =
-    hwApi && typeof hwApi.ATARI_CPU_HZ_PAL === "number"
-      ? hwApi.ATARI_CPU_HZ_PAL
+  const ATARI_CPU_HZ =
+    hwApi && typeof hwApi.ATARI_CPU_HZ === "number"
+      ? hwApi.ATARI_CPU_HZ
       : 1773447;
   const CYCLES_PER_FRAME =
     hwApi &&
     typeof hwApi.CYCLES_PER_LINE === "number" &&
-    typeof hwApi.LINES_PER_SCREEN_PAL === "number"
-      ? (hwApi.CYCLES_PER_LINE | 0) * (hwApi.LINES_PER_SCREEN_PAL | 0)
+    typeof hwApi.LINES_PER_SCREEN === "number"
+      ? (hwApi.CYCLES_PER_LINE | 0) * (hwApi.LINES_PER_SCREEN | 0)
       : 35568;
 
   const CODE_TABLE =
@@ -1503,7 +1503,7 @@
       const ms = Math.max(0, parseMs(isBare ? options : opts.ms));
       const clock = opts.clock === "emulated" ? "emulated" : "real";
       if (clock === "real") return waitForRealTime(ms, opts);
-      const cycles = Math.max(0, Math.round((ms / 1000) * ATARI_CPU_HZ_PAL));
+      const cycles = Math.max(0, Math.round((ms / 1000) * ATARI_CPU_HZ));
       const result = await waitForCounterDelta("cycleCounter", cycles, opts);
       result.clock = "emulated";
       result.elapsedMs = ms;

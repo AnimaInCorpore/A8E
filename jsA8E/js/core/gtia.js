@@ -3,6 +3,12 @@
 
   function createApi(cfg) {
     const PIXELS_PER_LINE = cfg.PIXELS_PER_LINE;
+    // ANTIC DMA reads, which may see extended memory the CPU does not.
+    const anticRead =
+      cfg.anticRead ||
+      function (ctx, address) {
+        return ctx.ram[address & 0xffff];
+      };
 
     const IO_COLPF0 = cfg.IO_COLPF0;
     const IO_COLPF1 = cfg.IO_COLPF1;
@@ -513,7 +519,7 @@
       if (lineCycle === 0 && pmDmaMissiles) {
         if (!vdelayAllowsFetch(0x08)) return 0;
         if (pmReceiveMissiles) {
-          sram[IO_GRAFM_TRIG1] = ctx.ram[fetchPmAddr(hires ? 768 : 384)];
+          sram[IO_GRAFM_TRIG1] = anticRead(ctx, fetchPmAddr(hires ? 768 : 384));
         }
         return 1;
       }
@@ -521,25 +527,25 @@
         if (lineCycle === 2) {
           if (!vdelayAllowsFetch(0x10)) return 0;
           if (pmReceivePlayers) {
-            sram[IO_GRAFP0_P1PL] = ctx.ram[fetchPmAddr(hires ? 1024 : 512)];
+            sram[IO_GRAFP0_P1PL] = anticRead(ctx, fetchPmAddr(hires ? 1024 : 512));
           }
           return 1;
         } else if (lineCycle === 3) {
           if (!vdelayAllowsFetch(0x20)) return 0;
           if (pmReceivePlayers) {
-            sram[IO_GRAFP1_P2PL] = ctx.ram[fetchPmAddr(hires ? 1280 : 640)];
+            sram[IO_GRAFP1_P2PL] = anticRead(ctx, fetchPmAddr(hires ? 1280 : 640));
           }
           return 1;
         } else if (lineCycle === 4) {
           if (!vdelayAllowsFetch(0x40)) return 0;
           if (pmReceivePlayers) {
-            sram[IO_GRAFP2_P3PL] = ctx.ram[fetchPmAddr(hires ? 1536 : 768)];
+            sram[IO_GRAFP2_P3PL] = anticRead(ctx, fetchPmAddr(hires ? 1536 : 768));
           }
           return 1;
         } else if (lineCycle === 5) {
           if (!vdelayAllowsFetch(0x80)) return 0;
           if (pmReceivePlayers) {
-            sram[IO_GRAFP3_TRIG0] = ctx.ram[fetchPmAddr(hires ? 1792 : 896)];
+            sram[IO_GRAFP3_TRIG0] = anticRead(ctx, fetchPmAddr(hires ? 1792 : 896));
           }
           return 1;
         }

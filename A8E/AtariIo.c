@@ -6,7 +6,7 @@
 *
 * (c) 2004 Sascha Springer
 *
-* NTSC: 1.7897725 MHz, 262 lines, 59.94 Hz
+* NTSC: 1.789773 MHz, 262 lines, 59.92 Hz
 * PAL: 1.773447 MHz, 312 lines, 49.86 Hz
 * 114 clocks per line
 *
@@ -155,7 +155,7 @@ static void AtariIoAdvanceScanline(_6502_Context_t *pContext)
 		RAM[IO_NMIRES_NMIST] &= ~NMI_DLI;
 	}
 
-	if(pIoData->tVideoData.lCurrentDisplayLine >= LINES_PER_SCREEN_PAL)
+	if(pIoData->tVideoData.lCurrentDisplayLine >= pIoData->lLinesPerScreen)
 	{
 		pIoData->tVideoData.lCurrentDisplayLine = 0;
 		pIoData->lNextDisplayListLine = 8;
@@ -165,7 +165,7 @@ static void AtariIoAdvanceScanline(_6502_Context_t *pContext)
 		pIoData->bModeLineScrollExit = 0;
 		pIoData->bModeLineExitDli = 0;
 		pIoData->bModeLineEndsThisLine = 0;
-		memset(pIoData->tVideoData.pPriorityData, 0, PIXELS_PER_LINE * LINES_PER_SCREEN_PAL);
+		memset(pIoData->tVideoData.pPriorityData, 0, PIXELS_PER_LINE * LINES_PER_SCREEN_MAX);
 	}
 
 	RAM[IO_VCOUNT] = pIoData->tVideoData.lCurrentDisplayLine >> 1;
@@ -244,44 +244,44 @@ static const u8 aXexBootLoader[] =
 
 		/* $071F: parse_header */
 		0x20,
-		0x7E,
-		0x07, /* JSR get_byte ($077E) */
+		0x84,
+		0x07, /* JSR get_byte ($0784) */
 		0xC9,
 		0xFF, /* CMP #$FF */
 		0xD0,
-		0x4F, /* BNE run_addr ($0775) */
+		0x52, /* BNE run_addr ($0778) */
 		0x20,
-		0x7E,
+		0x84,
 		0x07, /* JSR get_byte */
 		0xC9,
 		0xFF, /* CMP #$FF */
 		0xD0,
-		0x48, /* BNE run_addr ($0775) */
+		0x4B, /* BNE run_addr ($0778) */
 		0x20,
-		0x7E,
+		0x84,
 		0x07, /* JSR get_byte ; start_lo */
 		0x85,
 		0x43, /* STA $43 */
 		0x20,
-		0x7E,
+		0x84,
 		0x07, /* JSR get_byte ; start_hi */
 		0x85,
 		0x44, /* STA $44 */
 		0x20,
-		0x7E,
+		0x84,
 		0x07, /* JSR get_byte ; end_lo */
 		0x85,
 		0x45, /* STA $45 */
 		0x20,
-		0x7E,
+		0x84,
 		0x07, /* JSR get_byte ; end_hi */
 		0x85,
 		0x46, /* STA $46 */
 
 		/* $0741: copy_loop */
 		0x20,
-		0x7E,
-		0x07, /* JSR get_byte ($077E) */
+		0x84,
+		0x07, /* JSR get_byte ($0784) */
 		0xA0,
 		0x00, /* LDY #$00 */
 		0x91,
@@ -312,21 +312,24 @@ static const u8 aXexBootLoader[] =
 
 		/* $075C: check_init - call INITAD if set, then parse next segment */
 		0xAD,
+		0xE2,
+		0x02, /* LDA $02E2 ; INITAD lo */
+		0x0D,
 		0xE3,
-		0x02, /* LDA $02E3 ; INITAD hi */
+		0x02, /* ORA $02E3 ; INITAD hi (zero-page INIT routines are valid) */
 		0xF0,
-		0xBE, /* BEQ parse_header ($071F) ; no init */
+		0xBB, /* BEQ parse_header ($071F) ; no init */
 		/* "JSR ($02E2)" via push return addr and JMP indirect */
 		0xA9,
-		0x07, /* LDA #$07  ; hi byte of ($076A-1) */
+		0x07, /* LDA #$07  ; hi byte of ($076D-1) */
 		0x48, /* PHA */
 		0xA9,
-		0x69, /* LDA #$69  ; lo byte of ($076A-1) */
+		0x6C, /* LDA #$6C  ; lo byte of ($076D-1) */
 		0x48, /* PHA */
 		0x6C,
 		0xE2,
-		0x02, /* JMP ($02E2) ; INIT routine RTSs to $076A */
-		/* $076A: return from INIT */
+		0x02, /* JMP ($02E2) ; INIT routine RTSs to $076D */
+		/* $076D: return from INIT */
 		0xA9,
 		0x00, /* LDA #$00 */
 		0x8D,
@@ -339,27 +342,30 @@ static const u8 aXexBootLoader[] =
 		0x1F,
 		0x07, /* JMP parse_header ($071F) */
 
-		/* $0775: run_addr */
+		/* $0778: run_addr */
 		0xAD,
+		0xE0,
+		0x02, /* LDA $02E0 ; RUNAD lo */
+		0x0D,
 		0xE1,
-		0x02, /* LDA $02E1 */
+		0x02, /* ORA $02E1 ; RUNAD hi (zero-page entry points are valid) */
 		0xF0,
-		0x03, /* BEQ done ($077D) */
+		0x03, /* BEQ done ($0783) */
 		0x6C,
 		0xE0,
 		0x02, /* JMP ($02E0) */
-		/* $077D: done */
+		/* $0783: done */
 		0x60, /* RTS */
 
-		/* $077E: get_byte */
+		/* $0784: get_byte */
 		0xA5,
 		0x48, /* LDA $48 */
 		0xD0,
-		0x03, /* BNE have_byte ($0785) */
+		0x03, /* BNE have_byte ($078B) */
 		0x20,
-		0x8F,
-		0x07, /* JSR read_sector ($078F) */
-		/* $0785: have_byte */
+		0x95,
+		0x07, /* JSR read_sector ($0795) */
+		/* $078B: have_byte */
 		0xA6,
 		0x47, /* LDX $47 */
 		0xBD,
@@ -371,7 +377,7 @@ static const u8 aXexBootLoader[] =
 		0x48, /* DEC $48 */
 		0x60, /* RTS */
 
-		/* $078F: read_sector */
+		/* $0795: read_sector */
 		0xA9,
 		0x31, /* LDA #$31 */
 		0x8D,
@@ -448,10 +454,10 @@ static const u8 aXexBootLoader[] =
 };
 
 #define XEX_BOOT_LOADER_BASE 0x0700u
-#define XEX_BOOT_PATCH_GETBYTE_BUFLO_INDEX (0x0788u - XEX_BOOT_LOADER_BASE)
-#define XEX_BOOT_PATCH_GETBYTE_BUFHI_INDEX (0x0789u - XEX_BOOT_LOADER_BASE)
-#define XEX_BOOT_PATCH_DBUFLO_INDEX (0x07A4u - XEX_BOOT_LOADER_BASE)
-#define XEX_BOOT_PATCH_DBUFHI_INDEX (0x07A9u - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_GETBYTE_BUFLO_INDEX (0x078Eu - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_GETBYTE_BUFHI_INDEX (0x078Fu - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_DBUFLO_INDEX (0x07AAu - XEX_BOOT_LOADER_BASE)
+#define XEX_BOOT_PATCH_DBUFHI_INDEX (0x07AFu - XEX_BOOT_LOADER_BASE)
 #define XEX_BOOT_LOADER_RESERVED_START 0x0700u
 #define XEX_BOOT_LOADER_RESERVED_END 0x087Fu
 
@@ -1096,6 +1102,20 @@ static u8 AtariIo_PlayfieldDmaAllowedAtCycle(_6502_Context_t *pContext, u32 lCyc
 	return AtariIo_CurrentLineCycle(pIoData, lCycleOffset) <= 105u;
 }
 
+/* ANTIC DMA read. With extended memory ANTIC may see other memory than the
+   CPU at $4000-$7FFF (AHRM 2.7). */
+static u8 AtariIo_AnticRead(_6502_Context_t *pContext, u16 sAddress)
+{
+	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
+
+	if(pIoData->pAnticWindow != NULL && (sAddress & 0xc000) == 0x4000)
+	{
+		return pIoData->pAnticWindow[sAddress & 0x3fff];
+	}
+
+	return RAM[sAddress];
+}
+
 static u8 AtariIo_ReadVirtualPlayfieldBus(_6502_Context_t *pContext, u32 lCycleOffset)
 {
 	IoData_t *pIoData = (IoData_t *)pContext->pIoData;
@@ -1137,7 +1157,7 @@ static u8 AtariIo_FetchBufferedDisplayByte(_6502_Context_t *pContext, u8 cBuffer
 	{
 		if(AtariIo_PlayfieldDmaAllowedAtCycle(pContext, lCycleOffset))
 		{
-			cValue = RAM[pIoData->tDrawLineData.sDisplayMemoryAddress];
+			cValue = AtariIo_AnticRead(pContext, pIoData->tDrawLineData.sDisplayMemoryAddress);
 			AtariIo_SchedulePlayfieldDma(pContext, lCycleOffset, 1);
 		}
 		else
@@ -1162,7 +1182,7 @@ static u8 AtariIo_FetchUnbufferedDisplayByte(_6502_Context_t *pContext, u16 sAdd
 	if(AtariIo_PlayfieldDmaAllowedAtCycle(pContext, lCycleOffset))
 	{
 		AtariIo_SchedulePlayfieldDma(pContext, lCycleOffset, 1);
-		return RAM[sAddress];
+		return AtariIo_AnticRead(pContext, sAddress);
 	}
 
 	return AtariIo_ReadVirtualPlayfieldBus(pContext, lCycleOffset);
@@ -1200,7 +1220,7 @@ static int AtariIo_FetchPmgDmaCycle(_6502_Context_t *pContext, u32 lCycleInLine,
 	if(lCycleInLine == 0 && cPmDmaMissiles) {
 		if(!AtariIo_PmgVdelayAllowsFetch(pContext, lDisplayLine, 0x08)) return 0;
 		if(cPmReceiveMissiles) {
-			SRAM[IO_GRAFM_TRIG1] = RAM[AtariIo_PmgFetchAddress(usPmbaseHi, cHires, lDisplayLine, cHires ? 768u : 384u)];
+			SRAM[IO_GRAFM_TRIG1] = AtariIo_AnticRead(pContext, AtariIo_PmgFetchAddress(usPmbaseHi, cHires, lDisplayLine, cHires ? 768u : 384u));
 		}
 		return 1;
 	}
@@ -1208,25 +1228,25 @@ static int AtariIo_FetchPmgDmaCycle(_6502_Context_t *pContext, u32 lCycleInLine,
 		if(lCycleInLine == 2) {
 			if(!AtariIo_PmgVdelayAllowsFetch(pContext, lDisplayLine, 0x10)) return 0;
 			if(cPmReceivePlayers) {
-				SRAM[IO_GRAFP0_P1PL] = RAM[AtariIo_PmgFetchAddress(usPmbaseHi, cHires, lDisplayLine, cHires ? 1024u : 512u)];
+				SRAM[IO_GRAFP0_P1PL] = AtariIo_AnticRead(pContext, AtariIo_PmgFetchAddress(usPmbaseHi, cHires, lDisplayLine, cHires ? 1024u : 512u));
 			}
 			return 1;
 		} else if(lCycleInLine == 3) {
 			if(!AtariIo_PmgVdelayAllowsFetch(pContext, lDisplayLine, 0x20)) return 0;
 			if(cPmReceivePlayers) {
-				SRAM[IO_GRAFP1_P2PL] = RAM[AtariIo_PmgFetchAddress(usPmbaseHi, cHires, lDisplayLine, cHires ? 1280u : 640u)];
+				SRAM[IO_GRAFP1_P2PL] = AtariIo_AnticRead(pContext, AtariIo_PmgFetchAddress(usPmbaseHi, cHires, lDisplayLine, cHires ? 1280u : 640u));
 			}
 			return 1;
 		} else if(lCycleInLine == 4) {
 			if(!AtariIo_PmgVdelayAllowsFetch(pContext, lDisplayLine, 0x40)) return 0;
 			if(cPmReceivePlayers) {
-				SRAM[IO_GRAFP2_P3PL] = RAM[AtariIo_PmgFetchAddress(usPmbaseHi, cHires, lDisplayLine, cHires ? 1536u : 768u)];
+				SRAM[IO_GRAFP2_P3PL] = AtariIo_AnticRead(pContext, AtariIo_PmgFetchAddress(usPmbaseHi, cHires, lDisplayLine, cHires ? 1536u : 768u));
 			}
 			return 1;
 		} else if(lCycleInLine == 5) {
 			if(!AtariIo_PmgVdelayAllowsFetch(pContext, lDisplayLine, 0x80)) return 0;
 			if(cPmReceivePlayers) {
-				SRAM[IO_GRAFP3_TRIG0] = RAM[AtariIo_PmgFetchAddress(usPmbaseHi, cHires, lDisplayLine, cHires ? 1792u : 896u)];
+				SRAM[IO_GRAFP3_TRIG0] = AtariIo_AnticRead(pContext, AtariIo_PmgFetchAddress(usPmbaseHi, cHires, lDisplayLine, cHires ? 1792u : 896u));
 			}
 			return 1;
 		}
@@ -1251,14 +1271,15 @@ static void AtariIo_DrawClockAction(_6502_Context_t *pContext)
 	{
 		u32 lCurrentDisplayLine = pIoData->tVideoData.lCurrentDisplayLine;
 		u32 lNextDisplayLine = lCurrentDisplayLine + 1;
-		if(lCurrentDisplayLine == LINES_PER_SCREEN_PAL - 1u &&
+		/* AHRM 4.10: cycle 111 of the last line reads $9C (PAL) or $83 (NTSC). */
+		if(lCurrentDisplayLine == pIoData->lLinesPerScreen - 1u &&
 		   lCycleInLine == 111u)
 		{
-			RAM[IO_VCOUNT] = (u8)((LINES_PER_SCREEN_PAL >> 1) & 0xff);
+			RAM[IO_VCOUNT] = (u8)((pIoData->lLinesPerScreen >> 1) & 0xff);
 		}
 		else
 		{
-			if(lNextDisplayLine >= LINES_PER_SCREEN_PAL)
+			if(lNextDisplayLine >= pIoData->lLinesPerScreen)
 			{
 				lNextDisplayLine = 0;
 			}
@@ -1495,7 +1516,7 @@ static IoInitValue_t m_aIoInitValues[] =
 		{IO_SKCTL_SKSTAT, 0x00, 0xff, Pokey_SKCTL_SKSTAT},
 
 		{IO_PORTA, 0x00, 0xff, Pia_PORTA}, /* ORA is $00 after reset (AHRM 14.5) */
-		{IO_PORTB, 0xfd, 0xfd, Pia_PORTB},
+		{IO_PORTB, 0xff, 0xff, Pia_PORTB},
 		{IO_PACTL, 0x00, 0x00, Pia_PACTL},
 		{IO_PBCTL, 0x00, 0x00, Pia_PBCTL},
 
@@ -1606,7 +1627,7 @@ static u8 m_aKeyCodeTable[512] =
 #define CONTRAST 1.0
 #define BRIGHTNESS 0.9
 
-static void AtariIo_CreatePalette()
+static void AtariIo_CreatePalette(AtariVideoStandard_t eVideoStandard)
 {
 	u32 lHue;
 	u32 lLum;
@@ -1653,7 +1674,16 @@ static void AtariIo_CreatePalette()
 			}
 
 			//			dAngle = (ANGLE_START - ANGLE_STEP * lHue) / 180.0 * M_PI;
-			dAngle = aHueAngleTable[lHue] / 180.0 * M_PI;
+			/* NTSC hues are evenly spaced phase delays from the color burst
+			   at 180 degrees, typically about 24 degrees each (AHRM D.2). */
+			if(eVideoStandard == ATARI_VIDEO_NTSC)
+			{
+				dAngle = (180.0 - 24.0 * ((double)lHue - 1.0)) / 180.0 * M_PI;
+			}
+			else
+			{
+				dAngle = aHueAngleTable[lHue] / 180.0 * M_PI;
+			}
 
 			dR = dY + dS * sin(dAngle);
 			dG = dY - (27.0 / 53.0) * dS * sin(dAngle) - (10.0 / 53.0) * dS * cos(dAngle);
@@ -3223,7 +3253,7 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			printf(" $%04X:", pIoData->sDisplayListAddress);
 #endif
 			// Fetch new display list command
-			pIoData->cCurrentDisplayListCommand = RAM[pIoData->sDisplayListAddress];
+			pIoData->cCurrentDisplayListCommand = AtariIo_AnticRead(pContext, pIoData->sDisplayListAddress);
 			FIXED_ADD(pIoData->sDisplayListAddress, 0x03ff, 1);
 
 			// LMS (bit 6) or JUMP (instruction 01) schedule 2 more DMA steals
@@ -3316,8 +3346,8 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			if((pIoData->cCurrentDisplayListCommand & 0x0f) == 0x01)
 			{
 				pIoData->sDisplayListAddress =
-					RAM[pIoData->sDisplayListAddress] |
-					(RAM[pIoData->sDisplayListAddress + 1] << 8);
+					AtariIo_AnticRead(pContext, pIoData->sDisplayListAddress) |
+					(AtariIo_AnticRead(pContext, (u16)(pIoData->sDisplayListAddress + 1)) << 8);
 			}
 
 			// Wait for VBL?
@@ -3329,9 +3359,9 @@ void AtariIoFetchLine(_6502_Context_t *pContext)
 			// Fetch new display memory address
 			if((pIoData->cCurrentDisplayListCommand & 0x4f) >= 0x42)
 			{
-				pIoData->sDisplayMemoryAddress = RAM[pIoData->sDisplayListAddress];
+				pIoData->sDisplayMemoryAddress = AtariIo_AnticRead(pContext, pIoData->sDisplayListAddress);
 				FIXED_ADD(pIoData->sDisplayListAddress, 0x03ff, 1);
-				pIoData->sDisplayMemoryAddress |= RAM[pIoData->sDisplayListAddress] << 8;
+				pIoData->sDisplayMemoryAddress |= AtariIo_AnticRead(pContext, pIoData->sDisplayListAddress) << 8;
 				FIXED_ADD(pIoData->sDisplayListAddress, 0x03ff, 1);
 			}
 
@@ -5400,6 +5430,53 @@ static void AtariIo_SetIoWithMirrors(
 
 void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 {
+	AtariIoOpenMachine(pContext, lMode, pDiskFileName, ATARI_VIDEO_PAL, ATARI_MEMORY_64K);
+}
+
+/* PORTB bank bits (AHRM 2.7, Table 1); bit 5 enables the ANTIC window on the
+   130XE and the COMPY expansions. */
+static void AtariIo_OpenExtendedMemory(IoData_t *pIoData, AtariMemoryExpansion_t eMemoryExpansion)
+{
+	u32 lBanks;
+	u8 cBit;
+
+	switch(eMemoryExpansion)
+	{
+	case ATARI_MEMORY_130XE: pIoData->cBankMask = 0x0c; pIoData->bSeparateAnticWindow = 1; break;
+	case ATARI_MEMORY_RAMBO_192K: pIoData->cBankMask = 0x4c; break;
+	case ATARI_MEMORY_RAMBO_320K: pIoData->cBankMask = 0x6c; break;
+	case ATARI_MEMORY_COMPY_320K: pIoData->cBankMask = 0xcc; pIoData->bSeparateAnticWindow = 1; break;
+	case ATARI_MEMORY_RAMBO_576K: pIoData->cBankMask = 0x6e; break;
+	case ATARI_MEMORY_COMPY_576K: pIoData->cBankMask = 0xce; pIoData->bSeparateAnticWindow = 1; break;
+	case ATARI_MEMORY_RAMBO_1088K: pIoData->cBankMask = 0xee; break;
+	default: return;
+	}
+
+	lBanks = 1;
+	for(cBit = 0x01; cBit != 0; cBit <<= 1)
+	{
+		if(pIoData->cBankMask & cBit)
+		{
+			lBanks <<= 1;
+		}
+	}
+
+	pIoData->pExtendedMemory = (u8 *)calloc(lBanks, 0x4000);
+	pIoData->pMainWindow = (u8 *)calloc(1, 0x4000);
+	if(pIoData->pExtendedMemory == NULL || pIoData->pMainWindow == NULL)
+	{
+		AtariIo_LogError("A8E: Out of memory allocating extended memory.\n");
+		exit(1);
+	}
+}
+
+void AtariIoOpenMachine(
+	_6502_Context_t *pContext,
+	u32 lMode,
+	char *pDiskFileName,
+	AtariVideoStandard_t eVideoStandard,
+	AtariMemoryExpansion_t eMemoryExpansion)
+{
 	FILE *pFile;
 	IoInitValue_t *pIoInitValue = m_aIoInitValues;
 	IoData_t *pIoData;
@@ -5418,7 +5495,7 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 	pSdlAtariSurface = SDL_CreateRGBSurface(
 		SDL_SWSURFACE,
 		PIXELS_PER_LINE,
-		312,
+		LINES_PER_SCREEN_MAX,
 		8,
 		0, 0, 0, 0);
 
@@ -5428,7 +5505,7 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 		exit(-1);
 	}
 
-	AtariIo_CreatePalette();
+	AtariIo_CreatePalette(eVideoStandard);
 
 	SDL_SetPaletteColors(pSdlAtariSurface->format->palette, m_aAtariColors, 0, 256);
 
@@ -5441,6 +5518,9 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 	}
 	pContext->pIoData = pIoData;
 	memset(pIoData, 0, sizeof(IoData_t));
+	pIoData->eVideoStandard = eVideoStandard;
+	pIoData->lLinesPerScreen = eVideoStandard == ATARI_VIDEO_NTSC ? LINES_PER_SCREEN_NTSC : LINES_PER_SCREEN_PAL;
+	AtariIo_OpenExtendedMemory(pIoData, eMemoryExpansion);
 
 	pIoData->pBasicRom = malloc(0x2000);
 	pIoData->pOsRom = malloc(0x1000);
@@ -5459,7 +5539,6 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 		AtariIo_FatalMissingRom("ATARIBAS.ROM");
 	}
 	AtariIo_ReadRomOrDie(pFile, "ATARIBAS.ROM", pIoData->pBasicRom, 0x2000);
-	memcpy(&RAM[0xa000], pIoData->pBasicRom, 0x2000);
 	AtariIo_CloseFileOrDie(pFile, "ATARIBAS.ROM");
 
 	pFile = fopen("ATARIXL.ROM", "rb");
@@ -5474,7 +5553,8 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 	memcpy(&RAM[0xd800], pIoData->pFloatingPointRom, 0x2800);
 	AtariIo_CloseFileOrDie(pFile, "ATARIXL.ROM");
 
-	_6502_SetRom(pContext, 0xa000, 0xbfff);
+	/* The PIA powers up in its reset state: port B is all inputs and the
+	   pull-ups map the OS ROM in and BASIC and self-test out (AHRM 2.6). */
 	_6502_SetRom(pContext, 0xc000, 0xcfff);
 	_6502_SetRom(pContext, 0xd000, 0xd7ff);
 	_6502_SetRom(pContext, 0xd800, 0xffff);
@@ -5516,6 +5596,9 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 
 		pIoInitValue++;
 	}
+
+	/* $D014 identifies the GTIA: $01 for PAL, $0F for NTSC (AHRM 6.1). */
+	RAM[IO_COLPM2_PAL] = eVideoStandard == ATARI_VIDEO_NTSC ? 0x0f : 0x01;
 
 	pIoData->pDisk1 = (u8 *)malloc(MAX_DISK_SIZE);
 	if(pIoData->pDisk1 == NULL)
@@ -5563,7 +5646,7 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 		}
 	}
 
-	pIoData->tVideoData.pPriorityData = (u8 *)malloc(PIXELS_PER_LINE * LINES_PER_SCREEN_PAL);
+	pIoData->tVideoData.pPriorityData = (u8 *)malloc(PIXELS_PER_LINE * LINES_PER_SCREEN_MAX);
 
 	if(pIoData->tVideoData.pPriorityData == NULL)
 	{
@@ -5571,7 +5654,7 @@ void AtariIoOpen(_6502_Context_t *pContext, u32 lMode, char *pDiskFileName)
 		exit(1);
 	}
 
-	memset(pIoData->tVideoData.pPriorityData, 0, PIXELS_PER_LINE * LINES_PER_SCREEN_PAL);
+	memset(pIoData->tVideoData.pPriorityData, 0, PIXELS_PER_LINE * LINES_PER_SCREEN_MAX);
 
 	pContext->IoCycleTimedEventFunction = AtariIo_CycleTimedEvent;
 
@@ -5594,6 +5677,8 @@ void AtariIoClose(_6502_Context_t *pContext)
 	free(pIoData->pOsRom);
 	free(pIoData->pSelfTestRom);
 	free(pIoData->pFloatingPointRom);
+	free(pIoData->pExtendedMemory);
+	free(pIoData->pMainWindow);
 }
 
 void AtariIoStatus(_6502_Context_t *pContext)
