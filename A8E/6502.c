@@ -421,7 +421,7 @@ _6502_Code_t m_a6502CodeList[] =
 		{0x93, 74, 6, AT_INDIRECT_INDEXED}, /* SHA */
 		{0x9f, 74, 5, AT_ABSOLUTE_Y},
 		{0x9e, 75, 5, AT_ABSOLUTE_Y}, /* SHX */
-		{0x9c, 76, 4, AT_ABSOLUTE_X}, /* SHY */
+		{0x9c, 76, 5, AT_ABSOLUTE_X}, /* SHY */
 		{0x9b, 77, 5, AT_ABSOLUTE_Y}, /* TAS */
 		{0x02, 78, 2, AT_IMPLICIT}, /* KIL */
 		{0x12, 78, 2, AT_IMPLICIT},
@@ -664,24 +664,17 @@ static void _6502_ServiceInterrupt(_6502_Context_t *pContext, u16 sVector, u8 cB
 	CPU.pc = RAM[sVector] | (RAM[sVector + 1] << 8);
 }
 
-static void _6502_ServicePendingNmi(_6502_Context_t *pContext)
-{
-	if(!pContext->cNmiPendingFlag || pContext->cNmiActiveFlag)
-	{
-		return;
-	}
-
-	pContext->cNmiPendingFlag = 0;
-	pContext->cNmiActiveFlag = 1;
-	_6502_ServiceInterrupt(pContext, 0xfffa, 0, CPU.pc);
-	pContext->llCycleCounter += 7;
-}
-
 static u8 _6502_ServicePendingInterrupts(_6502_Context_t *pContext)
 {
-	if(pContext->cNmiPendingFlag && !pContext->cNmiActiveFlag)
+	/* The NMI is edge-triggered and independent of I (AHRM 3.4): each latched
+	   edge is serviced once, even inside a running NMI handler, so a VBI can
+	   interrupt a long DLI and a handler that exits without RTI does not
+	   block later NMIs. */
+	if(pContext->cNmiPendingFlag)
 	{
-		_6502_ServicePendingNmi(pContext);
+		pContext->cNmiPendingFlag = 0;
+		_6502_ServiceInterrupt(pContext, 0xfffa, 0, CPU.pc);
+		pContext->llCycleCounter += 7;
 		return 1;
 	}
 
@@ -1112,11 +1105,10 @@ void _6502_Reset(_6502_Context_t *pContext)
 {
 	/* 6502/SALLY reset does not push anything; it sets SP and vectors PC. */
 	CPU.sp = 0xfd;
+	/* Reset sets I but leaves D alone on the NMOS 6502 (AHRM 3.1). */
 	PS.i = 1;
-	PS.d = 0;
 	PS.b = 0;
 	pContext->cNmiPendingFlag = 0;
-	pContext->cNmiActiveFlag = 0;
 	pContext->cHaltedFlag = 0;
 	CPU.pc = RAM[0xfffc] | (RAM[0xfffd] << 8);
 
@@ -1433,12 +1425,15 @@ void _6502_SBC(_6502_Context_t *pContext)
 	}
 }
 
+/* Read-modify-write opcodes take flags (and the ALU input of the merged
+ * undocumented ones) from the computed value, not from a read-back, so a
+ * write to ROM or a write-only I/O register still sets them correctly. */
 void _6502_DEC(_6502_Context_t *pContext)
 {
 	u8 cValue = *READ_ACCESS;
 
 	cValue--;
-	cValue = *WRITE_ACCESS(&cValue);
+	WRITE_ACCESS(&cValue);
 
 	PS.z = !cValue;
 	PS.n = cValue & 0x80;
@@ -1465,7 +1460,7 @@ void _6502_INC(_6502_Context_t *pContext)
 	u8 cValue = *READ_ACCESS;
 
 	cValue++;
-	cValue = *WRITE_ACCESS(&cValue);
+	WRITE_ACCESS(&cValue);
 
 	PS.z = !cValue;
 	PS.n = cValue & 0x80;
@@ -1493,7 +1488,7 @@ void _6502_ASL(_6502_Context_t *pContext)
 
 	PS.c = cValue & 0x80;
 	cValue <<= 1;
-	cValue = *WRITE_ACCESS(&cValue);
+	WRITE_ACCESS(&cValue);
 
 	PS.z = !cValue;
 	PS.n = cValue & 0x80;
@@ -1505,7 +1500,7 @@ void _6502_LSR(_6502_Context_t *pContext)
 
 	PS.c = cValue & 0x01;
 	cValue >>= 1;
-	cValue = *WRITE_ACCESS(&cValue);
+	WRITE_ACCESS(&cValue);
 
 	PS.z = !cValue;
 	PS.n = cValue & 0x80;
@@ -1524,7 +1519,7 @@ void _6502_ROL(_6502_Context_t *pContext)
 		cValue |= 0x01;
 	}
 
-	cValue = *WRITE_ACCESS(&cValue);
+	WRITE_ACCESS(&cValue);
 
 	PS.z = !cValue;
 	PS.n = cValue & 0x80;
@@ -1543,7 +1538,7 @@ void _6502_ROR(_6502_Context_t *pContext)
 		cValue |= 0x80;
 	}
 
-	cValue = *WRITE_ACCESS(&cValue);
+	WRITE_ACCESS(&cValue);
 
 	PS.z = !cValue;
 	PS.n = cValue & 0x80;
@@ -1738,10 +1733,6 @@ void _6502_RTI(_6502_Context_t *pContext)
 	CPU.pc = RAM[0x100 + CPU.sp];
 	CPU.sp++;
 	CPU.pc |= RAM[0x100 + CPU.sp] << 8;
-	/* Clear NMI-active guard on every RTI. This is safe because _6502_ServiceInterrupt
-	 * sets PS.i=1, which blocks IRQs for the duration of the NMI handler unless the
-	 * handler explicitly executes CLI. No known Atari code does this. */
-	pContext->cNmiActiveFlag = 0;
 }
 
 void _6502_RTS(_6502_Context_t *pContext)
@@ -1853,7 +1844,7 @@ void _6502_SLO(_6502_Context_t *pContext)
 
 	PS.c = cValue >> 7;
 	cValue <<= 1;
-	cValue = *WRITE_ACCESS(&cValue);
+	WRITE_ACCESS(&cValue);
 
 	CPU.a |= cValue;
 
@@ -1882,9 +1873,14 @@ void _6502_DOP(_6502_Context_t *pContext)
 	READ_ACCESS;
 }
 
+/* NOP abs and NOP abs,X read like LDA, including the page-cross cycle (AHRM 3.5). */
 void _6502_TOP(_6502_Context_t *pContext)
 {
 	READ_ACCESS;
+	if(pContext->cPageCrossed)
+	{
+		pContext->llCycleCounter++;
+	}
 }
 
 void _6502_ASR(_6502_Context_t *pContext)
@@ -1905,7 +1901,7 @@ void _6502_ISC(_6502_Context_t *pContext)
 	u8 cValue = *READ_ACCESS;
 
 	cValue++;
-	cValue = *WRITE_ACCESS(&cValue);
+	WRITE_ACCESS(&cValue);
 
 	_6502_SbcValue(pContext, cValue);
 }
@@ -1918,7 +1914,9 @@ void _6502_SRE(_6502_Context_t *pContext)
 
 	cValue >>= 1;
 
-	CPU.a ^= *WRITE_ACCESS(&cValue);
+	WRITE_ACCESS(&cValue);
+
+	CPU.a ^= cValue;
 
 	PS.z = !CPU.a;
 	PS.n = CPU.a & 0x80;
@@ -1932,7 +1930,7 @@ void _6502_RLA(_6502_Context_t *pContext)
 	PS.c = cValue & 0x80;
 	cValue = (u8)((cValue << 1) | cOldCarry);
 
-	cValue = *WRITE_ACCESS(&cValue);
+	WRITE_ACCESS(&cValue);
 
 	CPU.a &= cValue;
 
@@ -1964,7 +1962,7 @@ void _6502_DCP(_6502_Context_t *pContext)
 	u8 cValue = *READ_ACCESS;
 
 	cValue--;
-	cValue = *WRITE_ACCESS(&cValue);
+	WRITE_ACCESS(&cValue);
 
 	PS.z = (CPU.a == cValue);
 	PS.n = (CPU.a - cValue) & 0x80;
@@ -1985,7 +1983,7 @@ void _6502_RRA(_6502_Context_t *pContext)
 		cValue |= 0x80;
 	}
 
-	cValue = *WRITE_ACCESS(&cValue);
+	WRITE_ACCESS(&cValue);
 	_6502_AdcValue(pContext, cValue);
 }
 
@@ -2056,51 +2054,45 @@ void _6502_LAS(_6502_Context_t *pContext)
 	}
 }
 
-/* Fake6502-compatible SHA form. */
+/* SHA/SHX/SHY/TAS store (value AND (base address high byte + 1)), where the
+ * base is the address before indexing. On a page crossing the stored value
+ * also replaces the address high byte (AHRM 3.5). The memory access is
+ * dispatched on that final address so ROM and I/O handling apply. */
+static void _6502_StoreAndHigh(_6502_Context_t *pContext, u8 cValue, u8 cIndex)
+{
+	u16 sBase = pContext->sAccessAddress - cIndex;
+
+	cValue &= (u8)((sBase >> 8) + 1);
+
+	if(((sBase & 0xff) + cIndex) > 0xff)
+	{
+		pContext->sAccessAddress = (pContext->sAccessAddress & 0xff) | ((u16)cValue << 8);
+		pContext->AccessFunction = pContext->pAccessFunctionList[pContext->sAccessAddress];
+	}
+
+	WRITE_ACCESS(&cValue);
+}
+
 void _6502_SHA(_6502_Context_t *pContext)
 {
-	u8 cValue = CPU.a & CPU.x & (u8)(((pContext->sAccessAddress >> 8) + 1) & 0xff);
-
-	WRITE_ACCESS(&cValue);
+	_6502_StoreAndHigh(pContext, CPU.a & CPU.x, CPU.y);
 }
 
-/* Fake6502-compatible SHX form. */
 void _6502_SHX(_6502_Context_t *pContext)
 {
-	u16 sBase = pContext->sAccessAddress - CPU.y;
-	u8 cValue = CPU.x & (u8)(((sBase >> 8) + 1) & 0xff);
-
-	if(((sBase & 0xff) + CPU.y) > 0xff)
-	{
-		pContext->sAccessAddress = (pContext->sAccessAddress & 0xff) | ((u16)cValue << 8);
-	}
-
-	WRITE_ACCESS(&cValue);
+	_6502_StoreAndHigh(pContext, CPU.x, CPU.y);
 }
 
-/* Fake6502-compatible SHY form. */
 void _6502_SHY(_6502_Context_t *pContext)
 {
-	u16 sBase = pContext->sAccessAddress - CPU.x;
-	u8 cValue = CPU.y & (u8)(((sBase >> 8) + 1) & 0xff);
-
-	if(((sBase & 0xff) + CPU.x) > 0xff)
-	{
-		pContext->sAccessAddress = (pContext->sAccessAddress & 0xff) | ((u16)cValue << 8);
-	}
-
-	WRITE_ACCESS(&cValue);
+	_6502_StoreAndHigh(pContext, CPU.y, CPU.x);
 }
 
-/* Fake6502-compatible TAS form. */
+/* TAS/SHS: S = A AND X, then store like SHA. */
 void _6502_TAS(_6502_Context_t *pContext)
 {
-	u8 cValue;
-
 	CPU.sp = CPU.a & CPU.x;
-	cValue = CPU.sp & (u8)(((pContext->sAccessAddress >> 8) + 1) & 0xff);
-
-	WRITE_ACCESS(&cValue);
+	_6502_StoreAndHigh(pContext, CPU.sp, CPU.y);
 }
 
 /* KIL/JAM: lock up until reset (AHRM 3.5). PC stays on the opcode for debugging. */

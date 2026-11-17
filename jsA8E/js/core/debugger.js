@@ -459,11 +459,13 @@
         const ctx = machine.ctx;
         const startCycleCounter = ctx.cycleCounter >>> 0;
         const startInstructionCounter = ctx.instructionCounter >>> 0;
-        const targetInstruction =
-          ((ctx.instructionCounter | 0) + 1) >>> 0;
         let safetyCounter = 0;
         clearLastStopState();
-        while ((ctx.instructionCounter | 0) !== targetInstruction) {
+        // A single CPU.run call can execute several instructions when it runs
+        // an ANTIC draw-line event (the renderer steps the CPU through the
+        // line), so stop as soon as the counter moved instead of waiting for
+        // an exact +1 that may be skipped.
+        while ((ctx.instructionCounter >>> 0) === startInstructionCounter) {
           const beforeCycles = ctx.cycleCounter | 0;
           try {
             CPU.run(ctx, (ctx.cycleCounter | 0) + 1);
@@ -480,7 +482,7 @@
                 ((ctx.cycleCounter >>> 0) - startCycleCounter) >>> 0,
             };
           }
-          if ((ctx.instructionCounter | 0) === targetInstruction) {
+          if ((ctx.instructionCounter >>> 0) !== startInstructionCounter) {
             return {
               ok: true,
               executedInstructions:

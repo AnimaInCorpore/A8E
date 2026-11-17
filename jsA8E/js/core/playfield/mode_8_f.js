@@ -45,6 +45,11 @@
       PRIO_PF3,
     ]);
 
+    // Mapped-mode DMA uses the bitmap tap of the DMA clock, two cycles after
+    // the character-name slot the loop runs on (AHRM 4.12, 4.14: normal
+    // width fetches start on cycle 20). The pixels stay where they are.
+    const BITMAP_DMA_OFFSET = 2;
+
     const clockAction = cfg.clockAction;
     const stealDma = cfg.stealDma || function (ctx, cycles) {
       ctx.cycleCounter += cycles | 0;
@@ -107,7 +112,7 @@
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (phase === initialPhase) {
-          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
+          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, BITMAP_DMA_OFFSET);
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           phase = 0;
         }
@@ -147,7 +152,7 @@
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (mask === 0x00) {
-          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
+          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, BITMAP_DMA_OFFSET);
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           mask = 0x80;
         }
@@ -183,7 +188,7 @@
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (mask === 0x00) {
-          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
+          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, BITMAP_DMA_OFFSET);
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           mask = 0x80;
         }
@@ -226,7 +231,7 @@
 
       for (let cycle = 0; cycle < playfieldCycles; cycle++) {
         if (phase === 2) {
-          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
+          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, BITMAP_DMA_OFFSET);
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           phase = 0;
         }
@@ -273,7 +278,7 @@
         const priorMode = (sram[IO_PRIOR] >> 6) & 3;
 
         if (mask === 0x00) {
-          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, 0);
+          data = fetchBufferedDisplayByte(ctx, bufferIndex++, dispAddr, BITMAP_DMA_OFFSET);
           dispAddr = Util.fixedAdd(dispAddr, 0x0fff, 1);
           mask = 0x80;
         }
@@ -292,13 +297,15 @@
             mask >>= 1;
           }
         } else if (priorMode === 1) {
+          // GTIA modes 9/11 keep the raw 4-bit pixel in priority bits 12-15
+          // so the fifth player can mix with it (AHRM 6.9).
           const colBk = sram[IO_COLBK] & 0xff;
           if (mask > 0x08) {
             const hi = (colBk | (data >> 4)) & 0xff;
-            dstIndex = writePixelQuad(dst, prio, dstIndex, hi, PRIO_BKG);
+            dstIndex = writePixelQuad(dst, prio, dstIndex, hi, PRIO_BKG | ((data >> 4) << 12));
           } else {
             const lo = (colBk | (data & 0x0f)) & 0xff;
-            dstIndex = writePixelQuad(dst, prio, dstIndex, lo, PRIO_BKG);
+            dstIndex = writePixelQuad(dst, prio, dstIndex, lo, PRIO_BKG | ((data & 0x0f) << 12));
           }
           mask >>= 4;
         } else if (priorMode === 2) {
@@ -319,10 +326,10 @@
           const colBk = sram[IO_COLBK] & 0xff;
           if (mask > 0x08) {
             const hi3 = data & 0xf0 ? colBk | (data & 0xf0) : colBk & 0xf0;
-            dstIndex = writePixelQuad(dst, prio, dstIndex, hi3, PRIO_BKG);
+            dstIndex = writePixelQuad(dst, prio, dstIndex, hi3, PRIO_BKG | ((data >> 4) << 12));
           } else {
             const lo3 = data & 0x0f ? colBk | ((data << 4) & 0xf0) : colBk & 0xf0;
-            dstIndex = writePixelQuad(dst, prio, dstIndex, lo3, PRIO_BKG);
+            dstIndex = writePixelQuad(dst, prio, dstIndex, lo3, PRIO_BKG | ((data & 0x0f) << 12));
           }
           mask >>= 4;
         }

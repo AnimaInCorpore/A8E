@@ -62,11 +62,75 @@ function testPendingNmiConsumesOnlyInterruptEntryStep() {
   assert.equal(ctx.cpu.sp, 0xfc, "NMI step should push PC/P onto the stack");
   assert.equal(ctx.cycleCounter, 7, "NMI entry should cost 7 cycles");
   assert.equal(ctx.nmiPending, 0, "NMI step should clear the pending edge");
-  assert.equal(ctx.nmiActive, 1, "NMI step should leave the active guard set");
 
   cpuApi.executeOne(ctx);
   assert.equal(ctx.cpu.pc, 0x1235, "handler opcode should execute on the next CPU step");
   assert.equal(ctx.cycleCounter, 9, "handler NOP should add its own 2 cycles");
+}
+
+// AHRM 3.4: the NMI is an edge-triggered one-time event independent of I, so a
+// second NMI (a VBI during a long DLI) interrupts the running NMI handler.
+function testNmiNestsInsideNmiHandler() {
+  const { cpuApi, ctx } = makeContext();
+
+  ctx.ram[0xfffa] = 0x00;
+  ctx.ram[0xfffb] = 0x30;
+  ctx.ram[0x3000] = 0xea;
+  ctx.ram[0x3001] = 0xea;
+
+  cpuApi.nmi(ctx);
+  cpuApi.executeOne(ctx);
+  cpuApi.executeOne(ctx);
+  assert.equal(ctx.cpu.pc, 0x3001, "first NMI handler should be running");
+
+  cpuApi.nmi(ctx);
+  cpuApi.executeOne(ctx);
+  assert.equal(ctx.cpu.pc, 0x3000, "second NMI should enter the handler again before RTI");
+  assert.equal(ctx.cpu.sp, 0xf9, "nested NMI should push a second frame");
+  assert.equal(ctx.ram[0x01fb], 0x01, "nested NMI should push the interrupted handler PC");
+  assert.equal(ctx.nmiPending, 0, "nested NMI should consume its edge");
+
+  // One edge is one NMI: the next step runs the handler, not a third entry.
+  cpuApi.executeOne(ctx);
+  assert.equal(ctx.cpu.pc, 0x3001, "a single edge must not be serviced twice");
+}
+
+// A handler that leaves without RTI (e.g. JMP back to the main loop) must not
+// block later NMIs.
+function testNmiHandlerWithoutRtiDoesNotBlockLaterNmis() {
+  const { cpuApi, ctx } = makeContext();
+
+  ctx.ram[0xfffa] = 0x00;
+  ctx.ram[0xfffb] = 0x30;
+  ctx.ram[0x3000] = 0x4c; // JMP $2000
+  ctx.ram[0x3001] = 0x00;
+  ctx.ram[0x3002] = 0x20;
+
+  cpuApi.nmi(ctx);
+  cpuApi.executeOne(ctx);
+  cpuApi.executeOne(ctx);
+  assert.equal(ctx.cpu.pc, 0x2000, "handler should jump back to the main loop");
+
+  cpuApi.nmi(ctx);
+  cpuApi.executeOne(ctx);
+  assert.equal(ctx.cpu.pc, 0x3000, "a later NMI should still be serviced");
+}
+
+// AHRM 3.1: reset sets I but does not clear D on the NMOS 6502.
+function testResetKeepsDecimalFlag() {
+  const { cpuApi, ctx } = makeContext();
+
+  ctx.ram[0xfffc] = 0x00;
+  ctx.ram[0xfffd] = 0x40;
+  ctx.cpu.ps = 0x08;
+  cpuApi.reset(ctx);
+  assert.equal(ctx.cpu.pc, 0x4000, "reset should load the reset vector");
+  assert.equal(ctx.cpu.ps & 0x04, 0x04, "reset should set I");
+  assert.equal(ctx.cpu.ps & 0x08, 0x08, "reset should leave D set");
+
+  ctx.cpu.ps = 0x00;
+  cpuApi.reset(ctx);
+  assert.equal(ctx.cpu.ps & 0x08, 0x00, "reset should leave D clear");
 }
 
 function testPendingIrqConsumesOnlyInterruptEntryStep() {
@@ -93,3 +157,6 @@ function testPendingIrqConsumesOnlyInterruptEntryStep() {
 
 testPendingNmiConsumesOnlyInterruptEntryStep();
 testPendingIrqConsumesOnlyInterruptEntryStep();
+testNmiNestsInsideNmiHandler();
+testNmiHandlerWithoutRtiDoesNotBlockLaterNmis();
+testResetKeepsDecimalFlag();

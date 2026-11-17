@@ -66,7 +66,6 @@ static void ProbeMachine_ResetVideo(ProbeMachine_t *pMachine)
 	pContext->llCycleCounter = 100000;
 	pContext->llStallCycleCounter = 0;
 	pContext->cNmiPendingFlag = 0;
-	pContext->cNmiActiveFlag = 0;
 	pContext->cIrqPendingFlag = 0;
 	pContext->AccessFunction = NULL;
 	pContext->sAccessAddress = 0;
@@ -501,6 +500,168 @@ static int TestHiresPriorityUsesPf2AndPf1Luminance(void)
 	return 1;
 }
 
+/* Draws the first scan line of a bitmap mode line and checks that its
+ * playfield DMA runs every lStep cycles from lFirst, lCount times. */
+static int CheckBitmapDmaSlots(u8 cMode, u8 cDmactl, u32 lFirst, u32 lStep, u32 lCount)
+{
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+	u32 i;
+
+	ProbeMachine_ResetVideo(&tMachine);
+	ProbeMachine_PrepareModeLine(&tMachine, cMode, 8, 9, 1);
+	SRAM[IO_DMACTL] = cDmactl;
+	AtariIoDrawLine(pContext);
+
+	REQUIRE(ProbeMachine_ScheduledPlayfieldDmaCount(&tMachine) == lCount,
+			"mode $%02X DMACTL $%02X scheduled %lu fetches instead of %lu", cMode, cDmactl,
+			(unsigned long)ProbeMachine_ScheduledPlayfieldDmaCount(&tMachine), (unsigned long)lCount);
+	REQUIRE(tMachine.pIoData->tDrawLineData.aScheduledPlayfieldDma[lFirst - 2] == 0,
+			"mode $%02X DMACTL $%02X fetched on the name slot, cycle %lu", cMode, cDmactl,
+			(unsigned long)(lFirst - 2));
+	for(i = 0; i < lCount; i++)
+	{
+		REQUIRE(tMachine.pIoData->tDrawLineData.aScheduledPlayfieldDma[lFirst + i * lStep] == 1,
+				"mode $%02X DMACTL $%02X fetch %lu not on cycle %lu", cMode, cDmactl,
+				(unsigned long)i, (unsigned long)(lFirst + i * lStep));
+	}
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
+static int TestBitmapModesFetchOnTheBitmapSlot(void)
+{
+	/* AHRM 4.12/4.14: mapped DMA starts on cycle 28/20/12 (narrow/normal/
+	 * wide), two cycles after the character-name slot; the 48th wide fetch
+	 * on cycle 106 is virtual. */
+	return CheckBitmapDmaSlots(0x0e, 0x22, 20, 2, 40) &&
+		   CheckBitmapDmaSlots(0x0a, 0x22, 20, 4, 20) &&
+		   CheckBitmapDmaSlots(0x08, 0x22, 20, 8, 10) &&
+		   CheckBitmapDmaSlots(0x0e, 0x21, 28, 2, 32) &&
+		   CheckBitmapDmaSlots(0x0f, 0x23, 12, 2, 47);
+}
+
+static int TestGtiaMode9And11FifthPlayerMixesWithPixel(void)
+{
+	/* AHRM 6.9: the fifth player mixes with GTIA mode 9/11 pixels as if PF3
+	 * replaced COLBK (PF3 $44). */
+	u8 cColor = DrawPriorityCase(0x0f, 0x55, 0x50, 0x00, 0x00, 0x03, NULL);
+	REQUIRE(cColor == 0x45, "mode 9 fifth player was $%02X instead of $45", cColor);
+
+	cColor = DrawPriorityCase(0x0f, 0x33, 0xd0, 0x00, 0x00, 0x03, NULL);
+	REQUIRE(cColor == 0x74, "mode 11 fifth player was $%02X instead of $74", cColor);
+
+	cColor = DrawPriorityCase(0x0f, 0x00, 0xd0, 0x00, 0x00, 0x03, NULL);
+	REQUIRE(cColor == 0x40, "mode 11 pixel 0 fifth player was $%02X instead of $40", cColor);
+
+	return 1;
+}
+
+/* Steps the beam through one clock at cycle lCycle of line lLine and returns
+ * the CPU cycles that ANTIC took for DMA. */
+static u64 StepPmgDmaCycle(ProbeMachine_t *pMachine, u32 lLine, u32 lCycle)
+{
+	_6502_Context_t *pContext = pMachine->pContext;
+	IoData_t *pIoData = pMachine->pIoData;
+	u64 llBefore = pContext->llCycleCounter;
+
+	pIoData->tVideoData.lCurrentDisplayLine = lLine;
+	pIoData->llDisplayListFetchCycle = 0;
+	pIoData->llCycle = lCycle;
+	pIoData->bInDrawLine = 0;
+	AtariIoTimingProbeStepClock(pContext);
+	return pContext->llCycleCounter - llBefore;
+}
+
+static int TestPmgDmaLinesAndVdelay(void)
+{
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+	u64 llSteal;
+
+	ProbeMachine_ResetVideo(&tMachine);
+	SRAM[IO_DMACTL] = 0x0c;
+	SRAM[IO_GRACTL] = 0x03;
+	SRAM[IO_PMBASE] = 0x20;
+
+	/* AHRM 4.13: P/M DMA only runs on scan lines 8-247. */
+	REQUIRE(StepPmgDmaCycle(&tMachine, 7, 0) == 0, "missile DMA ran on line 7");
+	REQUIRE(StepPmgDmaCycle(&tMachine, 248, 2) == 0, "player DMA ran on line 248");
+
+	/* AHRM 6.5/14.3: VDELAY masks only GTIA's load on even lines, per
+	 * object; ANTIC still takes the cycle. Missile 1 keeps its bits. */
+	SRAM[IO_VDELAY] = 0x12;
+	SRAM[IO_GRAFM_TRIG1] = 0x0c;
+	SRAM[IO_GRAFP0_P1PL] = 0x5a;
+	RAM[0x2185] = 0xf3;
+	RAM[0x2205] = 0x81;
+	llSteal = StepPmgDmaCycle(&tMachine, 10, 0);
+	REQUIRE(llSteal == 1, "VDELAY-masked missile fetch stole %llu cycles", (unsigned long long)llSteal);
+	REQUIRE(SRAM[IO_GRAFM_TRIG1] == 0xff, "GRAFM loaded $%02X instead of $FF", SRAM[IO_GRAFM_TRIG1]);
+	llSteal = StepPmgDmaCycle(&tMachine, 10, 2);
+	REQUIRE(llSteal == 1, "VDELAY-masked player fetch stole %llu cycles", (unsigned long long)llSteal);
+	REQUIRE(SRAM[IO_GRAFP0_P1PL] == 0x5a, "VDELAY did not hold GRAFP0 ($%02X)", SRAM[IO_GRAFP0_P1PL]);
+	StepPmgDmaCycle(&tMachine, 11, 2);
+	REQUIRE(SRAM[IO_GRAFP0_P1PL] == 0x81, "odd line did not load GRAFP0 ($%02X)", SRAM[IO_GRAFP0_P1PL]);
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
+/* Draws P0 and P1 at the same position on a blank line and returns P0PL. */
+static u8 DrawPlayerOverlap(u32 lLine, u8 cHpos)
+{
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+	IoData_t *pIoData = tMachine.pIoData;
+	u8 cCollision;
+
+	ProbeMachine_ResetVideo(&tMachine);
+	ProbeMachine_PrepareModeLine(&tMachine, 0x00, lLine, lLine + 1, 0);
+	SRAM[IO_GRAFP0_P1PL] = 0x80;
+	SRAM[IO_GRAFP1_P2PL] = 0x80;
+	SRAM[IO_HPOSP0_M0PF] = cHpos;
+	SRAM[IO_HPOSP1_M1PF] = cHpos;
+	pIoData->bInDrawLine = 1;
+	AtariIoDrawLine(pContext);
+	cCollision = RAM[IO_SIZEM_P0PL] & 0x0f;
+
+	ProbeMachine_Close(&tMachine);
+	return cCollision;
+}
+
+static int TestCollisionsOnlyInsideVisibleWindow(void)
+{
+	/* AHRM 6.6: collisions register at color clocks $22-$DD, lines 8-247. */
+	REQUIRE(DrawPlayerOverlap(8, 0x21) == 0, "collision left of $22");
+	REQUIRE(DrawPlayerOverlap(8, 0x22) == 0x02, "no P0P1 collision at $22");
+	REQUIRE(DrawPlayerOverlap(8, 0xdd) == 0x02, "no P0P1 collision at $DD");
+	REQUIRE(DrawPlayerOverlap(8, 0xde) == 0, "collision right of $DD");
+	REQUIRE(DrawPlayerOverlap(7, 0x80) == 0, "collision on line 7");
+	return 1;
+}
+
+static int TestBlankLineMatchesActiveLineOrigin(void)
+{
+	/* Cycle c covers pixels 24 + 4c on every line; the blank line fill
+	 * starts at cycle 6 like active lines (pixel 48, not 24). */
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+	IoData_t *pIoData = tMachine.pIoData;
+
+	ProbeMachine_ResetVideo(&tMachine);
+	ProbeMachine_PrepareModeLine(&tMachine, 0x00, 8, 9, 0);
+	SRAM[IO_COLBK] = 0x34;
+	pIoData->bInDrawLine = 1;
+	AtariIoDrawLine(pContext);
+	REQUIRE(ProbeMachine_PixelAt(&tMachine, 8, 47) == 0x00, "blank line wrote pixel 47 before cycle 6");
+	REQUIRE(ProbeMachine_PixelAt(&tMachine, 8, 48) == 0x34, "blank line left pixel 48 unwritten");
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
 int main(int argc, char *argv[])
 {
 	int bOk = 1;
@@ -524,6 +685,11 @@ int main(int argc, char *argv[])
 	bOk &= TestMode7FetchesCharacterDataOnOddRepeatedScanlines();
 	bOk &= TestGtiaPriorityEquations();
 	bOk &= TestHiresPriorityUsesPf2AndPf1Luminance();
+	bOk &= TestBitmapModesFetchOnTheBitmapSlot();
+	bOk &= TestGtiaMode9And11FifthPlayerMixesWithPixel();
+	bOk &= TestPmgDmaLinesAndVdelay();
+	bOk &= TestCollisionsOnlyInsideVisibleWindow();
+	bOk &= TestBlankLineMatchesActiveLineOrigin();
 
 	SDL_Quit();
 

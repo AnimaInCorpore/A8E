@@ -69,7 +69,6 @@
       ioBeamTimedEventCycle: Infinity,
       ioCycleTimedEventFunction: null,
       nmiPending: 0,
-      nmiActive: 0,
       irqPending: 0,
       halted: 0, // set by a KIL opcode; only a reset clears it
       breakRun: false,
@@ -225,17 +224,15 @@
     ctx.nmiPending = 1;
   }
 
-  function servicePendingNmi(ctx) {
-    if (!ctx.nmiPending || ctx.nmiActive) return;
-    ctx.nmiPending = 0;
-    ctx.nmiActive = 1;
-    serviceInterrupt(ctx, 0xfffa, 0, ctx.cpu.pc);
-    ctx.cycleCounter += 7;
-  }
-
   function servicePendingInterrupts(ctx) {
-    if (ctx.nmiPending && !ctx.nmiActive) {
-      servicePendingNmi(ctx);
+    // The NMI is edge-triggered and independent of I (AHRM 3.4): each latched
+    // edge is serviced once, even inside a running NMI handler, so a VBI can
+    // interrupt a long DLI and a handler that exits without RTI does not
+    // block later NMIs.
+    if (ctx.nmiPending) {
+      ctx.nmiPending = 0;
+      serviceInterrupt(ctx, 0xfffa, 0, ctx.cpu.pc);
+      ctx.cycleCounter += 7;
       return true;
     }
     // The IRQ line is level-triggered (AHRM 5.7): POKEY keeps it asserted
@@ -253,9 +250,9 @@
   function reset(ctx) {
     const cpu = ctx.cpu;
     cpu.sp = 0xfd;
-    cpu.ps = (cpu.ps | FLAG_I) & ~(FLAG_D | FLAG_B);
+    // Reset sets I but leaves D alone on the NMOS 6502 (AHRM 3.1).
+    cpu.ps = (cpu.ps | FLAG_I) & ~FLAG_B;
     ctx.nmiPending = 0;
-    ctx.nmiActive = 0;
     ctx.halted = 0;
     cpu.pc = ctx.ram[0xfffc] | (ctx.ram[0xfffd] << 8);
     ctx.cycleCounter += 7;
@@ -366,6 +363,17 @@
   ];
 
   // Helpers for operations
+  function selectAccess(ctx, accessFn) {
+    ctx.accessFunction = null;
+    if (accessFn === ramAccess) {
+      ctx.accessMode = ACCESS_MODE_RAM;
+    } else if (accessFn === romAccess) {
+      ctx.accessMode = ACCESS_MODE_ROM;
+    } else {
+      ctx.accessMode = ACCESS_MODE_FN;
+      ctx.accessFunction = accessFn;
+    }
+  }
   function readAccess(ctx) {
     const addr = ctx.accessAddress & 0xffff;
     if (ctx.accessMode === ACCESS_MODE_RAM || ctx.accessMode === ACCESS_MODE_ROM) {
@@ -532,9 +540,12 @@
     sbcValue(ctx, readAccess(ctx));
     if (ctx.pageCrossed) ctx.cycleCounter++;
   }
+  // Read-modify-write opcodes take flags (and the ALU input of the merged
+  // undocumented ones) from the computed value, not from a read-back, so a
+  // write to ROM or a write-only I/O register still sets them correctly.
   function opDEC(ctx) {
-    let v = (readAccess(ctx) - 1) & 0xff;
-    v = writeAccess(ctx, v);
+    const v = (readAccess(ctx) - 1) & 0xff;
+    writeAccess(ctx, v);
     setZN(ctx, v);
   }
   function opDEX(ctx) {
@@ -546,8 +557,8 @@
     setZN(ctx, ctx.cpu.y);
   }
   function opINC(ctx) {
-    let v = (readAccess(ctx) + 1) & 0xff;
-    v = writeAccess(ctx, v);
+    const v = (readAccess(ctx) + 1) & 0xff;
+    writeAccess(ctx, v);
     setZN(ctx, v);
   }
   function opINX(ctx) {
@@ -562,14 +573,14 @@
     let v = readAccess(ctx);
     ctx.cpu.ps = setFlag(ctx.cpu.ps, FLAG_C, v & 0x80);
     v = (v << 1) & 0xff;
-    v = writeAccess(ctx, v);
+    writeAccess(ctx, v);
     setZN(ctx, v);
   }
   function opLSR(ctx) {
     let v = readAccess(ctx);
     ctx.cpu.ps = setFlag(ctx.cpu.ps, FLAG_C, v & 0x01);
     v = (v >> 1) & 0xff;
-    v = writeAccess(ctx, v);
+    writeAccess(ctx, v);
     setZN(ctx, v);
   }
   function opROL(ctx) {
@@ -577,7 +588,7 @@
     let v = readAccess(ctx);
     ctx.cpu.ps = setFlag(ctx.cpu.ps, FLAG_C, v & 0x80);
     v = ((v << 1) & 0xff) | oldCarry;
-    v = writeAccess(ctx, v);
+    writeAccess(ctx, v);
     setZN(ctx, v);
   }
   function opROR(ctx) {
@@ -586,7 +597,7 @@
     ctx.cpu.ps = setFlag(ctx.cpu.ps, FLAG_C, v & 0x01);
     v = (v >> 1) & 0xff;
     if (oldCarry) v |= 0x80;
-    v = writeAccess(ctx, v);
+    writeAccess(ctx, v);
     setZN(ctx, v);
   }
   function opBIT(ctx) {
@@ -705,10 +716,6 @@
     cpu.pc = ctx.ram[0x100 + cpu.sp] & 0xff;
     cpu.sp = (cpu.sp + 1) & 0xff;
     cpu.pc |= (ctx.ram[0x100 + cpu.sp] & 0xff) << 8;
-    // Clear NMI-active guard on every RTI. This is safe because serviceInterrupt
-    // sets FLAG_I, blocking IRQs for the duration of the NMI handler unless the
-    // handler explicitly executes CLI. No known Atari code does this.
-    ctx.nmiActive = 0;
   }
   function opRTS(ctx) {
     const cpu = ctx.cpu;
@@ -782,7 +789,8 @@
     let v = readAccess(ctx);
     ctx.cpu.ps = setFlag(ctx.cpu.ps, FLAG_C, v & 0x80);
     v = (v << 1) & 0xff;
-    ctx.cpu.a = (ctx.cpu.a | writeAccess(ctx, v)) & 0xff;
+    writeAccess(ctx, v);
+    ctx.cpu.a = (ctx.cpu.a | v) & 0xff;
     setZN(ctx, ctx.cpu.a);
   }
   // Fake6502-compatible LXA form; AHRM marks $AB as unstable.
@@ -797,8 +805,10 @@
   function opDOP(ctx) {
     readAccess(ctx);
   }
+  // NOP abs and NOP abs,X read like LDA, including the page-cross cycle (AHRM 3.5).
   function opTOP(ctx) {
     readAccess(ctx);
+    if (ctx.pageCrossed) ctx.cycleCounter++;
   }
   function opASR(ctx) {
     ctx.cpu.a = ctx.cpu.a & readAccess(ctx) & 0xff;
@@ -807,15 +817,16 @@
     setZN(ctx, ctx.cpu.a);
   }
   function opISC(ctx) {
-    let v = (readAccess(ctx) + 1) & 0xff;
-    v = writeAccess(ctx, v);
+    const v = (readAccess(ctx) + 1) & 0xff;
+    writeAccess(ctx, v);
     sbcValue(ctx, v);
   }
   function opSRE(ctx) {
     let v = readAccess(ctx);
     ctx.cpu.ps = setFlag(ctx.cpu.ps, FLAG_C, v & 0x01);
     v = (v >> 1) & 0xff;
-    ctx.cpu.a = (ctx.cpu.a ^ writeAccess(ctx, v)) & 0xff;
+    writeAccess(ctx, v);
+    ctx.cpu.a = (ctx.cpu.a ^ v) & 0xff;
     setZN(ctx, ctx.cpu.a);
   }
   function opRLA(ctx) {
@@ -823,7 +834,7 @@
     let v = readAccess(ctx);
     ctx.cpu.ps = setFlag(ctx.cpu.ps, FLAG_C, v & 0x80);
     v = ((v << 1) & 0xff) | oldCarry;
-    v = writeAccess(ctx, v);
+    writeAccess(ctx, v);
     ctx.cpu.a = ctx.cpu.a & v & 0xff;
     setZN(ctx, ctx.cpu.a);
   }
@@ -839,8 +850,8 @@
   }
   function opDCP(ctx) {
     const cpu = ctx.cpu;
-    let v = (readAccess(ctx) - 1) & 0xff;
-    v = writeAccess(ctx, v);
+    const v = (readAccess(ctx) - 1) & 0xff;
+    writeAccess(ctx, v);
     cpu.ps = setCompare(cpu.ps, cpu.a, v);
   }
   function opRRA(ctx) {
@@ -849,7 +860,7 @@
     ctx.cpu.ps = setFlag(ctx.cpu.ps, FLAG_C, v & 0x01);
     v = (v >> 1) & 0xff;
     if (oldCarry) v |= 0x80;
-    v = writeAccess(ctx, v);
+    writeAccess(ctx, v);
     adcValue(ctx, v);
   }
   function opSBX(ctx) {
@@ -891,32 +902,33 @@
     setZN(ctx, value);
     if (ctx.pageCrossed) ctx.cycleCounter++;
   }
+  // SHA/SHX/SHY/TAS store (value AND (base address high byte + 1)), where the
+  // base is the address before indexing. On a page crossing the stored value
+  // also replaces the address high byte (AHRM 3.5). The memory access is
+  // dispatched on that final address so ROM and I/O handling apply.
+  function storeAndHigh(ctx, value, index) {
+    const base = (ctx.accessAddress - index) & 0xffff;
+    const v = value & (((base >> 8) + 1) & 0xff);
+    if ((base & 0xff) + index > 0xff) {
+      ctx.accessAddress = (ctx.accessAddress & 0xff) | (v << 8);
+      selectAccess(ctx, ctx.accessFunctionList[ctx.accessAddress]);
+    }
+    writeAccess(ctx, v);
+  }
   function opSHA(ctx) {
-    const value = ctx.cpu.a & ctx.cpu.x & ((((ctx.accessAddress >> 8) + 1) & 0xff));
-    writeAccess(ctx, value);
+    storeAndHigh(ctx, ctx.cpu.a & ctx.cpu.x, ctx.cpu.y);
   }
   function opSHX(ctx) {
-    const cpu = ctx.cpu;
-    const base = (ctx.accessAddress - cpu.y) & 0xffff;
-    const value = cpu.x & ((((base >> 8) + 1) & 0xff));
-    if (((base & 0xff) + cpu.y) > 0xff) {
-      ctx.accessAddress = (ctx.accessAddress & 0xff) | ((value & 0xff) << 8);
-    }
-    writeAccess(ctx, value);
+    storeAndHigh(ctx, ctx.cpu.x, ctx.cpu.y);
   }
   function opSHY(ctx) {
-    const cpu = ctx.cpu;
-    const base = (ctx.accessAddress - cpu.x) & 0xffff;
-    const value = cpu.y & ((((base >> 8) + 1) & 0xff));
-    if (((base & 0xff) + cpu.x) > 0xff) {
-      ctx.accessAddress = (ctx.accessAddress & 0xff) | ((value & 0xff) << 8);
-    }
-    writeAccess(ctx, value);
+    storeAndHigh(ctx, ctx.cpu.y, ctx.cpu.x);
   }
+  // TAS/SHS: S = A AND X, then store like SHA.
   function opTAS(ctx) {
     const cpu = ctx.cpu;
     cpu.sp = (cpu.a & cpu.x) & 0xff;
-    writeAccess(ctx, cpu.sp & ((((ctx.accessAddress >> 8) + 1) & 0xff)));
+    storeAndHigh(ctx, cpu.sp, cpu.y);
   }
 
   const OPCODE_FUNCS = [

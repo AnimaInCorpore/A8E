@@ -63,7 +63,6 @@ static void ProbeMachine_ResetTiming(ProbeMachine_t *pMachine)
 	pContext->llCycleCounter = 0;
 	pContext->llStallCycleCounter = 0;
 	pContext->cNmiPendingFlag = 0;
-	pContext->cNmiActiveFlag = 0;
 	pContext->cIrqPendingFlag = 0;
 
 	pIoData->llCycle = 0;
@@ -235,12 +234,27 @@ static int TestRefreshDropArtifactLatchesIntoLineBuffer(void)
 	return 1;
 }
 
+/* Writes WSYNC from an instruction of lCycles cycles that started on
+ * lStartCycle; bRmw first reads WSYNC like INC/DEC do. */
+static void WriteWsync(_6502_Context_t *pContext, u64 llStartCycle, u8 cCycles, u8 bRmw)
+{
+	u8 cValue = 0x00;
+
+	pContext->llStallCycleCounter = 0;
+	pContext->llCycleCounter = llStartCycle;
+	pContext->cCurrentInstructionCycles = cCycles;
+	if(bRmw)
+	{
+		Antic_WSYNC(pContext, NULL);
+	}
+	Antic_WSYNC(pContext, &cValue);
+}
+
 static int TestWsyncBoundaryUsesCurrentOrNextLine(void)
 {
 	ProbeMachine_t tMachine = ProbeMachine_Open();
 	_6502_Context_t *pContext = tMachine.pContext;
 	IoData_t *pIoData = tMachine.pIoData;
-	u8 cValue = 0x00;
 	const u64 llLineStartCycle = 0x1000;
 
 	REQUIRE(pContext != NULL, "machine open failed");
@@ -249,60 +263,83 @@ static int TestWsyncBoundaryUsesCurrentOrNextLine(void)
 
 	pIoData->llDisplayListFetchCycle = llLineStartCycle;
 
-	pContext->llCycleCounter = llLineStartCycle + 103;
-	Antic_WSYNC(pContext, &cValue);
-	REQUIRE(pContext->llStallCycleCounter == llLineStartCycle + 105,
-			"cycle-103 WSYNC stalled until %llu instead of current-line cycle 105",
+	/* AHRM 4.9: STA WSYNC writes on its last cycle. A write on cycle 103
+	 * halts until cycle 105, but the next opcode fetch already happened on
+	 * cycle 104, so the next instruction appears to start on cycle 104. */
+	WriteWsync(pContext, llLineStartCycle + 100, 4, 0);
+	REQUIRE(pContext->llStallCycleCounter == llLineStartCycle + 104,
+			"cycle-103 WSYNC write resumed at %llu instead of current-line cycle 104",
 			pContext->llStallCycleCounter);
 
-	pContext->llStallCycleCounter = 0;
-	pContext->llCycleCounter = llLineStartCycle + 104;
-	Antic_WSYNC(pContext, &cValue);
+	/* A write on cycle 104 is too late and waits for the next line. */
+	WriteWsync(pContext, llLineStartCycle + 101, 4, 0);
+	REQUIRE(pContext->llStallCycleCounter == llLineStartCycle + CYCLES_PER_LINE + 104,
+			"cycle-104 WSYNC write resumed at %llu instead of next-line cycle 104",
+			pContext->llStallCycleCounter);
+
+	/* INC WSYNC: the dummy write counts and the second write fills the
+	 * cycle after it, so the next instruction starts on cycle 105. */
+	WriteWsync(pContext, llLineStartCycle + 98, 6, 1);
+	REQUIRE(pContext->llStallCycleCounter == llLineStartCycle + 105,
+			"INC WSYNC writing on 102/103 resumed at %llu instead of cycle 105",
+			pContext->llStallCycleCounter);
+
+	/* Writes on 103 and 104: the next instruction starts on 105 but its
+	 * second cycle waits for cycle 105 of the next line. */
+	WriteWsync(pContext, llLineStartCycle + 99, 6, 1);
+	REQUIRE(pContext->llStallCycleCounter == llLineStartCycle + CYCLES_PER_LINE + 104,
+			"INC WSYNC writing on 103/104 resumed at %llu instead of next-line cycle 104",
+			pContext->llStallCycleCounter);
+
+	WriteWsync(pContext, llLineStartCycle + 100, 6, 1);
 	REQUIRE(pContext->llStallCycleCounter == llLineStartCycle + CYCLES_PER_LINE + 105,
-			"cycle-104 WSYNC stalled until %llu instead of next-line cycle 105",
+			"INC WSYNC writing on 104/105 resumed at %llu instead of next-line cycle 105",
 			pContext->llStallCycleCounter);
 
 	ProbeMachine_Close(&tMachine);
 	return 1;
 }
 
-static int TestWsyncRestartDelaysForCycle105PlayfieldDma(void)
+/* STA WSYNC on cycles 100-103, then a NOP at $2000, stepping the beam from
+ * cycle 104 until the NOP has run. Returns the cycle the NOP completed. */
+static u64 RunNopAfterWsync(ProbeMachine_t *pMachine, u8 bDma105, u8 bRefreshPending)
 {
-	ProbeMachine_t tMachine = ProbeMachine_Open();
-	_6502_Context_t *pContext = tMachine.pContext;
-	IoData_t *pIoData = tMachine.pIoData;
-	u8 cValue = 0x00;
+	_6502_Context_t *pContext = pMachine->pContext;
+	IoData_t *pIoData = pMachine->pIoData;
 
-	REQUIRE(pContext != NULL, "machine open failed");
-
-	ProbeMachine_ResetTiming(&tMachine);
-
+	ProbeMachine_ResetTiming(pMachine);
 	pContext->pShadowMemory[IO_DMACTL] = 0x23;
 	pIoData->llDisplayListFetchCycle = 0;
-	pContext->llCycleCounter = 103;
-	Antic_WSYNC(pContext, &cValue);
-
+	WriteWsync(pContext, 100, 4, 0);
 	pContext->llCycleCounter = 104;
 	pContext->tCpu.pc = 0x2000;
 	pContext->pMemory[0x2000] = 0xea;
-	_6502_Execute(pContext);
-	REQUIRE(pContext->llCycleCounter == 105,
-			"WSYNC did not stall on the first post-write cycle");
-	REQUIRE(pContext->tCpu.pc == 0x2000,
-			"CPU advanced before the cycle-105 stall completed");
 
-	pIoData->llCycle = 105;
-	pIoData->tDrawLineData.aScheduledPlayfieldDma[105] = 1;
-	AtariIoTimingProbeStepClock(pContext);
-	REQUIRE(pContext->llCycleCounter == 106,
-			"cycle-105 playfield DMA did not delay WSYNC restart by one cycle");
+	pIoData->llCycle = 104;
+	pIoData->tDrawLineData.aScheduledPlayfieldDma[105] = bDma105;
+	pIoData->tDrawLineData.cRefreshDmaPending = bRefreshPending;
+	while(pContext->tCpu.pc == 0x2000 && pIoData->llCycle < 120)
+	{
+		AtariIoTimingProbeStepClock(pContext);
+	}
 
-	_6502_Execute(pContext);
-	REQUIRE(pContext->tCpu.pc == 0x2001,
-			"CPU did not resume after cycle-105 playfield DMA cleared");
-	REQUIRE(pContext->llCycleCounter == 108,
-			"NOP after cycle-105 playfield DMA completed at %llu instead of 108",
-			pContext->llCycleCounter);
+	return pContext->tCpu.pc == 0x2001 ? pContext->llCycleCounter : 0;
+}
+
+static int TestWsyncRestartDelaysForCycle105PlayfieldDma(void)
+{
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	u64 llDone;
+
+	REQUIRE(tMachine.pContext != NULL, "machine open failed");
+
+	/* AHRM 4.9: NOP fetched on 104, second cycle on 105, done on 106. */
+	llDone = RunNopAfterWsync(&tMachine, 0, 0);
+	REQUIRE(llDone == 106, "NOP after WSYNC completed at %llu instead of 106", llDone);
+
+	/* Playfield DMA on cycle 105 delays the restart by one cycle. */
+	llDone = RunNopAfterWsync(&tMachine, 1, 0);
+	REQUIRE(llDone == 107, "NOP after cycle-105 playfield DMA completed at %llu instead of 107", llDone);
 
 	ProbeMachine_Close(&tMachine);
 	return 1;
@@ -311,66 +348,35 @@ static int TestWsyncRestartDelaysForCycle105PlayfieldDma(void)
 static int TestWsyncRestartDelaysForCycle106RefreshDma(void)
 {
 	ProbeMachine_t tMachine = ProbeMachine_Open();
-	_6502_Context_t *pContext = tMachine.pContext;
-	IoData_t *pIoData = tMachine.pIoData;
-	u8 cValue = 0x00;
+	u64 llDone;
 
-	REQUIRE(pContext != NULL, "machine open failed");
+	REQUIRE(tMachine.pContext != NULL, "machine open failed");
 
-	ProbeMachine_ResetTiming(&tMachine);
-
-	pContext->pShadowMemory[IO_DMACTL] = 0x23;
-	pIoData->llDisplayListFetchCycle = 0;
-	pContext->llCycleCounter = 103;
-	Antic_WSYNC(pContext, &cValue);
-
-	pContext->llCycleCounter = 104;
-	pContext->tCpu.pc = 0x2000;
-	pContext->pMemory[0x2000] = 0xea;
-	_6502_Execute(pContext);
-	REQUIRE(pContext->llCycleCounter == 105,
-			"WSYNC did not stall on the first post-write cycle");
-
-	pIoData->llCycle = 105;
-	pIoData->tDrawLineData.aScheduledPlayfieldDma[105] = 1;
-	pIoData->tDrawLineData.cRefreshDmaPending = 1;
-	AtariIoTimingProbeStepClock(pContext);
-	REQUIRE(pContext->llCycleCounter == 106,
-			"cycle-105 playfield DMA did not push restart to cycle 106");
-	REQUIRE(pIoData->tDrawLineData.cRefreshDmaPending == 1,
-			"refresh DMA pending flag was lost before cycle 106");
-
-	AtariIoTimingProbeStepClock(pContext);
-	REQUIRE(pContext->llCycleCounter == 107,
-			"cycle-106 refresh DMA did not delay WSYNC restart by a second cycle");
-	REQUIRE(pIoData->tDrawLineData.cRefreshDmaPending == 0,
+	/* AHRM 4.9/4.14: playfield DMA on 105 pushes refresh to 106, a
+	 * two-cycle delay. */
+	llDone = RunNopAfterWsync(&tMachine, 1, 1);
+	REQUIRE(llDone == 108, "NOP after cycle-106 refresh DMA completed at %llu instead of 108", llDone);
+	REQUIRE(tMachine.pIoData->tDrawLineData.cRefreshDmaPending == 0,
 			"cycle-106 refresh DMA was not consumed");
-
-	_6502_Execute(pContext);
-	REQUIRE(pContext->tCpu.pc == 0x2001,
-			"CPU did not resume after cycle-106 refresh DMA cleared");
-	REQUIRE(pContext->llCycleCounter == 109,
-			"NOP after cycle-106 refresh DMA completed at %llu instead of 109",
-			pContext->llCycleCounter);
 
 	ProbeMachine_Close(&tMachine);
 	return 1;
 }
 
-static int TestWsyncStallLetsDliPreemptNextInstruction(void)
+static int TestWsyncNextInstructionRunsBeforeDli(void)
 {
 	ProbeMachine_t tMachine = ProbeMachine_Open();
 	_6502_Context_t *pContext = tMachine.pContext;
 	IoData_t *pIoData = tMachine.pIoData;
-	u8 cValue = 0x00;
 
 	REQUIRE(pContext != NULL, "machine open failed");
 
 	ProbeMachine_ResetTiming(&tMachine);
 
-	pContext->llCycleCounter = 103;
-	Antic_WSYNC(pContext, &cValue);
-
+	/* AHRM 4.9: the instruction after the WSYNC write has already been
+	 * fetched when the CPU halts, so it completes before a DLI that
+	 * arrives during the wait is taken. */
+	WriteWsync(pContext, 100, 4, 0);
 	pContext->llCycleCounter = 104;
 	pContext->tCpu.pc = 0x2000;
 	pContext->tCpu.sp = 0xff;
@@ -378,25 +384,27 @@ static int TestWsyncStallLetsDliPreemptNextInstruction(void)
 	pContext->pMemory[0xfffa] = 0x34;
 	pContext->pMemory[0xfffb] = 0x12;
 
-	_6502_Execute(pContext);
-	REQUIRE(pContext->llCycleCounter == 105,
-			"WSYNC did not hold the CPU through cycle 105");
-	REQUIRE(pContext->tCpu.pc == 0x2000,
-			"next instruction started before DLI overlap test");
-
 	pContext->pShadowMemory[IO_NMIEN] = NMI_DLI;
 	pIoData->cNmienEnabledByCycle7 = NMI_DLI;
 	pIoData->cNmienEnabledByCycle8 = NMI_DLI;
 	pIoData->llDliCycle = 104;
-	ProbeMachine_TriggerBeamEvent(&tMachine, 105, 105);
+
+	_6502_Execute(pContext);
+	REQUIRE(pContext->tCpu.pc == 0x2001,
+			"instruction after WSYNC did not run first");
+	REQUIRE(pContext->llCycleCounter == 106,
+			"NOP after WSYNC completed at %llu instead of 106",
+			pContext->llCycleCounter);
+
+	ProbeMachine_TriggerBeamEvent(&tMachine, 105, 106);
 	REQUIRE(pContext->cNmiPendingFlag == 1,
-			"DLI did not become pending during WSYNC stall");
+			"DLI did not become pending");
 
 	_6502_Execute(pContext);
 	REQUIRE(pContext->tCpu.pc == 0x1234,
-			"DLI did not preempt the post-WSYNC instruction fetch");
-	REQUIRE(pContext->llCycleCounter == 112,
-			"NMI service after WSYNC completed at %llu instead of 112",
+			"DLI was not taken after the post-WSYNC instruction");
+	REQUIRE(pContext->llCycleCounter == 113,
+			"NMI service after WSYNC completed at %llu instead of 113",
 			pContext->llCycleCounter);
 	REQUIRE(pContext->tCpu.sp == 0xfc,
 			"NMI stack push after WSYNC left SP at $%02X instead of $FC",
@@ -420,7 +428,7 @@ int main(int argc, char *argv[])
 	lPassed &= TestWsyncBoundaryUsesCurrentOrNextLine();
 	lPassed &= TestWsyncRestartDelaysForCycle105PlayfieldDma();
 	lPassed &= TestWsyncRestartDelaysForCycle106RefreshDma();
-	lPassed &= TestWsyncStallLetsDliPreemptNextInstruction();
+	lPassed &= TestWsyncNextInstructionRunsBeforeDli();
 
 	SDL_Quit();
 

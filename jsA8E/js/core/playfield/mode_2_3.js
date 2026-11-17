@@ -69,11 +69,14 @@
       return resolveCharacterRow8(glyphRow - 8, chactl);
     }
 
-    function writeBackgroundQuad(dst, prio, dstIndex, color) {
-      dst[dstIndex] = color; prio[dstIndex++] = PRIO_BKG;
-      dst[dstIndex] = color; prio[dstIndex++] = PRIO_BKG;
-      dst[dstIndex] = color; prio[dstIndex++] = PRIO_BKG;
-      dst[dstIndex] = color; prio[dstIndex++] = PRIO_BKG;
+    // GTIA modes 9/11 keep the raw 4-bit pixel in priority bits 12-15 so the
+    // fifth player can mix with it (AHRM 6.9).
+    function writeBackgroundQuad(dst, prio, dstIndex, color, gtiaPixel) {
+      const p = PRIO_BKG | (((gtiaPixel | 0) & 0x0f) << 12);
+      dst[dstIndex] = color; prio[dstIndex++] = p;
+      dst[dstIndex] = color; prio[dstIndex++] = p;
+      dst[dstIndex] = color; prio[dstIndex++] = p;
+      dst[dstIndex] = color; prio[dstIndex++] = p;
       return dstIndex;
     }
 
@@ -186,10 +189,10 @@
           const colBk = sram[IO_COLBK] & 0xff;
           if (mask > 0x08) {
             const hi = (colBk | (outputData >> 4)) & 0xff;
-            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, hi);
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, hi, outputData >> 4);
           } else {
             const lo = (colBk | (outputData & 0x0f)) & 0xff;
-            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, lo);
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, lo, outputData);
           }
           mask >>= 4;
         } else if (priorMode === 2) {
@@ -208,12 +211,12 @@
             const hi3 = outputData & 0xf0
               ? colBk | (outputData & 0xf0)
               : colBk & 0xf0;
-            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, hi3);
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, hi3, outputData >> 4);
           } else {
             const lo3 = outputData & 0x0f
               ? colBk | ((outputData << 4) & 0xf0)
               : colBk & 0xf0;
-            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, lo3);
+            dstIndex = writeBackgroundQuad(dst, prio, dstIndex, lo3, outputData);
           }
           mask >>= 4;
         }

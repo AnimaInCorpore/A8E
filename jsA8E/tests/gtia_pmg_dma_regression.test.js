@@ -108,20 +108,77 @@ function testVdelayMasksFetchesOnEvenScanlines() {
   ctx.sram[0xd01d] = 0x02;
   ctx.sram[0xd01c] = 0x10;
   ctx.sram[0xd407] = 0x20;
-  ctx.ram[0x2203] = 0x33;
-  ctx.ram[0x2204] = 0x44;
+  ctx.ram[0x2204] = 0x33;
+  ctx.ram[0x2205] = 0x44;
 
-  const firstFetch = api.fetchPmgDmaCycle(ctx, 2, 7);
+  const firstFetch = api.fetchPmgDmaCycle(ctx, 2, 9);
   assert.equal(firstFetch, 1);
   assert.equal(ctx.sram[0xd00d], 0x33);
 
-  const maskedFetch = api.fetchPmgDmaCycle(ctx, 2, 8);
-  assert.equal(maskedFetch, 0);
+  // AHRM 6.5/14.3: ANTIC still takes the DMA cycle; VDELAY only stops GTIA
+  // from loading the latch on even scan lines.
+  const maskedFetch = api.fetchPmgDmaCycle(ctx, 2, 10);
+  assert.equal(maskedFetch, 1);
   assert.equal(ctx.sram[0xd00d], 0x33);
 
-  const secondFetch = api.fetchPmgDmaCycle(ctx, 2, 9);
+  const secondFetch = api.fetchPmgDmaCycle(ctx, 2, 11);
   assert.equal(secondFetch, 1);
   assert.equal(ctx.sram[0xd00d], 0x44);
+}
+
+function testVdelayMasksEachMissileField() {
+  const api = loadGtiaApi();
+  const ctx = makeCtx();
+
+  ctx.sram[0xd400] = 0x04; // missile DMA
+  ctx.sram[0xd01d] = 0x01;
+  ctx.sram[0xd01c] = 0x02; // VDELAY for missile 1 only
+  ctx.sram[0xd407] = 0x20;
+  ctx.sram[0xd011] = 0x0c; // missile 1 latched on the previous line
+  ctx.ram[0x2185] = 0xf3; // new data: missiles 0, 2, 3 set, missile 1 clear
+
+  assert.equal(api.fetchPmgDmaCycle(ctx, 0, 10), 1);
+  // Missile 1 keeps its old bits, the others load (AHRM 14.3 VDELAY layout).
+  assert.equal(ctx.sram[0xd011], 0xff);
+}
+
+function testNoPmgDmaInVerticalBlank() {
+  const api = loadGtiaApi();
+  const ctx = makeCtx();
+
+  ctx.sram[0xd400] = 0x0c;
+  ctx.sram[0xd01d] = 0x03;
+  ctx.sram[0xd407] = 0x20;
+  ctx.ram[0x2203] = 0x55;
+  // AHRM 4.13: P/M DMA only runs on scan lines 8-247.
+  for (const y of [0, 7, 248]) {
+    assert.equal(api.fetchPmgDmaCycle(ctx, 0, y), 0, "missile DMA on line " + y);
+    assert.equal(api.fetchPmgDmaCycle(ctx, 2, y), 0, "player DMA on line " + y);
+  }
+  assert.equal(ctx.sram[0xd00d], 0x00);
+  assert.equal(api.fetchPmgDmaCycle(ctx, 2, 8), 1);
+}
+
+function testCollisionsOnlyInsideVisibleWindow() {
+  // AHRM 6.6: collisions register at color clocks $22-$DD on lines 8-247.
+  function collide(hpos, line) {
+    const api = loadGtiaApi();
+    const ctx = makeCtx();
+    const lineBase = line * 456;
+    ctx.ioData.video.currentDisplayLine = line;
+    ctx.ioData.videoOut.pixels = new Uint8Array(456 * 312);
+    ctx.ioData.videoOut.priority = new Uint16Array(456 * 312);
+    ctx.sram[0xd00d] = 0x80; // P0, one color clock
+    ctx.sram[0xd000] = hpos;
+    ctx.ioData.videoOut.priority.fill(0x01, lineBase + hpos * 2, lineBase + hpos * 2 + 2); // PF0
+    api.drawPlayerMissilesClock(ctx, hpos * 2);
+    return ctx.ram[0xd004] & 0x0f; // P0PF
+  }
+  assert.equal(collide(0x21, 8), 0, "left of $22");
+  assert.equal(collide(0x22, 8), 1, "at $22");
+  assert.equal(collide(0xdd, 8), 1, "at $DD");
+  assert.equal(collide(0xde, 8), 0, "right of $DD");
+  assert.equal(collide(0x80, 7), 0, "line 7");
 }
 
 function testPlayerDmaKeepsMissileSlotAlive() {
@@ -221,7 +278,8 @@ function testHpos30MapsToNormalPlayfieldLeftEdge() {
   ctx.sram[0xd008] = 0x00;
   ctx.sram[0xd012] = 0x77;
 
-  api.drawPlayerMissiles(ctx);
+  api.drawPlayerMissilesClock(ctx, 92);
+  api.drawPlayerMissilesClock(ctx, 96);
 
   assert.equal(ctx.ioData.videoOut.pixels[95], 0x00);
   assert.equal(ctx.ioData.videoOut.pixels[96], 0x77);
@@ -283,6 +341,11 @@ function testGtiaPriorityEquations() {
     // a code-1 pixel unless multicolor players are on.
     ["PRIOR=$80 P0 over a mode 10 P1 pixel", { pixel: 0x42, priority: 0x200 }, { prior: 0x80, grafP0: 0xff, mode: 0x0f }, 0x21],
     ["PRIOR=$A0 P0 blends with a mode 10 P1 pixel", { pixel: 0x42, priority: 0x200 }, { prior: 0xa0, grafP0: 0xff, mode: 0x0f }, 0x63],
+    // AHRM 6.9: in GTIA modes 9/11 the fifth player mixes with the pixel as
+    // if PF3 replaced COLBK. The renderers keep the pixel in bits 12-15.
+    ["PRIOR=$50 fifth player ORs the mode 9 luminance", { pixel: 0x05, priority: 0x5000 }, { prior: 0x50, grafM: 0x03, mode: 0x0f }, 0x45],
+    ["PRIOR=$D0 fifth player ORs the mode 11 hue", { pixel: 0x30, priority: 0x3000 }, { prior: 0xd0, grafM: 0x03, mode: 0x0f }, 0x74],
+    ["PRIOR=$D0 mode 11 pixel 0 forces luminance 0", { pixel: 0x00, priority: 0x0000 }, { prior: 0xd0, grafM: 0x03, mode: 0x0f }, 0x40],
   ];
   for (const [name, playfield, objects, expected] of cases) {
     const color = drawPriorityCase(Object.assign({}, playfield, objects));
@@ -313,6 +376,9 @@ function testHiresPriorityUsesPf2AndPf1Luminance() {
 }
 
 testVdelayMasksFetchesOnEvenScanlines();
+testVdelayMasksEachMissileField();
+testNoPmgDmaInVerticalBlank();
+testCollisionsOnlyInsideVisibleWindow();
 testGtiaPriorityEquations();
 testHiresPriorityUsesPf2AndPf1Luminance();
 testPlayerDmaKeepsMissileSlotAlive();

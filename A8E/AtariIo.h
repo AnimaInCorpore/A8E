@@ -56,7 +56,6 @@
 #define CONSOL_HACK
 
 #define SERIAL_OUTPUT_DATA_NEEDED_CYCLES 900
-#define SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES 1500
 #define SERIAL_INPUT_FIRST_DATA_READY_CYCLES 3000
 #define SERIAL_INPUT_DATA_READY_CYCLES 900
 
@@ -97,6 +96,8 @@ typedef struct
 	u8 aMissilePmgState[4];
 	u8 aPlayfieldLineBuffer[48];
 	u8 aScheduledPlayfieldDma[CYCLES_PER_LINE];
+	/* GTIA modes 9/11: raw 4-bit pixel per color clock of this line */
+	u8 aGtiaPixels[PIXELS_PER_LINE / 2 + 1];
 } DrawLineData_t;
 
 typedef struct
@@ -123,6 +124,9 @@ typedef struct
 	u8 cChbasePendingValue;
 	u64 llChbasePendingCycle;
 
+	/* CPU cycle + 1 of the last WSYNC read; marks RMW writes (AHRM 4.9) */
+	u64 llWsyncReadMark;
+
 	void *pPokey;
 
 	u8 cCurrentDisplayListCommand;
@@ -143,6 +147,9 @@ typedef struct
 	u8 bModeLineScrollExit;
 	u8 bModeLineExitDli;
 	u8 bModeLineEndsThisLine;
+	/* Trigger inputs (1 = released) and the GRACTL bit 2 latch (AHRM 6.11). */
+	u8 aTrigPhysical[4];
+	u8 aTrigLatched[4];
 	u8 cValuePortA;
 	u8 cValuePortB;
 	u8 cReadValuePortA; /* PORTA input register as last read (AHRM 2.5) */
@@ -196,5 +203,7 @@ void AtariIoDrawScreen(
 	u32 lScreenHeight);
 
 void AtariIoKeyboardEvent(_6502_Context_t *pContext, SDL_KeyboardEvent *pKeyboardEvent);
+void AtariIoSetTrigger(_6502_Context_t *pContext, u8 cIndex, u8 bPressed);
+void AtariIoSyncTriggers(_6502_Context_t *pContext, u8 bInitializeLatch);
 
 #endif

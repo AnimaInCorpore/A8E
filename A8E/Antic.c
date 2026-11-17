@@ -215,23 +215,58 @@ u8 *Antic_WSYNC(_6502_Context_t *pContext, u8 *pValue)
 	{
 		u64 llLineStartCycle = pIoData->llDisplayListFetchCycle;
 		u64 llTargetCycle;
+		u64 llWriteCycle;
+		u32 lWriteCycleInLine;
+		/* A read of WSYNC in the same instruction means a read-modify-write
+		 * instruction; its first (dummy) write is the one that counts. */
+		u8 bReadModifyWrite = pIoData->llWsyncReadMark == pContext->llCycleCounter + 1;
+		u32 lInstructionCycles =
+			pContext->cCurrentInstructionCycles > 0 ? pContext->cCurrentInstructionCycles : 1;
 
-		/* AHRM 4.9:
-		 * - writes through cycle 103 wait for cycle 105 on current line
-		 * - writes on cycle 104+ wait for cycle 105 on next line
-		 * Keep a robust fallback when line state is temporarily out-of-sync.
-		 */
-		if(llLineStartCycle > pContext->llCycleCounter ||
-		   pContext->llCycleCounter >= llLineStartCycle + CYCLES_PER_LINE)
+		/* The CPU runs instructions atomically from their first cycle; the
+		 * write happens on the last cycle (RMW: the dummy write one cycle
+		 * earlier), like the CHBASE latch. */
+		llWriteCycle = pContext->llCycleCounter + lInstructionCycles - 1;
+		if(bReadModifyWrite && lInstructionCycles > 1)
 		{
-			llLineStartCycle =
-				(pContext->llCycleCounter / CYCLES_PER_LINE) * CYCLES_PER_LINE;
+			llWriteCycle--;
 		}
 
-		llTargetCycle = llLineStartCycle + 105u;
-		if(pContext->llCycleCounter >= llLineStartCycle + 104u)
+		/* Keep a robust fallback when line state is temporarily out-of-sync. */
+		if(llLineStartCycle > llWriteCycle)
 		{
-			llTargetCycle += CYCLES_PER_LINE;
+			llLineStartCycle = (llWriteCycle / CYCLES_PER_LINE) * CYCLES_PER_LINE;
+		}
+		llLineStartCycle +=
+			((llWriteCycle - llLineStartCycle) / CYCLES_PER_LINE) * CYCLES_PER_LINE;
+		lWriteCycleInLine = (u32)(llWriteCycle - llLineStartCycle);
+
+		/* AHRM 4.9: a write up to cycle 103 halts the CPU until cycle 105 of
+		 * this line, a later write until cycle 105 of the next line. The
+		 * opcode fetch of the next instruction still happens right after
+		 * the write, so it appears to start on cycle 104. An RMW write is
+		 * followed by its second write instead, so the next instruction
+		 * starts on cycle 105; if the two writes land on cycles 103 and 104,
+		 * it starts on 105 but continues on cycle 105 of the next line. */
+		if(!bReadModifyWrite)
+		{
+			llTargetCycle = llLineStartCycle + 104u;
+			if(lWriteCycleInLine >= 104u)
+			{
+				llTargetCycle += CYCLES_PER_LINE;
+			}
+		}
+		else if(lWriteCycleInLine <= 102u)
+		{
+			llTargetCycle = llLineStartCycle + 105u;
+		}
+		else if(lWriteCycleInLine == 103u)
+		{
+			llTargetCycle = llLineStartCycle + CYCLES_PER_LINE + 104u;
+		}
+		else
+		{
+			llTargetCycle = llLineStartCycle + CYCLES_PER_LINE + 105u;
 		}
 
 		pContext->llStallCycleCounter =
@@ -240,6 +275,11 @@ u8 *Antic_WSYNC(_6502_Context_t *pContext, u8 *pValue)
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" WSYNC: %02X\n", *pValue);
 #endif
+	}
+
+	else
+	{
+		pIoData->llWsyncReadMark = pContext->llCycleCounter + 1;
 	}
 
 	return &RAM[IO_WSYNC];

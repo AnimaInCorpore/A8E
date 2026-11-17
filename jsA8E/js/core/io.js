@@ -80,6 +80,8 @@
     const pokeySyncLfsr17 = cfg.pokeySyncLfsr17;
     const pokeySeroutWrite = cfg.pokeySeroutWrite;
     const pokeySerinRead = cfg.pokeySerinRead;
+    const pokeySerialInputSync = cfg.pokeySerialInputSync;
+    const pokeySerialReset = cfg.pokeySerialReset;
     const pokeyPotUpdate = cfg.pokeyPotUpdate;
     const ioRegisterAddress = cfg.ioRegisterAddress;
     const IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE =
@@ -362,6 +364,9 @@
           case IO_SKREST_RANDOM:
             pokeySyncLfsr17(ctx);
             sram[addr] = v;
+            // SKRES resets the frame error and overrun bits of SKSTAT
+            // (AHRM 14.4).
+            ram[IO_SKCTL_SKSTAT] |= 0xe0;
             break;
 
           case IO_SEROUT_SERIN:
@@ -373,6 +378,8 @@
             break;
 
           case IO_IRQEN_IRQST:
+            // Bytes that arrived before the write see the old IRQEN.
+            pokeySerialInputSync(ctx);
             // Disabling a source resets its latched status bit; bit 3 is not
             // latched and ignores IRQEN (AHRM 14.4).
             sram[addr] = v;
@@ -386,15 +393,11 @@
             sram[addr] = v;
             if (io.pokeyAudio)
               {pokeyAudioOnRegisterWrite(io.pokeyAudio, addr, v);}
-            // Writing SKCTL with serial mode off (bits 0-1 = 0) resets the
-            // serial port.  Clear the high-level SIO state machine so a
-            // subsequent command frame starts cleanly.
+            // Initialization mode (bits 0-1 = 0) resets the serial port; the
+            // output shift register goes idle.
             if ((v & 0x03) === 0) {
-              io.sioOutIndex = 0;
-              io.sioOutPhase = 0;
-              io.sioDataIndex = 0;
-              io.sioInSize = 0;
-              io.sioInIndex = 0;
+              pokeySerialReset(ctx);
+              setSerialOutputIdle(ctx, true);
             }
             break;
 
@@ -466,29 +469,45 @@
             break;
 
           case IO_WSYNC: {
-            // Stall until cycle 105 of the current scanline (0-indexed: cycle 104).
-            // AHRM 4.9: A write to WSYNC halts CPU execution until cycle 105 on the current line.
-            const WSYNC_CYCLE = 105;
-            const WSYNC_BOUNDARY = WSYNC_CYCLE - 1; // 104: if past this, wait for next line
-            let lineStart = io.displayListFetchCycle;
-            if (
-              lineStart > ctx.cycleCounter ||
-              ctx.cycleCounter >= lineStart + CYCLES_PER_LINE
-            ) {
-              lineStart =
-                ((ctx.cycleCounter / CYCLES_PER_LINE) | 0) * CYCLES_PER_LINE;
-            }
-            const target = lineStart + WSYNC_CYCLE;
+            // A read of WSYNC in the same instruction means a read-modify-
+            // write instruction; its first (dummy) write is the one that
+            // counts.
+            const readModifyWrite = io.wsyncReadMark === ctx.cycleCounter + 1;
+            const instructionCycles = Math.max(ctx.currentInstructionCycles | 0, 1);
+            // The CPU runs instructions atomically from their first cycle;
+            // the write happens on the last cycle (RMW: the dummy write one
+            // cycle earlier), like the CHBASE latch.
+            let writeCycle = ctx.cycleCounter + instructionCycles - 1;
+            if (readModifyWrite && instructionCycles > 1) writeCycle--;
 
-            // If we are already at or past cycle 104, wait for the next line's cycle 105.
-            if (ctx.cycleCounter >= lineStart + WSYNC_BOUNDARY) {
-              ctx.stallCycleCounter = Math.max(
-                ctx.stallCycleCounter,
-                target + CYCLES_PER_LINE,
-              );
-            } else {
-              ctx.stallCycleCounter = Math.max(ctx.stallCycleCounter, target);
+            let lineStart = io.displayListFetchCycle;
+            if (lineStart > writeCycle) {
+              lineStart = Math.floor(writeCycle / CYCLES_PER_LINE) * CYCLES_PER_LINE;
             }
+            lineStart +=
+              Math.floor((writeCycle - lineStart) / CYCLES_PER_LINE) * CYCLES_PER_LINE;
+            const writeCycleInLine = writeCycle - lineStart;
+
+            // AHRM 4.9: a write up to cycle 103 halts the CPU until cycle
+            // 105 of this line, a later write until cycle 105 of the next
+            // line. The opcode fetch of the next instruction still happens
+            // right after the write, so it appears to start on cycle 104.
+            // An RMW write is followed by its second write instead, so the
+            // next instruction starts on cycle 105; if the two writes land
+            // on cycles 103 and 104, it starts on 105 but continues on
+            // cycle 105 of the next line.
+            let target;
+            if (!readModifyWrite) {
+              target = lineStart + 104;
+              if (writeCycleInLine >= 104) target += CYCLES_PER_LINE;
+            } else if (writeCycleInLine <= 102) {
+              target = lineStart + 105;
+            } else if (writeCycleInLine === 103) {
+              target = lineStart + CYCLES_PER_LINE + 104;
+            } else {
+              target = lineStart + CYCLES_PER_LINE + 105;
+            }
+            ctx.stallCycleCounter = Math.max(ctx.stallCycleCounter, target);
             break;
           }
 
@@ -558,12 +577,17 @@
           return ram[addr] & 0xff;
 
         case IO_SKREST_RANDOM:
+          // RANDOM shows eight bits of the 17-bit polynomial counter, or of
+          // the 9-bit one while AUDCTL bit 7 is set (AHRM 14.4).
           pokeySyncLfsr17(ctx);
-          ram[addr] = io.pokeyLfsr17 & 0xff;
+          ram[addr] =
+            sram[IO_AUDCTL_ALLPOT] & 0x80
+              ? (io.pokeyLfsr9 >> 1) & 0xff
+              : io.pokeyLfsr17 & 0xff;
           return ram[addr] & 0xff;
 
         case IO_SEROUT_SERIN:
-          // Reading SERIN has no IRQ side effect; software acknowledges the
+          // Reading SERIN has no side effects; software acknowledges the
           // data-ready IRQ through IRQEN (AHRM 5.6, 5.7).
           return pokeySerinRead(ctx);
 
@@ -581,6 +605,11 @@
 
         case IO_SKCTL_SKSTAT:
           pokeySyncLfsr17(ctx);
+          pokeySerialInputSync(ctx);
+          return ram[addr] & 0xff;
+
+        case IO_WSYNC:
+          io.wsyncReadMark = ctx.cycleCounter + 1;
           return ram[addr] & 0xff;
 
         default:

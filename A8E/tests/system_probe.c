@@ -403,6 +403,34 @@ static int TestTrig3ReportsNoCartridge(void)
 	return 1;
 }
 
+static int TestTriggerLatchFollowsGractlBit2(void)
+{
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+
+	REQUIRE(pContext != NULL, "machine open failed");
+
+	/* AHRM 6.11: without the latch TRIG0 follows the button. */
+	SendKey(pContext, SDL_KEYDOWN, SDLK_LALT, KMOD_NONE, 0);
+	REQUIRE(CpuRead(pContext, 0xd010) == 0x00, "pressed TRIG0 read $%02X", pContext->tCpu.a);
+	SendKey(pContext, SDL_KEYUP, SDLK_LALT, KMOD_NONE, 0);
+	REQUIRE(CpuRead(pContext, 0xd010) == 0x01, "released TRIG0 read $%02X", pContext->tCpu.a);
+
+	/* GRACTL bit 2 latches a press until the bit is cleared again. */
+	CpuWrite(pContext, 0xd01d, 0x04);
+	SendKey(pContext, SDL_KEYDOWN, SDLK_LALT, KMOD_NONE, 0);
+	SendKey(pContext, SDL_KEYUP, SDLK_LALT, KMOD_NONE, 0);
+	REQUIRE(CpuRead(pContext, 0xd010) == 0x00, "latched TRIG0 read $%02X after release", pContext->tCpu.a);
+	REQUIRE(CpuRead(pContext, 0xd011) == 0x01, "TRIG1 read $%02X without a press", pContext->tCpu.a);
+	REQUIRE(CpuRead(pContext, 0xd013) == 0x00, "TRIG3 read $%02X with the latch on", pContext->tCpu.a);
+
+	CpuWrite(pContext, 0xd01d, 0x00);
+	REQUIRE(CpuRead(pContext, 0xd010) == 0x01, "TRIG0 read $%02X after releasing the latch", pContext->tCpu.a);
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
 static int TestPokeyIrqLatchesOnlyEnabledSources(void)
 {
 	ProbeMachine_t tMachine = ProbeMachine_Open();
@@ -505,6 +533,391 @@ static int TestSerialOutputCompleteIsUnlatched(void)
 	return 1;
 }
 
+static int TestVbiNmiIsTakenInsideAnUnfinishedNmiHandler(void)
+{
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+	u8 *pMemory;
+	int lFrame;
+
+	REQUIRE(pContext != NULL, "machine open failed");
+	pMemory = pContext->pMemory;
+
+	/* OS out so the NMI vector lives in RAM; VBI only, no display DMA. */
+	CpuWrite(pContext, IO_PBCTL, 0x3c);
+	CpuWrite(pContext, IO_PORTB, 0xfe);
+	CpuWrite(pContext, 0xfffa, 0x00);
+	CpuWrite(pContext, 0xfffb, 0x30);
+	CpuWrite(pContext, IO_DMACTL, 0x00);
+	CpuWrite(pContext, IO_NMIEN, 0x40);
+
+	/* The NMI handler counts its entries and never returns (no RTI). */
+	pMemory[0x80] = 0;
+	pMemory[0x3000] = 0xe6; /* INC $80 */
+	pMemory[0x3001] = 0x80;
+	pMemory[0x3002] = 0x4c; /* JMP $3002 */
+	pMemory[0x3003] = 0x02;
+	pMemory[0x3004] = 0x30;
+	pMemory[0x2100] = 0x4c; /* JMP $2100 */
+	pMemory[0x2101] = 0x00;
+	pMemory[0x2102] = 0x21;
+	pContext->tCpu.pc = 0x2100;
+
+	for(lFrame = 0; lFrame < 5; lFrame++)
+	{
+		_6502_Run(pContext, pContext->llCycleCounter + 114 * 312);
+	}
+
+	/* AHRM 3.4: the NMI is an edge-triggered one-time event independent of I,
+	   so every VBI enters the handler again, even though the previous one
+	   never executed RTI; one VBI is exactly one NMI. */
+	REQUIRE(pMemory[0x80] >= 4 && pMemory[0x80] <= 5,
+			"VBI NMI entered the handler %u times in 5 frames", pMemory[0x80]);
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
+#define IDLE_ADDRESS 0x2100
+
+/* Let the machine run on an idle loop with IRQs masked, so timed POKEY
+   events fire. */
+static void RunCycles(_6502_Context_t *pContext, u32 lCycles)
+{
+	pContext->pMemory[IDLE_ADDRESS] = 0x4c; /* JMP IDLE_ADDRESS */
+	pContext->pMemory[IDLE_ADDRESS + 1] = (u8)(IDLE_ADDRESS & 0xff);
+	pContext->pMemory[IDLE_ADDRESS + 2] = (u8)(IDLE_ADDRESS >> 8);
+	pContext->tCpu.pc = IDLE_ADDRESS;
+	pContext->tCpu.ps.i = 1;
+	pContext->llStallCycleCounter = 0;
+	_6502_Run(pContext, pContext->llCycleCounter + lCycles);
+}
+
+/* Is there a cycle count after init mode at which the 17-bit counter reads
+   c17 and the 9-bit counter reads c9? Steps as in Pokey.c. */
+static int RandomMatchesCounters(u8 c17, u8 c9)
+{
+	u32 l17 = 0x1ffff;
+	u32 l9 = 0x1ff;
+	int k;
+
+	for(k = 0; k < 2000; k++)
+	{
+		u32 in8 = ((l17 >> 8) ^ (l17 >> 13)) & 1u;
+
+		if((u8)l17 == c17 && (u8)(l9 >> 1) == c9)
+		{
+			return 1;
+		}
+		l17 = ((((l17 >> 1) & 0xff7fu) | (in8 << 7)) & 0xffffu) | ((l17 & 1u) << 16);
+		l9 = (l9 >> 1) | (((l9 ^ (l9 >> 5)) & 1u) << 8);
+	}
+
+	return 0;
+}
+
+static u8 RandomAfterInit(_6502_Context_t *pContext, u8 cAudctl)
+{
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x00);
+	CpuWrite(pContext, IO_AUDCTL_ALLPOT, cAudctl);
+	RunCycles(pContext, 40);
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x03);
+	RunCycles(pContext, 1000);
+	return CpuRead(pContext, IO_SKREST_RANDOM);
+}
+
+/* RANDOM shifts right one bit per machine cycle (AHRM 5.5, 14.4), so two
+   reads four cycles apart (back-to-back LDA abs) share four bits. */
+static int CheckRandom(const char *pAudioDriver)
+{
+	ProbeMachine_t tMachine;
+	_6502_Context_t *pContext;
+	u8 cFirst;
+	u8 cSecond;
+	int i;
+
+	SDL_setenv("SDL_AUDIODRIVER", pAudioDriver, 1);
+	tMachine = ProbeMachine_Open();
+	pContext = tMachine.pContext;
+	REQUIRE(pContext != NULL, "machine open failed");
+
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x00);
+	RunCycles(pContext, 40);
+	REQUIRE(CpuRead(pContext, IO_SKREST_RANDOM) == 0xff, "%s: RANDOM read $%02X in init mode", pAudioDriver, pContext->tCpu.a);
+
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x03);
+	for(i = 0; i < 2; i++)
+	{
+		/* 17-bit, then 9-bit counter (AUDCTL bit 7). */
+		CpuWrite(pContext, IO_AUDCTL_ALLPOT, i ? 0x80 : 0x00);
+		RunCycles(pContext, 1000);
+		cFirst = CpuRead(pContext, IO_SKREST_RANDOM);
+		cSecond = CpuRead(pContext, IO_SKREST_RANDOM);
+		REQUIRE(cFirst != cSecond || cFirst != 0xff, "%s: RANDOM stuck at $FF (AUDCTL $%02X)", pAudioDriver, i ? 0x80 : 0x00);
+		REQUIRE((cSecond & 0x0f) == (cFirst >> 4), "%s: RANDOM $%02X then $%02X four cycles later did not shift right (AUDCTL $%02X)",
+				pAudioDriver, cFirst, cSecond, i ? 0x80 : 0x00);
+	}
+
+	/* Leaving init mode, the counter shifts zeros in from the reset state
+	   at once: STA SKCTL + LDA RANDOM reads $FF shifted right a few times
+	   (AHRM 5.5 gives $1F in 9-bit mode). */
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x00);
+	RunCycles(pContext, 40);
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x03);
+	cFirst = CpuRead(pContext, IO_SKREST_RANDOM);
+	REQUIRE(cFirst == 0x7f || cFirst == 0x3f || cFirst == 0x1f || cFirst == 0x0f,
+			"%s: 9-bit RANDOM right after init mode read $%02X", pAudioDriver, cFirst);
+
+	/* The same delay after init mode reads the 17-bit counter, or the 9-bit
+	   one with AUDCTL bit 7 set (AHRM 14.4). */
+	cFirst = RandomAfterInit(pContext, 0x00);
+	cSecond = RandomAfterInit(pContext, 0x80);
+	REQUIRE(cFirst != cSecond, "%s: 9-bit mode read the 17-bit counter ($%02X)", pAudioDriver, cFirst);
+	REQUIRE(RandomMatchesCounters(cFirst, cSecond), "%s: RANDOM read $%02X (17-bit) and $%02X (9-bit)", pAudioDriver, cFirst, cSecond);
+
+	ProbeMachine_Close(&tMachine);
+	SDL_setenv("SDL_AUDIODRIVER", "dummy", 1);
+	return 1;
+}
+
+static int TestRandomRunsWithAndWithoutAudio(void)
+{
+	return CheckRandom("dummy") && CheckRandom("a8e-no-audio");
+}
+
+static int TestTimerPeriodsUseAudfZeroAsDivisorOne(void)
+{
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+
+	REQUIRE(pContext != NULL, "machine open failed");
+
+	/* AHRM 5.3: AUDF = $00 is a divisor of 1. */
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x03);
+	CpuWrite(pContext, IO_AUDF1_POT0, 0x00);
+	CpuWrite(pContext, IO_AUDF2_POT2, 0x00);
+	CpuWrite(pContext, IO_AUDF3_POT4, 0x28);
+	CpuWrite(pContext, IO_AUDF4_POT6, 0x00);
+	CpuWrite(pContext, IO_AUDCTL_ALLPOT, 0x00);
+	REQUIRE(Pokey_TimerPeriodCpuCycles(pContext, 1) == 28, "64 kHz AUDF1=0 period %llu", (unsigned long long)Pokey_TimerPeriodCpuCycles(pContext, 1));
+	REQUIRE(Pokey_TimerPeriodCpuCycles(pContext, 4) == 28, "64 kHz AUDF4=0 period %llu", (unsigned long long)Pokey_TimerPeriodCpuCycles(pContext, 4));
+	CpuWrite(pContext, IO_AUDCTL_ALLPOT, 0x01);
+	REQUIRE(Pokey_TimerPeriodCpuCycles(pContext, 2) == 114, "15 kHz AUDF2=0 period %llu", (unsigned long long)Pokey_TimerPeriodCpuCycles(pContext, 2));
+	CpuWrite(pContext, IO_AUDCTL_ALLPOT, 0x40);
+	REQUIRE(Pokey_TimerPeriodCpuCycles(pContext, 1) == 4, "1.79 MHz AUDF1=0 period %llu", (unsigned long long)Pokey_TimerPeriodCpuCycles(pContext, 1));
+	/* Linked 3+4 at 1.79 MHz, the SIO 19200 baud setting: N + 7. */
+	CpuWrite(pContext, IO_AUDCTL_ALLPOT, 0x28);
+	REQUIRE(Pokey_TimerPeriodCpuCycles(pContext, 4) == 0x28 + 7, "linked $0028 period %llu", (unsigned long long)Pokey_TimerPeriodCpuCycles(pContext, 4));
+
+	CpuWrite(pContext, IO_AUDCTL_ALLPOT, 0x00);
+	CpuWrite(pContext, IO_STIMER_KBCODE, 0x00);
+	REQUIRE(tMachine.pIoData->llTimer1Cycle != CYCLE_NEVER, "STIMER with AUDF1=0 did not start timer 1");
+
+	/* AHRM 5.2: init mode stops only the 15/64 kHz clocks. */
+	CpuWrite(pContext, IO_AUDCTL_ALLPOT, 0x40);
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x00);
+	REQUIRE(Pokey_TimerPeriodCpuCycles(pContext, 1) == 4, "init mode stopped the 1.79 MHz timer 1");
+	REQUIRE(Pokey_TimerPeriodCpuCycles(pContext, 2) == 0, "init mode left the 64 kHz timer 2 running");
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
+static u8 SioChecksum(const u8 *pData, u32 lSize)
+{
+	u32 lSum = 0;
+
+	while(lSize--)
+	{
+		lSum += *pData++;
+		lSum = (lSum & 0xff) + (lSum >> 8);
+	}
+
+	return (u8)lSum;
+}
+
+/* Mount a blank single density image (720 sectors of 128 bytes) as D1:. */
+static void MountBlankDisk(IoData_t *pIoData)
+{
+	memset(pIoData->pDisk1, 0, 16 + 720 * 128);
+	pIoData->pDisk1[0] = 0x96;
+	pIoData->pDisk1[1] = 0x02;
+	pIoData->pDisk1[2] = (u8)((720 * 128 / 16) & 0xff);
+	pIoData->pDisk1[3] = (u8)((720 * 128 / 16) >> 8);
+	pIoData->pDisk1[4] = 128;
+	pIoData->lDiskSize = 16 + 720 * 128;
+}
+
+/* Wait for the serial input IRQ; returns 0 on timeout. */
+static int WaitSerialInput(_6502_Context_t *pContext)
+{
+	int i;
+
+	for(i = 0; i < 100; i++)
+	{
+		if(!(CpuRead(pContext, IO_IRQEN_IRQST) & IRQ_SERIAL_INPUT_DATA_READY))
+		{
+			return 1;
+		}
+		RunCycles(pContext, 100);
+	}
+
+	return 0;
+}
+
+/* Send a command frame at 19200 baud the way the OS does, then collect up to
+   lMax response bytes, acknowledging each serial input IRQ. */
+static u32 SioCommand(_6502_Context_t *pContext, u8 cDevice, u8 cCommand, u8 cChecksumError,
+					  u8 *pResponse, u32 lMax)
+{
+	u8 aFrame[5];
+	u32 lCount;
+	int i;
+
+	aFrame[0] = cDevice;
+	aFrame[1] = cCommand;
+	aFrame[2] = 0x01;
+	aFrame[3] = 0x00;
+	aFrame[4] = (u8)(SioChecksum(aFrame, 4) ^ cChecksumError);
+
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x00); /* reset the serial port */
+	CpuWrite(pContext, IO_AUDF3_POT4, 0x28);
+	CpuWrite(pContext, IO_AUDF4_POT6, 0x00);
+	CpuWrite(pContext, IO_AUDCTL_ALLPOT, 0x28);
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x23);
+	CpuWrite(pContext, IO_IRQEN_IRQST, 0x00);
+	for(i = 0; i < 5; i++)
+	{
+		CpuWrite(pContext, IO_SEROUT_SERIN, aFrame[i]);
+		RunCycles(pContext, 1000);
+	}
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x13);
+	CpuWrite(pContext, IO_IRQEN_IRQST, IRQ_SERIAL_INPUT_DATA_READY);
+
+	for(lCount = 0; lCount < lMax && WaitSerialInput(pContext); lCount++)
+	{
+		pResponse[lCount] = CpuRead(pContext, IO_SEROUT_SERIN);
+		CpuWrite(pContext, IO_IRQEN_IRQST, 0x00);
+		CpuWrite(pContext, IO_IRQEN_IRQST, IRQ_SERIAL_INPUT_DATA_READY);
+	}
+
+	return lCount;
+}
+
+static int TestSioDriveAnswersOnlyValidD1Frames(void)
+{
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+	u8 aResponse[140];
+	u32 lCount;
+	u32 i;
+
+	REQUIRE(pContext != NULL, "machine open failed");
+	MountBlankDisk(tMachine.pIoData);
+
+	/* AHRM 10.2, Table 44: ACK, Complete, drive status, inverted FDC status
+	   ($FF), format timeout, unused byte, checksum. */
+	lCount = SioCommand(pContext, 0x31, 0x53, 0, aResponse, sizeof(aResponse));
+	REQUIRE(lCount == 7, "status returned %lu bytes instead of 7", (unsigned long)lCount);
+	REQUIRE(aResponse[0] == 'A' && aResponse[1] == 'C', "status answered $%02X $%02X", aResponse[0], aResponse[1]);
+	REQUIRE(aResponse[2] == 0x10 && aResponse[3] == 0xff && aResponse[4] == 0xe0 && aResponse[5] == 0x00,
+			"status frame $%02X $%02X $%02X $%02X instead of $10 $FF $E0 $00", aResponse[2], aResponse[3], aResponse[4], aResponse[5]);
+	REQUIRE(aResponse[6] == SioChecksum(&aResponse[2], 4), "status checksum $%02X", aResponse[6]);
+
+	/* AHRM 9.1: no NAK for other device IDs or a bad checksum; the OS times out. */
+	REQUIRE(SioCommand(pContext, 0x32, 0x53, 0, aResponse, sizeof(aResponse)) == 0, "D2: answered without a drive");
+	REQUIRE(SioCommand(pContext, 0x40, 0x53, 0, aResponse, sizeof(aResponse)) == 0, "the printer ID was answered by the disk drive");
+	REQUIRE(SioCommand(pContext, 0x31, 0x53, 0x01, aResponse, sizeof(aResponse)) == 0, "a bad command frame checksum was answered");
+
+	/* An unsupported command to the drive is NAKed. */
+	lCount = SioCommand(pContext, 0x31, 0x58, 0, aResponse, sizeof(aResponse));
+	REQUIRE(lCount == 1 && aResponse[0] == 'N', "unsupported command returned %lu bytes ($%02X)", (unsigned long)lCount, aResponse[0]);
+
+	/* AHRM 10.2: format returns a sector-sized bad sector list ended by $FFFF. */
+	lCount = SioCommand(pContext, 0x31, 0x21, 0, aResponse, sizeof(aResponse));
+	REQUIRE(lCount == 131, "format returned %lu bytes instead of 131", (unsigned long)lCount);
+	REQUIRE(aResponse[0] == 'A' && aResponse[1] == 'C', "format answered $%02X $%02X", aResponse[0], aResponse[1]);
+	for(i = 2; i < 130; i++)
+	{
+		REQUIRE(aResponse[i] == 0xff, "format list byte %lu is $%02X", (unsigned long)(i - 2), aResponse[i]);
+	}
+	REQUIRE(aResponse[130] == SioChecksum(&aResponse[2], 128), "format list checksum $%02X", aResponse[130]);
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
+static int TestSerinReadsHaveNoSideEffects(void)
+{
+	static const u8 aStatus[4] = {0x10, 0xff, 0xe0, 0x00};
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+	IoData_t *pIoData = tMachine.pIoData;
+	u8 aResponse[8];
+
+	REQUIRE(pContext != NULL, "machine open failed");
+	MountBlankDisk(pIoData);
+
+	/* AHRM 5.6: SERIN keeps the last byte; reading it changes nothing. */
+	REQUIRE(SioCommand(pContext, 0x31, 0x53, 0, aResponse, 1) == 1 && aResponse[0] == 'A', "no ACK for status");
+	REQUIRE(CpuRead(pContext, IO_SEROUT_SERIN) == 'A' && CpuRead(pContext, IO_SEROUT_SERIN) == 'A',
+			"a second SERIN read returned $%02X instead of the ACK again", pContext->tCpu.a);
+
+	/* The drive keeps sending at its own pace. Bytes that arrive while the
+	   serial input IRQ is still pending overrun SERIN: SKSTAT bit 5 drops. */
+	REQUIRE(CpuRead(pContext, IO_SKCTL_SKSTAT) & 0x20, "SKSTAT reported an overrun too early");
+	RunCycles(pContext, 20000);
+	REQUIRE(CpuRead(pContext, IO_SEROUT_SERIN) == SioChecksum(aStatus, 4),
+			"SERIN read $%02X instead of the last status byte", pContext->tCpu.a);
+	REQUIRE(!(CpuRead(pContext, IO_SKCTL_SKSTAT) & 0x20), "unacknowledged bytes did not set the overrun bit");
+
+	/* SKRES resets SKSTAT bits 5-7 (AHRM 14.4). */
+	CpuWrite(pContext, IO_SKREST_RANDOM, 0x00);
+	REQUIRE((CpuRead(pContext, IO_SKCTL_SKSTAT) & 0xe0) == 0xe0, "SKRES left SKSTAT at $%02X", pContext->tCpu.a);
+
+	/* Reading SERIN with nothing to receive schedules no phantom bytes. */
+	CpuRead(pContext, IO_SEROUT_SERIN);
+	REQUIRE(pIoData->llSerialInputDataReadyCycle == CYCLE_NEVER, "an idle SERIN read scheduled a serial input event");
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
+static int TestSerialOutputCompletesForAnyByte(void)
+{
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+
+	REQUIRE(pContext != NULL, "machine open failed");
+
+	/* 19200 baud: linked timers 3+4 at $0028 give 47-cycle half bits, so a
+	   10-bit byte takes 940 cycles (AHRM 5.6). */
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x00);
+	CpuWrite(pContext, IO_AUDF3_POT4, 0x28);
+	CpuWrite(pContext, IO_AUDF4_POT6, 0x00);
+	CpuWrite(pContext, IO_AUDCTL_ALLPOT, 0x28);
+	CpuWrite(pContext, IO_SKCTL_SKSTAT, 0x23);
+	CpuWrite(pContext, IO_IRQEN_IRQST, IRQ_SERIAL_OUTPUT_DATA_NEEDED);
+
+	/* A lone byte that is no SIO frame still completes. */
+	CpuWrite(pContext, IO_SEROUT_SERIN, 0x00);
+	REQUIRE(CpuRead(pContext, IO_IRQEN_IRQST) & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE, "SEROUT write left the output idle");
+	RunCycles(pContext, 200);
+	REQUIRE(!(CpuRead(pContext, IO_IRQEN_IRQST) & IRQ_SERIAL_OUTPUT_DATA_NEEDED), "the shift register load did not raise output needed");
+	REQUIRE(CpuRead(pContext, IO_IRQEN_IRQST) & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE, "output went idle before the byte was shifted out");
+
+	/* A second byte loads when the first ends, so the output stays busy. */
+	CpuWrite(pContext, IO_IRQEN_IRQST, 0x00);
+	CpuWrite(pContext, IO_SEROUT_SERIN, 0x55);
+	RunCycles(pContext, 1000);
+	REQUIRE(CpuRead(pContext, IO_IRQEN_IRQST) & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE, "output went idle between back-to-back bytes");
+	RunCycles(pContext, 1000);
+	REQUIRE(!(CpuRead(pContext, IO_IRQEN_IRQST) & IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE), "output still busy after two bytes");
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
 int main(int argc, char *argv[])
 {
 	int lPassed = 1;
@@ -525,9 +938,16 @@ int main(int argc, char *argv[])
 	lPassed &= TestSpecialKeysReachAtariKeyCodes();
 	lPassed &= TestResetKeyResetsAnticAndPia();
 	lPassed &= TestTrig3ReportsNoCartridge();
+	lPassed &= TestTriggerLatchFollowsGractlBit2();
 	lPassed &= TestPokeyIrqLatchesOnlyEnabledSources();
 	lPassed &= TestIrqLineIsALevelNotACount();
 	lPassed &= TestSerialOutputCompleteIsUnlatched();
+	lPassed &= TestVbiNmiIsTakenInsideAnUnfinishedNmiHandler();
+	lPassed &= TestRandomRunsWithAndWithoutAudio();
+	lPassed &= TestTimerPeriodsUseAudfZeroAsDivisorOne();
+	lPassed &= TestSioDriveAnswersOnlyValidD1Frames();
+	lPassed &= TestSerinReadsHaveNoSideEffects();
+	lPassed &= TestSerialOutputCompletesForAnyByte();
 
 	SDL_Quit();
 

@@ -42,7 +42,6 @@
     const ANTIC_MODE_INFO = cfg.ANTIC_MODE_INFO;
     const drawPlayerMissilesClock = cfg.drawPlayerMissilesClock;
     const fetchPmgDmaCycle = cfg.fetchPmgDmaCycle;
-    const drawPlayerMissiles = cfg.drawPlayerMissiles;
     const pokeyTimerPeriodCpuCycles = cfg.pokeyTimerPeriodCpuCycles;
     const cycleTimedEventUpdate = cfg.cycleTimedEventUpdate;
     const PRIO_BKG = cfg.PRIO_BKG;
@@ -192,12 +191,14 @@
 
           const cmd = io.currentDisplayListCommand;
 
-          // LMS (bit 6) or JUMP (instruction 01) schedule 2 more DMA steals
-          // for the address on cycles 6 and 7 (AHRM 4.14).
-          if ((cmd & ANTIC_LMS_BIT) || (cmd & ANTIC_MODE_BITS) === ANTIC_JUMP_INSTRUCTION) {
+          const mode = cmd & ANTIC_MODE_BITS;
+
+          // LMS (bit 6 on modes 2-F) or JUMP (instruction 01) schedule 2
+          // more DMA steals for the address on cycles 6 and 7 (AHRM 4.6,
+          // 4.14). On blank lines bit 6 is part of the line count.
+          if ((mode >= 2 && (cmd & ANTIC_LMS_BIT)) || mode === ANTIC_JUMP_INSTRUCTION) {
             io.drawLine.displayListAddressDmaRemaining = 2;
           }
-          const mode = cmd & ANTIC_MODE_BITS;
 
           // Mode-line row counter setup (AHRM 4.7).  The 4-bit delta
           // counter starts at 0, or at VSCROL when this mode line enters
@@ -208,8 +209,12 @@
           let endRow;
           let scrollExit = false;
 
-          if (mode <= 0x01) {
+          if (mode === 0x00) {
             endRow = (cmd & ANTIC_VSCROL_BITS) >> 4;
+          } else if (mode === ANTIC_JUMP_INSTRUCTION) {
+            // A jump is one blank line; bits 4-6 are not a count (AHRM
+            // 4.6). It only grows when it ends a scrolled region.
+            endRow = 0;
           } else {
             endRow = (ANTIC_MODE_INFO[mode].lines - 1) & 0x0f;
           }
@@ -258,10 +263,12 @@
           }
 
           // JMP
+          // The address bytes wrap within the 1K block (AHRM 4.6).
           if ((cmd & ANTIC_MODE_BITS) === ANTIC_JUMP_INSTRUCTION) {
+            const jumpLow = ram[io.displayListAddress & 0xffff] & 0xff;
+            const highAddress = Util.fixedAdd(io.displayListAddress, 0x03ff, 1);
             io.displayListAddress =
-              ram[io.displayListAddress & 0xffff] |
-              (ram[(io.displayListAddress + 1) & 0xffff] << 8);
+              jumpLow | ((ram[highAddress & 0xffff] & 0xff) << 8);
           }
 
           // Wait for VBL (JVB)
@@ -343,7 +350,9 @@
       if (io.video.currentDisplayLine >= LINES_PER_SCREEN_PAL) {
         io.video.currentDisplayLine = 0;
         io.nextDisplayListLine = 8;
-        io.currentDisplayListCommand = 0;
+        // Only IR bit 6 is cleared across vertical blank (AHRM 4.6), so
+        // the VS bit of the last mode line still counts for region entry.
+        io.currentDisplayListCommand &= ~ANTIC_LMS_BIT & 0xff;
         io.modeLineRowCounter = 0;
         io.modeLineEndRow = 0;
         io.modeLineScrollExit = false;
@@ -386,8 +395,9 @@
         cycleTimedEventUpdate(ctx);
 
         try {
+          // Lines 0-7 and 248+ are vertical blank: GTIA shows no players
+          // or missiles there and registers no collisions (AHRM 6.6).
           drawLine(ctx);
-          if (!io.drawLine.playerMissileInterleaved) drawPlayerMissiles(ctx);
           evaluateModeLineEnd(ctx);
           io.displayListFetchCycle += CYCLES_PER_LINE;
           advanceScanline(ctx);
@@ -443,19 +453,21 @@
         }
       }
 
+      // Clear each deadline before its handler runs, so a handler can
+      // schedule the next event (the next SIO byte, the next shift).
       if (masterEff >= io.serialOutputTransmissionDoneCycle) {
-        setSerialOutputIdle(ctx, true);
         io.serialOutputTransmissionDoneCycle = CYCLE_NEVER;
+        setSerialOutputIdle(ctx, true);
       }
 
       if (masterEff >= io.serialOutputNeedDataCycle) {
-        raisePokeyIrq(ctx, IRQ_SERIAL_OUTPUT_DATA_NEEDED);
         io.serialOutputNeedDataCycle = CYCLE_NEVER;
+        raisePokeyIrq(ctx, IRQ_SERIAL_OUTPUT_DATA_NEEDED);
       }
 
       if (masterEff >= io.serialInputDataReadyCycle) {
-        raisePokeyIrq(ctx, IRQ_SERIAL_INPUT_DATA_READY);
         io.serialInputDataReadyCycle = CYCLE_NEVER;
+        raisePokeyIrq(ctx, IRQ_SERIAL_INPUT_DATA_READY);
       }
 
       if (masterEff >= io.timer1Cycle) {

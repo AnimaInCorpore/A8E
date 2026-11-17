@@ -60,6 +60,8 @@ function loadSystem() {
       pokeySerinRead: function () {
         return 0;
       },
+      pokeySerialInputSync: noop,
+      pokeySerialReset: noop,
       pokeyPotUpdate: noop,
     }),
   );
@@ -352,7 +354,36 @@ function testSerialOutputCompleteIsUnlatched() {
   assert.equal(ctx.irqPending, 0, "IRQEN=0 should release the IRQ line");
 }
 
+function testWsyncUsesTheWriteCycle() {
+  const lineStart = 0x1000;
+  // Returns the cycle the next instruction starts on after the WSYNC write.
+  function resume(opcode, startCycle) {
+    const system = loadSystem();
+    const ctx = system.ctx;
+    ctx.ioData.displayListFetchCycle = lineStart;
+    ctx.cycleCounter = lineStart + startCycle;
+    ctx.ram[PROGRAM_ADDRESS] = opcode;
+    ctx.ram[PROGRAM_ADDRESS + 1] = 0x0a;
+    ctx.ram[PROGRAM_ADDRESS + 2] = 0xd4;
+    ctx.cpu.pc = PROGRAM_ADDRESS;
+    ctx.cpu.ps |= FLAG_I;
+    system.CPU.executeOne(ctx);
+    return Math.max(ctx.cycleCounter, ctx.stallCycleCounter) - lineStart;
+  }
+  const STA = 0x8d; // writes on its 4th cycle
+  const INC = 0xee; // dummy write on the 5th cycle, final write on the 6th
+  // AHRM 4.9: a write up to cycle 103 releases the CPU on cycle 105, and the
+  // next instruction, already fetched, appears to start on cycle 104.
+  assert.equal(resume(STA, 100), 104, "STA WSYNC writing on cycle 103");
+  assert.equal(resume(STA, 101), 114 + 104, "STA WSYNC writing on cycle 104");
+  // INC WSYNC: the dummy write counts; the next instruction starts on 105.
+  assert.equal(resume(INC, 98), 105, "INC WSYNC writing on 102/103");
+  assert.equal(resume(INC, 99), 114 + 104, "INC WSYNC writing on 103/104");
+  assert.equal(resume(INC, 100), 114 + 105, "INC WSYNC writing on 104/105");
+}
+
 testPortAPowerOnState();
+testWsyncUsesTheWriteCycle();
 testPortAOutputBitsReadAsAndOfOraAndInput();
 testPokeyIrqLatchesOnlyEnabledSources();
 testIrqLineIsALevelNotACount();

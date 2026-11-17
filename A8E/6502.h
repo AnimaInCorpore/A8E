@@ -80,8 +80,7 @@ typedef struct _6502_Context
 	u64 llIoBeamTimedEventCycle;
 	void (*IoCycleTimedEventFunction)(struct _6502_Context *);
 
-	u8 cNmiPendingFlag;
-	u8 cNmiActiveFlag;
+	u8 cNmiPendingFlag; /* NMI edge latch, set by _6502_Nmi, cleared when serviced (AHRM 3.4) */
 	u8 cIrqPendingFlag; /* IRQ line level, driven by POKEY (AHRM 5.7) */
 	u8 cHaltedFlag; /* set by a KIL opcode; only a reset clears it */
 

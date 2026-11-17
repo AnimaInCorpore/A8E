@@ -202,7 +202,6 @@
           stallCycleCounter: machine.ctx.stallCycleCounter,
           ioCycleTimedEventCycle: machine.ctx.ioCycleTimedEventCycle,
           nmiPending: machine.ctx.nmiPending | 0,
-          nmiActive: machine.ctx.nmiActive | 0,
           irqPending: machine.ctx.irqPending | 0,
           halted: machine.ctx.halted | 0,
           instructionCounter: machine.ctx.instructionCounter >>> 0,
@@ -331,7 +330,8 @@
       machine.ctx.ioMasterTimedEventCycle = Infinity;
       machine.ctx.ioBeamTimedEventCycle = Infinity;
       machine.ctx.nmiPending = snapshot.nmiPending ? 1 : 0;
-      machine.ctx.nmiActive = snapshot.nmiActive ? 1 : 0;
+      // Older snapshots also stored an nmiActive guard; NMIs no longer have
+      // one (AHRM 3.4), so that field is ignored.
       machine.ctx.irqPending = snapshot.irqPending | 0;
       machine.ctx.halted = snapshot.halted ? 1 : 0;
       machine.ctx.instructionCounter = snapshot.instructionCounter >>> 0;

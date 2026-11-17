@@ -63,7 +63,6 @@ static void ProbeMachine_ResetTiming(ProbeMachine_t *pMachine)
 	pContext->llCycleCounter = 0;
 	pContext->llStallCycleCounter = 0;
 	pContext->cNmiPendingFlag = 0;
-	pContext->cNmiActiveFlag = 0;
 	pContext->cIrqPendingFlag = 0;
 
 	pIoData->llCycle = 0;
@@ -678,6 +677,150 @@ static int TestDliDisableOnCycle8SuppressesCurrentLine(void)
 	return 1;
 }
 
+void AtariIoFetchLine(_6502_Context_t *pContext);
+
+/* Fetches one display list instruction at line 100 from $0600. */
+static void ProbeMachine_FetchInstruction(ProbeMachine_t *pMachine, u8 cPreviousCommand)
+{
+	_6502_Context_t *pContext = pMachine->pContext;
+	IoData_t *pIoData = pMachine->pIoData;
+
+	ProbeMachine_ResetTiming(pMachine);
+	pContext->pShadowMemory[IO_DMACTL] = 0x22;
+	pIoData->cCurrentDisplayListCommand = cPreviousCommand;
+	pIoData->tVideoData.lCurrentDisplayLine = 100;
+	pIoData->lNextDisplayListLine = 100;
+	pIoData->sDisplayListAddress = 0x0600;
+	pIoData->llDisplayListFetchCycle = 0x2000;
+	AtariIoFetchLine(pContext);
+}
+
+static int TestBlankLinesSkipAddressDma(void)
+{
+	/* AHRM 4.6/4.14: only LMS on modes 2-F and jumps fetch an address. On
+	 * blank lines $40-$70 bit 6 is part of the line count. */
+	static const u8 aCommands[] = {0x40, 0x50, 0x60, 0x70, 0x42, 0x01};
+	static const u8 aExpected[] = {0, 0, 0, 0, 2, 2};
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	u32 i;
+
+	REQUIRE(tMachine.pContext != NULL, "machine open failed");
+
+	for(i = 0; i < sizeof(aCommands); i++)
+	{
+		tMachine.pContext->pMemory[0x0600] = aCommands[i];
+		ProbeMachine_FetchInstruction(&tMachine, 0x02);
+		REQUIRE(tMachine.pIoData->tDrawLineData.cDisplayListAddressDmaRemaining == aExpected[i],
+				"$%02X scheduled %u address DMA cycles instead of %u",
+				aCommands[i],
+				tMachine.pIoData->tDrawLineData.cDisplayListAddressDmaRemaining,
+				aExpected[i]);
+	}
+
+	tMachine.pContext->pMemory[0x0600] = 0x70;
+	ProbeMachine_FetchInstruction(&tMachine, 0x02);
+	REQUIRE(tMachine.pIoData->lNextDisplayListLine == 108,
+			"$70 blank line ends at line %lu instead of 108",
+			(unsigned long)tMachine.pIoData->lNextDisplayListLine);
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
+static int TestJumpIsOneBlankLine(void)
+{
+	/* AHRM 4.6: bits 4-5 are ignored on jumps; a jump is one blank line. */
+	static const u8 aCommands[] = {0x01, 0x11, 0x21, 0x31};
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	u32 i;
+
+	REQUIRE(tMachine.pContext != NULL, "machine open failed");
+
+	for(i = 0; i < sizeof(aCommands); i++)
+	{
+		tMachine.pContext->pMemory[0x0600] = aCommands[i];
+		tMachine.pContext->pMemory[0x0601] = 0x00;
+		tMachine.pContext->pMemory[0x0602] = 0x07;
+		ProbeMachine_FetchInstruction(&tMachine, 0x02);
+		REQUIRE(tMachine.pIoData->lNextDisplayListLine == 101,
+				"jump $%02X fetches the next instruction at line %lu instead of 101",
+				aCommands[i],
+				(unsigned long)tMachine.pIoData->lNextDisplayListLine);
+		REQUIRE(tMachine.pIoData->sDisplayListAddress == 0x0700,
+				"jump $%02X went to $%04X instead of $0700",
+				aCommands[i],
+				tMachine.pIoData->sDisplayListAddress);
+	}
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
+static int TestJumpAddressWrapsWithin1K(void)
+{
+	/* AHRM 4.6: the display list wraps within its 1K block, even inside a
+	 * jump's address bytes. */
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+	IoData_t *pIoData = tMachine.pIoData;
+
+	REQUIRE(pContext != NULL, "machine open failed");
+
+	ProbeMachine_FetchInstruction(&tMachine, 0x02);
+	pIoData->tVideoData.lCurrentDisplayLine = 100;
+	pIoData->lNextDisplayListLine = 100;
+	pIoData->sDisplayListAddress = 0x07fe;
+	pContext->pMemory[0x07fe] = 0x01;
+	pContext->pMemory[0x07ff] = 0x34;
+	pContext->pMemory[0x0400] = 0x12;
+	pContext->pMemory[0x0800] = 0x99;
+	AtariIoFetchLine(pContext);
+	REQUIRE(pIoData->sDisplayListAddress == 0x1234,
+			"jump across the 1K boundary went to $%04X instead of $1234",
+			pIoData->sDisplayListAddress);
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
+static int TestIrBit6ClearedAcrossVbl(void)
+{
+	/* AHRM 4.6: only IR bit 6 is cleared over vertical blank, so a VS line
+	 * before VBL followed by a VS line on line 8 is no region entry. */
+	ProbeMachine_t tMachine = ProbeMachine_Open();
+	_6502_Context_t *pContext = tMachine.pContext;
+	IoData_t *pIoData = tMachine.pIoData;
+
+	REQUIRE(pContext != NULL, "machine open failed");
+
+	ProbeMachine_ResetTiming(&tMachine);
+	pContext->pShadowMemory[IO_DMACTL] = 0x22;
+	pContext->pShadowMemory[IO_VSCROL] = 5;
+	pIoData->cCurrentDisplayListCommand = 0xe2;
+	pIoData->tVideoData.lCurrentDisplayLine = LINES_PER_SCREEN_PAL - 1;
+	pIoData->lNextDisplayListLine = 8;
+	pIoData->sDisplayListAddress = 0x0600;
+	pIoData->llDisplayListFetchCycle = 0x2000;
+	pContext->pMemory[0x0600] = 0x22;
+
+	ProbeMachine_RunCurrentScanline(&tMachine);
+	REQUIRE(pIoData->cCurrentDisplayListCommand == 0xa2,
+			"IR read $%02X after vertical blank instead of $A2",
+			pIoData->cCurrentDisplayListCommand);
+
+	while(pIoData->tVideoData.lCurrentDisplayLine < 8)
+	{
+		ProbeMachine_RunCurrentScanline(&tMachine);
+	}
+	ProbeMachine_RunCurrentScanline(&tMachine);
+	REQUIRE(pIoData->lNextDisplayListLine == 16,
+			"VS line 8 after a VS line before VBL ends at %lu instead of 16",
+			(unsigned long)pIoData->lNextDisplayListLine);
+
+	ProbeMachine_Close(&tMachine);
+	return 1;
+}
+
 int main(int argc, char *argv[])
 {
 	int lPassed = 1;
@@ -698,6 +841,10 @@ int main(int argc, char *argv[])
 	lPassed &= TestDliEnableOnCycle7DelaysByOneCycle();
 	lPassed &= TestDliEnableOnCycle8IsTooLate();
 	lPassed &= TestDliDisableOnCycle8SuppressesCurrentLine();
+	lPassed &= TestBlankLinesSkipAddressDma();
+	lPassed &= TestJumpIsOneBlankLine();
+	lPassed &= TestJumpAddressWrapsWithin1K();
+	lPassed &= TestIrBit6ClearedAcrossVbl();
 
 	SDL_Quit();
 

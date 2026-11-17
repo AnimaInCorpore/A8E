@@ -211,7 +211,8 @@ function testSha() {
     cpuCtx.ram[0x0200] = 0xaa;
   });
 
-  assert.equal(ctx.ram[0x0200], 0x03, "SHA indirect indexed should store the masked high-byte value");
+  // AHRM 3.5: A & X & (base high + 1) = $03 & $02; the page cross keeps $02 as the high byte.
+  assert.equal(ctx.ram[0x0200], 0x02, "SHA indirect indexed should store the masked high-byte value");
   assert.equal(ctx.cpu.pc, 0x2002, "SHA indirect indexed should consume its zero-page operand");
   assert.equal(ctx.cycleCounter, 6, "SHA indirect indexed should keep its base timing");
 
@@ -223,7 +224,7 @@ function testSha() {
     cpuCtx.ram[0x0200] = 0xaa;
   });
 
-  assert.equal(ctx.ram[0x0200], 0x03, "SHA absolute,Y should store the masked high-byte value");
+  assert.equal(ctx.ram[0x0200], 0x02, "SHA absolute,Y should store the masked high-byte value");
   assert.equal(ctx.cpu.pc, 0x2003, "SHA absolute,Y should consume its absolute operand");
   assert.equal(ctx.cycleCounter, 5, "SHA absolute,Y should keep its base timing");
 }
@@ -255,7 +256,7 @@ function testShy() {
   assert.equal(ctx.ram[0x0000], 0x00, "SHY should write the glitch value into the page-cross target");
   assert.equal(ctx.ram[0x0200], 0xbb, "SHY should not touch the natural effective address when the page-cross glitch fires");
   assert.equal(ctx.cpu.pc, 0x2003, "SHY should consume its absolute,X operand");
-  assert.equal(ctx.cycleCounter, 4, "SHY should keep its base timing");
+  assert.equal(ctx.cycleCounter, 5, "SHY should keep its base timing");
 }
 
 function testTas() {
@@ -269,7 +270,7 @@ function testTas() {
   });
 
   assert.equal(ctx.cpu.sp, 0x03, "TAS should copy A & X into SP");
-  assert.equal(ctx.ram[0x0200], 0x03, "TAS should store the masked stack value");
+  assert.equal(ctx.ram[0x0200], 0x02, "TAS should store the masked stack value");
   assert.equal(ctx.cpu.pc, 0x2003, "TAS should consume its absolute,Y operand");
   assert.equal(ctx.cycleCounter, 5, "TAS should keep its base timing");
 }

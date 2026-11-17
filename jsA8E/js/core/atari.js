@@ -18,8 +18,6 @@
   const FIRST_VISIBLE_LINE = hwApi.FIRST_VISIBLE_LINE;
   const LAST_VISIBLE_LINE = hwApi.LAST_VISIBLE_LINE;
   const SERIAL_OUTPUT_DATA_NEEDED_CYCLES = hwApi.SERIAL_OUTPUT_DATA_NEEDED_CYCLES;
-  const SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES =
-    hwApi.SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES;
   const SERIAL_INPUT_FIRST_DATA_READY_CYCLES =
     hwApi.SERIAL_INPUT_FIRST_DATA_READY_CYCLES;
   const SERIAL_INPUT_DATA_READY_CYCLES = hwApi.SERIAL_INPUT_DATA_READY_CYCLES;
@@ -286,8 +284,6 @@
           POKEY_AUDIO_MAX_CATCHUP_CYCLES: POKEY_AUDIO_MAX_CATCHUP_CYCLES,
           CYCLE_NEVER: CYCLE_NEVER,
           SERIAL_OUTPUT_DATA_NEEDED_CYCLES: SERIAL_OUTPUT_DATA_NEEDED_CYCLES,
-          SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES:
-            SERIAL_OUTPUT_TRANSMISSION_DONE_CYCLES,
           SERIAL_INPUT_FIRST_DATA_READY_CYCLES:
             SERIAL_INPUT_FIRST_DATA_READY_CYCLES,
           SERIAL_INPUT_DATA_READY_CYCLES: SERIAL_INPUT_DATA_READY_CYCLES,
@@ -303,7 +299,11 @@
           IO_STIMER_KBCODE: IO_STIMER_KBCODE,
           IO_SKCTL_SKSTAT: IO_SKCTL_SKSTAT,
           IO_SEROUT_SERIN: IO_SEROUT_SERIN,
+          IO_IRQEN_IRQST: IO_IRQEN_IRQST,
           cycleTimedEventUpdate: cycleTimedEventUpdate,
+          raisePokeyIrq: function (ctx, mask) {
+            ioApi.raisePokeyIrq(ctx, mask);
+          },
         })
       : null;
   if (!pokeyAudioApi) throw new Error("A8EPokeyAudio is not loaded");
@@ -326,6 +326,8 @@
   const pokeyRestartTimers = pokeyAudioApi.restartTimers;
   const pokeySeroutWrite = pokeyAudioApi.seroutWrite;
   const pokeySerinRead = pokeyAudioApi.serinRead;
+  const pokeySerialInputSync = pokeyAudioApi.serialInputSync;
+  const pokeySerialReset = pokeyAudioApi.serialReset;
 
   const ioApi =
     window.A8EIo && window.A8EIo.createApi
@@ -408,6 +410,8 @@
           pokeySyncLfsr17: pokeySyncLfsr17,
           pokeySeroutWrite: pokeySeroutWrite,
           pokeySerinRead: pokeySerinRead,
+          pokeySerialInputSync: pokeySerialInputSync,
+          pokeySerialReset: pokeySerialReset,
           pokeyPotUpdate: pokeyPotUpdate,
           ioRegisterAddress: hwApi.ioRegisterAddress,
           IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE: IRQ_SERIAL_OUTPUT_TRANSMISSION_DONE,
@@ -467,13 +471,18 @@
       : null;
   if (!gtiaApi) throw new Error("A8EGtia is not loaded");
   const drawPlayerMissilesClock = gtiaApi.drawPlayerMissilesClock;
-  const drawPlayerMissiles = gtiaApi.drawPlayerMissiles;
 
   const anticApi =
     window.A8EAntic && window.A8EAntic.createApi
       ? window.A8EAntic.createApi({
           CPU: CPU,
-          raisePokeyIrq: ioApi.raisePokeyIrq,
+          // antic.js runs the timed POKEY events. The serial input event
+          // shifts the next SIO byte into SERIN, raises the IRQ and
+          // schedules the following byte (pokey_sio.js).
+          raisePokeyIrq: function (ctx, mask) {
+            if (mask === IRQ_SERIAL_INPUT_DATA_READY) pokeySerialInputSync(ctx);
+            else ioApi.raisePokeyIrq(ctx, mask);
+          },
           setSerialOutputIdle: ioApi.setSerialOutputIdle,
           Util: Util,
           PIXELS_PER_LINE: PIXELS_PER_LINE,
@@ -510,7 +519,6 @@
           ANTIC_MODE_INFO: ANTIC_MODE_INFO,
           drawPlayerMissilesClock: drawPlayerMissilesClock,
           fetchPmgDmaCycle: gtiaApi.fetchPmgDmaCycle,
-          drawPlayerMissiles: drawPlayerMissiles,
           pokeyTimerPeriodCpuCycles: pokeyTimerPeriodCpuCycles,
           cycleTimedEventUpdate: cycleTimedEventUpdate,
           PRIO_BKG: PRIO_BKG,

@@ -88,6 +88,7 @@ XEX mount preflight simulates the file's writes in load order, so a segment that
 - The AHRM 4.8 missed-NMI case (an IRQ acknowledged at exactly cycle 4 swallowing the cycle-8 NMI) is not modeled.
 - Blanked extended text rows (modes 2/3 rows 8-9 for non-descender characters) skip the character-data bus fetch instead of fetching and discarding, so their DMA steal timing is approximated.
 - The interleaved PMG path still reconstructs the hidden part of a scanline from current register state at the first visible span, rather than replaying every earlier same-line write cycle by cycle.
+- The open items from the 2026-11-17 AHRM audit apply to both cores and are listed once in the native notes: CPU bus-access and interrupt timing ([CPU](../A8E/CPU.md)), ANTIC display-list DMA, mid-line DMACTL/HSCROL and PENH/PENV ([ANTIC](../A8E/ANTIC.md)), GTIA display lag, CONSOL speaker and GTIA-mode details ([GTIA](../A8E/GTIA.md)), and POKEY serial/keyboard/audio details plus SIO framing and drive timing ([POKEY](../A8E/POKEY.md)).
 
 ## Todo
 - Finish the raster-content sweep, including the AHRM VSCROL corner-case examples (Atomix Plus!, GTIA 9++ content).

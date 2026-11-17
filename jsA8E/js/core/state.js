@@ -46,8 +46,10 @@
         sioPendingBytes: 0,
         sioInIndex: 0,
         sioInSize: 0,
-        // POKEY-ish randomness state (LFSR)
+        sioInNextCycle: CYCLE_NEVER, // arrival of the next response byte
+        // POKEY polynomial counters behind RANDOM
         pokeyLfsr17: 0x1ffff,
+        pokeyLfsr9: 0x1ff,
         pokeyLfsr17LastCycle: 0,
         // POKEY pot scan (POT0..POT7 / ALLPOT).
         pokeyPotValues: potValues,
@@ -77,6 +79,8 @@
           enabledByCycle8: 0,
           enabledOnCycle7Mask: 0,
         },
+        // CPU cycle + 1 of the last WSYNC read; marks RMW writes (AHRM 4.9).
+        wsyncReadMark: 0,
         chbaseTiming: {
           rawValue: 0,
           activeValue: 0,

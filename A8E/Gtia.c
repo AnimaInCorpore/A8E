@@ -481,7 +481,16 @@ u8 *Gtia_GRACTL(_6502_Context_t *pContext, u8 *pValue)
 {
 	if(pValue)
 	{
+		u8 bOldLatch = (SRAM[IO_GRACTL] & 0x04) != 0;
+		u8 bNewLatch = (*pValue & 0x04) != 0;
+
 		SRAM[IO_GRACTL] = *pValue;
+		/* Clearing bit 2 releases the trigger latches; setting it starts
+		 * latching from the current inputs (AHRM 6.11). */
+		if(!bNewLatch || !bOldLatch)
+		{
+			AtariIoSyncTriggers(pContext, 1);
+		}
 #ifdef VERBOSE_REGISTER
 		printf("             [%16llu]", pContext->llCycleCounter);
 		printf(" GRACTL: %02X\n", *pValue);

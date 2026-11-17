@@ -64,6 +64,10 @@ void Pokey_UpdateIrqLine(_6502_Context_t *pContext);
 void Pokey_RaiseIrq(_6502_Context_t *pContext, u8 cMask);
 void Pokey_SetSerialOutputIdle(_6502_Context_t *pContext, u8 bIdle);
 
+/* Delivers the SIO response bytes that have arrived into SERIN, raising the
+   serial input IRQ for each; runs on the serial input event (AHRM 5.6). */
+void Pokey_SerialInputSync(_6502_Context_t *pContext);
+
 /* Returns the timer period in CPU cycles for timer 1/2/4. Returns 0 if disabled. */
 u64 Pokey_TimerPeriodCpuCycles(_6502_Context_t *pContext, u8 timer);
 
